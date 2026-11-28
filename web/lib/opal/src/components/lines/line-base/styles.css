@@ -51,7 +51,8 @@
 /* A long title stays within the header: its swap box may shrink, and the
    text truncates (with a tooltip) rather than widening the card. */
 .opal-line-card-title .opal-presence-swap,
-.opal-line-card-title .opal-presence-swap-content {
+.opal-line-card-title .opal-presence-swap-content,
+.opal-line-card-title .opal-presence-swap-content > .opal-presence {
   @apply min-w-0 max-w-full;
 }
 
@@ -139,6 +140,7 @@
 .opal-line[data-opal-line-weight="heavy"][data-opal-line-status="warning"] {
   @apply bg-status-warning-00;
 }
-.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="error"] {
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="error"],
+.opal-line[data-opal-line-flavour="card"][data-opal-line-weight="heavy"][data-opal-line-status="error"]:hover {
   @apply bg-status-error-00;
 }

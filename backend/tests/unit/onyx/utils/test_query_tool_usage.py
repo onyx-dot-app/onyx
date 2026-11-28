@@ -12,7 +12,7 @@ from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils import fleet_query_telemetry as telemetry
-from onyx.utils.fleet_telemetry import sanitize_data
+from onyx.utils.fleet_telemetry import ToolKind, sanitize_data
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
@@ -77,8 +77,8 @@ def test_parallel_models_share_usage_and_cancellation_freezes_it(
     )
     run_functions_tuples_in_parallel(
         [
-            (lambda: observation.tool_started(is_search=True), ()),
-            (lambda: observation.tool_started(is_search=False), ()),
+            (lambda: observation.tool_started(ToolKind.SEARCH), ()),
+            (lambda: observation.tool_started(ToolKind.MCP), ()),
         ]
     )
     observation.outcome = "canceled"
@@ -87,9 +87,9 @@ def test_parallel_models_share_usage_and_cancellation_freezes_it(
     assert sink.call_args.args[1]["outcome"] == "canceled"
 
     stopped = telemetry.QueryObservation(channel="web", mode=telemetry.QueryMode.CHAT)
-    stopped.tool_started(is_search=True)
+    stopped.tool_started(ToolKind.SEARCH)
     stopped.finish()
-    stopped.tool_started(is_search=False)
+    stopped.tool_started(ToolKind.MCP)
     stopped.finish()
     assert sink.call_count == 2
     assert sink.call_args.args[1]["tool_usage"] == "search_only"

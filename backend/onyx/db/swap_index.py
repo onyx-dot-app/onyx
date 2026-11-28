@@ -12,6 +12,7 @@ from onyx.configs.app_configs import (
     PORT_SWAP_VERIFY_RETRY_DELAY_S,
 )
 from onyx.configs.constants import KV_REINDEX_KEY, DocumentSource
+from onyx.db.chat import flag_chat_artifacts_for_reindex__no_commit
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
     get_connector_credential_pairs,
@@ -144,6 +145,9 @@ def _perform_index_swap(
         new_status=IndexModelStatus.PRESENT,
         db_session=db_session,
     )
+    # Published files are not ported: the indexing beat writes them into the
+    # new index after the swap.
+    flag_chat_artifacts_for_reindex__no_commit(db_session)
     if clear_for_cc_pairs is not None:
         # After the status updates, in the same transaction: every stamp that
         # was in flight has committed by now, and a row still locked belongs to

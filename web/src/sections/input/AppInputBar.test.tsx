@@ -22,15 +22,20 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import { Button } from "@opal/components";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import type { ChatState } from "@/app/app/types";
+import type { ChatState, Message } from "@/app/app/types";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { SYSTEM_NODE_ID } from "@/app/app/services/messageTree";
 import type { PickerSections } from "@/lib/skills/picker";
 import { useChatSkills } from "@/lib/skills/hooks";
 import type { ChatSkill } from "@/lib/skills/types";
 import { draftKey } from "@/hooks/useDraft";
+import { releaseUploads, trackUpload } from "@/lib/projects/uploadProgress";
 import type MicrophoneButton from "@/sections/input/MicrophoneButton";
 import {
   MAX_MENTIONS_PER_MESSAGE,
+  type ChatSessionQueue,
   type ComposedMessage,
+  type PendingChatMessage,
 } from "@/lib/chat/types";
 
 function memberTool(overrides: Partial<ToolSnapshot> = {}): ToolSnapshot {
@@ -64,7 +69,10 @@ const storedMcpTool = memberTool({
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
 }));
-let mockUser: { preferences: { shortcut_enabled: boolean } } | null = null;
+let mockUser: {
+  id: string;
+  preferences: { shortcut_enabled: boolean };
+} | null = null;
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: mockUser, isAdmin: false }),
 }));
@@ -88,8 +96,14 @@ let mockIncognitoEnabled = false;
 jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({ incognitoEnabled: mockIncognitoEnabled }),
 }));
+let mockSearchResults = false;
 jest.mock("@/providers/QueryControllerProvider", () => ({
-  useQueryController: () => ({ state: { phase: "idle", appMode: "chat" } }),
+  useQueryController: () => ({
+    state: {
+      phase: mockSearchResults ? "search-results" : "idle",
+      appMode: "chat",
+    },
+  }),
 }));
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({ stopTTS: jest.fn() }),
@@ -114,10 +128,11 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
 }));
+let mockChatId: string | null = null;
 jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
-    isNewSession: () => true,
-    chat: () => null,
+    isNewSession: () => mockChatId === null,
+    chat: () => mockChatId,
     agent: () => null,
     project: () => null,
   }),
@@ -155,6 +170,9 @@ jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => mockProjectsContext,
 }));
 jest.mock("@/lib/projects/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/projects/hooks")>(
+    "@/lib/projects/hooks"
+  ),
   useProjects: () => ({ isLoading: false }),
   useActiveProject: () => null,
 }));
@@ -195,6 +213,7 @@ function Composer({
   chatState = "input",
   disabled = false,
   onSubmit = jest.fn(),
+  queueOverride,
 }: {
   agentId?: number;
   tools?: MinimalAgent["tools"];
@@ -202,10 +221,12 @@ function Composer({
   chatState?: ChatState;
   disabled?: boolean;
   onSubmit?: AppInputBarProps["onSubmit"];
+  queueOverride?: ChatSessionQueue;
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
-  const queue = useChatSessionQueue(false);
+  const sessionQueue = useChatSessionQueue(false);
+  const queue = queueOverride ?? sessionQueue;
   return (
     <>
       <Button
@@ -239,13 +260,15 @@ function Composer({
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
-  mockUser = null;
+  mockUser = { id: "test-user", preferences: { shortcut_enabled: false } };
   mockChatSkills = NO_SKILLS;
   mockIncognitoEnabled = false;
+  mockSearchResults = false;
   mockSttEnabled = false;
   mockMicrophone = null;
   mockProjectsContext.currentMessageFiles = [];
   mockProjectsContext.setCurrentMessageFiles.mockClear();
+  mockChatId = null;
 });
 
 test("incognito greys out Deep Research and explains why", async () => {
@@ -263,23 +286,546 @@ test("incognito greys out Deep Research and explains why", async () => {
   );
 });
 
-describe("restore after a failed send", () => {
-  function projectFile(id: string): ProjectFile {
-    return {
-      id,
-      name: `${id}.txt`,
-      project_id: null,
-      user_id: null,
-      file_id: `${id}-file-id`,
-      created_at: "2026-01-01T00:00:00Z",
-      status: UserFileStatus.COMPLETED,
-      file_type: "text/plain",
-      last_accessed_at: "2026-01-01T00:00:00Z",
-      chat_file_type: ChatFileType.PLAIN_TEXT,
-      token_count: null,
-      chunk_count: null,
-    };
+test("a large paste becomes a tile when the preference is not set", async () => {
+  const user = setupUser();
+  render(<Composer />);
+  await user.click(screen.getByRole("textbox"));
+  const large = "line 1\nline 2\nline 3\nline 4";
+  await user.paste(large);
+  const tile = screen
+    .getByRole("textbox")
+    .querySelector<HTMLElement>("[data-rich-tile]");
+  expect(tile).toHaveAttribute("data-text", large);
+});
+
+function projectFile(id: string): ProjectFile {
+  return {
+    id,
+    name: `${id}.txt`,
+    project_id: null,
+    user_id: null,
+    file_id: `${id}-file-id`,
+    created_at: "2026-01-01T00:00:00Z",
+    status: UserFileStatus.COMPLETED,
+    file_type: "text/plain",
+    last_accessed_at: "2026-01-01T00:00:00Z",
+    chat_file_type: ChatFileType.PLAIN_TEXT,
+    token_count: null,
+    chunk_count: null,
+  };
+}
+
+test("an immediate reload restores draft text and completed uploads", async () => {
+  const uploading = {
+    ...projectFile("uploading-file"),
+    status: UserFileStatus.UPLOADING,
+  };
+  const first = render(<Composer />);
+  const processing = {
+    ...projectFile("processing-file"),
+    status: UserFileStatus.PROCESSING,
+  };
+  mockProjectsContext.currentMessageFiles = [
+    projectFile("draft-file"),
+    processing,
+    uploading,
+  ];
+  first.rerender(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "unsent text");
+  first.unmount();
+
+  expect(sessionStorage.length).toBe(0);
+  mockProjectsContext.currentMessageFiles = [];
+  render(<Composer />);
+  expect(screen.getByRole("textbox")).toHaveTextContent("unsent text");
+  const restoreFiles =
+    mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+  expect(restoreFiles([])).toEqual([projectFile("draft-file"), processing]);
+  const currentFiles = [projectFile("new-attachment")];
+  expect(restoreFiles(currentFiles)).toBe(currentFiles);
+});
+
+test("an uploading file shows its progress, and its remove control cancels the upload", async () => {
+  const uploading = {
+    ...projectFile("temp_upload"),
+    status: UserFileStatus.UPLOADING,
+  };
+  const upload = trackUpload([uploading.id]);
+  act(() => upload.options.onProgress(0.42));
+  mockProjectsContext.currentMessageFiles = [uploading];
+  render(<Composer />);
+
+  expect(screen.getByText("42%")).toBeInTheDocument();
+  await setupUser().click(screen.getByRole("button", { name: "Remove" }));
+
+  expect(upload.options.signal.aborted).toBe(true);
+  const removeFile =
+    mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+  expect(removeFile([uploading])).toEqual([]);
+  upload.finish();
+});
+
+test("a composer for another chat drops the files a left composer kept", async () => {
+  mockChatId = "chat-a";
+  mockProjectsContext.currentMessageFiles = [projectFile("chat-a-file")];
+  const first = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "draft for A");
+  // Chat A's composer unmounts (e.g. a visit to Settings); the shared
+  // attachment list keeps chat A's file.
+  first.unmount();
+
+  mockChatId = "chat-b";
+  render(<Composer />);
+  const restoreFiles =
+    mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+  expect(restoreFiles([projectFile("chat-a-file")])).toEqual([]);
+});
+
+test("keeps the query in the editor when an auto-routed search returns", async () => {
+  const { rerender } = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "query to refine");
+  mockSearchResults = true;
+  rerender(<Composer />);
+  expect(screen.getByRole("textbox")).toHaveTextContent("query to refine");
+});
+
+test("a different account cannot restore the previous account's draft", async () => {
+  const first = render(<Composer />);
+  await setupUser().type(screen.getByRole("textbox"), "account A draft");
+  first.unmount();
+
+  mockUser = { id: "another-user", preferences: { shortcut_enabled: false } };
+  render(<Composer />);
+  expect(screen.getByRole("textbox")).not.toHaveTextContent("account A draft");
+});
+
+test("incognito keeps its draft out of storage and restores the regular draft on exit", async () => {
+  const user = setupUser();
+  const { rerender } = render(<Composer />);
+  const message = () => screen.getByRole("textbox");
+
+  await user.type(message(), "regular draft");
+  mockIncognitoEnabled = true;
+  rerender(<Composer />);
+  expect(message()).toBeEmptyDOMElement();
+
+  await user.type(message(), "private draft");
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  expect(localStorage.getItem(draftKey("chat", ":test-user:new"))).toContain(
+    "regular draft"
+  );
+  expect(
+    localStorage.getItem(draftKey("chat", ":test-user:new"))
+  ).not.toContain("private draft");
+  expect(sessionStorage.length).toBe(0);
+
+  mockIncognitoEnabled = false;
+  rerender(<Composer />);
+  expect(message()).toHaveTextContent("regular draft");
+  expect(message()).not.toHaveTextContent("private draft");
+});
+
+describe("edit a sent message in the composer", () => {
+  const sentFile = {
+    id: "store-sent",
+    type: ChatFileType.PLAIN_TEXT,
+    name: "sent.txt",
+    user_file_id: "user-sent",
+  };
+  const edit = {
+    messageId: 5,
+    message: "sent question",
+    mentions: [],
+    files: [sentFile],
+  };
+
+  function startEdit(
+    draftFiles: ProjectFile[] = [projectFile("draft-file")],
+    chatState: ChatState = "input"
+  ) {
+    const inputBarRef = createRef<AppInputBarHandle>();
+    const onSubmit = jest.fn();
+    mockProjectsContext.currentMessageFiles = draftFiles;
+    render(
+      <Composer
+        inputBarRef={inputBarRef}
+        onSubmit={onSubmit}
+        chatState={chatState}
+      />
+    );
+    return { inputBarRef, onSubmit };
   }
+
+  test("does not start while a queued message is withdrawn for an edit", async () => {
+    const store = useChatSessionStore.getState();
+    store.createSession("queue-session");
+    store.setCurrentSession("queue-session");
+    const withdrawal = deferred<PendingChatMessage | null>();
+    const queued: PendingChatMessage = {
+      id: "queued-1",
+      message: "queued text",
+      delivery: "queue",
+      target_response_id: null,
+      deep_research: false,
+      llm_override: null,
+      mentions: [],
+    };
+    const queue: ChatSessionQueue = {
+      enabled: true,
+      messages: [queued],
+      error: null,
+      busy: false,
+      needsResponseSelection: false,
+      submit: jest.fn(),
+      withdraw: () => withdrawal.promise,
+      interrupt: jest.fn(),
+    };
+    const inputBarRef = createRef<AppInputBarHandle>();
+    mockProjectsContext.currentMessageFiles = [];
+    render(<Composer inputBarRef={inputBarRef} queueOverride={queue} />);
+    await setupUser().click(
+      screen.getByRole("button", { name: "Edit queued message: queued text" })
+    );
+
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    await act(async () => withdrawal.resolve(null));
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
+  });
+
+  test("Escape ends the edit when the text starts with / and shortcuts are off", async () => {
+    const { inputBarRef } = startEdit([]);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const user = setupUser();
+    await user.clear(screen.getByRole("textbox"));
+    await user.type(screen.getByRole("textbox"), "/x");
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("does not start while a response streams", () => {
+    const { inputBarRef } = startEdit([], "streaming");
+    act(() => inputBarRef.current?.editMessage(edit));
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).not.toHaveTextContent("sent question");
+  });
+
+  test("a draft file still processing comes back live after the edit", async () => {
+    const processing = {
+      ...projectFile("processing-file"),
+      status: UserFileStatus.PROCESSING,
+    };
+    const { inputBarRef } = startEdit([processing]);
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    await setupUser().keyboard("{Escape}");
+
+    expect(lastFiles()).toEqual([processing]);
+  });
+
+  test("a draft file that finished uploading during the edit comes back uploaded", async () => {
+    const uploading = {
+      ...projectFile("temp_draft"),
+      temp_id: "temp_draft",
+      status: UserFileStatus.UPLOADING,
+    };
+    const upload = trackUpload(["temp_draft"]);
+    const { inputBarRef } = startEdit([uploading]);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const uploaded = {
+      ...projectFile("user-draft"),
+      temp_id: "temp_draft",
+      status: UserFileStatus.PROCESSING,
+    };
+    act(() => upload.finish([uploaded]));
+
+    await setupUser().keyboard("{Escape}");
+
+    expect(lastFiles()).toEqual([uploaded]);
+  });
+
+  describe("an abandoned edit forgets its held uploads", () => {
+    const uploading = {
+      ...projectFile("temp_abandoned"),
+      temp_id: "temp_abandoned",
+      status: UserFileStatus.UPLOADING,
+    };
+    const uploaded = {
+      ...projectFile("user-abandoned"),
+      temp_id: "temp_abandoned",
+      status: UserFileStatus.PROCESSING,
+    };
+
+    // A result still held comes back from `releaseUploads`; a dropped one does not.
+    function heldResult(): ProjectFile[] {
+      return releaseUploads([uploading]);
+    }
+
+    test("when the composer resets", () => {
+      const upload = trackUpload(["temp_abandoned"]);
+      const { inputBarRef } = startEdit([uploading]);
+      act(() => inputBarRef.current?.editMessage(edit));
+
+      act(() => inputBarRef.current?.reset());
+      act(() => upload.finish([uploaded]));
+
+      expect(heldResult()).toEqual([]);
+    });
+
+    test("when the chat changes", () => {
+      const upload = trackUpload(["temp_abandoned"]);
+      mockChatId = "chat-a";
+      const inputBarRef = createRef<AppInputBarHandle>();
+      mockProjectsContext.currentMessageFiles = [uploading];
+      const { rerender } = render(<Composer inputBarRef={inputBarRef} />);
+      act(() => inputBarRef.current?.editMessage(edit));
+
+      mockChatId = "chat-b";
+      rerender(<Composer inputBarRef={inputBarRef} />);
+      act(() => upload.finish([uploaded]));
+
+      expect(heldResult()).toEqual([]);
+    });
+  });
+
+  test("switching to another version of the edited message ends the edit", async () => {
+    const node = (nodeId: number, fields: Partial<Message> = {}): Message => ({
+      nodeId,
+      messageId: nodeId,
+      type: "user",
+      message: `version ${nodeId}`,
+      files: [],
+      toolCall: null,
+      packets: [],
+      parentNodeId: SYSTEM_NODE_ID,
+      childrenNodeIds: [],
+      latestChildNodeId: null,
+      ...fields,
+    });
+    const tree = (shown: number) =>
+      new Map([
+        [
+          SYSTEM_NODE_ID,
+          node(SYSTEM_NODE_ID, {
+            type: "system",
+            parentNodeId: null,
+            childrenNodeIds: [5, 6],
+            latestChildNodeId: shown,
+          }),
+        ],
+        [5, node(5)],
+        [6, node(6)],
+      ]);
+    const store = useChatSessionStore.getState();
+    store.createSession("edit-session", { messageTree: tree(5) });
+    store.setCurrentSession("edit-session");
+    const { inputBarRef } = startEdit();
+    await setupUser().type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+
+    act(() =>
+      useChatSessionStore
+        .getState()
+        .updateSessionMessageTree("edit-session", tree(6))
+    );
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
+  });
+
+  test("a reload keeps an edit of a message older than the loaded page", () => {
+    const newer: Message = {
+      nodeId: 30,
+      messageId: 30,
+      type: "user",
+      message: "newer question",
+      files: [],
+      toolCall: null,
+      packets: [],
+      parentNodeId: null,
+      childrenNodeIds: [],
+      latestChildNodeId: null,
+    };
+    const inputBarRef = createRef<AppInputBarHandle>();
+    mockProjectsContext.currentMessageFiles = [];
+    const first = render(<Composer inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.editMessage(edit));
+    first.unmount();
+    // The first page after a reload holds only the newer messages.
+    const store = useChatSessionStore.getState();
+    store.createSession("paged-session", {
+      messageTree: new Map([[30, newer]]),
+    });
+    store.setCurrentSession("paged-session");
+
+    render(<Composer />);
+
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
+  });
+
+  test("a draft file that finished uploading during the edit survives a remount", async () => {
+    const uploading = {
+      ...projectFile("temp_saved"),
+      temp_id: "temp_saved",
+      status: UserFileStatus.UPLOADING,
+    };
+    const upload = trackUpload(["temp_saved"]);
+    mockProjectsContext.currentMessageFiles = [uploading];
+    const inputBarRef = createRef<AppInputBarHandle>();
+    const first = render(<Composer inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const uploaded = {
+      ...projectFile("user-saved"),
+      temp_id: "temp_saved",
+      status: UserFileStatus.PROCESSING,
+    };
+    act(() => upload.finish([uploaded]));
+    first.unmount();
+
+    render(<Composer />);
+    await setupUser().click(
+      screen.getByRole("button", { name: "Cancel editing message" })
+    );
+
+    expect(lastFiles()).toEqual([uploaded]);
+  });
+
+  function lastFiles(): ProjectFile[] {
+    const next = mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+    return typeof next === "function" ? next([]) : next;
+  }
+
+  test("loads the text and files and shows the banner; Cancel restores the draft", async () => {
+    const { inputBarRef } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    expect(lastFiles()).toEqual([
+      expect.objectContaining({
+        id: "user-sent",
+        file_id: "store-sent",
+        name: "sent.txt",
+      }),
+    ]);
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Cancel editing message" })
+    );
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    expect(lastFiles()).toEqual([projectFile("draft-file")]);
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("Escape cancels the edit", async () => {
+    const { inputBarRef } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("send resends the edited text as an edit, then restores the draft", async () => {
+    const { inputBarRef, onSubmit } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    await user.keyboard(" again{Enter}");
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "sent question again",
+      mentions: [],
+      messageIdToResend: 5,
+    });
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    expect(lastFiles()).toEqual([projectFile("draft-file")]);
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("a rejected edit comes back as the same edit", async () => {
+    const { inputBarRef } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+    await user.keyboard("{Enter}");
+
+    act(() =>
+      inputBarRef.current?.restore({
+        message: "sent question",
+        mentions: [],
+        files: [],
+        messageIdToResend: 5,
+      })
+    );
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Cancel editing message" })
+    );
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+  });
+
+  test("a reset for a new chat ends the edit", async () => {
+    const { inputBarRef, onSubmit } = startEdit();
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    act(() => inputBarRef.current?.reset());
+    await setupUser().type(screen.getByRole("textbox"), "new question{Enter}");
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "new question",
+      mentions: [],
+    });
+  });
+
+  test("the edit is saved with the draft and comes back after the composer remounts", () => {
+    const inputBarRef = createRef<AppInputBarHandle>();
+    const first = render(<Composer inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.editMessage(edit));
+    first.unmount();
+
+    render(<Composer />);
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+  });
+});
+
+describe("restore after a failed send", () => {
   const failedFiles = [projectFile("failed-file")] satisfies ProjectFile[];
 
   test("puts the message, its picks and its files back into an empty composer", async () => {
@@ -310,6 +856,7 @@ describe("restore after a failed send", () => {
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer inputBarRef={inputBarRef} />);
     await setupUser().type(screen.getByRole("textbox"), "newer draft");
+    mockProjectsContext.setCurrentMessageFiles.mockClear();
     act(() =>
       inputBarRef.current?.restore({
         message: "failed message",
@@ -328,6 +875,7 @@ describe("restore after a failed send", () => {
     ] satisfies ProjectFile[];
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer inputBarRef={inputBarRef} />);
+    mockProjectsContext.setCurrentMessageFiles.mockClear();
     act(() =>
       inputBarRef.current?.restore({
         message: "failed message",
@@ -369,7 +917,7 @@ describe("`@` skill mentions", () => {
   });
 
   beforeEach(() => {
-    mockUser = { preferences: { shortcut_enabled: true } };
+    mockUser = { id: "test-user", preferences: { shortcut_enabled: true } };
     mockChatSkills = {
       ...NO_SKILLS,
       skills: [
@@ -410,7 +958,7 @@ describe("`@` skill mentions", () => {
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
   });
 
-  test("fetches the chat skills again when the input gains focus, not on a window focus", async () => {
+  test("fetches the chat skills again on an input focus at most once a minute", async () => {
     mockChatSkills = null;
     let skills: ChatSkill[] = [];
     const fetchSpy = jest
@@ -431,13 +979,9 @@ describe("`@` skill mentions", () => {
           short_description: null,
           version_id: "v1",
           built_in_skill_id: null,
+          plugin_id: null,
         },
       ];
-      await act(async () => {
-        window.dispatchEvent(new Event("focus"));
-      });
-      expect(skillFetches()).toBe(1);
-
       // The composer takes focus after each send, so a focus within a minute
       // of the last fetch does not fetch.
       const firstFetchAt = Date.now();
@@ -493,6 +1037,46 @@ describe("`@` skill mentions", () => {
     }
   });
 
+  test("fetches the chat skills again on a window focus at most once a minute", async () => {
+    mockChatSkills = null;
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async () => new Response(JSON.stringify([])));
+    try {
+      renderHook(() => useChatSkills({ builtIns: true }), {
+        wrapper: ({ children }) => (
+          <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+            {children}
+          </SWRConfig>
+        ),
+      });
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      const focusWindow = () =>
+        act(async () => {
+          window.dispatchEvent(new Event("focus"));
+          // SWR handles the focus in a timeout.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+      const mountedAt = Date.now();
+      const nowSpy = jest.spyOn(Date, "now");
+
+      // A focus within a minute of the first fetch does not fetch.
+      nowSpy.mockReturnValue(mountedAt + 59_000);
+      await focusWindow();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      nowSpy.mockReturnValue(mountedAt + 61_000);
+      await focusWindow();
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+
+      nowSpy.mockReturnValue(mountedAt + 62_000);
+      await focusWindow();
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
   test("a row shows the skill's short description when it has one", async () => {
     mockChatSkills = null;
     const skills: ChatSkill[] = [
@@ -502,6 +1086,7 @@ describe("`@` skill mentions", () => {
         short_description: "Review code",
         version_id: "v1",
         built_in_skill_id: null,
+        plugin_id: null,
       },
       {
         name: "commit-message",
@@ -509,6 +1094,7 @@ describe("`@` skill mentions", () => {
         short_description: null,
         version_id: "v2",
         built_in_skill_id: null,
+        plugin_id: null,
       },
     ];
     const fetchSpy = jest
@@ -547,6 +1133,7 @@ describe("`@` skill mentions", () => {
           short_description: null,
           version_id: "b1",
           built_in_skill_id: "pptx",
+          plugin_id: null,
         },
         {
           name: "plan",
@@ -554,6 +1141,7 @@ describe("`@` skill mentions", () => {
           short_description: null,
           version_id: "v1",
           built_in_skill_id: null,
+          plugin_id: null,
         },
       ];
       const fetchSpy = jest

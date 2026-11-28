@@ -1,3 +1,5 @@
+import type { EndpointLineError } from "@/lib/integrations/types";
+
 /** JSON body of a backend error response. `OnyxError` and the request
  * validation handler both send `error_code` and a string `detail`; the
  * validation and `ValueError` handlers also send `message`. */
@@ -5,6 +7,9 @@ export interface ErrorResponseBody {
   detail?: string;
   error_code?: string;
   message?: string;
+  line_errors?: EndpointLineError[];
+  /** The name a CONFLICT refused because it is already in use. */
+  taken_name?: string;
 }
 
 export class FetchError extends Error {

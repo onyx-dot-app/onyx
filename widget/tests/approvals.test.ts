@@ -37,6 +37,7 @@ import {
 import { chatStream, idle, offer, runs } from "./session-status";
 import type { ChatMessage } from "../src/types/widget-types";
 import { OnyxChatWidget } from "../src/widget";
+import { saveSession } from "../src/utils/storage";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -129,6 +130,56 @@ describe("approval packets", () => {
   });
 });
 
+describe("saved session", () => {
+  it("keeps command approval cards out of the host page's storage, not app cards", () => {
+    const saved = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, value: string) => saved.set(key, value),
+      removeItem: (key: string) => saved.delete(key),
+    };
+    const original = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "sessionStorage"
+    );
+    Object.defineProperty(globalThis, "sessionStorage", {
+      value: storage,
+      configurable: true,
+    });
+    try {
+      const command: ApprovalEntry = {
+        request: {
+          ...request("2", "POST"),
+          arguments: { path: "/v1/send?token=secret" },
+          can_approve_for_chat: false,
+          can_approve_for_command: true,
+          app_name: "Gmail",
+          expires_at: "2026-01-01T00:00:00Z",
+        },
+        outcome: null,
+      };
+      const appCall: ApprovalEntry = {
+        request: { ...request("3"), app_name: "Gmail" },
+        outcome: null,
+      };
+      saveSession(
+        "s",
+        [streamingMessage([entry("1"), command, appCall])],
+        "id"
+      );
+      const stored = saved.get("onyx-widget-session") ?? "";
+      expect(stored).not.toContain("secret");
+      const messages: ChatMessage[] = JSON.parse(stored).messages;
+      expect(
+        messages[0]?.approvals?.map((e) => e.request.approval_id)
+      ).toEqual(["1", "3"]);
+    } finally {
+      if (original) Object.defineProperty(globalThis, "sessionStorage", original);
+      else Reflect.deleteProperty(globalThis, "sessionStorage");
+    }
+  });
+});
+
 describe("approval status", () => {
   it("trusts the server outcome, then the local decision", () => {
     expect(approvalStatus(entry("a", "cancelled"), "approved")).toBe("closed");
@@ -136,6 +187,9 @@ describe("approval status", () => {
     expect(approvalStatus(entry("a", "approved_for_chat"), undefined)).toBe(
       "approvedForSession"
     );
+    expect(
+      approvalStatus(entry("a", "approved_for_command"), undefined)
+    ).toBe("approvedForSession");
     expect(approvalStatus(entry("a"), "rejected")).toBe("rejected");
     expect(approvalStatus(entry("a"), "submitting")).toBe("pending");
     expect(approvalStatus(entry("a"), undefined)).toBe("pending");
@@ -195,6 +249,7 @@ describe("approval status", () => {
   it.each([
     ["APPROVED", "USER", "approved"],
     ["APPROVED", "SESSION_GRANT", "approvedForSession"],
+    ["APPROVED", "COMMAND_GRANT", "approvedForSession"],
     ["REJECTED", "USER", "rejected"],
     ["REJECTED", "POLICY", "disabled"],
   ] as const)(
@@ -209,6 +264,9 @@ describe("approval status", () => {
   it("writes one-line records", () => {
     expect(approvalRecord("approvedForSession", "Send email")).toBe(
       "Approved for this chat: Send email"
+    );
+    expect(approvalRecord("approvedForSession", "GET /x", "command")).toBe(
+      "Approved for this command: GET /x"
     );
     expect(approvalRecord("closed", "Send email")).toBe(
       "No longer waiting: Send email"
@@ -295,6 +353,70 @@ describe("approval arguments from the model", () => {
 
     expanded.add(JSON.stringify(["a"]));
     expect(card()).toContain(last);
+  });
+
+  it("offer only the wider approval that the server allows", () => {
+    // Each button's click handler, called with a recording onDecide
+    function decisions(approval: ApprovalEntry): string[] {
+      const sent: string[] = [];
+      const card = renderApprovalCard(approval, "pending", {
+        ...view(new Set()),
+        onDecide: (_request, decision) => sent.push(decision),
+      });
+      const visit = (value: unknown): void => {
+        if (Array.isArray(value)) value.forEach(visit);
+        else if (typeof value === "function") value();
+        else if (typeof value === "object" && value !== null && "values" in value)
+          visit((value as { values: unknown[] }).values);
+      };
+      visit(card);
+      return sent;
+    }
+    const withFlags = (
+      flags: Partial<ToolApprovalRequest>
+    ): ApprovalEntry => ({ request: { ...request("a"), ...flags }, outcome: null });
+
+    expect(decisions(entry("a"))).toEqual([
+      "approve_once",
+      "approve_session",
+      "reject",
+    ]);
+    expect(decisions(withFlags({ can_approve_for_chat: false }))).toEqual([
+      "approve_once",
+      "reject",
+    ]);
+    const command = withFlags({
+      can_approve_for_chat: false,
+      can_approve_for_command: true,
+      app_name: "Gmail",
+    });
+    expect(decisions(command)).toEqual([
+      "approve_once",
+      "approve_command",
+      "reject",
+    ]);
+    const shown = shownText(
+      renderApprovalCard(command, "pending", view(new Set()))
+    );
+    expect(shown).toContain("Approval requested: Send email in Gmail");
+    expect(shown).toContain("Approve for this command");
+    expect(shown).not.toContain("Approve for this chat");
+  });
+
+  it("record a command grant as approved for this command", () => {
+    const command: ApprovalEntry = {
+      request: { ...request("a"), can_approve_for_command: true },
+      outcome: "approved_for_command",
+    };
+    const shown = shownText(
+      renderApprovalCard(
+        command,
+        approvalStatus(command, undefined),
+        view(new Set())
+      )
+    );
+    expect(shown).toContain("Approved for this command");
+    expect(shown).not.toContain("Approved for this chat");
   });
 
   it("name the subagent that asks", () => {

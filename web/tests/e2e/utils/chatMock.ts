@@ -179,7 +179,7 @@ export interface MockPublishedFile {
   thumbnailFileId?: string;
 }
 
-/** The packets of one publish_files call, the same live and on replay. */
+/** The packets of one publishing call, the same live and on replay. */
 export function publishFilesPackets(
   turnIndex: number,
   files: MockPublishedFile[]
@@ -209,6 +209,7 @@ export function publishFilesPackets(
           artifact_id: file.artifactId,
           version: file.version,
           thumbnail_file_id: file.thumbnailFileId ?? null,
+          chat_id: null,
         })),
         error: null,
       },
@@ -260,7 +261,7 @@ export interface CodeModeCellStreamOptions {
   toolOutput: string;
   message: string;
   /**
-   * "wait": a wait_code call reports the call's end and the program's end.
+   * "wait": a wait call reports the call's end and the program's end.
    * "response_end": the answer arrives while the cell runs, and the closing
    * record reports the rest.
    */

@@ -104,15 +104,23 @@ export const SWR_KEYS = {
   authType: "/api/auth/type",
   adminSecuritySettings: "/api/admin/security",
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
+  adminAuditStatus: "/api/admin/security/audit-status",
   incognitoAvailability: "/api/chat/incognito-availability",
   // A chat file's preview data, not a URL: see `useChatFilePreview`
   chatFilePreview: (fileId: string) => `chat-file-preview:${fileId}`,
   // The start of a text file, for its tile in the chat's Files list
   chatFileTileText: (fileId: string) => `chat-file-tile-text:${fileId}`,
+  // A published file's version, the newest when `version` is null
+  chatArtifact: (artifactId: string, version: number | null) =>
+    `/api/chat/artifacts/${artifactId}${
+      version === null ? "" : `?version=${version}`
+    }`,
   chatSessionStatus: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/status`,
   chatSessionAgents: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/agents`,
+  chatSubagentHistory: (sessionId: string, agentId: string) =>
+    `/api/chat/chat-session/${sessionId}/agents/${agentId}/history`,
   pendingChatMessages: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/pending-messages`,
   maxSelectedDocumentTokens: (personaId: number) =>
@@ -266,6 +274,10 @@ export const SWR_KEYS = {
   adminUserGroupsWithDefault:
     "/api/manage/admin/user-group?include_default=true",
   shareableGroups: "/api/manage/user-groups/minimal",
+  shareableGroupsManageableFor: (permission: string) =>
+    `/api/manage/user-groups/minimal?manageable_for=${encodeURIComponent(permission)}`,
+  shareableUsers: (includeApiKeys: boolean) =>
+    `/api/users?include_api_keys=${includeApiKeys}`,
   userGroupPermissions: (groupId: number) =>
     `/api/manage/admin/user-group/${groupId}/permissions`,
   permissionRegistry: "/api/manage/admin/permissions/registry",

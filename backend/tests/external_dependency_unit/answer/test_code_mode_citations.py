@@ -19,7 +19,7 @@ from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
     CODE_MODE_SEARCH_USAGE,
-    INTERNAL_SEARCH_GUIDANCE,
+    INTERNAL_SEARCH_DESCRIPTION,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
 )
 from onyx.server.features.build.sandbox.harness_base import search_file_name
@@ -30,6 +30,8 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     SearchToolDocumentsDelta,
 )
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.search.constants import MAX_QUERIES_PER_CALL
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
@@ -111,6 +113,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
     first = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "search",
                 "r = await tools.internal_search(queries=['Q2 revenue'])\n"
                 "for doc in r['results']:\n"
@@ -118,6 +121,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
                 "store('k', 1)\n",
             ),
             code_step(
+                OPENAI_CODE_MODE,
                 "python",
                 "out = await tools.run_python(code=\"import os\\nprint(os.listdir('.'))\")\n"
                 "print(out)\n"
@@ -156,14 +160,13 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         )
         parts = send(session.id, user, first, "How did Q2 revenue change?")
     assert final_answer(parts).startswith("Revenue grew")
-    # The prompt keeps the guidance of the tools inside programs.
+    # The prompt keeps the guidance that spans the tools inside programs.
     system = "\n".join(
         message.content
         for message in first.requests[0]["prompt"]
         if isinstance(message, SystemMessage)
     )
-    assert CODE_MODE_GUIDANCE in system
-    assert INTERNAL_SEARCH_GUIDANCE.format(name="tools.internal_search") in system
+    assert CODE_MODE_GUIDANCE.format(name=EXECUTE_CODE_TOOL_NAME) in system
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in system
     # The real search tool's stub asks for one call per information need.
     [description] = [
@@ -172,6 +175,10 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         if tool["function"]["name"] == "execute_code"
     ]
     assert CODE_MODE_SEARCH_USAGE in description
+    # The search tool's own guidance is in its stub, not the system prompt.
+    assert INTERNAL_SEARCH_DESCRIPTION.replace("\n", "\n        ") in description
+    for line in INTERNAL_SEARCH_DESCRIPTION.splitlines():
+        assert line not in system
     # The tool's own query limit reaches its stub.
     assert f"List of up to {MAX_QUERIES_PER_CALL} search queries" in description
     assert "Output:\n1 Q2 revenue" in tool_text(first.requests[1]["prompt"], "search")
@@ -221,6 +228,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
     second = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "web",
                 "r = await tools.web_search(queries=['beta topic'])\n"
                 "print(r['results'][0]['document'])\n",

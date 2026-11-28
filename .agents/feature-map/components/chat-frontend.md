@@ -44,25 +44,89 @@
   Pending submission takes no attached files and is unavailable in incognito
   and for anonymous users. Craft keeps its own queue; only the queue display and
   keyboard navigation are shared.
-- **Subagents can continue after the answer ends.** A small activity indicator
-  stays visible while background work remains. It shares a row with the
-  pending-input hint. Its Stop subagents button stops every active
-  background agent on the selected branch; it sits outside the `role="status"`
-  text, so the live region announces only the status. The input stays usable. While
+- **A user drives the chat from the keyboard.** Cmd/Ctrl+Shift+O starts a
+  new session, Cmd/Ctrl+E folds the sidebar, Cmd/Ctrl+/ opens or closes the
+  model picker, Alt+Up and Alt+Down open the previous or next Recents chat,
+  and Cmd+Option on Mac or Ctrl+Alt with 1–9 opens the Nth Recents chat.
+  Holding those modifiers shows the shortcut at the end of each chat row. All but
+  Alt+Up and Alt+Down work from the chat input too, since those keys move
+  the caret by paragraph on macOS. Only the sidebar shortcut runs while
+  another modal is open.
+  `web/src/lib/shortcuts/constants.ts` lists them;
+  `sections/sidebar/ChatShortcuts.tsx` binds them with Opal's `useHotkey`.
+  Cmd/Ctrl+K opens or closes the sidebar's search menu
+  (`sections/sidebar/ChatSearchCommandMenu.tsx`). The menu shows Recent
+  Sessions and Shortcuts. Search matches chat sessions and shortcut labels.
+  Shortcuts includes New Session and shows the keys for the user's platform.
+  Each shortcut action runs after the menu closes.
+- **A user finds text in the open chat.** Cmd/Ctrl+F opens a find bar
+  (`sections/chat/ChatFind.tsx`) in the `overlay` slot of the chat's
+  `ChatScrollContainer`; with no chat open, the browser's find stays. It
+  searches the loaded messages' data, not the DOM: user text and answer
+  text, without tool steps or thinking (`lib/chatFind/match.ts`). It parses
+  answers with `AnswerMarkdown`'s remark plugins
+  (`lib/answerText/remarkPlugins.ts`), so the counts match the page. So it also
+  finds rows that the windowed list has unmounted. A step scrolls the row
+  near the view so it mounts, then the CSS Custom Highlight API paints the
+  matches inside rows marked `data-chat-find-text`
+  (`lib/chatFind/highlights.ts`, `lib/chatFind/hooks.ts`). Citation chips and
+  callout titles are marked `data-chat-find-ignore`; footnotes are left out.
+  It searches every answer of a multi-model turn and the user messages a
+  reply shows in place. A match in a closed `<details>` opens it, and one
+  below a long question's fold unfolds the bubble (`data-chat-find-fold`).
+  The first search in a paged chat loads its older pages with
+  `loadOlderChatMessages`, up to 20 (`lib/chatFind/olderPages.ts`); past the
+  cap the bar says how many messages it searched. A search starts at the top
+  row of the view.
+  Enter and Shift+Enter step; Escape closes and returns focus. The command
+  menu's Find item shows only while a bar is mounted (the store's `mounted`
+  count). The matcher skips a link as a citation chip only when its label is
+  plain text, as `MemoizedAnchor` does; keep the two rules the same.
+- **A user types or pastes with no field focused.** On the chat page, a
+  printable key with no Ctrl, Cmd or Alt moves focus to the chat input, and
+  the browser types the character there. A paste goes to the input too. Keys
+  in a field, Space on a button, and keys while a dialog, menu or listbox is
+  open stay where they are (`web/src/lib/chat/typeToFocus.ts`). The handlers
+  are React props on the page's root element in `views/AppPage.tsx`, which
+  takes focus (`tabIndex={-1}`) on a click in empty space. So only keys with
+  focus inside the page count: not keys on the sidebar, or on `body` before
+  the first click.
+- **The composer keeps a draft for each chat** and one for the new chat
+  (`sections/input/AppInputBar.tsx`, `useDraft` with `storage: "local"`). The
+  draft holds the text, its `@` picks and the uploaded files, and survives
+  reload and browser closure. A send or an emptied input clears it, and
+  logout removes all of them. Incognito keeps its composer text and files
+  in memory. Persisted drafts are scoped to the signed-in account and tenant.
+  Drafts from older tabs without an account or privacy mode are not restored.
+- **Subagents can continue after the answer ends.** The header's activity
+  card opens when agents start and lists each one with its run time and its
+  own Stop button, which stops that agent and the agents below it. The
+  composer shows no subagent status. The input stays usable. While
   subagents run, status polling finds automatic follow-up responses in an idle
   chat and loads them through the normal refresh and replay path. Internal
-  agent results do not become user message bubbles. A "Subagent results received" divider shows above each
-  automatic follow-up response. That response shows its model label but
-  cannot be regenerated.
-- **A tool call needs approval.** An approval card shows the tool's
-  arguments. Every card that waits for a decision shows in one region after
+  agent results do not become user message bubbles. An automatic follow-up
+  response continues the turn that spawned the agents, as T3 Code shows it: no
+  divider, and the turn's actions show once, under its last answer. That
+  response shows its model label but cannot be regenerated.
+- **A tool call needs approval.** An approval card shows the payload that
+  the tool gives for the call (`ToolApprovalRequest.arguments`), or the call's arguments
+  when the tool gives none. Every card that waits for a decision shows in one region after
   the last message (`sections/chat/ToolApprovalsRegion.tsx`, rendered by
   `ChatUI`), oldest response first and in packet order, from the replies and
   from their background subagents alike. A multi-model card names its model;
   a subagent's card (`agent_name` set) names the subagent. The request has no
-  deadline. The user approves once, approves for the chat, or rejects; the
-  card then becomes a one-line record of the outcome, or of "No longer
-  waiting" when the server returns 409 or 404. The record shows in the region
+  deadline. The user approves once, approves for the chat, or rejects. A card
+  with `can_approve_for_command` (an app request of a VM command,
+  [[craft-external-apps#chat-command-approvals]]) offers "Approve for this
+  command" (`ApprovalCard` `sessionScope="command"`, which sends
+  `approve_command`) in place of the chat choice. Any card of a VM command's
+  app request, also one that offers only approve once and reject, shows its
+  `expires_at` deadline; it waits only while its call runs. A reconnect to the live stream
+  buffer can send the card and its outcome again; a saved session does not
+  rebuild it. The card then becomes a record of the
+  outcome, or of "No longer waiting" when the server returns 409 or 404. The
+  record is a closed timeline step (`RunStep`) titled with the outcome; it
+  opens onto the request details. The record shows in the region
   until the resolution packet arrives; from then on the reply's timeline
   shows it next to its tool call (`AgentMessage:buildSectionSegments`), and
   a reload replays it there. While the turn waits, its stream ends with
@@ -74,7 +138,8 @@
   outcome arrives (`lib/chat/toolApprovals.ts:toolApprovalStatus`). A
   continuation sends a resolution again live after its replay sent it; the
   read keeps one entry per `approval_id`. The decision response names the
-  resume stream of a suspended answer in `continuation` (`ToolApprovalCard`);
+  resume stream of a suspended answer in `continuation`
+  (`lib/chat/hooks.ts:useToolApprovalDecision`, which `ToolApprovalCard` uses);
   for an answer that still runs it is null and the current reader keeps
   reading. The client does not decide which decision was the last: "Approve
   for this chat" can also approve sibling requests on the server. When
@@ -115,7 +180,9 @@
   open request of the reply, and the record reads "Not approved". A reload
   replays the request and the stop the same way.
   While a reply's own card waits, the timeline header reads "Waiting for your
-  approval", also after a preamble and for parallel tool calls. The server
+  approval", also after a preamble and for parallel tool calls. The shared
+  chat view sets `ToolRequestDeciderContext` to false and shows no cards, so
+  its header reads "Waiting for the owner's approval" (or answer) instead. The server
   refuses new input with a 409 `APPROVAL_PENDING`; the client does not check
   first. On that 409 the composer keeps the draft, scrolls to the reply's
   first waiting card in the region, approval or question, shakes it and
@@ -126,13 +193,18 @@
   refreshes. A subagent's card blocks no send.
   What each decision does is in [[mcp-and-custom-tools]].
 - **The agent asks the user questions.** A question card
-  (`ToolQuestionCard`) shows 1-3 questions, one per page; each offers its
+  (`ToolQuestionCard`) shows 1-4 questions, one per page; each offers its
   options in the model's order, recommended first, and an "Other" field
   for the user's own answer. A card with more than one question shows "Question N of M"
   and Back and Next buttons; the choices stay when the page changes, and
-  picking an option does not change the page. For every question the user
-  picks one option or writes in Other; typing in Other clears the option
-  and picking an option clears Other. The user submits on the last page,
+  picking an option does not change the page. For a single-select question
+  the user picks one option (a radio group) or writes in Other; typing in
+  Other clears the option and picking an option clears Other. A question
+  with `multi_select` reads "Choose all that apply." and shows its options
+  as checkboxes; the user toggles any of them and can also write in Other.
+  The record joins several chosen options as a list. The record is a closed
+  timeline step titled "Answered N questions", or with the outcome when the
+  card has no answers; it opens onto each question and its answer. The user submits on the last page,
   where Submit replaces Next. Submit stays disabled, with a hint that
   names the unanswered questions, until each question has an answer.
   Waiting cards show in their own region after the approval
@@ -140,7 +212,8 @@
   label, since only a single-model reply's root agent asks. The packets,
   the answers route and the replay are in [[streaming-protocol]] and
   [[mcp-and-custom-tools]]. Questions share the approval reads and UI
-  state in `lib/chat/toolApprovals.ts`: `readToolQuestions` reads them
+  state in `lib/chat/toolApprovals.ts`: `readToolQuestions`
+  (`lib/chat/toolQuestions.ts`, with `toolQuestionStatus`) reads them
   with the same cache as `readToolApprovals`, `readWaitingToolRequests`
   lists both kinds on the selected branch, and `useToolRequestUi` holds
   the local statuses of both and the nudge. The card's answered status
@@ -173,11 +246,17 @@
   section there); a reload replays the same.
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
-  reload shows the same version.
+  reload shows the same version. Edit loads the message's text and files into
+  the composer (`AppInputBarHandle.editMessage`) under an "Editing in the
+  composer" banner, and sets the draft aside. Cancel, Escape or the send
+  puts the draft back. The send resends with `messageIdToResend` and the
+  composer's files; a kept file keeps its original descriptor.
 - **A user sends one message to several models** and sees the answers side by
   side. They can pick one. If they send a follow-up without a pick, the chat
   continues from the answer they were looking at.
-- **A user attaches files** by drag and drop, paste or the input bar. If the
+- **A user attaches files** by drag and drop, paste or the input bar. While
+  files are dragged over the chat page, an overlay says "Drop files to
+  attach" (`sections/input/FileDropOverlay.tsx`). If the
   active model has no vision support, an upload that contains an image is
   refused with a message, and none of its files attach.
 - **A user reloads during an answer.** The buffered part appears at once,
@@ -190,8 +269,10 @@
   the turn ends (stopped and failed turns too), each file that the turn
   published shows as a download card after the answer, with its title (else
   its file name), type and size. As in Craft, a reply shows at most five
-  cards, then a "View all N files" button that opens the panel's Files list;
-  a page without the panel shows every card. Every publish of one path in a chat is a version of one
+  cards of the chat's own files, then a "View all N files" button that opens
+  the panel's Files list; a file of another chat, which that list leaves out,
+  always shows as a card (`belongsToChat`, the chat ID from
+  `PublishedFilesPanel`). A page without the panel shows every card. Every publish of one path in a chat is a version of one
   artifact (`artifact_id`, `version`). A click opens the card's version in
   its artifact's tab in the right panel; a page without the panel (NRF)
   opens it in the preview modal. Each card shows only its file; a later publish of the same path adds
@@ -202,6 +283,33 @@
   and digits. The timeline step lists the
   files that the call asked for and how it ended. Shared chats show the same
   cards.
+- **Each page of the chat's sandbox browser is a tab of the right panel.**
+  The page tabs sit in the strip with Files, Sources and the file tabs
+  (display ID `browser:<page id>`; `RIGHT_PANEL_BROWSER_TAB` stands for the
+  browser until the stream lists its pages). The browser service owns the
+  page list and each viewer's selection: the `tabs` message's `selected`
+  marks the active page tab, and a tab click sends `selectTab`, close sends
+  `closeTab` (without a connection, close shuts the whole browser in the
+  panel). The browser opens by itself when a live stream starts the
+  agent's `browser_open` tool in the open chat, also on a followed
+  continuation (`followChatSession`), but not on reload or replay,
+  and from the strip's "+" menu (shown when
+  `settings.chat_browser_available`), which sends `newTab`. It closes when
+  the last page of a live browser closes. `ChatRightPanel` gets the stream
+  and the page tabs from `useChatBrowserTabs`, which owns the stream
+  (`useBrowserStream`) and the download and error toasts: its websocket
+  (`/api/chat/sessions/{id}/browser/ws`, cookie auth, owner only) is open
+  while the panel and the chat's browser are open. One view
+  (`sections/chat/browser/`, ported from T3 Code) serves all page tabs; only
+  the viewer that controls the tab can send input or navigate, and the
+  service adds a missing URL scheme. Page dialogs and file choosers name
+  the asking frame's origin when the service knows it. Close code 4403 shows the browser as
+  off, 4404 and 4503 as unavailable with a retry; other drops reconnect,
+  and six connects in a row that do not open stop with a retry. A
+  page's download goes to the sandbox's `downloads/`, not to Files: its toast
+  downloads it from `/api/chat/sessions/{id}/browser/downloads/{name}`. The
+  admin switch is "Browser" on the chat preferences page
+  (`browser_enabled`).
 - **A chat has a right panel, with a toggle at the far end of its header**
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the
@@ -226,7 +334,10 @@
   starts (`lib/chat/publishedFiles.ts:startChatLoad`), and a load's list
   replaces the chat's list only when no load that started later gave it, so an
   older load never overwrites a newer list. The button is off while the reload
-  runs, and a failure shows a toast. A file tab's URL bar shows the file's
+  runs, and a failure shows a toast. Settlement runs the same reload when a
+  settled stream's answers hold a finished `library_manage_library` or
+  `artifact` call (a `custom_tool_delta`), whose changes send no file packets,
+  unless it loaded the saved history. A file tab's URL bar shows the file's
   path, then the preview's actions: source toggle, copy and download. It
   opens at half the page; the user drags its edge, or uses the arrow keys on
   the edge, to resize it, and the width is kept per chat through a reload. A
@@ -234,7 +345,8 @@
   the chat and the panel shows the panel over the page, without the size
   button. A panel over the page covers only the page column,
   not the sidebar, and the page under it cannot be focused. Files and Sources
-  lead the tab strip when they have content, or while they are active. A citation's Sources control opens the panel on Sources. The
+  lead the tab strip while they are open. Each has at most one tab, which
+  stays while other tabs show; opening it again shows that tab. A citation's Sources control opens the panel on Sources. The
   Files tab shows Craft's output tiles for the files published in the chat,
   on every branch, also by answers that are not loaded and by subagents: one
   tile per artifact, its newest version, newest artifact first (a new
@@ -255,27 +367,31 @@
   with a click or the arrow keys, reorder by drag or Alt+arrow among the
   file tabs (on a touch screen, a swipe scrolls the strip and a press and
   hold starts the drag), and closing
-  the active tab returns to the tab used before it, else to Files. Files and
-  Sources cannot close or move, and a file tab cannot move before them. File
+  the active tab returns to the tab used before it, else to Sources, else to
+  the browser; with no tab left, the panel closes. Files and Sources close
+  with their close buttons but cannot move, and a file tab cannot move
+  before them. File
   tabs of one shown name show their paths. An artifact has one tab, which
   follows its newest version: a reload's list or a live publish of a newer
-  version updates an open tab. A card of an older version pins the tab to
-  that version, labelled "v{version} of {latest}"; the newest version has no
-  label. The five most recent file viewers stay
+  version updates an open tab. A card of an older version, or an artifact
+  link that names a version, pins the tab to that version, labelled "v{version} of {latest}"; the newest version has no
+  label. A tab's name comes from the list, so a reload after a rename
+  updates it, also on a pinned tab. The five most recent file viewers stay
   mounted, so switching back does not load the file again; a hidden one
   leaves layout (`content-visibility: hidden`). During a drag of the panel's
   edge, the content follows the width live, as in Craft, under an overlay
   so the pointer hovers nothing in it. A file tab and
   the preview modal show a file the same way: markdown as a document, a CSV
   or workbook as a grid with a sheet bar, a PDF one page at a time with page
-  thumbnails and zoom, a PowerPoint deck one slide at a time with a slide
-  list, a Word file as pages scaled to fit the width, an image fit to the
+  thumbnails and zoom (each thumbnail in its page's shape), a PowerPoint deck
+  or a Word file in the same PDF view, from the PDF that the server converts
+  it to, an image fit to the
   panel, HTML as its page in a sandboxed frame, SVG as an image, and code,
   data and text as highlighted source with line numbers (plain text wraps
-  instead). Markdown, CSV, HTML and SVG have a "Show source" button that becomes "Show preview" (an eye) on the source. The PDF and
-  slide views share Craft's toolbar and resizable thumbnail column
+  instead). Markdown, CSV, HTML and SVG have a "Show source" button that becomes "Show preview" (an eye) on the source. The PDF view
+  shares Craft's toolbar and resizable thumbnail column
   (`sections/file-preview/PreviewControls.tsx`). The column is one tab stop,
-  the current page or slide, and the arrow keys move it, with focus. A
+  the current page, and the arrow keys move it, with focus. A
   preview under 480 px wide, as on a phone, starts with the column hidden:
   `lib/filePreview/hooks.ts:useThumbnailColumn` measures the row that holds
   the column and the page when it mounts, before the first paint, then
@@ -283,11 +399,14 @@
   the counts, copy, download and source toggle over the content's bottom. In
   the panel, the visible file's actions move to the URL bar's row through
   `PreviewActionsSlotContext` (`sections/file-preview/FloatingFooter.tsx`);
-  the counts and an image's actual-size toggle stay at the bottom. A loader shows only when a load takes over 300 ms. A file over its
-  format's limit (5 MB of text, 20 MB for Word or PowerPoint, 100 MB for a
-  PDF), a legacy `.ppt` and other types show one card with a download
-  instead. So does a failed load, with a retry, and a PDF, deck, Word file or
-  image that does not render, such as a HEIC image.
+  the counts and an image's actual-size toggle stay at the bottom. A loader shows only when a load takes over 300 ms;
+  for a Word or PowerPoint file it also says, in a live region, that the
+  preview is being prepared, because the first conversion can take a while.
+  A file over its format's limit (5 MB of text, 100 MB for a PDF), a legacy
+  `.ppt` and other types show one card with a download instead. So does a
+  failed load, with a retry, a Word or PowerPoint file that the server cannot
+  convert (its own "No preview for this file" copy), and a PDF or image that
+  does not render, such as a HEIC image.
   Closing the panel
   keeps its tabs, so reopening it, or coming back to the chat, restores them.
   A closed panel cannot be focused, and closing it returns focus to the
@@ -425,7 +544,10 @@ history API first, so the tabs follow the click, then asks Next to render a new
 route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
 `web/src/lib/navigation/hooks.ts:AppPosition` changes only the query, which
 `AppPage` renders itself, so writing the URL is the whole switch; in-app links
-use its `linkTo*` props. `AppChrome`'s `PendingRoute` loader is
+use its `linkTo*` props. A send from a new session makes its chat current
+before the URL changes, so a switch to a new session in that gap writes no new
+URL; `openNewSession` and `linkToNewSession` clear the current chat for that
+case. `AppChrome`'s `PendingRoute` loader is
 `web/src/layouts/chromes/AppChromeLoader.tsx:AppChromeLoader`, which picks the
 URL's page loader (the agents catalog, the agent editor, the page loader, or
 blank for a view of `/app`). `/app/loading.tsx` re-exports it, so the same
@@ -449,11 +571,13 @@ parent and the server parent are the same node. When the server answers
 without admitting the send (`CurrentMessageFIFO.acknowledged` resolves to
 `null`) or the send fails before dispatch, `restoreTreeBeforeSend` removes the
 send's nodes and restores the links of their parent. The error goes to the
-session's `uncaughtError`, a `SessionError` with the error code and details,
-after settlement.
+session's `uncaughtError`, a `SessionError` with the error code and details.
+The reader returns a rejected send’s error when it finishes. Completion and
+Stop both read that result before releasing the input.
 An automatic follow-up response has a hidden `agent_results` question node as
-its parent. `ChatUI` and the shared chat view render that node with
-`web/src/lib/timeline/chat/message/AgentResultsDivider.tsx`, with no message controls. Checks that
+its parent. `ChatUI` keeps that node as an empty row, which takes no room but
+stays the scroll anchor while the follow-up streams. The shared chat view and
+the subagent view skip it. The answer before it hides its footer. Checks that
 look for the last `user` node skip it, and export omits it. A multi-model turn
 is unresolved only while the chain tip's parent is its user message
 (`web/src/lib/timeline/chat/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not
@@ -481,7 +605,29 @@ section began (`buildSectionSegments` owns the placement)
 `/api/chat/file/{file_id}`; a click calls `PublishedFilesPanelContext`'s
 `openFile` and the view-all button its `showFiles`, which the chat page
 (`CHAT_FILES_PANEL`) and the shared view provide; without one, the card opens
-`PreviewModal` and every card shows). The right panel (`sections/chat/ChatRightPanel.tsx`)
+`PreviewModal` and every card shows). An artifact link in an answer
+(`{WEB_DOMAIN}/app/artifacts/<artifact_id>[/v<N>]`, which the artifact tools
+give the model; `lib/chat/publishedFiles.ts:parseArtifactLink`, any origin)
+calls the same `openFile` with the file that `GET
+/api/chat/artifacts/{artifact_id}?version=N` gives
+(`lib/timeline/chat/message/MemoizedTextComponents.tsx:MemoizedLink`), also a file of
+another chat, pinned to the version that the link names. A response that
+arrives after the user switched chats, or after a later artifact link click, opens nothing. A modified or middle click, or a page without the panel, keeps
+the link's new tab. The route `app/app/artifacts/[...link]`
+(`sections/chat/ArtifactLinkPage.tsx`) resolves a link outside a chat by the
+metadata route's `access`: the `owner` goes with `artifactId` and
+`artifactVersion` to the owning chat, a `chat_reader` (a public share) to
+the chat's shared view (`app/app/shared/[chatId]`), and `file_only` (a
+version that a chat the user can read holds, such as a reader of another
+chat whose replace added it; only a link with `/v<N>`) shows the file alone
+with `PublishedFilePreview` and `DownloadButton`, with no chat. A response
+that arrives after the user left the link's URL sends the user nowhere.
+`lib/chat/hooks.ts:useOpenArtifactFromUrl` (on the chat page and the shared
+view) opens the version once the chat has loaded, pinned when the URL names
+a version, then drops the parameters. Any other user gets not-found. `parseArtifactLink` and the
+backend's `parse_artifact_url` read the same example links
+(`backend/tests/unit/onyx/tools/sandbox/artifact_links.json`).
+The right panel (`sections/chat/ChatRightPanel.tsx`)
 is built from the output-panel parts that it shares with Craft's panel
 (`sections/output-panel/` and `lib/outputPanel/`): the presentational parts,
 the tab rules, and `sections/output-panel/PanelResize.tsx:useOutputPanelWorkspace`, which measures
@@ -501,8 +647,16 @@ reports that it failed. Its loader,
 `/api/chat/file/{id}` once with the default cache mode. The response's name
 and type pick the format (`lib/filePreview/format.ts:resolveFilePreviewFormat`).
 A spreadsheet reads the server's parsed sheets (`?parsed=true`) instead of
-the workbook, and an image or an unsupported file reads no body: the image
-loads from the file URL in an `<img>`. SVG loads as text, because the server
+the workbook. A Word or PowerPoint file reads its stored PDF (`?preview=pdf`);
+on a 409 with error code `PREVIEW_NOT_READY` it asks the server to convert the
+file in the owner's sandbox (POST `/{id}/preview`), and the PDF view shows the
+result. The download stays the original file. Both responses read at most the
+browser's PDF limit. A 422 with error code `PREVIEW_UNAVAILABLE` from either
+call (no sandbox, a file over the server's limit, a failed conversion) shows
+the download card without a retry; other failures keep the retry. A name in one
+of these formats skips the request for the original. `lib/chat/svc.ts:fetchChatFile`
+owns the method and URL of each form (`ChatFileVariant`). An image or an unsupported
+file reads no body: the image loads from the file URL in an `<img>`. SVG loads as text, because the server
 serves it as `application/octet-stream`, and renders from a `data:` URL. HTML
 renders through `srcdoc` with an empty `sandbox`: an opaque origin with no
 scripts, so it cannot reach Onyx's page, cookies or API, and the sandbox
@@ -514,17 +668,9 @@ send the file's contents to another site. Scripted or CDN parts do not show. Dec
 and CDN loads come back only with a real browser surface for previews, not by
 loosening this policy; the page's CSP applies too. Other bodies
 are read up to the format's limit while they stream, because the server sends
-no length. Text over 200,000 characters shows without highlighting, and
-markdown over it shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
-the build's `/pdfjs/` assets, with `isEvalSupported` off. A Word file renders
-through `lib/docx/renderDocx.ts`, which sanitizes it, into a shadow root. A
-PowerPoint deck parses in the browser with `@jvmr/pptx-to-html` through
-`lib/pptx/renderPptx.ts`, which sanitizes each slide: no script, no style
-element, and no image or CSS `url()` from outside the deck: a style property
-with any `url()` that is not an embedded image goes. Each slide
-renders into its own shadow root, scaled from the deck's slide size. The
-parser uses namespaced selectors that jsdom lacks, so Jest tests give its
-output.
+no length. Text over 100,000 characters shows without highlighting, and
+markdown over 200,000 shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
+the build's `/pdfjs/` assets, with `isEvalSupported` off.
 Markdown shows raw HTML as text. Craft's previewers read sandbox paths, not
 chat files. Published files belong to the chat, not to a branch.
 `lib/chat/publishedFiles.ts:chatPublishedFiles` owns the Files list: the
@@ -534,18 +680,24 @@ the loads, such as live publishes and an answer that resumes after an
 approval, merged per artifact (`artifactKey`) into its highest version. A
 file saved without `artifact_id` is its own one-version artifact. The
 session's `loadedPublishedFiles` holds the list, the sequence of the load
-that gave it, and the file IDs that the loads' packets replayed
-(`addLoadedPublishedFiles`; every load and settle applies it with the
-sequence it took as its fetch started, and an older page adds its packets). A replayed file that the
-list leaves out stays out: an older version, a file saved without an
-artifact or one whose object is missing. Without a list, the packets give all the
-files.
+that gave it, and the file IDs that the list covers: the files that the
+loads' packets replayed, and the files that the chat's packets held when a
+load with a list started (`addLoadedPublishedFiles`; every load and settle
+applies the `ChatLoad` that it took as its fetch started, and an older page
+adds its packets). A covered file that the list leaves out stays out: an
+older version, a deleted file, a file saved without an artifact or one whose
+object is missing. So a live publish on a message that a reload's page
+leaves out does not come back after a delete. Without a list, the packets give all the
+files. A version that the chat added to another chat's artifact (its
+`chat_id` is that chat) stays out, as the list leaves it out; its reply
+card shows it.
 A shared chat has no live publishes, so its load's list alone gives its
 files, until the panel's reload adds a newer page's list. A file tab (`ChatRightPanelState.fileTabs`, keyed by
 `rightPanelFileTab`, the artifact) keeps the file that it opened with and
-whether it is pinned: both card openers (`openPublishedFileInChat`, the
+whether it is pinned: both panel openers (`openPublishedFileInChat`, the
 shared view's opener) build the action with `openCardFileAction`, which
-pins it when the chat's files hold a newer version (`newestVersion`). A card
+pins it when an artifact link names the version (`pinVersion`) or the chat's
+files hold a newer version (`newestVersion`). A card
 saved without `artifact_id` whose file the list holds opens the listed
 file, so the card and its tile share one tab. The panel shows a pinned tab's file, else the newest
 version of its artifact, so a card always opens its own file, also one that
@@ -565,8 +717,8 @@ closed, the panel takes no room. The panel draws its own toggle once the chat
 has a session, and the header leaves room for it at its end
 (`layouts/chromes/AppChrome.tsx`, the shared view's header padding). That room
 is `--panel-toggle-reserve`, a registered property in `app/globals.css`: the
-open panel sets it to zero on the page element, and the page eases it with
-the panel's slide. The size button's `end-12` in
+open panel sets it to zero on the page element, in the same frame as the
+panel opens. The size button's `end-12` in
 `sections/chat/ChatRightPanel.tsx` repeats its 48px initial value; change both
 together. In the
 DOM, the toggle follows what the user sees: a closed panel puts it in the
@@ -587,12 +739,25 @@ packet, stripped where it renders.
 
 The panel's state and its transitions are one pure module,
 `lib/chat/rightPanel.ts:rightPanelReducer`, which owns the tabs: the mode
-(closed, medium or full, as Craft's), the open files (Files and Sources
-are fixed tabs, so only the active tab and the history name them), width,
+(closed, medium or full, as Craft's), the open files (`filesOpen` and
+`sourcesOpen` say whether Files and Sources have tabs; only the active tab
+and the history name them), width,
 search and seen files. The Files list and the file tabs follow the shared
 tab rules (`lib/outputPanel/tabs.ts:openPanelTab`, `closePanelTab`), with
-the Files list first, so closing the last file tab shows the Files list;
-Sources stands apart. A file that the panel shows counts as seen
+the open Files list first;
+Sources and the browser stand apart: `browserOpen` says whether the
+browser's pages show as tabs (`openBrowser`; `closeTab` of
+`RIGHT_PANEL_BROWSER_TAB` closes it), and `RIGHT_PANEL_BROWSER_TAB` is the
+active tab while the browser shows. The page list and the selected page come
+from the stream, not from this state; `useChatBrowserTabs` gives each page a
+display tab ID `browser:<page id>`. `isFilesTab` excludes Sources and the
+browser. The browser protocol
+(`lib/chat/browser/types.ts`), the stream client and pure input mapping
+(`lib/chat/browser/stream.ts`), and the view's state
+(`lib/chat/browser/hooks.ts:useBrowserStream`, `useChatBrowserTabs`) match the
+api_server's browser route. In dev, `next.config.js` rewrites the
+websocket to the backend, as Craft's HMR route. A file that the panel shows
+counts as seen
 (`markSeen`); the first time the panel shows files, the panel marks the
 listed files seen once (`initializeSeen`). The store keeps one state per
 session and applies the reducer (`updateCurrentRightPanel`); the shared view
@@ -610,13 +775,14 @@ panel does not watch the width; it measures again when it opens.
 `ChatSidePanel`'s `reserve` keeps the medium width in the row's flow, and the
 panel sits over the row's end: at the reserve's width at medium size, at the
 row's full width (`100%`) when it covers. A change of size moves only the
-panel's edge, never the page or the panel's position. The width slides only
-when the panel's shape changes (open, close, beside or over the page); a
-change of the row's width or a drag applies at once. The panel and its
-reserve carry transition timing only while they slide: CSS
-`transition-property` defaults to `all`, so a duration left on them animates
-every drag step and the panel trails the pointer. The chat panel throws
-without the workspace context.
+panel's edge, never the page or the panel's position. With a reserve, open,
+close and every change of shape or width apply in one frame, as T3 Code's
+panels do by default: a width slide beside the page lays out the whole chat
+transcript, and the panel's content from zero width, on each frame, which
+showed as lag and a shifting layout. Only a panel without a reserve (NRF's
+Sources) slides; it carries transition timing only while it slides, because
+CSS `transition-property` defaults to `all`. The chat panel throws without the
+workspace context.
 In the panel, `sections/document-sidebar/DocumentsSidebar.tsx` gets no
 `closeSidebar` and draws no frame; NRF draws its frame. `sections/chat/ChatSidePanel.tsx` is
 the sliding panel frame: it returns focus to the opener on close. It records
@@ -665,7 +831,7 @@ packet of a started tool, such as a code mode closing record, joins its group,
 and the answer stays shown. The stop packet sets `finalAnswerComing` again
 when the latest display group is text, not a user message. Nothing follows the
 stop, so the text of a step that ends the response with a tool call, such as
-`wait_agents`, is the answer. A cancelled or failed turn shows its latest text
+`wait_agent`, is the answer. A cancelled or failed turn shows its latest text
 the same way, as its saved answer does. Live,
 the closing record follows the answer. On replay, it follows its tab's section
 end, before the answer's `message_start`. Both orders give the same groups.
@@ -678,7 +844,7 @@ The mobile app copies the group end and step-kind rules in
 **Code mode steps.** Code mode runs behind the scenes: the timeline shows the
 tool calls a program makes, not the program.
 `lib/timeline/chat/transformers.ts:expandCodeModeSteps`
-turns each nested call of an `execute_code` or `wait_code` group into its own
+turns each nested call of a run or wait group into its own
 step, drawn by that tool's renderer as a direct call would be. The packet
 processor adds each nested packet to its call as the packet arrives, and after
 each processed batch builds `GroupedPacket.nestedCalls` for each group with
@@ -689,7 +855,7 @@ renderers of finished calls do not redraw. A call is its cell and
 `sub_turn_index`, as `CodeModeRenderer` (`backend/onyx/chat/renderer.py`)
 states, so the latest report replaces the earlier ones in place. Pacing
 compares the last packet of each step, because a new report can have as many
-packets as the old one. The program, its output, `wait_code`
+packets as the old one. The program, its output, wait tool (`wait` or `poll`)
 calls, yields and closing records have no step. A program without tool calls
 shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
 in one pass: a program runs from `code_mode_start` until a `code_mode_delta`
@@ -698,7 +864,15 @@ it. A yield (status `running`) ends the program's turn: the model acts next.
 `useTimelineHeader` takes `codeModeWorking`, so the run header reads
 "Working" while the program runs between calls.
 The header names a step's activity from its own first packet; nested packets
-do not decide it. A step with no activity of its own reads "Working". Before
+do not decide it. A step with no activity of its own reads "Working". A
+command step names its program (`web/src/lib/timeline/chat/commandProgramName.ts`, from T3 Code).
+A reasoning step shows the title of its latest section, a bold line or a
+heading (`reasoningPreview`), or "Thinking" before the first title. Its own
+step card also shows this title while it streams. The
+collapsed run card shows this header while it works. Once done, it reads
+"Worked for {duration}", also after a stop: the answer's own notice says it
+stopped. Only the response's first run uses the response's start and
+duration (`isFirstRun`); a later run times itself. Before
 the first step, the response shows the cursor, not a run card. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
 keyed by step (a parallel group by its first step), not by position, because a
@@ -801,7 +975,9 @@ Resume).
 **Pending input.** `lib/chat/hooks.ts:useChatSessionQueue` holds the pending
 list and session status in SWR. `useChatSessionController` mounts it once per
 chat page and passes it to `AppInputBar`, which only renders it. The hook
-subscribes to primitives and memoizes its result, so streamed frames do not
+and `useChatSessionStatus` subscribe to primitives: the status hook reads the
+message tree only to know whether a shown request waits
+(`readWaitingToolRequests`). The result is memoized, so streamed frames do not
 re-render the memoized `AppInputBar`; submit reads its target response from
 the store when it runs. Incognito chats and anonymous users get a disabled
 queue. One pending-message request runs at a time, and its cache writes use
@@ -814,13 +990,85 @@ Input that joins a running response arrives as a `user_message` packet;
 `app/app/services/lib.tsx` removes that ID from the cached list on either
 reader, with no request. Saved replay emits the same packets from each step's
 human inputs, so both paths render user bubbles between response sections.
-Status polls every 2 seconds while `has_startable_input` or
-`has_active_subagents` is true. `stopSubagents` posts
-`/api/chat/chat-session/{id}/stop-subagents`, then revalidates status.
+Every status reader loads it through `lib/chat/hooks.ts:useChatSessionStatus`,
+which polls every 2 seconds while a reply streams, while the chat shows a
+waiting approval or question, or while `has_startable_input` or
+`has_active_subagents` is true. Another tab or client can decide that request
+and continue the response there; the poll sees `is_processing`, a new
+`latest_response_id` or a new `approvals_version` and refreshes the chat.
 The header's activity button (`sections/chat/ChatActivity.tsx`) shows once a
-chat has a waiting request, a background agent or a published file. It is
-always the icon alone, so the header never shifts, and toggles a card that
-stays open until that button closes it. The card portals into the page column's
+chat has a waiting request, a background agent or a published file. It sits
+after the share menu. The extension page (`app/nrf/NRFPage.tsx`) has no app
+chrome, so it gives the card its own `activitySlot` and puts the button in the
+side panel's header or beside the new tab's settings button; that is the only
+subagent Stop there. It has no Files panel, so its card leaves out the files
+(`showFiles={false}`). It is always the icon alone, so the header never shifts,
+and toggles a card that stays open until that button closes it. The card also
+opens when the count of live agents goes from zero to more while the chat
+shows. `loaded` from `useChatSubagents` turns true only after a successful list read from
+the server, so a cached list is never the baseline. In the first list, a live
+run that started up to 10 seconds before the card mounted counts as new (a new
+chat's reply can start agents before that list arrives); older live agents
+leave the card closed, and a card closed during a run of agents stays closed.
+The agent rows copy T3 Code's lineage rows: the section header counts the
+running agents ("Agents · 2 running"), and a live row shows the agent glyph
+with a blue dot, its name and its run time, counted up from `started_at`
+(`useStreamingDuration`, plain `Text` so the ticks do not flash). Hover or
+keyboard focus on the row swaps the time for a red filled square Stop (two
+overlaid `Hoverable.Item`s, so the Stop stays in the tab order; a touch screen
+shows the Stop): `useChatSubagents().stopAgent` posts
+`/api/chat/chat-session/{id}/stop-subagents` with `{ "agent_id": ... }`, then
+reloads the status and the list. A finished row shows its outcome and no time.
+A row opens the agent in the main view (`lib/chat/subagents.ts:useSubagentNavigation`).
+
+**Subagent view.** As T3 Code's, a subagent opens in the main view in place
+of the chat. `useSubagentNavigation().open` pushes the URL with
+`?subagent={id}` (`SEARCH_PARAM_NAMES.SUBAGENT_ID`) and keeps the other
+parameters; `openParent` removes it. `views/AppPage.tsx` reads the parameter
+while a chat is open: it renders `SubagentView` in the ChatUI slot (no
+`ChatScrollContainer`, no `ChatFind`) and `SubagentBar` in place of
+`MultiModelSelector` and `AppInputBar`. The sidebar and right panel stay the
+parent chat's; subagents never open in the output panel. The header title
+reads `{chat title} / {subagent name}` (`layouts/chromes/AppChrome.tsx:ChatTitle`),
+and the chat title gives way first on a narrow screen.
+`sections/chat/SubagentView.tsx:SubagentView` starts with T3 Code's "Subagent
+of · {chat title}" divider, a pill that opens the parent, then renders the
+agent's conversation read-only, as the shared view does (`HumanMessage`,
+`AgentMessage`), in the chat column's width, with its own scroller that keeps
+to the end unless the user scrolled up. It reads
+`GET .../agents/{agent_id}/history`. `useSubagentTranscript` follows the live
+stream that the history names (`.../agents/{agent_id}/stream`, one batch of
+packets per frame); its packets replace the running response's saved ones.
+A stream that drops before its stop packet resumes from its last cursor. The
+history reloads when the stream ends or the agents list names another
+`stream_id`, or none. The view lists the agent's messages by ID, not by the
+latest-child chain: a reply never links to the next instruction its parent
+sends. The history reads approvals under the root chat and adds the stop packet
+that a child's saved reply lacks. `SubagentBar` copies T3 Code's read-only
+composer bar: the agent's `model`, its state (`Starting`, `Running 12s`,
+`Waiting 12s`, `Completed in 1m 53s` from `duration_seconds`, else the label),
+an sr-only `role="status"` announcement without the ticking time, "Runs on its
+own", Stop while it is live, and **Open parent**. An agent that the list does
+not hold shows the empty text and only **Open parent**.
+`SubagentPathContext` gives the path of the agent whose conversation renders,
+so its spawns resolve to `{path}/{name}`, with each `/` of a Claude-family
+description turned into `-` as the server names it; a refused spawn links to
+no agent. `SubagentLinksContext` is false on the extension page, which shows
+no subagent view: its rows and cards open nothing.
+In the timeline, each spawn is T3 Code's subagent card
+(`lib/timeline/chat/renderers/agent/SubagentCard.tsx`): an avatar with a
+state dot (blue working, green done, red failed or at its limit, grey
+stopped), the name over the current activity (`activity_tool`) or task, the
+state while not completed, the run time or saved duration, and a chevron.
+A single spawn renders as the card alone, with no step header
+(`lib/timeline/chat/renderers/agent/AgentToolRenderer.tsx`, `timelineLayout: "content"`); send and interrupt
+steps keep their header. Consecutive spawns of one turn form one step
+(`lib/timeline/chat/transformers.ts:groupSpawnSteps`) that
+`lib/timeline/chat/renderers/agent/AgentGroupRenderer.tsx` draws as T3 Code's
+subagent group: the count, a summary such as "2 working · 1 done · 1 failed"
+(blue while any works, red when any failed), the group's run time, and a
+card per agent.
+The card portals into the page column's
 `activitySlot` (`layouts/chromes/AppWorkspace.tsx`) and pins under the header
 at the chat region's top end, so the header keeps its width and buttons. With
 no output panel open it sets `data-activity-docked`, and in a workspace at
@@ -837,11 +1085,15 @@ panel. Agents come from
 `GET /chat/chat-session/{id}/agents` (`lib/chat/hooks.ts:useChatSubagents`),
 which reads `load_session_agent_metadata` for the selected branch and keeps
 the `spawn_agent` children (`ChatConfiguration`; Deep Research workers are
-foreground): `id`, `path`, `status` and `stopped_by_user`, with no
-transcript. The list loads again when the status changes
+foreground): `id`, `path`, `status`, `stopped_by_user`, and the latest run's
+`started_at` (its response's `time_sent`), with no transcript. One more query
+(`db/chat_subagents.py:agent_run_summaries`) gives each latest run's `model`
+(`model_display_name`, copied from the spawning response when the run is
+reserved) and `duration_seconds` (`processing_duration_seconds`, saved with
+a finished child's reply). The list loads again when the status changes
 `has_active_subagents` or `latest_response_id`, and polls while agents are
-active. The status it reads also polls while a reply streams, so agents that
-the reply starts show. An idle chat that sees a running or unknown
+active. The status it reads (`useChatSessionStatus`) also polls while a reply
+streams, so agents that the reply starts show. An idle chat that sees a running or unknown
 response refreshes history and attaches to the stream.
 `app/app/stores/useChatSessionStore.ts:useCurrentResponseStopped` is true once
 the latest response's last packet is a turn-level stop. `AppInputBar` then
@@ -896,6 +1148,24 @@ the admin and Craft sidebars share: the logo mark and the wordmark from
 [[whitelabelling-and-theme]], and the fold button, which moves with the
 column's edge as the sidebar folds. A sidebar renders it rather than setting
 up its own branding.
+
+**Run status on chat rows.** Each chat row (`sections/sidebar/ChatButton.tsx`)
+shows live status from the session store and unseen Done or Failed status
+from a separate store. The row has no tooltip; the status mark carries the
+status as its label. With no status mark, the row shows the relative update time
+at its end until hover. Right-click, or the context-menu key, opens the options
+menu at the pointer. Double-click renames. The menu has Regenerate title (a
+rename with `name: null` and `regenerate: true`, which replaces a saved name) and Mark as unread or Mark as read. Working shimmers
+the title (`SidebarTab` `loading`). The other statuses put a mark at the row's
+end. On hover, the options button replaces the warning icon, error icon, or
+blue unseen dot for Done. Working (`loading`, `streaming` or `cancelling`), Needs
+approval or Question waiting (`lib/chat/runStatus.ts:liveRunStatus`, from
+`readWaitingToolRequests`, less the requests that this client decided), and
+Failed or Done for a run that ended while its chat was not on screen.
+`lib/chat/hooks.ts:useTrackChatRuns`, which `AppSidebar` mounts, watches the
+store for runs that stop working and records Failed or Done in
+`useUnseenRuns`. Tab storage keeps the 50 newest records across reloads.
+Opening or deleting the chat clears its record. Signing out clears all records.
 
 ## Contracts and traps
 
@@ -1043,6 +1313,16 @@ up its own branding.
     when it ends. Do not write `scrollTop` while the user scrolls: a following
     view catches up once the input settles. Keep native scroll anchoring on: a
     script write stops a trackpad fling.
+    **Opening a step reveals it.** When the user opens a run card or a step,
+    `lib/chatScroll/hooks.ts:useRevealOnOpen` waits `FOLD_OPEN_MS` for the fold
+    to reach its full height, then the action from the container's `prepareReveal` scrolls by the smaller of
+    the part of the row hidden below and the room above it. The footer's height (a
+    spacer the height of the composer laid over the view) counts as hidden.
+    It does nothing while the view follows a streaming reply (`isStreaming`) with
+    auto-scroll on, or when the user closes the row again during the wait, and
+    jumps instead of gliding under reduced motion. Otherwise it makes the view a
+    reading one, so the click's catch-up does not jump a following idle view to
+    the end.
     **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
     user message and its replies) in a `data-chat-turn` element. The latest turn
     has `min-height: calc(100cqh - 3rem - var(--app-composer-height))` (the
@@ -1062,6 +1342,11 @@ up its own branding.
     chat's end clear of the composer: a footer spacer (not content, so "at the
     bottom" ignores it), the latest turn's minimum height, and
     `scroll-padding-bottom` for focus and `scrollIntoView`.
+    The button names why to return (`lib/chat/hooks.ts:useJumpToLatestReason`):
+    a waiting approval, a waiting question, or new output from a run that went
+    on after the button appeared and has ended. Output that only loads, such
+    as an opened chat's history, does not count. Otherwise it is a bare
+    chevron.
     Each chat's position (end, or a row and offset) and its row heights live
     in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
     them from loaded rows only, so a switch never waits on the network. Rows

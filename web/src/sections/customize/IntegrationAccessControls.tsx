@@ -12,10 +12,11 @@ import {
   type DropdownMenuItem,
 } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
+import { useScreenSize } from "@opal/hooks";
 import { SvgMoreHorizontal, SvgOrganization, SvgShare } from "@opal/icons";
 import {
-  publishIntegration,
   setIntegrationEnabled,
+  setIntegrationInstallationPolicy,
 } from "@/lib/integrations/svc";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -98,15 +99,22 @@ interface IntegrationStateControlProps {
 }
 
 /** The control of one member row: a switch for On and Turn on, Connect and
- * the switch for Sign in, and a muted reason for No access and Turned off. */
+ * the switch for Sign in, and a muted reason for No access and Turned off.
+ * On a phone a Turned off row shows the short state; its detail page shows
+ * the reason. A No access row has no detail page, so it keeps the reason. */
 export function IntegrationStateControl({
   integration,
   returnPath,
 }: IntegrationStateControlProps) {
   const copy = useIntegrationStateCopy();
+  const { isMobile } = useScreenSize();
   const reason = copy.reason(integration);
   if (reason !== null)
-    return (
+    return isMobile && integration.access.state !== "no_access" ? (
+      <Text font="secondary-body" color="text-03" maxLines={1} tooltip={reason}>
+        {copy.label(integration)}
+      </Text>
+    ) : (
       <Text font="secondary-body" color="text-03" maxLines={2}>
         {reason}
       </Text>
@@ -149,7 +157,7 @@ export function IntegrationMenu({ integration }: IntegrationMenuProps) {
   async function publish() {
     setPublishing(false);
     try {
-      await publishIntegration(integration.id);
+      await setIntegrationInstallationPolicy(integration.id, "AVAILABLE");
       toast.success(t("publish.done", { name: integration.name }));
       await Promise.all([
         mutate(SWR_KEYS.integrations),

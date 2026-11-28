@@ -73,8 +73,8 @@ def validate_stored_custom_skill(
     bundle_file_id: str | None,
     file_store: FileStore,
 ) -> SkillValidationResult:
-    """Validate the stored bundle of one plugin version. ``name`` is the name
-    in the version's frontmatter."""
+    """Validate the stored bundle of one plugin version. ``name`` is the
+    skill's plugin name; the push writes it into the SKILL.md frontmatter."""
     if len(name) > SKILL_NAME_MAX_LENGTH or not SKILL_NAME_PATTERN.fullmatch(name):
         return SkillValidationResult(
             is_valid=False,
@@ -128,7 +128,7 @@ def validate_stored_custom_skill(
     try:
         with open_bundle_zip(normalized.content) as bundle_zip:
             raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
-        document = parse_skill_document(
+        parse_skill_document(
             raw_skill_md,
             directory_name=normalized.source_directory,
         )
@@ -147,13 +147,6 @@ def validate_stored_custom_skill(
             is_valid=False,
             normalized_bundle=None,
             detail=f"stored bundle is invalid: {detail}",
-        )
-
-    if document.metadata.name != name:
-        return SkillValidationResult(
-            is_valid=False,
-            normalized_bundle=None,
-            detail="SKILL.md name does not match the persisted skill name",
         )
 
     return SkillValidationResult(

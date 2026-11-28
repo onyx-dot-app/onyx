@@ -6,7 +6,7 @@ import { memo, useCallback, useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
-import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
 import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
 import {
   useSession,

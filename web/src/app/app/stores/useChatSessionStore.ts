@@ -23,7 +23,6 @@ import {
   CHAT_PANEL_STORAGE_PREFIX,
   INITIAL_RIGHT_PANEL,
   rightPanelReducer,
-  showsFiles,
   showsSources,
   type ChatRightPanelAction,
   type ChatRightPanelState,
@@ -31,6 +30,7 @@ import {
 import type { ChatToolOptions } from "@/lib/tools/types";
 import {
   addLoadedPublishedFiles,
+  type ChatLoad,
   NO_LOADED_PUBLISHED_FILES,
   type LoadedPublishedFiles,
 } from "@/lib/chat/publishedFiles";
@@ -38,6 +38,7 @@ import {
 /** An error that belongs to the session, not to a saved message. */
 export interface SessionError {
   error: string;
+  affectsRunStatus?: false;
   errorCode?: string;
   isRetryable?: boolean;
   details?: Record<string, any>;
@@ -46,6 +47,7 @@ export interface SessionError {
 
 interface ChatSessionData {
   sessionId: string;
+  runMarkerSuppressed?: boolean;
   messageTree: MessageTreeState;
   chatState: ChatState;
   regenerationState: RegenerationState | null;
@@ -56,8 +58,8 @@ interface ChatSessionData {
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
   sendAcknowledged?: Promise<ChatStream | null>;
-  // Resolves after the reader applies its final packets and message state.
-  readerFinished?: Promise<void>;
+  // Resolves after the reader applies its final packets, with any send rejection.
+  readerFinished?: Promise<SessionError | void>;
   hasPerformedInitialScroll: boolean;
   // The chat's right panel (lib/chat/rightPanel.ts). It stays while the
   // panel is closed, so reopening it, or coming back to the chat, restores
@@ -116,6 +118,7 @@ interface ChatSessionStore {
 
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
+  suppressRunMarkers: (sessionId?: string) => void;
   createSession: (
     sessionId: string,
     initialData?: Partial<ChatSessionData>
@@ -125,14 +128,14 @@ interface ChatSessionStore {
     updates: Partial<ChatSessionData>
   ) => void;
   /**
-   * Applies a load of the chat from the server, of sequence `loadSequence`
+   * Applies the page of `chatLoad`, a load of the chat from the server
    * (`startChatLoad`): the load's approvals version and published files, with
    * `updates` for the rest.
    */
   applyLoadedSession: (
     sessionId: string,
     loaded: BackendChatSession,
-    loadSequence: number,
+    chatLoad: ChatLoad,
     updates: Partial<ChatSessionData>
   ) => void;
   updateSessionMessageTree: (
@@ -313,6 +316,18 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().cleanupOldSessions();
   },
 
+  suppressRunMarkers: (sessionId) => {
+    set((state) => {
+      const sessions = new Map(state.sessions);
+      for (const [id, session] of sessions) {
+        if (!sessionId || sessionId === id) {
+          sessions.set(id, { ...session, runMarkerSuppressed: true });
+        }
+      }
+      return { sessions };
+    });
+  },
+
   createSession: (
     sessionId: string,
     initialData?: Partial<ChatSessionData>
@@ -329,7 +344,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   applyLoadedSession: (
     sessionId: string,
     loaded: BackendChatSession,
-    loadSequence: number,
+    chatLoad: ChatLoad,
     updates: Partial<ChatSessionData>
   ) => {
     get().updateSessionData(sessionId, {
@@ -338,7 +353,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
         get().sessions.get(sessionId)?.loadedPublishedFiles ??
           NO_LOADED_PUBLISHED_FILES,
         loaded,
-        loadSequence
+        chatLoad
       ),
       ...updates,
     });
@@ -788,6 +803,16 @@ export const useHasOlderMessages = () =>
     return currentSession?.hasOlderMessages ?? false;
   });
 
+/** An older page of the open chat failed to load, so older messages are missing. */
+export const useOlderMessagesFailed = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.olderMessagesFailed ?? false;
+  });
+
 /** The open chat is loading a page of older messages. */
 export const useIsLoadingOlderMessages = () =>
   useChatSessionStore((state) => {
@@ -839,15 +864,12 @@ export const useRightPanelShown = () =>
     );
   });
 
-/** Whether the open chat's right panel shows the Files list or a file. */
-export const useFilesShown = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession ? showsFiles(currentSession.rightPanel) : false;
-  });
+/** Opens the Browser tab when `sessionId` is the open chat. */
+export function openBrowserInChat(sessionId: string | null): void {
+  const store = useChatSessionStore.getState();
+  if (sessionId === null || store.currentSessionId !== sessionId) return;
+  store.updateCurrentRightPanel({ type: "openBrowser" });
+}
 
 /**
  * The agent the open session was created with, from the session the backend

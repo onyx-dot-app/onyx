@@ -197,7 +197,8 @@ def prepare_model_messages(  # noqa: C901
     *,
     token_counter: Callable[[str], int] | None = None,
 ) -> list[Message]:
-    """Resolve attachments and reminders into detached model messages."""
+    """Resolve attachments and reminders into model messages; each is a new
+    message object whose nested content may be shared with `history`."""
     messages: list[Message] = []
     # Replay images as text markers when the selected model does not accept images.
     supports_image_input = True
@@ -264,9 +265,7 @@ def prepare_model_messages(  # noqa: C901
 
         elif isinstance(msg, AssistantMessage):
             # Model input needs content, not the saved citation/document graph.
-            messages.append(
-                msg.model_copy(update={"metadata": None}).model_copy(deep=True)
-            )
+            messages.append(msg.model_copy(update={"metadata": None}))
 
         elif isinstance(msg, ToolResultMessage):
             # All remaining fields are scalars; application tool details stay in history.

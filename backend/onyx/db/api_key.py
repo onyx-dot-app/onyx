@@ -332,4 +332,5 @@ def remove_all_api_keys__no_commit(db_session: Session) -> UserDeleteCleanup:
         user_cleanup = delete_user_from_db__no_commit(key_user, db_session)
         cleanup.file_ids += user_cleanup.file_ids
         cleanup.affected_user_ids |= user_cleanup.affected_user_ids
+        cleanup.chat_artifact_ids += user_cleanup.chat_artifact_ids
     return cleanup

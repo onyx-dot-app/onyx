@@ -7,6 +7,7 @@ import {
   CustomToolArgs,
   CustomToolDelta,
   CustomToolErrorInfo,
+  CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
   SectionEnd,
 } from "@/app/app/services/streamingModels";
 import {
@@ -22,6 +23,13 @@ import { SvgDownload, SvgExternalLink } from "@opal/icons";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import { codeSpan, markdown } from "@opal/utils";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
+import {
+  flatFields,
+  isEcho,
+  isEmptyPayload,
+  type ToolField,
+} from "@/lib/timeline/chat/toolPayload";
+import { readToolApprovals } from "@/lib/chat/toolApprovals";
 
 function constructCustomToolState(
   packets: CustomToolPacket[],
@@ -51,6 +59,15 @@ function constructCustomToolState(
 
   const isRunning = Boolean(toolStart && !toolEnd);
   const isComplete = Boolean(toolStart && toolEnd);
+  // A call whose approval did not pass never ran. A background agent's
+  // request shows in the card of the call that started it, which ran.
+  const notRun = readToolApprovals(packets).entries.some(
+    (entry) =>
+      entry.request.agent_name === null &&
+      (entry.outcome === "rejected" ||
+        entry.outcome === "disabled" ||
+        entry.outcome === "cancelled")
+  );
 
   return {
     toolName,
@@ -61,7 +78,41 @@ function constructCustomToolState(
     error,
     isRunning,
     isComplete,
+    notRun,
   };
+}
+
+interface ToolFieldsProps {
+  fields: ToolField[];
+}
+
+export function ToolFields({ fields }: ToolFieldsProps) {
+  return (
+    <Section
+      alignItems="stretch"
+      gap={1}
+      height="fit"
+      className="whitespace-pre-wrap"
+    >
+      {fields.map(([key, value]) => (
+        <Section
+          key={key}
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="start"
+          gap={2}
+          height="fit"
+        >
+          <Text font="secondary-mono" color="text-03" wordWrap="wrap-anywhere">
+            {`${key}:`}
+          </Text>
+          <Text font="secondary-mono" color="text-04" wordWrap="wrap-anywhere">
+            {String(value)}
+          </Text>
+        </Section>
+      ))}
+    </Section>
+  );
 }
 
 export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
@@ -80,6 +131,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     error,
     isRunning,
     isComplete,
+    notRun,
   } = constructCustomToolState(packets, t("customTool.fallbackName.label"));
 
   useEffect(() => {
@@ -88,7 +140,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     }
   }, [isComplete, onComplete]);
 
-  // A failed or stopped step keeps the running title; a done one says how it
+  // A stopped step keeps the running title; a done or failed one says how it
   // ended, the tool's own errors included. The tool's name is a code span.
   const status = markdown(
     t("customTool.runningStatus.text", { toolName: codeSpan(toolName) })
@@ -96,13 +148,19 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const doneStatus = useMemo(() => {
     if (!isComplete) return null;
     const chip = codeSpan(toolName);
+    if (notRun)
+      return markdown(t("customTool.blockedStatus.text", { toolName: chip }));
     if (error) {
       if (error.is_unreachable)
         return markdown(
           t("customTool.unreachableStatus.text", { toolName: chip })
         );
       if (error.status_code === null)
-        return markdown(t("customTool.blockedStatus.text", { toolName: chip }));
+        return markdown(
+          error.is_auth_error
+            ? t("customTool.callFailedStatus.text", { toolName: chip })
+            : t("customTool.blockedStatus.text", { toolName: chip })
+        );
       return markdown(
         error.is_auth_error
           ? t("customTool.authFailedStatus.text", {
@@ -115,17 +173,21 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
             })
       );
     }
+    if (responseType === CUSTOM_TOOL_ERROR_RESPONSE_TYPE)
+      return markdown(
+        t("customTool.callFailedStatus.text", { toolName: chip })
+      );
     if (responseType === "image")
       return markdown(t("customTool.imagesStatus.text", { toolName: chip }));
     if (responseType === "csv")
       return markdown(t("customTool.fileStatus.text", { toolName: chip }));
     return markdown(t("customTool.completedStatus.text", { toolName: chip }));
-  }, [toolName, responseType, error, isComplete, t]);
+  }, [toolName, responseType, error, isComplete, notRun, t]);
 
   const icon = STEP_ICONS.tool;
 
   const toolArgsJson = useMemo(
-    () => (toolArgs ? JSON.stringify(toolArgs, null, 2) : null),
+    () => (toolArgs ? JSON.stringify(toolArgs, null, 2) : ""),
     [toolArgs]
   );
   const dataJson = useMemo(
@@ -135,11 +197,17 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         : null,
     [data]
   );
-  const hasData = data !== undefined && data !== null;
   const hasFiles = !error && !!fileIds && fileIds.length > 0;
+  const argFields = useMemo(() => flatFields(toolArgs), [toolArgs]);
+  const dataFields = useMemo(() => flatFields(data), [data]);
+  const showArgs = !isEmptyPayload(toolArgs);
+  // A response that only repeats the arguments adds nothing.
+  const hasResult =
+    !isEmptyPayload(data) || (data !== null && typeof data === "object");
+  const showData = hasResult && !isEcho(dataFields, argFields);
   // The response shows once it arrives, and as "waiting" while the tool runs.
-  const showResponse = !!error || hasFiles || hasData || isRunning;
-  const argsLines = useCodeLines(toolArgsJson ?? "", "json");
+  const showResponse = !!error || hasFiles || showData || isRunning;
+  const argsLines = useCodeLines(toolArgsJson, "json");
   const dataLines = useCodeLines(dataJson ?? "", "json");
 
   const content = useMemo(
@@ -147,15 +215,21 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       // One panel: the request, then the response (waiting, files, JSON,
       // text or the tool's error), each under its own title row. Nothing to
       // open until the request or a response arrives.
-      toolArgsJson || error || hasFiles || hasData ? (
+      showArgs || error || hasFiles || showData ? (
         <CodePanel>
-          {toolArgsJson && (
+          {showArgs && (
             <>
               <CodePanel.Header
                 title={t("customTool.requestBlock.label")}
                 copyText={toolArgsJson}
               />
-              <CodePanel.Lines lineNumbers lines={argsLines} />
+              {argFields ? (
+                <CodePanel.Content>
+                  <ToolFields fields={argFields} />
+                </CodePanel.Content>
+              ) : (
+                <CodePanel.Lines lineNumbers lines={argsLines} />
+              )}
             </>
           )}
           {showResponse && (
@@ -163,7 +237,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
               <CodePanel.Header
                 title={t("customTool.responseBlock.label")}
                 copyText={
-                  error || hasFiles || !hasData
+                  error || hasFiles || !showData
                     ? undefined
                     : (dataJson ?? String(data))
                 }
@@ -218,8 +292,12 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
                     ))}
                   </Section>
                 </CodePanel.Content>
-              ) : hasData ? (
-                dataJson ? (
+              ) : showData ? (
+                dataFields ? (
+                  <CodePanel.Content>
+                    <ToolFields fields={dataFields} />
+                  </CodePanel.Content>
+                ) : dataJson ? (
                   <CodePanel.Lines lineNumbers lines={dataLines} />
                 ) : (
                   <CodePanel.Output>{String(data)}</CodePanel.Output>
@@ -233,13 +311,16 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         </CodePanel>
       ) : null,
     [
+      showArgs,
+      argFields,
+      dataFields,
+      showData,
       toolArgsJson,
       dataJson,
       argsLines,
       dataLines,
       showResponse,
       hasFiles,
-      hasData,
       data,
       fileIds,
       error,

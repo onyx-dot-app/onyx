@@ -4,12 +4,14 @@ user's approval, keyed by its integration."""
 
 import json
 from collections.abc import Generator
+from io import BytesIO
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 import requests
+import urllib3
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,6 +25,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_name import normalize_external_tool_name
 from tests.external_dependency_unit.answer.stream_test_utils import final_answer
 from tests.external_dependency_unit.code_mode_helpers import (
@@ -138,7 +141,10 @@ def _orders_response(
         response = requests.Response()
         response.status_code = 200
         response.headers["Content-Type"] = "application/json"
-        response._content = json.dumps({"orders": ["A-1"]}).encode()
+        response.raw = urllib3.HTTPResponse(
+            body=BytesIO(json.dumps({"orders": ["A-1"]}).encode()),
+            preload_content=False,
+        )
         return response
 
     return respond
@@ -153,6 +159,7 @@ def test_a_chat_calls_an_mcp_action(
     chat = _chat(db_session, integration_agent, user)
     first = (
         code_step(
+            OPENAI_CODE_MODE,
             "call",
             f"r = await tools.{integration_agent.hello}(name='alpha')\nprint(r['result'])\n",
         )
@@ -175,6 +182,7 @@ def test_a_chat_calls_an_openapi_action(
     chat = _chat(db_session, integration_agent, user)
     first = (
         code_step(
+            OPENAI_CODE_MODE,
             "call",
             f"r = await tools.{integration_agent.list_orders}()\nprint(r)\n",
         )
@@ -185,7 +193,7 @@ def test_a_chat_calls_an_openapi_action(
     sent: list[dict[str, str]] = []
 
     with patch(
-        "onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request",
+        "onyx.tools.tool_implementations.http_request.ssrf_safe_request",
         side_effect=_orders_response(sent),
     ):
         parts = send(chat.id, user, llm, "List orders.", code_mode=code_mode)
@@ -203,6 +211,7 @@ def test_an_ask_action_in_a_program_opens_one_request(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "call",
                 f"r = await tools.{integration_agent.hello}(name='alpha')\nprint(r)\n",
             )

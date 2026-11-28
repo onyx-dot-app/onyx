@@ -193,7 +193,7 @@ test("a command shows its output while it runs and how it ended", async () => {
       ])
     );
     await expandTimeline();
-    expect(screen.getByText("Ran command")).toBeInTheDocument();
+    expect(screen.getByText("Command failed")).toBeInTheDocument();
     // Where it ran is a comment above the command.
     expect(view.container).toHaveTextContent("# in /home/onyx/workspaces/abc");
     expect(
@@ -202,6 +202,38 @@ test("a command shows its output while it runs and how it ended", async () => {
     expect(view.container).not.toHaveTextContent("test_9 ok");
     expect(screen.getByText("Exit code 2")).toBeInTheDocument();
     expect(screen.getByText("Output truncated")).toBeInTheDocument();
+    // A failed command is a failed step: red, as failed Python is.
+    expect(
+      screen.getByText("Command failed").closest(".opal-line")
+    ).toHaveAttribute("data-opal-line-status", "error");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("command output keeps its terminal colors", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      call({
+        type: PacketType.EXEC_COMMAND_START,
+        cmd: "make test",
+        workdir: null,
+      }),
+      call({
+        type: PacketType.EXEC_OUTPUT_DELTA,
+        text: "\u001b[32m3 passed\u001b[0m, \u001b[31m1 failed\u001b[0m\n",
+      }),
+    ])
+  );
+  try {
+    await openRun();
+    const failed = await screen.findByText("1 failed");
+    expect(failed).toHaveStyle({ color: "var(--opal-ansi-1)" });
+    expect(screen.getByText("3 passed")).toHaveStyle({
+      color: "var(--opal-ansi-2)",
+    });
+    expect(view.container).not.toHaveTextContent("\u001b");
   } finally {
     view.unmount();
   }
@@ -279,7 +311,7 @@ test("session input shows typed keys, and polls show the session state", async (
     expect(screen.getByText("Sent input to session 7")).toBeInTheDocument();
     expect(screen.getByText("^C")).toBeInTheDocument();
     expect(screen.getByText("Still running (session 7)")).toBeInTheDocument();
-    expect(screen.getByText("Checked session 7")).toBeInTheDocument();
+    expect(screen.queryByText("Checked session 7")).not.toBeInTheDocument();
     expect(screen.getByText("Stopped by a signal")).toBeInTheDocument();
     expect(screen.getByText("Command failed")).toBeInTheDocument();
     expect(screen.getByText("Sandbox is unavailable")).toBeInTheDocument();
@@ -290,6 +322,38 @@ test("session input shows typed keys, and polls show the session state", async (
     // A command still running at its end has only started.
     expect(screen.getByText("Started command")).toBeInTheDocument();
     expect(screen.getByText("Still running (session 12)")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a poll that reports a command deadline shows the time limit in its title", async () => {
+  const poll = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      poll({ type: PacketType.WRITE_STDIN_START, session_id: "7", chars: "" }),
+      poll({
+        type: PacketType.EXEC_END,
+        completion: "deadline_exceeded",
+        exit_code: null,
+        session_id: null,
+        wall_time_seconds: 1,
+        truncated: false,
+        output: "",
+        error: null,
+      }),
+      poll(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    const title = screen.getByText("Stopped at its time limit");
+    expect(screen.queryByText("Checked session 7")).not.toBeInTheDocument();
+    expect(title.closest(".opal-line")).toHaveAttribute(
+      "data-opal-line-status",
+      "error"
+    );
   } finally {
     view.unmount();
   }
@@ -362,17 +426,70 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
     expect(screen.getByText("Edited 2 files")).toBeInTheDocument();
     // Each patch shows each file's diff under a header with its path.
     expect(screen.getAllByText("new.py")).toHaveLength(2);
-    expect(screen.getAllByText("old.py → moved.py")).toHaveLength(2);
+    // A moved file's title is where it went; its first row, where from.
+    expect(screen.getAllByText("moved.py")).toHaveLength(2);
+    expect(screen.getAllByText("Moved from old.py")).toHaveLength(2);
     expect(screen.getAllByText("print('hi')")).toHaveLength(2);
     expect(screen.getAllByText("a = 2")).toHaveLength(2);
-    // The applied patch lists the files it changed, with their change.
-    expect(
-      screen.getByText("A new.py M old.py → moved.py")
-    ).toBeInTheDocument();
+    // The diffs name the changed files, so no file list repeats them.
+    expect(view.container).not.toHaveTextContent(/A new\.py/);
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(
       screen.getByText("Failed to find expected lines in old.py")
     ).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a patch shows its line counts in the header, and a failed one does not", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const rejected = at({ turn_index: 1, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [
+          { path: "new.py", change: "add", move_path: null },
+          { path: "old.py", change: "update", move_path: "moved.py" },
+        ],
+        error: null,
+      }),
+      applied(sectionEnd),
+      rejected({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
+      rejected({
+        type: PacketType.APPLY_PATCH_END,
+        files: [],
+        error: "Failed to find expected lines in old.py",
+      }),
+      rejected(sectionEnd),
+      ...answer(2),
+    ])
+  );
+  try {
+    await expandTimeline();
+    // The patch adds two lines and removes one. Only the applied step's
+    // header shows the total; each file's panel shows its own counts, in
+    // both steps.
+    expect(
+      screen.getAllByRole("group", { name: "2 additions, 1 deletion" })
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByRole("group", { name: "1 addition, 1 deletion" })
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("group", { name: "1 addition, 0 deletions" })
+    ).toHaveLength(2);
+    expect(screen.getAllByText("print('hi')").length).toBeGreaterThan(0);
   } finally {
     view.unmount();
   }
@@ -559,7 +676,7 @@ test("sandbox text is isolated in markup, and paths show without bidi controls",
     }
     await openRun();
     // The patch's file header and the published file's chip.
-    expect(screen.getByText("ab.py", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("ab.py", { selector: "p" })).toBeInTheDocument();
     expect(screen.getByText("notes")).toBeInTheDocument();
     // The patch and the error keep the sandbox's text, inside an isolate.
     expect(screen.getByText("x").closest("[dir]")).toHaveAttribute(
@@ -793,9 +910,9 @@ test("sandbox calls of a code mode program show as their own steps", async () =>
     expect(screen.getByText("Ran command")).toBeInTheDocument();
     expect(view.container).toHaveTextContent("$ pytest");
     expect(screen.getByText("3 passed")).toBeInTheDocument();
-    expect(screen.getByText("Exit code 0")).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent(/Exit code/);
     expect(screen.getByText("Edited 1 file")).toBeInTheDocument();
-    expect(screen.getByText("D gone.py")).toBeInTheDocument();
+    expect(view.container).toHaveTextContent("a = 2");
     expect(view.container).not.toHaveTextContent(/await run/);
   } finally {
     view.unmount();
@@ -1009,6 +1126,7 @@ test("published files show in the timeline and as download cards after the answe
     artifact_id: "artifact-report",
     version,
     thumbnail_file_id: null,
+    chat_id: null,
   });
   const view = render(
     renderMessage([
@@ -1078,7 +1196,7 @@ test("published files show in the timeline and as download cards after the answe
   }
 });
 
-test("a publish_files call with invalid arguments still shows its step and error", async () => {
+test("a publishing call with invalid arguments still shows its step and error", async () => {
   const call = at({ turn_index: 0, tab_index: 0 });
   const view = render(
     renderMessage([
@@ -1103,6 +1221,163 @@ test("a publish_files call with invalid arguments still shows its step and error
     expect(
       screen.queryByRole("button", { name: /^Preview / })
     ).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a Ctrl+C that stops a running process is not a failure", async () => {
+  const stop = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      stop({
+        type: PacketType.WRITE_STDIN_START,
+        session_id: "4",
+        chars: "\u0003",
+      }),
+      stop({
+        type: PacketType.EXEC_END,
+        exit_code: 130,
+        completion: "exited",
+        session_id: null,
+        wall_time_seconds: 0.2,
+        truncated: false,
+        output: "^C\n",
+        error: null,
+      }),
+      stop(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    const title = screen.getByText("Sent input to session 4");
+    expect(title.closest(".opal-line")).not.toHaveAttribute(
+      "data-opal-line-status",
+      "error"
+    );
+    expect(view.container).not.toHaveTextContent("Exit code 130");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("input that ends the command with a failure names it in a red title", async () => {
+  const input = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      input({
+        type: PacketType.WRITE_STDIN_START,
+        session_id: "4",
+        chars: "exit 1\n",
+      }),
+      input({
+        type: PacketType.EXEC_END,
+        exit_code: 1,
+        completion: "exited",
+        session_id: null,
+        wall_time_seconds: 0.2,
+        truncated: false,
+        output: "",
+        error: null,
+      }),
+      input(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    const title = screen.getAllByText("Exit code 1")[0]!;
+    expect(title.closest(".opal-line")).toHaveAttribute(
+      "data-opal-line-status",
+      "error"
+    );
+    expect(view.container).not.toHaveTextContent("Sent input to session 4");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a deleted file's panel names the operation", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: "*** Begin Patch\n*** Delete File: gone.py\n*** End Patch",
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [{ path: "gone.py", change: "delete", move_path: null }],
+        error: null,
+      }),
+      applied(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("gone.py")).toBeInTheDocument();
+    expect(screen.getByText("Delete file")).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent(/D gone\.py/);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("an empty new file's panel says it is empty", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: "*** Begin Patch\n*** Add File: empty.txt\n*** End Patch",
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [{ path: "empty.txt", change: "add", move_path: null }],
+        error: null,
+      }),
+      applied(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("empty.txt")).toBeInTheDocument();
+    expect(screen.getByText("Empty file")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("files the preview did not read show in the changed-files list", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch:
+          "*** Begin Patch\n*** Add File: a.txt\n+one\n  *** Add File: b.txt\n+two\n*** End Patch",
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [
+          { path: "a.txt", change: "add", move_path: null },
+          { path: "b.txt", change: "add", move_path: null },
+        ],
+        error: null,
+      }),
+      applied(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(view.container).toHaveTextContent("A b.txt");
   } finally {
     view.unmount();
   }

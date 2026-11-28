@@ -13,6 +13,7 @@ from onyx.db.memory import add_memory, update_memory_at_index
 from onyx.llm.cancellation import check_cancelled
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.prompts.tool_prompts import MEMORY_DESCRIPTION
 from onyx.secondary_llm_flows.memory_update import process_memory_update
 from onyx.tools.interface import (
     Tool,
@@ -27,6 +28,7 @@ from onyx.tools.models import (
     MemoryUpdated,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
 
@@ -34,9 +36,10 @@ logger = setup_logger()
 
 
 class MemoryTool(Tool):
+    rank = ToolRank.MEMORY
     NAME = "add_memory"
     DISPLAY_NAME = "Add Memory"
-    DESCRIPTION = "Save memories about the user for future conversations."
+    DESCRIPTION = MEMORY_DESCRIPTION
 
     def __init__(
         self,
@@ -95,7 +98,7 @@ class MemoryTool(Tool):
             )
 
         existing_memories = list(user_memory.memories) if user_memory else []
-        chat_history = tool_message_history(list(invocation.messages))
+        chat_history = tool_message_history(invocation.messages)
 
         memory_text, index_to_replace = process_memory_update(
             new_memory=memory,

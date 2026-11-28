@@ -4,9 +4,12 @@ import (
 	"context"
 	"flag"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
+	"github.com/onyx-dot-app/onyx/microvm/internal/server"
 	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
 )
 
@@ -241,5 +244,15 @@ func TestEgressTLS(t *testing.T) {
 		if _, err := egressTLS(f); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+func TestDefaultDialPortsFlag(t *testing.T) {
+	if !slices.Contains(server.DefaultDialPorts, browser.RelayPort) {
+		t.Fatalf("default dial ports %v do not allow the browser relay port %d", server.DefaultDialPorts, browser.RelayPort)
+	}
+	ports, err := parsePorts(formatPorts(server.DefaultDialPorts))
+	if err != nil || !slices.Equal(ports, server.DefaultDialPorts) {
+		t.Fatalf("round trip: %v %v", ports, err)
 	}
 }

@@ -9,11 +9,12 @@ import pytest
 from pydantic import JsonValue
 
 from onyx.agents.events import AgentEvent, ToolEndEvent, ToolStartEvent, ToolUpdateEvent
-from onyx.agents.models import ToolCallContext
+from onyx.agents.models import RunHooks, ToolCallContext
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolProgress
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.interfaces import GenerationContext
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import (
     AssistantMessage,
     TextContent,
@@ -26,6 +27,7 @@ from onyx.tools.interface import Tool, merge_tool_arguments
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     MAX_URLS_PER_CALL,
+    OPEN_URL_SHAPES,
     OpenURLTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -127,7 +129,6 @@ def test_before_tool_hook_keeps_individual_calls() -> None:
     run = Agent(
         FakeModelClient(lambda *_: next(replies)),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        before_tool_call=before,
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -137,6 +138,7 @@ def test_before_tool_hook_keeps_individual_calls() -> None:
                 merge_arguments=partial(merge_tool_arguments, field="queries"),
             )
         ],
+        feature=RunHooks(before_tool_call=before),
     ).start(max_steps=2)
     run.result(timeout=10)
     run.wait_for_idle(timeout=10)
@@ -381,6 +383,7 @@ def test_real_retrieval_bindings_merge_their_public_argument(
         )
     elif kind == "open_url":
         tool = OpenURLTool(
+            shape=OPEN_URL_SHAPES[ToolFamily.OPENAI],
             tool_id=1,
             user=MagicMock(),
             document_index=MagicMock(),
@@ -432,6 +435,7 @@ def test_open_url_batches_preserve_every_requested_page(
     sizes: tuple[int, ...], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tool = OpenURLTool(
+        shape=OPEN_URL_SHAPES[ToolFamily.OPENAI],
         tool_id=1,
         user=MagicMock(),
         document_index=MagicMock(),

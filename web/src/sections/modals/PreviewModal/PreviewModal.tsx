@@ -40,7 +40,7 @@ function PreviewModalContent({
   const size: Required<Pick<ModalContentProps, "width" | "height">> =
     kind === "code"
       ? { width: "xl", height: "lg" }
-      : kind === "unsupported" || kind === "tooLarge"
+      : kind === "unsupported" || kind === "unavailable" || kind === "tooLarge"
         ? { width: "xl", height: "full" }
         : { width: "full", height: "full" };
 

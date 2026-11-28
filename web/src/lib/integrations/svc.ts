@@ -1,7 +1,8 @@
-import { parseErrorDetail } from "@/lib/fetcher";
+import { fetchErrorDetail, fetchErrorFrom } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   AdminIntegrationDetail,
+  GraphQLConfig,
   InstallationPolicy,
   IntegrationActionsResponse,
   IntegrationActionsUpdate,
@@ -13,6 +14,7 @@ import type {
   IntegrationSharesUpdate,
   IntegrationSharesView,
   MemberActionPolicies,
+  OpenApiConfigView,
   MemberIntegration,
 } from "@/lib/integrations/types";
 
@@ -27,7 +29,10 @@ type RequestBody =
   | { enabled: boolean }
   | IntegrationSharesUpdate
   | { code: string; state: string }
-  | { actions: Record<string, "allow" | null> };
+  | { actions: Record<string, "allow" | null> }
+  | { openapi_document: string }
+  | { spec_url: string }
+  | { endpoint_url: string };
 
 async function request(
   url: string,
@@ -41,11 +46,35 @@ async function request(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(
-      await parseErrorDetail(res, `Request failed (${res.status})`)
-    );
+    const error = await fetchErrorFrom(res, `Request failed (${res.status})`);
+    error.message = fetchErrorDetail(error) ?? error.message;
+    throw error;
   }
   return res;
+}
+
+/** The base URL and endpoint lines of a spec to import. */
+export async function importOpenApiSpec(
+  body: { openapi_document: string } | { spec_url: string }
+): Promise<OpenApiConfigView> {
+  const res = await request(
+    `${SWR_KEYS.adminIntegrations}/openapi-import`,
+    "POST",
+    body
+  );
+  return res.json();
+}
+
+/** The schema of an endpoint that answers introspection with no sign-in. */
+export async function introspectGraphQL(
+  endpointUrl: string
+): Promise<GraphQLConfig> {
+  const res = await request(
+    `${SWR_KEYS.adminIntegrations}/graphql-introspect`,
+    "POST",
+    { endpoint_url: endpointUrl }
+  );
+  return res.json();
 }
 
 export async function createIntegration(
@@ -192,7 +221,7 @@ export async function completeIntegrationOAuth(
   return res.json();
 }
 
-/** Saves the user's "Always allow" choices: "allow" saves one, null clears it. */
+/** Saves the user's "Don't ask me" choices: "allow" saves one, null clears it. */
 export async function saveAlwaysAllow(
   id: number,
   actions: Record<string, "allow" | null>
@@ -220,9 +249,4 @@ export async function updateIntegrationShares(
 ): Promise<IntegrationSharesView> {
   const res = await request(SWR_KEYS.integrationAccess(id), "PUT", body);
   return res.json();
-}
-
-/** Makes a private integration Available to the organization. */
-export async function publishIntegration(id: number): Promise<void> {
-  await request(`${SWR_KEYS.integration(id)}/publish`, "POST");
 }

@@ -30,7 +30,7 @@ test.each([
   ],
   ["notes.md", "text/plain", { kind: "markdown" }],
   ["notes", "text/markdown; charset=utf-8", { kind: "markdown" }],
-  ["letter.docx", "application/octet-stream", { kind: "docx" }],
+  ["letter.docx", "application/octet-stream", { kind: "office" }],
   // Legacy Word files have no previewer
   ["letter.doc", "application/msword", { kind: "unsupported" }],
   [
@@ -47,11 +47,16 @@ test.each([
   ["data.csv", "application/pdf", { kind: "csv" }],
   ["report.pdf", "image/png", { kind: "pdf" }],
   ["notes.txt", "text/plain", { kind: "code", language: "plaintext" }],
-  ["deck.pptx", "application/octet-stream", { kind: "pptx" }],
+  ["deck.pptx", "application/octet-stream", { kind: "office" }],
   [
     "renamed",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    { kind: "pptx" },
+    { kind: "office" },
+  ],
+  [
+    "renamed",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    { kind: "office" },
   ],
   // Legacy PowerPoint files have no previewer
   ["deck.ppt", "application/vnd.ms-powerpoint", { kind: "unsupported" }],

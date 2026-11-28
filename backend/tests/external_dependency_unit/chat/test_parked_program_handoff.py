@@ -9,10 +9,12 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from uuid import UUID
 
 import pytest
+from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -24,10 +26,11 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    RunHooks,
     RunStatus,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, AgentFeature
 from onyx.agents.tools import (
     HumanToolAnswer,
     InputDecision,
@@ -37,7 +40,7 @@ from onyx.agents.tools import (
     ToolInvocation,
     ToolOutcome,
 )
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.models import ChatResponseCheckpoint
 from onyx.file_store.file_store import get_default_file_store
@@ -51,11 +54,8 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME, WAIT_TOOL_NAME
 from onyx.tools.models import ToolContext
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
-    CodeModeTool,
-    WaitCodeTool,
-)
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.chat.test_run_store import (
     branch,
@@ -93,21 +93,36 @@ def _ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
     )
 
 
+class _AskingFeature(AgentFeature):
+    """Chat whose `send` calls wait for approval (`_ask_for_send`)."""
+
+    def __init__(self, chat: ChatFeature) -> None:
+        self.chat = chat
+
+    def bind(self) -> RunHooks:
+        return self.chat.bind().model_copy(update={"before_tool_call": _ask_for_send})
+
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:
+        self.chat.restore_state(state)
+
+
 def _steps(scenario: str) -> tuple[ToolCall, ...]:
     """One call per step: the scenario's first cell, if any, a program that
     waits for approval, then a read of the first cell."""
     first = FIRST_CELLS[scenario]
     program = ToolCall(
-        id="program", name=CodeModeTool.NAME, arguments={"code": PROGRAM}
+        id="program", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": PROGRAM}
     )
     if first is None:
         return (program,)
     return (
-        ToolCall(id="background", name=CodeModeTool.NAME, arguments={"code": first}),
+        ToolCall(
+            id="background", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": first}
+        ),
         program,
         ToolCall(
             id="read",
-            name=WaitCodeTool.NAME,
+            name=WAIT_TOOL_NAME,
             arguments={"cell_id": 1, "yield_time_ms": 10_000},
         ),
     )
@@ -120,7 +135,7 @@ def _program_agent(
     scenario: str,
     state: AgentState | None = None,
     gate: threading.Event | None = None,
-) -> ChatAgent:
+) -> Agent:
     """The model runs the scenario's steps, then answers with the last result.
     A `wait` call returns once `gate` opens, or stops when its cell stops."""
     steps = _steps(scenario)
@@ -154,7 +169,8 @@ def _program_agent(
         tools=[FakeTool("send", send), FakeTool("wait", wait)],
         code_mode=True,
     )
-    agent.before_tool_call = _ask_for_send
+    assert isinstance(agent.feature, ChatFeature)
+    agent.feature = _AskingFeature(agent.feature)
     return agent
 
 
@@ -199,7 +215,7 @@ def _resume_program_in_process(session_id: str, message_id: str, scenario: str) 
             assert "before" in output and "sent {'sent': 'x'}" in output, output
         elif scenario == "running":
             assert sent == ["x"]
-            # wait_code points to the closing record that holds the end of
+            # wait points to the closing record that holds the end of
             # the cell that ended before the run paused in the other process.
             assert output == (
                 "Cell 1 completed before the run paused; its output and result "

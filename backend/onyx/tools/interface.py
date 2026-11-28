@@ -1,8 +1,8 @@
 import abc
 import traceback
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from functools import cache, partial
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, ClassVar, final
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ from onyx.tools.models import (
     CodeModeFunctionName,
     CodeModeResultSpec,
     IntegrationActionRef,
+    ToolApprovalDetails,
     ToolApprovalScope,
     ToolCallException,
     ToolContext,
@@ -32,9 +33,11 @@ from onyx.tools.models import (
     ToolExecutionException,
     ToolPreference,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tracing.framework.create import function_span
 from onyx.tracing.framework.spans import SpanError
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION
+from onyx.utils.fleet_telemetry import ToolKind
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -54,7 +57,9 @@ _MESSAGE_TYPES = {
 }
 
 
-def tool_message_history(messages: list[Message]) -> list[ChatMinimalTextMessage]:
+def tool_message_history(
+    messages: Sequence[Message],
+) -> list[ChatMinimalTextMessage]:
     return [
         ChatMinimalTextMessage(
             message=message.text,
@@ -176,6 +181,48 @@ def _invoke_tool[T: ToolOutcome](
     return result
 
 
+@cache
+def _tool_kind_classes() -> tuple[tuple[type["Tool"], ToolKind], ...]:
+    # Local imports break the Tool / implementation inheritance cycle.
+    from onyx.tools.tool_implementations.api_app.rest_tool import RestTool
+    from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
+        CodeModeTool,
+        WaitCodeTool,
+    )
+    from onyx.tools.tool_implementations.images.image_generation_tool import (
+        ImageGenerationTool,
+    )
+    from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+    from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+    from onyx.tools.tool_implementations.python.python_tool import PythonTool
+    from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
+    from onyx.tools.tool_implementations.search.search_tool import SearchTool
+    from onyx.tools.tool_implementations.web_search.web_search_tool import (
+        WebSearchTool,
+    )
+
+    return (
+        (SearchTool, ToolKind.SEARCH),
+        (WebSearchTool, ToolKind.WEB_SEARCH),
+        (OpenURLTool, ToolKind.OPEN_URL),
+        (MCPTool, ToolKind.MCP),
+        (RestTool, ToolKind.CUSTOM),
+        (ImageGenerationTool, ToolKind.IMAGE),
+        (PythonTool, ToolKind.PYTHON),
+        (CodeModeTool, ToolKind.CODE_MODE),
+        (WaitCodeTool, ToolKind.CODE_MODE),
+        (SandboxTool, ToolKind.SANDBOX),
+    )
+
+
+def tool_kind(tool: "Tool") -> ToolKind:
+    """The tool's fixed telemetry class, from its type and never its name."""
+    for tool_class, kind in _tool_kind_classes():
+        if isinstance(tool, tool_class):
+            return kind
+    return ToolKind.OTHER
+
+
 ToolResultFromChildren = Callable[
     [ToolInvocation, ToolContext, list["RunState"]], ToolResult
 ]
@@ -202,10 +249,15 @@ class Tool(abc.ABC):
     merge_list_limit: int | None = None
     # SEQUENTIAL tools of one group take turns, as calls of one tool do.
     sequence_group: str | None = None
-    # Set on tools whose calls follow an action policy; see onyx/chat/tool_approvals.py.
+    # Set on tools whose calls can wait for the user's approval: an integration
+    # action that its policy asks for, or a built-in tool's gated action. See
+    # onyx/chat/tool_approvals.py and approval_details.
     approval: ToolApprovalScope | None = None
     # Set on the tool of an integration action; a preference names it.
     integration_action: IntegrationActionRef | None = None
+    # The tool's slot in the order that the model reads the tools
+    # (onyx/tools/ordering.py). Every concrete tool class sets it.
+    rank: ClassVar[ToolRank]
 
     @property
     def execution_mode(self) -> ToolExecutionMode:
@@ -228,11 +280,6 @@ class Tool(abc.ABC):
     def operation_names(self, preference: ToolPreference) -> list[str]:
         """How the model calls the preferred tool through this tool."""
         return [self.name] if self.matches(preference) else []
-
-    def inner_call_hint(self, name: str) -> str | None:  # noqa: ARG002
-        """For a call of `name` as a tool of its own: how to call it through
-        this tool instead; None when `name` is none of its inner tools."""
-        return None
 
     @property
     @abc.abstractmethod
@@ -271,9 +318,36 @@ class Tool(abc.ABC):
     def display_name(self) -> str:
         raise NotImplementedError
 
+    @property
+    def summary(self) -> str:
+        """What the tool does, without the usage guidance that its description
+        can carry. A caller that writes its own guidance, as deep research
+        does, shows the summary instead."""
+        return self.description
+
+    def describe(self, called_name: Callable[[str], str]) -> str | None:  # noqa: ARG002
+        """The description, naming each other tool by the name that
+        `called_name` gives for its tool name, such as its code mode
+        function; None: the definition's description, which names no tool. A
+        tool whose description names other tools overrides it, and its
+        `description` names them as tools."""
+        return None
+
     @classmethod
     def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
         return True
+
+    def approval_details(
+        self,
+        arguments: dict[str, JsonValue],  # noqa: ARG002
+    ) -> ToolApprovalDetails | None:
+        """What the approval card of a call of this gated tool shows, or None
+        when the call needs no approval. `arguments` are the ones the call
+        runs with. Called before the call runs, with no database session open,
+        so it must not raise: arguments that it cannot read return None, and
+        the call reports its own error. The default shows the call's
+        arguments."""
+        return ToolApprovalDetails(display_name=self.display_name)
 
     @abc.abstractmethod
     def tool_definition(self) -> ToolDefinition:
@@ -287,20 +361,28 @@ class Tool(abc.ABC):
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         """Run with tracing and return tool errors to the model; cancellation propagates."""
 
-        def execute() -> ToolOutcome:
-            if observation := CURRENT_QUERY_OBSERVATION.get():
-                # Local import breaks the Tool / SearchTool inheritance cycle.
-                from onyx.tools.tool_implementations.search.search_tool import (
-                    SearchTool,
-                )
+        observation = CURRENT_QUERY_OBSERVATION.get()
+        kind = tool_kind(self) if observation else ToolKind.OTHER
 
-                observation.tool_started(is_search=isinstance(self, SearchTool))
+        def execute() -> ToolOutcome:
+            if observation:
+                observation.tool_started(kind)
             return self._run(invocation, context)
 
-        return _invoke_tool(self.name, invocation, execute)
+        result = _invoke_tool(self.name, invocation, execute)
+        if observation and isinstance(result, ToolResult) and result.is_error:
+            observation.tool_failed(kind)
+        return result
 
-    def bind(self, get_context: Callable[[], ToolContext]) -> AgentTool:
-        """Bind runtime callbacks; resolve application context only when they execute."""
+    def bind(
+        self, get_context: Callable[[], ToolContext], *, summary_only: bool = False
+    ) -> AgentTool:
+        """Bind runtime callbacks; resolve application context only when they
+        execute. With `summary_only`, the definition describes the tool by its
+        `summary`."""
+        definition = self.tool_definition()
+        if summary_only:
+            definition = definition.model_copy(update={"description": self.summary})
         convert_child_results = self.result_from_children
         result_from_children = None
         if convert_child_results is not None:
@@ -339,7 +421,7 @@ class Tool(abc.ABC):
                 return take_open_input(invocation, get_context(), answers)
 
         return AgentTool(
-            definition=self.tool_definition(),
+            definition=definition,
             execute=lambda invocation: self.run(invocation, get_context()),
             execution_mode=self.execution_mode,
             sequence_group=self.sequence_group,
@@ -360,7 +442,6 @@ class Tool(abc.ABC):
                 for tool in (self, *self.inner_tools)
                 if tool.approval is not None
             ],
-            inner_call_hint=self.inner_call_hint,
         )
 
 
@@ -382,11 +463,14 @@ def tool_definition_from_arguments(
     such as a mapping, is an error too, because strict mode requires every
     object to be closed."""
     schema = arguments.model_json_schema()
-    # Titles repeat the property names; leave them out of every request.
-    schema.pop("title", None)
+    # Titles repeat the names, and a model's docstring is for developers;
+    # leave both out of the arguments model and its nested models.
+    for model_schema in (schema, *schema.get("$defs", {}).values()):
+        model_schema.pop("title", None)
+        model_schema.pop("description", None)
+        for field_schema in model_schema.get("properties", {}).values():
+            field_schema.pop("title", None)
     properties = schema["properties"]
-    for field_schema in properties.values():
-        field_schema.pop("title", None)
     if strict:
         if "$defs" in schema:
             raise ValueError(

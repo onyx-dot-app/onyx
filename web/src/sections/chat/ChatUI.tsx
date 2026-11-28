@@ -8,10 +8,9 @@ import React, {
   useRef,
 } from "react";
 import { Message } from "@/app/app/types";
-import type { ComposedMessage } from "@/lib/chat/types";
+import type { ComposedMessage, MessageEdit } from "@/lib/chat/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
-import AgentResultsDivider from "@/lib/timeline/chat/message/AgentResultsDivider";
 import { ErrorBanner } from "@/lib/timeline/chat/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
@@ -81,16 +80,15 @@ export interface ChatUIProps {
     }
   ) => Promise<void>;
   deepResearchEnabled: boolean;
-  currentMessageFiles: any[];
 
   onResubmit: () => void;
+
+  /** Starts an edit of a sent question in the composer. Stable identity. */
+  onEditMessage?: (edit: MessageEdit) => void;
 
   /** Node ID of the latest user message, the scroll anchor. Its row stays
    *  mounted. */
   anchorNodeId?: number;
-
-  /** Currently selected models for multi-model comparison. */
-  selectedModels?: SelectedModel[];
 
   /**
    * When on, the chat uses the wide width's padding layout. The width itself
@@ -108,11 +106,10 @@ const ChatUI = React.memo(
     stopGenerating,
     onSubmit,
     deepResearchEnabled,
-    currentMessageFiles,
     onResubmit,
     anchorNodeId,
-    selectedModels,
     wideChat,
+    onEditMessage,
   }: ChatUIProps) => {
     // Get messages and error state from store
     const messages = useCurrentMessageHistory();
@@ -196,15 +193,11 @@ const ChatUI = React.memo(
     // Use refs to keep callbacks stable while always using latest values
     const onSubmitRef = useRef(onSubmit);
     const deepResearchEnabledRef = useRef(deepResearchEnabled);
-    const currentMessageFilesRef = useRef(currentMessageFiles);
-    const selectedModelsRef = useRef(selectedModels);
 
     useEffect(() => {
       onSubmitRef.current = onSubmit;
       deepResearchEnabledRef.current = deepResearchEnabled;
-      currentMessageFilesRef.current = currentMessageFiles;
-      selectedModelsRef.current = selectedModels;
-    }, [onSubmit, deepResearchEnabled, currentMessageFiles, selectedModels]);
+    }, [onSubmit, deepResearchEnabled]);
 
     const createRegenerator = useCallback(
       (regenerationRequest: { messageId: number; parentMessage: Message }) => {
@@ -212,27 +205,13 @@ const ChatUI = React.memo(
           return await onSubmitRef.current({
             message: regenerationRequest.parentMessage.message,
             mentions: regenerationRequest.parentMessage.mentions ?? [],
-            currentMessageFiles: currentMessageFilesRef.current,
+            currentMessageFiles: [],
             deepResearch: deepResearchEnabledRef.current,
             modelOverride,
             messageIdToResend: regenerationRequest.parentMessage.messageId,
             regenerationRequest,
           });
         };
-      },
-      []
-    );
-
-    const handleEditWithMessageId = useCallback(
-      (edited: ComposedMessage, msgId: number) => {
-        const models = selectedModelsRef.current;
-        onSubmitRef.current({
-          ...edited,
-          messageIdToResend: msgId,
-          currentMessageFiles: [],
-          deepResearch: deepResearchEnabledRef.current,
-          selectedModels: models && models.length >= 2 ? models : undefined,
-        });
       },
       []
     );
@@ -325,9 +304,10 @@ const ChatUI = React.memo(
                 content={message.message}
                 files={message.files}
                 mentions={message.mentions}
+                timeSent={message.timeSent}
                 messageId={message.messageId}
                 nodeId={message.nodeId}
-                onEdit={handleEditWithMessageId}
+                onEdit={chatState === "input" ? onEditMessage : undefined}
                 otherMessagesCanSwitchTo={
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
                 }
@@ -359,20 +339,24 @@ const ChatUI = React.memo(
           </WindowedRow>
         );
       } else if (message.type === "agent_results") {
+        // The follow-up continues the turn, as T3 Code shows it: the hidden
+        // question takes no room, but keeps its row for the scroll anchor.
         return (
           <WindowedRow
             id={messageReactComponentKey}
             key={messageReactComponentKey}
-            className={cn("w-full self-center", msgWidth)}
+            className={cn("w-full self-center -mt-12", msgWidth)}
             pinned={pinned}
             initiallyMounted={initiallyMounted}
             heightCache={rowHeightCache}
           >
-            <AgentResultsDivider />
+            <div data-agent-results aria-hidden />
           </WindowedRow>
         );
       } else if (message.type === "assistant" || message.type === "error") {
         const previousMessage = i !== 0 ? messages[i - 1] : null;
+        // A turn's actions show once, under its last answer
+        const continued = messages[i + 1]?.type === "agent_results";
 
         // Skip assistant messages already rendered in MultiModelResponseView
         if (
@@ -395,7 +379,12 @@ const ChatUI = React.memo(
           <WindowedRow
             id={messageReactComponentKey}
             key={messageReactComponentKey}
-            className={cn("w-full self-center", msgWidth)}
+            className={cn(
+              "w-full self-center",
+              // The rest of the same turn
+              previousMessage?.type === "agent_results" && "-mt-8",
+              msgWidth
+            )}
             pinned={pinned}
             initiallyMounted={initiallyMounted}
             heightCache={rowHeightCache}
@@ -417,7 +406,8 @@ const ChatUI = React.memo(
                 onRegenerate={createRegenerator}
                 parentMessage={previousMessage}
                 processingDurationSeconds={message.processingDurationSeconds}
-                hideFooter={message.type === "error"}
+                timeSent={message.timeSent}
+                hideFooter={message.type === "error" || continued}
                 disableTTS={message.type === "error"}
               />
             )}

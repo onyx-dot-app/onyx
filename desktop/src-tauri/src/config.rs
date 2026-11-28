@@ -1,219 +1,233 @@
-// Config load/save runs before any `AppHandle` (and thus `log_backend_error`)
-// exists, so failures here go straight to stderr instead.
-#![allow(clippy::print_stderr)]
-
-use directories::ProjectDirs;
-use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Mutex, RwLock};
+use std::sync::Mutex;
 
-pub const DEFAULT_SERVER_URL: &str = "https://cloud.onyx.app";
-const CONFIG_FILE_NAME: &str = "config.json";
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppConfig {
-    pub server_url: String,
+#[cfg(target_os = "macos")]
+pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+Space";
+// Windows and some Linux desktops already use Ctrl+Shift+Space (IME switch).
+#[cfg(not(target_os = "macos"))]
+pub const DEFAULT_HOTKEY: &str = "Control+Alt+Space";
 
-    #[serde(default = "default_window_title")]
-    pub window_title: String,
+/// Windows keeps Credential Manager entries when the app is uninstalled or its
+/// data is deleted. There a stored token is used only if this install's
+/// config records that it saved one (`Config::session_servers`).
+pub const TOKEN_NEEDS_RECORD: bool = cfg!(target_os = "windows");
 
-    #[serde(default = "default_show_menu_bar")]
-    pub show_menu_bar: bool,
-
-    #[serde(default)]
-    pub hide_window_decorations: bool,
-
-    /// Global shortcut that summons Onyx from any app, in Tauri accelerator
-    /// syntax. Explicit `null` in config.json disables it.
-    #[serde(default = "default_summon_shortcut")]
-    pub summon_shortcut: Option<String>,
-
-    #[serde(default = "default_summon_opens_new_chat")]
-    pub summon_opens_new_chat: bool,
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Config {
+    pub server_url: Option<String>,
+    pub hotkey: Option<String>,
+    pub zoom: Option<f64>,
+    /// The desktop pet is on screen (an easter egg, see aonyx.rs).
+    pub aonyx: Option<bool>,
+    /// Where the pet sits, in logical screen coordinates.
+    pub aonyx_position: Option<[f64; 2]>,
+    /// Notify when a launcher answer finishes while the launcher is hidden.
+    pub notify_answers: Option<bool>,
+    /// The launcher's last agent, by server origin. No entry: the default agent.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub launcher_agents: BTreeMap<String, i64>,
+    /// Server origins this install saved a session token for. Written only
+    /// where `TOKEN_NEEDS_RECORD` is set.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub session_servers: BTreeSet<String>,
+    /// The last valid managed `ServerURL`, used while the policy is invalid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_server_url: Option<String>,
+    /// Per server, the fingerprints (`token_fingerprint`) of the tokens that a
+    /// sign-out could not delete from the OS store. These tokens are never
+    /// used again. The tokens themselves are never written here.
+    #[serde(
+        default,
+        deserialize_with = "lenient_rejected_tokens",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub rejected_tokens: BTreeMap<String, BTreeSet<String>>,
+    /// Windows: the earlier app's program folder that is still to delete
+    /// (`earlier_install.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub earlier_install_dir: Option<String>,
+    /// The identity (`earlier_install::file_identity`) of that folder's
+    /// `uninstall.exe` when it was recorded. A retry runs only for the same
+    /// file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub earlier_install_id: Option<String>,
 }
 
-fn default_window_title() -> String {
-    "Onyx".to_string()
-}
+impl Config {
+    pub fn zoom(&self) -> f64 {
+        self.zoom.unwrap_or(1.0)
+    }
 
-const fn default_show_menu_bar() -> bool {
-    true
-}
+    pub fn hotkey(&self) -> String {
+        self.hotkey
+            .clone()
+            .unwrap_or_else(|| DEFAULT_HOTKEY.to_string())
+    }
 
-// Space-with-modifiers chords are the only family major apps leave alone.
-// Alt+Space is contested on Windows (system window menu, Copilot, PowerToys
-// Run) and Ctrl+Alt+<letter> collides with AltGr typing on European layouts,
-// so Ctrl+Alt+Space is the safe non-mac default.
-#[allow(clippy::unnecessary_wraps)] // serde default for an `Option` field must return `Option`
-fn default_summon_shortcut() -> Option<String> {
-    let chord = if cfg!(target_os = "macos") {
-        "Super+Shift+Space"
-    } else {
-        "Ctrl+Alt+Space"
-    };
-    Some(chord.to_string())
-}
+    pub fn notify_answers(&self) -> bool {
+        self.notify_answers.unwrap_or(true)
+    }
 
-const fn default_summon_opens_new_chat() -> bool {
-    true
-}
+    /// Whether a token found in the OS store for `server` may be used. A
+    /// token with no record came from an earlier install, or from before the
+    /// user deleted the app's data. A token that a sign-out could not delete
+    /// is never used, with or without a record.
+    pub fn trusts_stored_token(&self, server: &str, needs_record: bool) -> bool {
+        !needs_record || self.session_servers.contains(server)
+    }
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            server_url: DEFAULT_SERVER_URL.to_string(),
-            window_title: default_window_title(),
-            show_menu_bar: true,
-            hide_window_decorations: false,
-            summon_shortcut: default_summon_shortcut(),
-            summon_opens_new_chat: default_summon_opens_new_chat(),
-        }
+    /// Whether `token` is one a sign-out from `server` could not delete. The
+    /// app refuses every stored token while a record exists; this checks
+    /// the record's contents in tests.
+    #[cfg(test)]
+    pub fn rejects_token(&self, server: &str, token: &str) -> bool {
+        self.rejected_tokens
+            .get(server)
+            .is_some_and(|set| set.contains(&token_fingerprint(server, token)))
     }
 }
 
-/// Get the config directory path
-pub fn get_config_dir() -> Option<PathBuf> {
-    ProjectDirs::from("app", "onyx", "onyx-desktop").map(|dirs| dirs.config_dir().to_path_buf())
+/// Reads `rejectedTokens` without ever failing the whole config: a server
+/// maps to one fingerprint (the first format) or a list of them. Any other
+/// value is dropped and logged.
+fn lenient_rejected_tokens<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, BTreeSet<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(rejected_tokens_from(value))
 }
 
-/// Get the full config file path
-pub fn get_config_path() -> Option<PathBuf> {
-    get_config_dir().map(|dir| dir.join(CONFIG_FILE_NAME))
-}
-
-/// Load config from file, or create default if it doesn't exist
-pub fn load_config() -> (AppConfig, bool) {
-    let Some(config_path) = get_config_path() else {
-        return (AppConfig::default(), false);
+fn rejected_tokens_from(value: serde_json::Value) -> BTreeMap<String, BTreeSet<String>> {
+    use serde_json::Value;
+    let Value::Object(entries) = value else {
+        log::warn!("rejectedTokens in config.json is not an object; ignored");
+        return BTreeMap::new();
     };
-
-    if !config_path.exists() {
-        return (AppConfig::default(), false);
-    }
-
-    match fs::read_to_string(&config_path) {
-        Ok(contents) => match serde_json::from_str(&contents) {
-            Ok(config) => (config, true),
-            Err(e) => {
-                eprintln!(
-                    "[ONYX ERROR] Failed to parse config file {}: {e}",
-                    config_path.display()
-                );
-                (AppConfig::default(), false)
+    let mut out = BTreeMap::new();
+    for (server, value) in entries {
+        let set: Option<BTreeSet<String>> = match value {
+            Value::String(one) => Some(BTreeSet::from([one])),
+            // A list keeps its valid fingerprints; only bad items go.
+            Value::Array(items) => {
+                let mut skipped_invalid = false;
+                let set: BTreeSet<String> = items
+                    .into_iter()
+                    .filter_map(|item| match item {
+                        Value::String(s) => Some(s),
+                        _ => {
+                            skipped_invalid = true;
+                            None
+                        }
+                    })
+                    .collect();
+                if skipped_invalid {
+                    log::warn!("a rejectedTokens item in config.json is not valid; ignored");
+                }
+                Some(set)
             }
-        },
-        Err(e) => {
-            eprintln!(
-                "[ONYX ERROR] Failed to read config file {}: {e}",
-                config_path.display()
-            );
-            (AppConfig::default(), false)
+            _ => None,
+        };
+        match set {
+            Some(set) if !set.is_empty() => {
+                out.insert(server, set);
+            }
+            Some(_) => {}
+            None => log::warn!("a rejectedTokens entry in config.json is not valid; ignored"),
         }
     }
+    out
 }
 
-/// Save config to file
-pub fn save_config(config: &AppConfig) -> Result<(), String> {
-    let config_dir = get_config_dir().ok_or("Could not determine config directory")?;
-    let config_path = config_dir.join(CONFIG_FILE_NAME);
-
-    // Ensure config directory exists
-    fs::create_dir_all(&config_dir).map_err(|e| format!("Failed to create config dir: {e}"))?;
-
-    let json = serde_json::to_string_pretty(config)
-        .map_err(|e| format!("Failed to serialize config: {e}"))?;
-
-    fs::write(&config_path, json).map_err(|e| format!("Failed to write config: {e}"))?;
-
-    Ok(())
+/// The fingerprints to record when a sign-out cannot delete the stored
+/// token: every token that can still be loaded for `server`. The token in
+/// memory and the stored one differ when a renewed token could not be saved.
+pub fn tokens_to_reject(
+    server: &str,
+    in_memory: Option<&str>,
+    stored: Option<&str>,
+) -> BTreeSet<String> {
+    in_memory
+        .into_iter()
+        .chain(stored)
+        .map(|token| token_fingerprint(server, token))
+        .collect()
 }
 
-/// Shared app state: the live config plus a few process-lifetime flags. All
-/// fields are behind locks so this can be safely handed out as managed Tauri
-/// state and accessed from any thread/command.
-pub struct ConfigState {
-    config: RwLock<AppConfig>,
-    config_initialized: RwLock<bool>,
-    pub debug_mode: bool,
-    pub debug_log_file: Mutex<Option<fs::File>>,
-    /// Serializes update-then-persist-to-disk sequences. Without it, two
-    /// concurrent `update_config` + `save_config` callers can interleave so
-    /// the last disk write doesn't match the last in-memory update (A and B
-    /// both update, B saves, then A's stale snapshot saves last).
-    persist_lock: Mutex<()>,
+/// SHA-256 (hex) of the server and the token, so a rejected token can be
+/// recognized without keeping it.
+pub fn token_fingerprint(server: &str, token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::new()
+        .chain_update(server.as_bytes())
+        .chain_update([0u8])
+        .chain_update(token.as_bytes())
+        .finalize();
+    digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-impl ConfigState {
-    pub const fn new(
-        config: AppConfig,
-        config_initialized: bool,
-        debug_mode: bool,
-        debug_log_file: Option<fs::File>,
-    ) -> Self {
+pub struct ConfigStore {
+    path: PathBuf,
+    inner: Mutex<Config>,
+}
+
+impl ConfigStore {
+    pub fn load(path: PathBuf) -> Self {
+        let config = match fs::read_to_string(&path) {
+            Ok(raw) => {
+                // Windows PowerShell 5.1 writes UTF-8 with a byte order mark.
+                let raw = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
+                serde_json::from_str(raw).unwrap_or_else(|e| {
+                    log::error!("{} is not valid; using defaults: {e}", path.display());
+                    Config::default()
+                })
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::default(),
+            Err(e) => {
+                log::error!("could not read {}; using defaults: {e}", path.display());
+                Config::default()
+            }
+        };
         Self {
-            config: RwLock::new(config),
-            config_initialized: RwLock::new(config_initialized),
-            debug_mode,
-            debug_log_file: Mutex::new(debug_log_file),
-            persist_lock: Mutex::new(()),
+            path,
+            inner: Mutex::new(config),
         }
     }
 
-    /// A snapshot of the current config. A panic elsewhere while holding the
-    /// write lock poisons it; recovering via `into_inner` means one bad
-    /// mutation can't take down every future read.
-    pub fn config(&self) -> AppConfig {
-        self.config
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    pub fn get(&self) -> Config {
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone()
     }
 
-    /// Apply `f` to the config and return the resulting snapshot.
-    pub fn update_config(&self, f: impl FnOnce(&mut AppConfig)) -> AppConfig {
+    /// Applies `change` and saves it. If saving fails, the settings in memory
+    /// stay as they were, so they never differ from the file.
+    pub fn update(&self, change: impl FnOnce(&mut Config)) -> Result<(), String> {
         let mut guard = self
-            .config
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        f(&mut guard);
-        guard.clone()
-    }
-
-    /// Apply `f` and persist the result to disk as one atomic step, so a
-    /// concurrent caller can't save its own update in between this update and
-    /// this save (which would otherwise leave `config.json` not matching
-    /// whichever update actually happened last in memory).
-    ///
-    /// A failed save rolls the in-memory config back to its prior value, so a
-    /// setting can't appear to change for the session and then silently revert
-    /// on the next launch.
-    pub fn update_and_persist(&self, f: impl FnOnce(&mut AppConfig)) -> Result<AppConfig, String> {
-        let _guard = self
-            .persist_lock
+            .inner
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let previous = self.config();
-        let config = self.update_config(f);
-        if let Err(e) = save_config(&config) {
-            self.update_config(|current| *current = previous);
-            return Err(e);
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut next = guard.clone();
+        change(&mut next);
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("Could not create config dir: {e}"))?;
         }
-        Ok(config)
-    }
-
-    pub fn is_config_initialized(&self) -> bool {
-        *self
-            .config_initialized
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
-    pub fn set_config_initialized(&self, value: bool) {
-        *self
-            .config_initialized
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = value;
+        let raw = serde_json::to_string_pretty(&next).map_err(|e| e.to_string())?;
+        // Written beside the file, then renamed over it, so a failed write
+        // never leaves a truncated settings file.
+        let tmp = self.path.with_extension("json.tmp");
+        fs::write(&tmp, raw).map_err(|e| format!("Could not save config: {e}"))?;
+        fs::rename(&tmp, &self.path).map_err(|e| format!("Could not save config: {e}"))?;
+        *guard = next;
+        Ok(())
     }
 }
 
@@ -221,31 +235,164 @@ impl ConfigState {
 mod tests {
     use super::*;
 
-    #[allow(clippy::unwrap_used)]
-    fn parse(json: &str) -> AppConfig {
-        serde_json::from_str(json).unwrap()
+    const SERVER: &str = "https://onyx.example.com";
+
+    #[test]
+    fn stored_token_needs_a_record_where_required() {
+        let mut config = Config::default();
+        assert!(!config.trusts_stored_token(SERVER, true));
+        config.session_servers.insert(SERVER.to_string());
+        assert!(config.trusts_stored_token(SERVER, true));
+        assert!(!config.trusts_stored_token("https://other.example.com", true));
     }
 
     #[test]
-    fn missing_summon_fields_get_defaults() {
-        let config = parse(r#"{"server_url": "https://cloud.onyx.app"}"#);
-        assert_eq!(config.summon_shortcut, default_summon_shortcut());
-        assert!(config.summon_shortcut.is_some());
-        assert!(config.summon_opens_new_chat);
-    }
-
-    #[test]
-    fn explicit_null_disables_summon_shortcut() {
-        let config = parse(r#"{"server_url": "https://cloud.onyx.app", "summon_shortcut": null}"#);
-        assert_eq!(config.summon_shortcut, None);
-    }
-
-    #[test]
-    fn custom_summon_settings_are_preserved() {
-        let config = parse(
-            r#"{"server_url": "https://cloud.onyx.app", "summon_shortcut": "F19", "summon_opens_new_chat": false}"#,
+    fn a_rejected_token_is_known_by_its_fingerprint_only() {
+        let fingerprint = token_fingerprint(SERVER, "secret-token");
+        assert_eq!(fingerprint.len(), 64);
+        assert!(!fingerprint.contains("secret-token"));
+        assert_ne!(fingerprint, token_fingerprint(SERVER, "other-token"));
+        assert_ne!(
+            fingerprint,
+            token_fingerprint("https://other.example.com", "secret-token")
         );
-        assert_eq!(config.summon_shortcut.as_deref(), Some("F19"));
-        assert!(!config.summon_opens_new_chat);
+        let mut config = Config::default();
+        assert!(!config.rejects_token(SERVER, "secret-token"));
+        config
+            .rejected_tokens
+            .insert(SERVER.to_string(), BTreeSet::from([fingerprint]));
+        assert!(config.rejects_token(SERVER, "secret-token"));
+        assert!(!config.rejects_token(SERVER, "new-token"));
+        assert!(!config.rejects_token("https://other.example.com", "secret-token"));
+        let raw = serde_json::to_string(&config).unwrap();
+        assert!(raw.contains("rejectedTokens"));
+        assert!(!raw.contains("secret-token"));
+    }
+
+    #[test]
+    fn sign_out_rejects_both_the_renewed_and_the_stored_token() {
+        let both = tokens_to_reject(SERVER, Some("renewed"), Some("stored"));
+        assert_eq!(
+            both,
+            BTreeSet::from([
+                token_fingerprint(SERVER, "renewed"),
+                token_fingerprint(SERVER, "stored"),
+            ])
+        );
+        assert_eq!(
+            tokens_to_reject(SERVER, Some("same"), Some("same")).len(),
+            1
+        );
+        assert_eq!(
+            tokens_to_reject(SERVER, None, Some("stored")),
+            BTreeSet::from([token_fingerprint(SERVER, "stored")])
+        );
+        assert!(tokens_to_reject(SERVER, None, None).is_empty());
+        let mut config = Config::default();
+        config.rejected_tokens.insert(SERVER.to_string(), both);
+        assert!(config.rejects_token(SERVER, "renewed"));
+        assert!(config.rejects_token(SERVER, "stored"));
+    }
+
+    #[test]
+    fn rejected_tokens_read_both_formats() {
+        let config: Config = serde_json::from_str(
+            r#"{"serverUrl": "https://a.example.com",
+                "rejectedTokens": {"https://a.example.com": "aa", "https://b.example.com": ["bb", "cc"]}}"#,
+        )
+        .unwrap();
+        assert_eq!(config.server_url.as_deref(), Some("https://a.example.com"));
+        assert_eq!(
+            config.rejected_tokens.get("https://a.example.com"),
+            Some(&BTreeSet::from(["aa".to_string()]))
+        );
+        assert_eq!(
+            config.rejected_tokens.get("https://b.example.com"),
+            Some(&BTreeSet::from(["bb".to_string(), "cc".to_string()]))
+        );
+        // Written in the list format only.
+        let raw = serde_json::to_string(&config).unwrap();
+        assert!(raw.contains(r#""https://a.example.com":["aa"]"#));
+    }
+
+    #[test]
+    fn a_bad_rejected_tokens_value_keeps_the_other_settings() {
+        for bad in [
+            r#""garbage""#,
+            "42",
+            r#"{"https://a.example.com": 7}"#,
+            r#"{"https://a.example.com": [1, null]}"#,
+        ] {
+            let config: Config = serde_json::from_str(&format!(
+                r#"{{"serverUrl": "https://a.example.com", "hotkey": "Alt+Space", "rejectedTokens": {bad}}}"#
+            ))
+            .unwrap();
+            assert_eq!(config.server_url.as_deref(), Some("https://a.example.com"));
+            assert_eq!(config.hotkey(), "Alt+Space");
+            assert!(config.rejected_tokens.is_empty(), "{bad}");
+        }
+        let mixed: Config = serde_json::from_str(
+            r#"{"rejectedTokens": {"https://a.example.com": 7, "https://b.example.com": "bb"}}"#,
+        )
+        .unwrap();
+        assert_eq!(mixed.rejected_tokens.len(), 1);
+        // The valid fingerprints of a list stay when one item is bad.
+        let partly: Config = serde_json::from_str(
+            r#"{"rejectedTokens": {"https://a.example.com": ["aa", 1, "bb"]}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            partly.rejected_tokens.get("https://a.example.com"),
+            Some(&BTreeSet::from(["aa".to_string(), "bb".to_string()]))
+        );
+    }
+
+    #[test]
+    fn stored_token_is_trusted_where_no_record_is_required() {
+        assert!(Config::default().trusts_stored_token(SERVER, false));
+    }
+
+    #[test]
+    fn empty_session_record_is_not_written() {
+        let raw = serde_json::to_string(&Config::default()).unwrap();
+        assert!(!raw.contains("sessionServers"));
+    }
+
+    #[test]
+    fn session_record_survives_a_reload_and_not_a_data_wipe() {
+        let dir =
+            std::env::temp_dir().join(format!("onyx-desktop-config-test-{}", std::process::id()));
+        let path = dir.join("config.json");
+        let store = ConfigStore::load(path.clone());
+        store
+            .update(|c| {
+                c.session_servers.insert(SERVER.to_string());
+            })
+            .unwrap();
+        assert!(ConfigStore::load(path.clone())
+            .get()
+            .trusts_stored_token(SERVER, true));
+
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(!ConfigStore::load(path)
+            .get()
+            .trusts_stored_token(SERVER, true));
+    }
+
+    #[test]
+    fn reads_a_config_file_with_a_byte_order_mark() {
+        let dir = std::env::temp_dir().join(format!("onyx-config-bom-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        fs::write(
+            &path,
+            "\u{feff}{\"serverUrl\": \"https://x.example.com\", \"hotkey\": \"Alt+Space\"}",
+        )
+        .unwrap();
+        let config = ConfigStore::load(path).get();
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(config.server_url.as_deref(), Some("https://x.example.com"));
+        assert_eq!(config.hotkey(), "Alt+Space");
     }
 }

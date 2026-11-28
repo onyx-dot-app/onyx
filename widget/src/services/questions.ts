@@ -124,9 +124,11 @@ export function choiceAnswer(
 ): ToolQuestionAnswer | null {
   if (!choice) return null;
   if ("option" in choice)
-    return { question_id: questionId, option_label: choice.option };
+    return { question_id: questionId, option_labels: [choice.option] };
   const note = choice.note.trim();
-  return note ? { question_id: questionId, user_note: note } : null;
+  return note
+    ? { question_id: questionId, option_labels: [], user_note: note }
+    : null;
 }
 
 /**
@@ -165,7 +167,10 @@ export function questionRecords(
   );
   return request.questions.map((question) => {
     const answer = answers.get(question.id);
-    const parts = [answer?.option_label, answer?.user_note?.trim()].filter(
+    const parts = [
+      answer?.option_labels.join(", "),
+      answer?.user_note?.trim(),
+    ].filter(
       (part): part is string => !!part
     );
     return `${question.header}: ${parts.length ? parts.join(" - ") : "No answer"}`;

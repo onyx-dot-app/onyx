@@ -27,6 +27,7 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -35,6 +36,7 @@ PREVIEW_CHARS = 500
 
 
 class FileReaderTool(Tool):
+    rank = ToolRank.READ_FILE
     NAME = "read_file"
     DISPLAY_NAME = "File Reader"
     DESCRIPTION = (

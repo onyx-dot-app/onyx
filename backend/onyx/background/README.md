@@ -60,6 +60,7 @@ Then it cycles through its tasks as scheduled by Celery Beat:
 | `check_for_pruning`               | 20s       | Finds connectors due for pruning → dispatches to `CONNECTOR_PRUNING` queue                 |
 | `check_for_connector_deletion`    | 20s       | Processes deletion requests → dispatches to `CONNECTOR_DELETION` queue                     |
 | `check_for_user_file_processing`  | 20s       | Checks for user uploads → dispatches to `USER_FILE_PROCESSING` queue                       |
+| `check_for_chat_artifact_indexing` | 20s      | Finds published files waiting to be indexed → dispatches to `USER_FILE_PROCESSING` queue  |
 | `check_for_checkpoint_cleanup`    | 1h        | Cleans up old indexing checkpoints                                                         |
 | `check_for_index_attempt_cleanup` | 30m       | Cleans up old index attempts                                                               |
 | `celery_beat_heartbeat`           | 1m        | Heartbeat for Beat watchdog                                                                |

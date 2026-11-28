@@ -238,6 +238,7 @@ function TextElement({
 export {
   Text,
   TextElement,
+  FONT_CONFIG as TEXT_FONT_CLASSES,
   COLOR_CONFIG as TEXT_COLOR_CLASSES,
   type TextProps,
 };

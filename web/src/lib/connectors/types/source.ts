@@ -32,6 +32,7 @@ export enum ValidSources {
   Document360 = "document360",
   File = "file",
   UserFile = "user_file",
+  ChatArtifact = "chat_artifact",
   GoogleSites = "google_sites",
   Loopio = "loopio",
   Box = "box",
@@ -120,6 +121,7 @@ export type ConfigurableSources = Exclude<
   | ValidSources.IngestionApi
   | ValidSources.FederatedSlack // is part of ValiedSources.Slack
   | ValidSources.UserFile
+  | ValidSources.ChatArtifact // Files published in chat, indexed by the server
   | ValidSources.CraftFile // User Library - managed through dedicated UI
 >;
 

@@ -17,6 +17,7 @@ import type {
   TemperatureManager,
 } from "@/sections/model-selector/ModelSelectorContent";
 import { llmOptionKey } from "@/lib/languageModels/options";
+import { toggleModelPicker } from "@/lib/shortcuts/utils";
 import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
@@ -857,6 +858,24 @@ describe("MultiModelSelector", () => {
       expectNoCallbacks(callbacks);
     });
 
+    test("Escape gives focus back to the composer after Cmd/Ctrl+/ or /model opened the menu", async () => {
+      const user = setupUser();
+      render(
+        <>
+          <textarea aria-label="Composer" />
+          <Harness initial={[selected("Model A")]} />
+        </>
+      );
+      const composer = screen.getByRole("textbox", { name: "Composer" });
+      act(() => composer.focus());
+
+      act(() => toggleModelPicker());
+      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      await user.keyboard("{Escape}");
+      await expectClosed();
+
+      await waitFor(() => expect(composer).toHaveFocus());
+    });
     test.each([
       { view: "add list", opener: ADD, pane: null, remove: "Model B" },
       { view: "switch list", opener: "Model B", pane: null, remove: "Model A" },

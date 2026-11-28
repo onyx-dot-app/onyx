@@ -3,6 +3,16 @@ import AdminSkillsTable from "@/sections/skills/AdminSkillsTable";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import type { CustomSkill } from "@/lib/skills/types";
 
+let mockIsMobile = false;
+jest.mock("@/hooks/useScreenSize", () => ({
+  __esModule: true,
+  default: () => ({ isMobile: mockIsMobile }),
+}));
+
+afterEach(() => {
+  mockIsMobile = false;
+});
+
 const published = customFixture({
   id: "published",
   name: "weekly-report",
@@ -39,12 +49,12 @@ function renderTable(skills: CustomSkill[]) {
   render(
     <AdminSkillsTable
       skills={skills}
-      selectedIds={new Set()}
-      onSelectionChange={jest.fn()}
-      busy={false}
-      isPending={() => false}
-      enabledOf={(skill) => skill.enabled}
-      onEnabledChange={jest.fn()}
+      bulk={{ selectedIds: new Set(), select: jest.fn(), busy: false }}
+      enablement={{
+        isPending: () => false,
+        enabledOf: (skill) => skill.enabled,
+        setEnabled: jest.fn(),
+      }}
       onOpen={onOpen}
       onShare={onShare}
       onDelete={onDelete}
@@ -87,4 +97,41 @@ test("Share and Delete call back for an editor, and a viewer gets no Share", asy
   expect(
     screen.queryByRole("menuitem", { name: "Share" })
   ).not.toBeInTheDocument();
+});
+
+test("an owner gets no Share for a plugin of a personal marketplace", async () => {
+  const user = setupUser();
+  const personal = customFixture({
+    id: "personal",
+    name: "my-kit",
+    user_permission: "OWNER",
+    owner: { id: "me", email: "me@example.com" },
+    marketplace: {
+      id: "m-personal",
+      name: "me/plugins",
+      kind: "github",
+      repository: "me/plugins",
+      personal: true,
+    },
+  });
+  renderTable([personal]);
+
+  await user.click(screen.getByRole("button", { name: "More for my-kit" }));
+  expect(
+    screen.queryByRole("menuitem", { name: "Share" })
+  ).not.toBeInTheDocument();
+});
+
+test("at phone width a row shows only the name, switch and menu", () => {
+  mockIsMobile = true;
+  renderTable([published]);
+  const row = screen.getByRole("row", { name: "Open weekly-report" });
+  expect(within(row).getByText("weekly-report")).toBeVisible();
+  expect(within(row).getByRole("switch")).toBeInTheDocument();
+  expect(
+    within(row).getByRole("button", { name: "More for weekly-report" })
+  ).toBeInTheDocument();
+  expect(within(row).queryByText("Organization library")).toBeNull();
+  expect(within(row).queryByText("v3 · v2 live")).toBeNull();
+  expect(within(row).queryByText("Groups: Sales: Available")).toBeNull();
 });

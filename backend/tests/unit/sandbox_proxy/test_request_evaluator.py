@@ -6,19 +6,20 @@ CUSTOM apps author globs; built-in providers author regexes.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ExternalAppType, IntegrationKind
-from onyx.db.models import ExternalApp, Integration
+from onyx.db.enums import ApiAppType, ExternalAppType, IntegrationKind
+from onyx.db.models import ApiApp, ExternalApp, Integration
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import url_matches_patterns
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.models import RequestMatch
-from onyx.sandbox_proxy.request_evaluator import _matches, _pick
+from onyx.sandbox_proxy.request_evaluator import _matches, _pick, _request_payload
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     IntegrationMatchTarget,
     may_match,
@@ -155,9 +156,10 @@ def test_a_failed_integration_match_blocks_the_request() -> None:
 
 def _match(
     integration_id: int, kind: IntegrationKind, prefix_length: int
-) -> tuple[Integration, RequestMatch]:
+) -> tuple[Integration, IntegrationMatchTarget, RequestMatch]:
     return (
         Integration(id=integration_id, kind=kind),
+        IntegrationMatchTarget(integration_id=integration_id, kind=kind),
         RequestMatch(actions=[], path_prefix_length=prefix_length),
     )
 
@@ -193,11 +195,13 @@ def test_pick_takes_the_longest_mcp_prefix_and_an_api_over_mcp() -> None:
 
 
 def test_an_openapi_spec_that_does_not_parse_gives_a_load_error() -> None:
-    two_servers = {"servers": [{"url": "https://a.example.com"}, {"url": "https://b"}]}
-    for schema in (None, two_servers):
-        target = openapi_match_target(1, schema)
+    two_servers = json.dumps(
+        {"servers": [{"url": "https://a.example.com"}, {"url": "https://b"}]}
+    )
+    for document in (None, two_servers, "[1, 2]", "servers: [unclosed"):
+        target = openapi_match_target(1, document)
         assert target is not None and target.load_error is not None
-    parsed = openapi_match_target(1, {"servers": [{"url": "https://a.example.com/v1"}]})
+    parsed = openapi_match_target(1, "servers:\n  - url: https://a.example.com/v1\n")
     assert parsed is not None and parsed.endpoint is not None
     assert parsed.endpoint.path_prefix == "/v1"
 
@@ -210,10 +214,20 @@ def test_a_malformed_url_gives_a_load_error_and_keeps_the_valid_targets() -> Non
             return_value=[(1, "https://x:invalid/mcp"), (2, "https://ok.example/mcp")],
         ),
         patch(
-            f"{module}.list_enabled_openapi_schemas",
+            f"{module}.list_enabled_api_apps",
             return_value=[
-                (3, {"servers": [{"url": "https://y:invalid/v1"}]}),
-                (4, {"servers": [{"url": "https://api.example/v1"}]}),
+                (
+                    integration_id,
+                    ApiApp(
+                        api_type=ApiAppType.REST,
+                        base_url=url,
+                        openapi_document=json.dumps({"servers": [{"url": url}]}),
+                    ),
+                )
+                for integration_id, url in (
+                    (3, "https://y:invalid/v1"),
+                    (4, "https://api.example/v1"),
+                )
             ],
         ),
         patch(f"{module}.list_enabled_external_apps", return_value=[]),
@@ -227,3 +241,23 @@ def test_a_malformed_url_gives_a_load_error_and_keeps_the_valid_targets() -> Non
     assert targets[3].load_error is not None
     for valid in (targets[2], targets[4]):
         assert valid.load_error is None and valid.endpoint is not None
+
+
+def test_a_form_body_keeps_its_empty_fields() -> None:
+    request = http.Request.make(
+        "POST",
+        "https://api.example.com/contacts/1",
+        b"name=Ada&title=&tag=a&tag=b",
+        {"content-type": "application/x-www-form-urlencoded"},
+    )
+    assert _request_payload(request) == {"name": "Ada", "title": "", "tag": ["a", "b"]}
+
+
+def test_a_json_patch_body_is_decoded() -> None:
+    request = http.Request.make(
+        "PATCH",
+        "https://api.example.com/contacts/1",
+        b'{"title": "CTO"}',
+        {"content-type": "application/merge-patch+json; charset=utf-8"},
+    )
+    assert _request_payload(request) == {"title": "CTO"}

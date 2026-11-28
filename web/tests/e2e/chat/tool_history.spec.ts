@@ -9,7 +9,7 @@ import {
 
 // Code mode runs behind the scenes; none of it is user-facing copy.
 const CODE_MODE_TEXT =
-  /await [\w.]+\(|\bcell\b|Ran code|execute_code|wait_code/i;
+  /await [\w.]+\(|\bcell\b|Ran code|execute_code|wait_code|\b(?:wait|poll)\(cell_id/i;
 
 test("custom tool output and answer survive a history reload @code-mode", async ({
   browser,
@@ -21,6 +21,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
   const adminApi = new OnyxApiClient(admin.request);
   const nonce = mockLlmNonce();
   const operation = "check_service_health";
+  const summary = "Read service health";
   const created = await adminApi.createIntegration({
     for_organization: true,
     name: `Health ${nonce}`,
@@ -32,7 +33,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
     oauth_client: null,
     config: {
       shape: "openapi",
-      openapi_spec: {
+      openapi_document: JSON.stringify({
         openapi: "3.0.0",
         info: {
           title: `Health ${nonce}`,
@@ -44,12 +45,12 @@ test("custom tool output and answer survive a history reload @code-mode", async 
           "/health": {
             get: {
               operationId: operation,
-              summary: "Read service health",
+              summary,
               responses: { "200": { description: "OK" } },
             },
           },
         },
-      },
+      }),
     },
   });
   let agentId: number | undefined;
@@ -65,7 +66,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
     );
     sessionId = await api.createChatSession("Tool history", agentId);
     const callId = `call-${nonce}`;
-    // Matches `CustomTool.name` in the backend.
+    // Matches `RestTool.name` in the backend.
     const toolName = `custom__${created.id}__${operation}`;
     await addMockLlmConversation({
       name: nonce,
@@ -85,7 +86,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
       if (view === "reloaded") await chatPage.reload();
       await chatPage.expectCompleteAnswers(1);
       await chatPage.expectAnswerParagraph("The health check returned ok.");
-      await chatPage.expectCustomToolResult(operation, '"status": "ok"');
+      await chatPage.expectCustomToolResult(summary, ["status:", "ok"]);
       await expect(chatPage.aiMessage()).not.toContainText(CODE_MODE_TEXT);
     }
   } finally {

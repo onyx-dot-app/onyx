@@ -16,7 +16,8 @@ export interface StoredSession {
 }
 
 /**
- * Save session to sessionStorage
+ * Save session to sessionStorage. A command's approval card shows the path
+ * and body of an app request, so it stays out of the host page's storage.
  */
 export function saveSession(
   sessionId: string,
@@ -26,7 +27,16 @@ export function saveSession(
   try {
     const session: StoredSession = {
       sessionId,
-      messages,
+      messages: messages.map((message) =>
+        message.approvals
+          ? {
+              ...message,
+              approvals: message.approvals.filter(
+                (entry) => !entry.request.expires_at
+              ),
+            }
+          : message
+      ),
       timestamp: Date.now(),
       identity,
     };

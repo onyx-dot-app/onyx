@@ -3,7 +3,9 @@
 import "@opal/loaders/styles.css";
 import { useLayoutEffect, useRef } from "react";
 import { Text, type TextFont } from "@opal/components";
+import { TEXT_FONT_CLASSES } from "@opal/components/text/components";
 import type { RichStr } from "@opal/types";
+import { cn } from "@opal/utils";
 
 // The block shimmer in loaders/styles.css (LineLoader, CardLoader) uses the
 // same wave; keep the two in step.
@@ -28,6 +30,9 @@ interface TextLoaderProps {
 
   /** Typography preset. @default "main-ui-action" */
   font?: TextFont;
+
+  /** Keeps the text on one line, cut with an ellipsis. */
+  truncate?: boolean;
 }
 
 /**
@@ -40,7 +45,11 @@ interface TextLoaderProps {
  * measures the text's run length (every line fragment) and scales the wave's
  * width and rate to it.
  */
-function TextLoader({ children, font = "main-ui-action" }: TextLoaderProps) {
+function TextLoader({
+  children,
+  font = "main-ui-action",
+  truncate = false,
+}: TextLoaderProps) {
   // A RichStr is a new object on each render; its text is what is measured.
   const content = typeof children === "string" ? children : children.raw;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -76,8 +85,20 @@ function TextLoader({ children, font = "main-ui-action" }: TextLoaderProps) {
   }, [content, font]);
 
   return (
-    <div ref={rootRef} className="opal-text-loader">
-      <span ref={waveRef} className="opal-text-loader-wave">
+    <div
+      ref={rootRef}
+      className="opal-text-loader"
+      data-truncate={truncate || undefined}
+    >
+      {/* A truncated wave is a block. Its line box takes the font's line
+          height, so the text is as tall and placed as plain `Text`. */}
+      <span
+        ref={waveRef}
+        className={cn(
+          "opal-text-loader-wave",
+          truncate && TEXT_FONT_CLASSES[font]
+        )}
+      >
         <Text font={font} color="inherit">
           {children}
         </Text>

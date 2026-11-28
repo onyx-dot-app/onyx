@@ -23,6 +23,7 @@ afterEach(() => {
 async function resolveSource() {
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   await user.type(screen.getByLabelText("Repository"), "acme/plugins");
+  await user.click(screen.getByRole("button", { name: "Expand Advanced" }));
   await user.type(screen.getByLabelText("Folder"), "catalog");
   await user.type(screen.getByLabelText("Branch, Tag or Commit"), "main");
   await user.click(screen.getByRole("button", { name: "Continue" }));

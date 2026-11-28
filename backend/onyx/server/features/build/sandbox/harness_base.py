@@ -29,6 +29,10 @@ Exec contract (`exec_command` / `write_stdin`):
   kills the command (SIGKILL), however the wait ends; the call raises
   `AgentCancelled`. A call cancelled before it starts its command, or writes
   its input, does neither.
+- Each command has a command ID, which its app requests carry to the egress
+  proxy. With a `CommandHold`, the call calls `begin` with the ID before it
+  starts the command or writes to it, and does not yield while `holds` is
+  true (a request of the command waits for the user's approval).
 """
 
 import abc
@@ -38,15 +42,26 @@ import posixpath
 import string
 import unicodedata
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
-from typing import IO
+from typing import IO, Protocol
 from uuid import UUID
 
+from pydantic import JsonValue
+
+from onyx.file_processing.file_types import (
+    OFFICE_MIME_TYPES_BY_EXTENSION,
+    PRESENTATION_MIME_TYPE,
+    WORD_PROCESSING_MIME_TYPE,
+)
+from onyx.microvm.browser_protocol import BrowserFrame
 from onyx.microvm.models import FileListing
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     FileSet,
     HarnessSandboxRef,
+    RenderedPreview,
+    RenderFileBytes,
+    RenderSessionFile,
     SandboxPathInfo,
     session_workspace,
 )
@@ -54,12 +69,14 @@ from onyx.server.features.build.sandbox.models import (
 # The directory of the chat's files in its session directory: copies of file
 # store files (tools/tool_implementations/sandbox/file_copies.py).
 CHAT_FILES_DIR = "attachments"
+# Uploads for the chat browser's file chooser, in the session directory.
+BROWSER_UPLOADS_DIR = "browser-uploads"
 # The chat's project files and its agent's files, in CHAT_FILES_DIR.
 PROJECT_FILES_DIR = f"{CHAT_FILES_DIR}/project"
 AGENT_FILES_DIR = f"{CHAT_FILES_DIR}/agent"
-# Published files that the model downloaded from the user's chats
-# (artifacts_download), in CHAT_FILES_DIR. The chat file copies never clean
-# it up.
+# Published files that the model copied from the user's chats
+# (library_prepare_materialize), in CHAT_FILES_DIR. The chat file copies never
+# clean it up.
 ARTIFACT_FILES_DIR = f"{CHAT_FILES_DIR}/artifacts"
 # The original files of the chat's search results, in CHAT_FILES_DIR.
 SEARCH_FILES_DIR = f"{CHAT_FILES_DIR}/search"
@@ -84,18 +101,38 @@ ONYX_VM_FILES_ROOT = "/tmp/onyx"  # noqa: S108 - a path in the sandbox VM.
 # deletes the directory again and raises HarnessSandboxError.
 TOOL_RESULTS_ROOT = f"{ONYX_VM_FILES_ROOT}/tool-results"
 
-# render_first_page: a JPEG of a file's first page, at most this many pixels on
-# its longer side, drawn in a scratch directory of its own under this root.
-RENDER_FIRST_PAGE_SIZE_PX = 640
-RENDER_FIRST_PAGE_ROOT = f"{ONYX_VM_FILES_ROOT}/renders"
-# The suffixes it draws: a PDF directly, Office files through LibreOffice.
-RENDER_FIRST_PAGE_SUFFIXES = frozenset({".pdf", ".pptx", ".docx"})
-# Largest file that callers render, and largest JPEG that it reads back.
-RENDER_FIRST_PAGE_MAX_INPUT_BYTES = 20 << 20
-RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES = 4 << 20
-# The renders of one publish_files call end by this budget, which starts once
-# the call has its sandbox. A file after it publishes without a thumbnail.
-RENDER_FIRST_PAGE_BUDGET_SECONDS = 30.0
+# render_preview: the longer side, in pixels, of the JPEG of a file's first
+# page, and the root of each render's own scratch directory.
+RENDER_PREVIEW_SIZE_PX = 640
+RENDER_PREVIEW_ROOT = f"{ONYX_VM_FILES_ROOT}/renders"
+# The Office types that LibreOffice converts to a PDF, which the render
+# returns. The web's list is OFFICE_MIME_TYPES in
+# web/src/lib/filePreview/format.ts.
+RENDER_PREVIEW_PDF_MIME_TYPES = frozenset(
+    {PRESENTATION_MIME_TYPE, WORD_PROCESSING_MIME_TYPE}
+)
+# The suffixes it draws: a PDF directly, the Office types above through
+# LibreOffice.
+RENDER_PREVIEW_SUFFIXES = frozenset(
+    {
+        ".pdf",
+        *(
+            suffix
+            for suffix, mime_type in OFFICE_MIME_TYPES_BY_EXTENSION.items()
+            if mime_type in RENDER_PREVIEW_PDF_MIME_TYPES
+        ),
+    }
+)
+# Largest file that callers render, and largest JPEG and PDF that it reads
+# back. The PDF limit matches PREVIEW_BYTE_LIMITS.pdf in
+# web/src/lib/filePreview/loadChatFilePreview.ts.
+RENDER_PREVIEW_MAX_INPUT_BYTES = 20 << 20
+RENDER_PREVIEW_MAX_OUTPUT_BYTES = 4 << 20
+RENDER_PREVIEW_MAX_PDF_BYTES = 100 << 20
+# The renders of one publish call, or the render of one preview request, end
+# by this budget, which starts once the sandbox's VM runs. A publish file
+# after it publishes without a thumbnail or a PDF.
+RENDER_PREVIEW_BUDGET_SECONDS = 30.0
 
 # Most exec session records per sandbox; the least recently used goes
 # first. The guest daemon caps the running commands.
@@ -114,6 +151,9 @@ EXEC_DEFAULT_ENV: dict[str, str] = {
 
 INTERRUPT_CHAR = "\x03"
 
+# An open live view keeps the sandbox busy this long after each renewal.
+BROWSER_VIEW_LEASE_SECONDS = 60.0
+
 
 def _strip_trailing_spaces_and_dots(text: str) -> str:
     """`text` without the whitespace and dots at its end, which the Python
@@ -125,18 +165,16 @@ def _strip_trailing_spaces_and_dots(text: str) -> str:
     return text[:end]
 
 
-def chat_file_name(file_id: str, name: str | None) -> str:
-    """The name of a file store file in a directory of chat files, a function
-    of the file alone, so it never names another file: `<the first 8 hex
-    digits of the file ID>-<name>`. The name is the last part of `name` (the
-    file ID without one, "file" without either), NFC, with control
-    characters and _REPLACED_CHARACTERS replaced by `_`, and without
-    trailing whitespace or dots. Its stem is cut so that the whole name fits
-    _MAX_NAME_CHARS and _MAX_NAME_BYTES; it keeps its extension unless the
-    extension takes more than half of either. The Python tool stages each
-    such name unchanged."""
-    prefix = "".join(c for c in file_id if c in string.hexdigits)[:8].lower() + "-"
-    for raw in (name or "", file_id):
+def safe_file_name(names: Sequence[str], *, prefix: str = "", suffix: str = "") -> str:
+    """`prefix` and the first of `names` that keeps a name after this rule:
+    the last part of the name, NFC, with control characters and
+    _REPLACED_CHARACTERS replaced by `_`, and without trailing whitespace or
+    dots, with `suffix` after its stem. Its stem is cut so that the whole
+    name fits _MAX_NAME_CHARS and _MAX_NAME_BYTES; it keeps its extension
+    unless the extension takes more than half of either. `prefix` + "file"
+    when none keeps a name. The Python tool stages each such name
+    unchanged."""
+    for raw in names:
         base = _strip_trailing_spaces_and_dots(
             "".join(
                 "_"
@@ -153,14 +191,26 @@ def chat_file_name(file_id: str, name: str | None) -> str:
             or len(extension.encode()) > _MAX_NAME_BYTES // 2
         ):
             stem, extension = base, ""
-        stem = stem.encode()[
-            : _MAX_NAME_BYTES - len(f"{prefix}{extension}".encode())
-        ].decode(errors="ignore")[: _MAX_NAME_CHARS - len(f"{prefix}{extension}")]
+        kept = f"{prefix}{suffix}{extension}"
+        stem = stem.encode()[: _MAX_NAME_BYTES - len(kept.encode())].decode(
+            errors="ignore"
+        )[: _MAX_NAME_CHARS - len(kept)]
         # A cut stem without an extension can end in whitespace or dots.
-        tail = _strip_trailing_spaces_and_dots(f"{stem}{extension}")
+        tail = _strip_trailing_spaces_and_dots(f"{stem}{suffix}{extension}")
         if tail:
             return f"{prefix}{tail}"
     return f"{prefix}file"
+
+
+def chat_file_name(file_id: str, name: str | None) -> str:
+    """The name of a file store file in a directory of chat files, a function
+    of the file alone, so it never names another file: `<the first 8 hex
+    digits of the file ID>-<name>`, by safe_file_name of `name`, else of the
+    file ID."""
+    return safe_file_name(
+        (name or "", file_id),
+        prefix="".join(c for c in file_id if c in string.hexdigits)[:8].lower() + "-",
+    )
 
 
 def search_file_name(file_id: str, title: str) -> str:
@@ -232,10 +282,15 @@ class SandboxFileNotFoundError(HarnessSandboxError):
         super().__init__(f"{path!r} does not exist")
 
 
-def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
+class RenderBudgetSpentError(TimeoutError):
+    """A render ran out of its budget, which starts once the VM runs, so a
+    retry of the file most likely runs out too."""
+
+
+def session_relative_path(session_id: UUID, path: str) -> str:
     """The session-relative form of `path` ("" = the session directory).
     Accepts a relative path or an absolute path in the session directory."""
-    root = session_workspace(ref.session_id)
+    root = session_workspace(session_id)
     normalized = posixpath.normpath(path or ".")
     if posixpath.isabs(normalized):
         if normalized == root:
@@ -243,7 +298,7 @@ def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
         if not normalized.startswith(root + "/"):
             raise SandboxPathError(
                 f"{path!r} is outside the working directory {root}; use "
-                "exec_command elsewhere"
+                "a shell command elsewhere"
             )
         return normalized[len(root) + 1 :]
     if normalized == ".." or normalized.startswith("../"):
@@ -266,10 +321,14 @@ class SessionFiles(abc.ABC):
     relative to the session directory. Safe to call from several threads."""
 
     @abc.abstractmethod
-    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+    def write(
+        self, path: str, data: IO[bytes], *, timeout_seconds: float, overwrite: bool
+    ) -> None:
         """write_file, mode 0644, on this instance. A write makes a missing
         session directory; a write that finds the session purged deletes
-        that directory again and raises HarnessSandboxError."""
+        that directory again and raises HarnessSandboxError. Without
+        `overwrite`, a file at the path raises SandboxDaemonError
+        FILE_EXISTS and stays."""
 
     @abc.abstractmethod
     def delete(self, path: str) -> bool:
@@ -279,14 +338,47 @@ class SessionFiles(abc.ABC):
         nothing."""
 
     @abc.abstractmethod
-    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+    def list_files(
+        self, directory: str, *, max_entries: int, include_hidden: bool = False
+    ) -> FileListing:
         """The entries directly in `directory`, not those of its
-        subdirectories; none for a missing directory."""
+        subdirectories; none for a missing directory. Hidden entries, such
+        as the daemon's temporary file of a write in progress, only with
+        `include_hidden`."""
 
     @abc.abstractmethod
     def mark_busy(self, seconds: float | None) -> None:
         """Keep the sandbox busy (no idle stop) for `seconds` from now, or
         end that (None). Each SessionFiles has one such mark."""
+
+
+class BrowserStream(abc.ABC):
+    """A live view connection to the sandbox's browser service, in the
+    service's frames (`onyx.microvm.browser_protocol`). The caller sends the
+    view hello first."""
+
+    @abc.abstractmethod
+    async def send(self, frame: BrowserFrame) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def receive(self) -> BrowserFrame | None:
+        """The next frame; None once the service closed the connection."""
+
+    @abc.abstractmethod
+    async def aclose(self) -> None:
+        pass
+
+
+class CommandHold(Protocol):
+    """A call's link to the proxy approvals of the command it waits on
+    (`tools/tool_implementations/sandbox/command_approvals.py`)."""
+
+    def begin(self, command_id: UUID) -> None:
+        """The call waits on the command from now on."""
+
+    def holds(self) -> bool:
+        """A request of the command waits for the user's decision."""
 
 
 class HarnessSandbox(abc.ABC):
@@ -317,6 +409,7 @@ class HarnessSandbox(abc.ABC):
         *,
         workdir: str | None = None,
         yield_time_ms: int | None = None,
+        hold: CommandHold | None = None,
     ) -> Generator[ExecEvent]:
         """Run `cmd` with bash in `workdir` (default: the session
         directory)."""
@@ -329,10 +422,11 @@ class HarnessSandbox(abc.ABC):
         chars: str = "",
         *,
         yield_time_ms: int | None = None,
+        hold: CommandHold | None = None,
     ) -> Generator[ExecEvent]:
         """Write to a running command, or poll it with empty chars."""
 
-    # Files: only what exec_command cannot do well. publish_files needs exact
+    # Files: only what exec_command cannot do well. A publish needs exact
     # bytes (exec output is text), and apply_patch needs exact writes of any
     # content (no shell quoting) and typed path facts. Paths are relative to
     # the session directory, or absolute inside it; read_file, write_file,
@@ -350,6 +444,15 @@ class HarnessSandbox(abc.ABC):
         missing file, SandboxFileTooLargeError over max_bytes, and
         HarnessSandboxError for a path that is not a regular file or that a
         link takes out of its root."""
+
+    @abc.abstractmethod
+    def stream_file(
+        self, ref: HarnessSandboxRef, path: str, *, max_bytes: int
+    ) -> Iterator[bytes]:
+        """read_file, as chunks that are not kept in memory. Raises the
+        same errors before the first chunk, and SandboxFileTooLargeError
+        while it reads a file that grows over max_bytes. Dropping the
+        iterator unread cancels the transfer."""
 
     @abc.abstractmethod
     def write_file(
@@ -403,16 +506,27 @@ class HarnessSandbox(abc.ABC):
         HarnessSandboxError for a purged session."""
 
     @abc.abstractmethod
-    def render_first_page(
-        self, ref: HarnessSandboxRef, path: str, *, until: float
-    ) -> bytes | None:
-        """A JPEG of the first page of a file with a RENDER_FIRST_PAGE_SUFFIXES
-        suffix, at a path that `read_file` accepts, RENDER_FIRST_PAGE_SIZE_PX
-        on its longer side, drawn by the VM's poppler and LibreOffice by
-        `until` (time.monotonic()). Callers pass files up to
-        RENDER_FIRST_PAGE_MAX_INPUT_BYTES. Returns None, and logs why, on any
-        failure. A cancel of the current signal kills the render and raises
-        AgentCancelled."""
+    def render_preview(
+        self,
+        source: RenderSessionFile | RenderFileBytes,
+        *,
+        first_page: bool,
+        budget_seconds: float,
+    ) -> RenderedPreview | None:
+        """Render a file with a RENDER_PREVIEW_SUFFIXES suffix, up to
+        RENDER_PREVIEW_MAX_INPUT_BYTES, with the VM's LibreOffice and
+        poppler: the PDF that LibreOffice makes of an Office file, and with
+        `first_page`, a JPEG of the first page, RENDER_PREVIEW_SIZE_PX on its
+        longer side. The callers ask for the first page or pass an Office
+        file. The budget starts once the sandbox's VM runs.
+
+        Returns None, and logs why, when the converter rejects the file: a
+        step fails, or LibreOffice makes no PDF. An output that is too large,
+        or a first page that poppler cannot draw from a converted PDF, is
+        None in the result. Raises RenderBudgetSpentError when the budget
+        runs out, and the sandbox's own errors when the sandbox cannot be
+        reached, after which a retry can succeed. A cancel of the current
+        signal kills the render and raises AgentCancelled."""
 
     @abc.abstractmethod
     def touch(self, ref: HarnessSandboxRef) -> None:
@@ -433,5 +547,39 @@ class HarnessSandbox(abc.ABC):
 
     @abc.abstractmethod
     def is_busy(self, *, tenant_id: str, sandbox_id: UUID) -> bool:
-        """True while a command runs, a turn is in progress, a copy runs, or
-        an approval waits. Never starts the sandbox."""
+        """True while a command runs, a turn is in progress, a copy runs, an
+        approval waits, or a live view is open. Never starts the sandbox."""
+
+    # Browser. Each call names the chat by `ref.session_id`; the service
+    # shows a chat only its own tabs.
+
+    @abc.abstractmethod
+    def browser_call(
+        self,
+        ref: HarnessSandboxRef,
+        method: str,
+        params: dict[str, JsonValue],
+        *,
+        timeout_seconds: float,
+    ) -> dict[str, JsonValue]:
+        """One agent call to the browser service; returns its result. Starts
+        the sandbox and the browser if needed; that startup has its own
+        limits and does not count against `timeout_seconds`. Raises
+        HarnessSandboxError when the service refuses the call or does not
+        answer within `timeout_seconds`. A cancel of the
+        current signal ends the call and raises AgentCancelled."""
+
+    @abc.abstractmethod
+    async def open_browser_stream(self, ref: HarnessSandboxRef) -> BrowserStream:
+        """Start the sandbox and the browser if needed, and open a live view
+        connection. Raises when the browser cannot be reached."""
+
+    @abc.abstractmethod
+    def renew_browser_view(self, ref: HarnessSandboxRef) -> None:
+        """Keep the sandbox busy for BROWSER_VIEW_LEASE_SECONDS more: a live
+        view of the chat is open. Never starts the sandbox."""
+
+    @abc.abstractmethod
+    def clear_browser_data(self, ref: HarnessSandboxRef) -> None:
+        """Stop the browser and delete its profile (sign-ins, cookies,
+        storage) and the profile's save. Never starts the sandbox."""

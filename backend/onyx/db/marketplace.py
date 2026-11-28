@@ -2,9 +2,10 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import KeyedColumnElement
 
 from onyx.db.enums import MarketplaceKind, PluginInstallationPolicy
 from onyx.db.models import Marketplace, Plugin, PluginVersion, User
@@ -43,6 +44,21 @@ _SOURCE_INDEXES = (
 )
 
 
+def _same_source(
+    config: GitHubMarketplaceConfig, default_branch: str
+) -> ColumnElement[bool]:
+    """A source with no ref is also a marketplace saved with the name of the
+    default branch."""
+    ref = config.ref or ""
+    refs = [ref] if ref else [ref, default_branch]
+    return and_(
+        Marketplace.kind == MarketplaceKind.GITHUB,
+        Marketplace.repository == config.repository,
+        Marketplace.folder == (config.folder or ""),
+        Marketplace.ref.in_(refs),
+    )
+
+
 def create_github_marketplace__no_commit(
     *,
     name: str,
@@ -51,20 +67,24 @@ def create_github_marketplace__no_commit(
     login_user_id: UUID,
     default_installation_policy: PluginInstallationPolicy,
     db_session: Session,
+    default_branch: str,
 ) -> Marketplace:
-    if owner_user_id is not None and db_session.scalar(
-        select(Marketplace.id).where(
-            Marketplace.kind == MarketplaceKind.GITHUB,
-            Marketplace.owner_user_id.is_(None),
-            Marketplace.repository == config.repository,
-            Marketplace.folder == (config.folder or ""),
-            Marketplace.ref == (config.ref or ""),
+    owners = db_session.scalars(
+        select(Marketplace.owner_user_id).where(
+            _same_source(config, default_branch),
+            or_(
+                Marketplace.owner_user_id.is_(None),
+                Marketplace.owner_user_id == owner_user_id,
+            ),
         )
-    ):
+    ).all()
+    if owner_user_id is not None and None in owners:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
             "Your organization already gets this marketplace.",
         )
+    if owners:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "This marketplace is already added.")
     marketplace = Marketplace(
         kind=MarketplaceKind.GITHUB,
         name=name,
@@ -89,16 +109,16 @@ def create_github_marketplace__no_commit(
 
 
 def source_added_for(
-    config: GitHubMarketplaceConfig, user_id: UUID, db_session: Session
+    config: GitHubMarketplaceConfig,
+    user_id: UUID,
+    db_session: Session,
+    default_branch: str,
 ) -> tuple[bool, bool]:
     """Whether the user's personal marketplaces, and the company ones, already
     have this source."""
     owners = db_session.scalars(
         select(Marketplace.owner_user_id).where(
-            Marketplace.kind == MarketplaceKind.GITHUB,
-            Marketplace.repository == config.repository,
-            Marketplace.folder == (config.folder or ""),
-            Marketplace.ref == (config.ref or ""),
+            _same_source(config, default_branch),
             or_(
                 Marketplace.owner_user_id == user_id,
                 Marketplace.owner_user_id.is_(None),
@@ -135,8 +155,9 @@ def lock_github_marketplace(
 
 def list_github_marketplaces(
     owner_user_id: UUID, db_session: Session
-) -> list[tuple[Marketplace, int]]:
-    """The company marketplaces and the user's personal ones."""
+) -> list[tuple[Marketplace, int, str | None]]:
+    """The company marketplaces and the user's personal ones, each with its
+    plugin count and the email of its login user."""
     plugin_count = (
         select(func.count(Plugin.id))
         .where(Plugin.marketplace_id == Marketplace.id)
@@ -146,14 +167,16 @@ def list_github_marketplaces(
     owner_filter = (Marketplace.owner_user_id == owner_user_id) | (
         Marketplace.owner_user_id.is_(None)
     )
-    return [
-        (marketplace, count)
-        for marketplace, count in db_session.execute(
-            select(Marketplace, plugin_count)
+    user = User.__table__.c
+    login_email: KeyedColumnElement[str] = user.email
+    return list(
+        db_session.execute(
+            select(Marketplace, plugin_count, login_email)
+            .outerjoin(User.__table__, user.id == Marketplace.login_user_id)
             .where(Marketplace.kind == MarketplaceKind.GITHUB, owner_filter)
             .order_by(Marketplace.created_at, Marketplace.id)
         ).tuples()
-    ]
+    )
 
 
 def list_synced_plugins(

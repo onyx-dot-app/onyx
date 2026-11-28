@@ -193,17 +193,14 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                     secret=True,
                 ),
             ],
-            setup_instructions=(
-                f"Create a Slack app at {SLACK_APPS_URL}. Under OAuth & "
-                "Permissions, add this Onyx instance's callback URL "
-                "(/craft/v1/apps/oauth/callback) to Redirect URLs, and add the "
-                "User Token Scopes you want the agent to use (channels:history, "
-                "channels:read, chat:write, files:write, groups:history, "
-                "groups:read, im:history, im:read, im:write, search:read, "
-                "users:read). No "
-                "bot user is required. Then paste the app's Client ID and "
-                "Client Secret below."
-            ),
+            setup_steps=[
+                "Create a Slack app. The app does not need a bot user.",
+                "Open OAuth & Permissions.",
+                "Add the callback URL to Redirect URLs.",
+                "Add the scopes to User Token Scopes.",
+                "Paste the Client ID and Client Secret into the fields.",
+            ],
+            setup_url=SLACK_APPS_URL,
         ),
         endpoint_catalog=_ENDPOINTS,
     )

@@ -1,5 +1,6 @@
 "use client";
 
+import { takeRecentChatShortcutTarget } from "@/lib/shortcuts/utils";
 import { useEffect, useCallback, useState } from "react";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -142,7 +143,9 @@ export default function useChatSessionController({
     chatSessionIdRef.current = existingChatSessionId;
     loadedIdSessionRef.current = existingChatSessionId;
 
-    chatInputBarRef.current?.focus();
+    if (!takeRecentChatShortcutTarget(existingChatSessionId)) {
+      chatInputBarRef.current?.focus();
+    }
 
     const isCreatingNewSession =
       priorChatSessionId === null && existingChatSessionId !== null;
@@ -150,7 +153,8 @@ export default function useChatSessionController({
       priorChatSessionId !== null &&
       existingChatSessionId !== priorChatSessionId;
 
-    // Clear uploaded files on any session change (they're already in context)
+    // Clear files on any session change; the composer restores the next
+    // chat's draft files.
     if (isCreatingNewSession || isSwitchingBetweenSessions) {
       setCurrentMessageFiles([]);
     }
@@ -160,15 +164,6 @@ export default function useChatSessionController({
     // configuration, so the next chat reads its own.
     if (isSwitchingBetweenSessions) {
       setSelectedDocuments([]);
-
-      // Remove uploaded files
-      setCurrentMessageFiles([]);
-
-      // If switching from one chat to another, then need to scroll again
-      // If we're creating a brand new chat, then don't need to scroll
-      if (priorChatSessionId !== null) {
-        setSelectedDocuments([]);
-      }
     }
 
     // Each run owns its load: cleanup cancels the request and stops the run.
@@ -219,7 +214,10 @@ export default function useChatSessionController({
       const toolOptionsVersion =
         useChatSessionStore.getState().sessions.get(existingChatSessionId)
           ?.toolOptionsVersion ?? 0;
-      const loadSequence = startChatLoad();
+      const chatLoad = startChatLoad(
+        useChatSessionStore.getState().sessions.get(existingChatSessionId)
+          ?.messageTree
+      );
       let response: Response;
       try {
         response = await fetch(chatPageUrl(existingChatSessionId), {
@@ -368,7 +366,7 @@ export default function useChatSessionController({
           .applyLoadedSession(
             chatSession.chat_session_id,
             chatSession,
-            loadSequence,
+            chatLoad,
             {
               hasOlderMessages,
               olderMessagesFailed: false,

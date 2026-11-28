@@ -113,6 +113,25 @@ it("names the tab for assistive technology in both states", () => {
   expect(screen.getByLabelText("Settings")).toBeInTheDocument();
 });
 
+it("gives a loading title's line box the same font as the plain title", () => {
+  // jsdom does no layout. The block that holds a loading title must take the
+  // title's font, or its line box takes the inherited, taller line height and
+  // the title sits lower than on a plain tab.
+  const { rerender } = render(<SidebarTab href="/app">My chat</SidebarTab>);
+  const plainFont = screen
+    .getByText("My chat")
+    .className.match(/font-\S+/)?.[0];
+  expect(plainFont).toBeDefined();
+
+  rerender(
+    <SidebarTab href="/app" loading>
+      My chat
+    </SidebarTab>
+  );
+  const wave = screen.getByText("My chat").closest(".opal-text-loader-wave");
+  expect(wave).toHaveClass(plainFont!);
+});
+
 it("keeps the same DOM node when children switch from a label to an element", () => {
   // An inline rename swaps the string label for an input and drops `href`.
   // A remount here would unmount that input before it could take focus.

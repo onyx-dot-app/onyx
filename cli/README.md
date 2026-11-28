@@ -66,7 +66,7 @@ time limit.
 | Key | Action |
 |-----|--------|
 | `y` | Approve once |
-| `a` | Approve for this session |
+| `a` | Approve for this chat, or for this command on a VM command's request. A request that asks each time has no `a`. |
 | `n` | Reject |
 | `d` | Show all arguments in full, or the short list again |
 | `Up` / `Down`, `Enter` | Select and confirm an action |
@@ -76,7 +76,7 @@ The card shows at most 10 arguments and shortens long values. Press `d` to
 read every argument before you decide.
 
 The shortcuts work when the input is empty. After the decision, the card changes
-to a one-line record: Approved, Approved for this session, Not approved,
+to a one-line record: Approved, Approved for this chat, Approved for this command, Not approved,
 Disabled, or No longer waiting. When the server continues the response, the
 chat shows the rest of it.
 
@@ -96,7 +96,7 @@ After you decide, the chat shows the outcome and the agent's later requests.
 
 #### Questions from the agent
 
-The agent can ask you 1 to 3 questions when your answer changes its work. The
+The agent can ask you 1 to 4 questions when your answer changes its work. The
 chat shows a card that asks each question in turn, with its choices and an
 **Other** row. The response waits until you answer. It has no time limit.
 
@@ -132,12 +132,12 @@ onyx-cli ask --json "Hello"
 | `--prompt <string>` | Question text (use with piped stdin context) |
 | `--quiet` | Buffer output and print once at end |
 | `--max-output <int>` | Max bytes before truncating (0 to disable) |
-| `--approve <answer>` | Answer to tool approval requests when `ask` cannot prompt: `fail` (default), `reject`, `once`, or `session` |
+| `--approve <answer>` | Answer to tool approval requests when `ask` cannot prompt: `fail` (default), `reject`, `once`, or `session`. `session` approves for the chat, or for the command on a VM command's request |
 | `--questions <answer>` | Answer to the agent's questions when `ask` cannot prompt: `fail` (default) or `skip` |
 
 When a tool call needs approval and stderr is a terminal, `ask` shows the
 request on stderr and prompts:
-`[y] approve once / [a] approve for session / [d] show all arguments / [N] reject`.
+`[y] approve once / [a] approve for this chat / [d] show all arguments / [N] reject`.
 The request shows at most 10 arguments and shortens long values. Answer `d` to
 show every argument in full, then answer the prompt again. If the server ends
 the request first, for example because the program that made the call ended,
@@ -316,7 +316,7 @@ onyx-cli install-skill --agent claude-code
 |-----|--------|
 | `Enter` | Send message |
 | `Escape`, `Ctrl+C` | Cancel current generation |
-| `y` / `a` / `n` | Approve once / approve for this session / reject a tool call |
+| `y` / `a` / `n` | Approve once / approve for this chat or command / reject a tool call |
 | `d` | Show all arguments of a tool call that waits for approval |
 | `Up` / `Down`, `Enter` | Select and confirm an approval action or an answer to the agent's question |
 | `Ctrl+O` | Toggle source citations |

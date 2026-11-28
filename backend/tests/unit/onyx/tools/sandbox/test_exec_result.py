@@ -1,5 +1,11 @@
 """The model's cut of exec output and its full value."""
 
+from onyx.microvm.models import OutputStream
+from onyx.prompts.sandbox_tools import EXEC_COMMAND_DESCRIPTION
+from onyx.server.features.build.sandbox.exec_output import (
+    EXEC_CALL_OUTPUT_MAX_BYTES,
+    ExecOutputBuffer,
+)
 from onyx.server.features.build.sandbox.models import ExecCommandResult
 from onyx.tools.tool_implementations.sandbox.models import SandboxExecResult
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import _exec_result
@@ -55,3 +61,16 @@ def test_output_at_exactly_its_budget_gives_no_full_value() -> None:
 
     over_budget = _exec_result(_result("h" * 30, "t" * 21), 50)
     assert isinstance(over_budget.full_value, SandboxExecResult)
+
+
+def test_the_command_tool_s_description_states_what_a_call_keeps() -> None:
+    buffer = ExecOutputBuffer()
+    buffer.add(OutputStream.STDOUT, b"x" * (3 * EXEC_CALL_OUTPUT_MAX_BYTES))
+    kept = EXEC_CALL_OUTPUT_MAX_BYTES // 2
+    assert len(buffer.head.encode()) == kept == len(buffer.tail.encode())
+    assert f"first and last {kept // 1024} KB" in EXEC_COMMAND_DESCRIPTION
+
+    result = _exec_result(_result("h" * 100, "t" * 100), 50)
+    assert "Output over the limit is cut in the middle" in EXEC_COMMAND_DESCRIPTION
+    assert "\n... [output truncated, 150 characters omitted] ...\n" in result.content
+    assert "Original character count: 200" in result.content

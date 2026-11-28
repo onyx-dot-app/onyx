@@ -5,8 +5,9 @@ from uuid import uuid4
 import pytest
 
 from onyx.agents.models import AgentState, CompactionCheckpoint, PreparedStep, StepInput
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.llm.models import (
     Message,
@@ -20,12 +21,15 @@ from onyx.llm.models import (
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tools.interface import Tool
 from onyx.tools.models import CodeModeExposure, ToolContext
+from onyx.tools.ordering import ToolRank
 from tests.unit.onyx.agents.fakes import run_agent
 from tests.utils.secret_names import TestSecret
 
 
 class CatalogTool(Tool):
     """Return synthetic evidence without an external data dependency."""
+
+    rank = ToolRank.INTEGRATION
 
     def __init__(self, evidence: str) -> None:
         self.evidence = evidence
@@ -105,8 +109,8 @@ def test_followup_reuses_cached_tool_evidence_after_agent_reconstruction(
         *,
         client: LitellmLLM = model,
         checkpoint: CompactionCheckpoint | None = None,
-    ) -> ChatAgent:
-        return ChatAgent(
+    ) -> Agent:
+        return ChatFeature(
             messages=messages,
             tools=[tool],
             custom_agent_prompt="Begin every final answer with the response prefix from the project policy followed by a colon. Keep answers brief.",
@@ -115,11 +119,10 @@ def test_followup_reuses_cached_tool_evidence_after_agent_reconstruction(
             persona=None,
             user_memory_context=None,
             llm=client,
-            checkpoint=checkpoint,
             reasoning_effort=ReasoningEffort.OFF,
             include_citations=False,
             reminders_enabled=False,
-        )
+        ).agent(AgentState(messages=messages, checkpoint=checkpoint))
 
     first = agent(
         [
@@ -128,7 +131,9 @@ def test_followup_reuses_cached_tool_evidence_after_agent_reconstruction(
             )
         ],
     )
-    prepare = first.prepare_step
+    assert first.feature is not None
+    hooks = first.feature.bind()
+    prepare = hooks.prepare_step
     assert prepare is not None
 
     def load_catalog_first(step: StepInput) -> PreparedStep:
@@ -144,7 +149,7 @@ def test_followup_reuses_cached_tool_evidence_after_agent_reconstruction(
         return prepared
 
     # Make evidence setup deterministic; this test measures replay, not tool selection.
-    first.prepare_step = load_catalog_first
+    first.feature = hooks.model_copy(update={"prepare_step": load_catalog_first})
     loaded = run_agent(first, max_steps=2)
     assert "HARBOR:" in loaded.output.text
     assert "READY" in loaded.output.text

@@ -1,77 +1,215 @@
-// Heavy module: pulls in highlight.js, every grammar lowlight ships plus ABAP,
-// and the hljs theme CSS. It is imported ONLY via dynamic import() (see
-// `useCodeHighlighter`), so it stays out of the first-load bundle and is
-// fetched the first time code needs highlighting.
+// Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
+// Heavy module: import it only with import() (see `useCodeHighlighter`), so
+// Shiki stays out of the first-load bundle.
 
-import hljs from "highlight.js/lib/core";
-import { all } from "lowlight";
-import abap from "highlightjs-sap-abap";
+import {
+  createHighlighterCore,
+  stringifyTokenStyle,
+  type GrammarState,
+  type HighlighterCore,
+} from "shiki/core";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import { bundledLanguages, type BundledLanguage } from "shiki/langs";
+import "@/lib/codeHighlight/shiki.css";
 
-// hljs theme styles. Loads with this chunk, not on first paint.
-import "@/lib/timeline/chat/message/custom-code-styles.css";
+const THEMES = {
+  light: "github-light-default",
+  dark: "github-dark-default",
+} as const;
 
-for (const [name, language] of Object.entries({ ...all, abap })) {
-  hljs.registerLanguage(name, language);
+export interface HighlightedLines {
+  /** HTML for each line: escaped source in colored spans. */
+  lines: string[];
+  /** The grammar state after the last line, to continue from. */
+  state: GrammarState | undefined;
 }
 
-/** A guess must score at least this to color an untagged block. */
-const MIN_DETECTED_RELEVANCE = 7;
+export interface CodeHighlighter {
+  /**
+   * Highlights `code` as one block, continuing from `state` when given.
+   * Throws on a tokenizer error.
+   */
+  highlight(code: string, state?: GrammarState): HighlightedLines;
+}
 
-const HTML_TOKEN = /<span[^>]*>|<\/span>|\n|[^<\n]+/g;
+let highlighterPromise: Promise<HighlighterCore> | null = null;
+const languagePromises = new Map<string, Promise<CodeHighlighter | null>>();
 
-// Splits hljs HTML into one string per source line. A span that is open at a
-// line break closes at the end of that line and opens again on the next, so
-// each line is valid markup on its own.
-function splitHtmlLines(html: string): string[] {
-  const lines: string[] = [];
-  const open: string[] = [];
-  let line = "";
-  for (const [token] of html.matchAll(HTML_TOKEN)) {
-    if (token === "\n") {
-      lines.push(line + "</span>".repeat(open.length));
-      line = open.join("");
-    } else if (token === "</span>") {
-      open.pop();
-      line += token;
-    } else if (token.startsWith("<span")) {
-      open.push(token);
-      line += token;
-    } else {
-      line += token;
-    }
-  }
-  lines.push(line);
-  return lines;
+function getHighlighter(): Promise<HighlighterCore> {
+  highlighterPromise ??= createHighlighterCore({
+    themes: [
+      import("shiki/themes/github-light-default.mjs"),
+      import("shiki/themes/github-dark-default.mjs"),
+    ],
+    langs: [],
+    engine: createJavaScriptRegexEngine({ forgiving: true }),
+  }).catch((error: unknown) => {
+    highlighterPromise = null;
+    throw error;
+  });
+  return highlighterPromise;
+}
+
+function isBundledLanguage(language: string): language is BundledLanguage {
+  return Object.hasOwn(bundledLanguages, language);
+}
+
+// Fence tags, file extensions and linguist names that Shiki knows under
+// another name.
+const LANGUAGE_ALIASES = new Map<string, BundledLanguage>([
+  ["gitignore", "ini"],
+  ["dos", "bat"],
+  ["golang", "go"],
+  ["patch", "diff"],
+  ["pwsh", "powershell"],
+  ["h", "c"],
+  ["cc", "cpp"],
+  ["cxx", "cpp"],
+  ["hh", "cpp"],
+  ["hpp", "cpp"],
+  ["hxx", "cpp"],
+  ["h++", "cpp"],
+  ["arduino", "cpp"],
+  ["ino", "cpp"],
+  ["apacheconf", "apache"],
+  ["nginxconf", "nginx"],
+  ["pgsql", "sql"],
+  ["postgres", "sql"],
+  ["postgresql", "sql"],
+  ["ex", "elixir"],
+  ["exs", "elixir"],
+  ["feature", "gherkin"],
+  ["pl", "perl"],
+  ["pm", "perl"],
+  ["objectivec", "objective-c"],
+  ["obj-c", "objective-c"],
+  ["mk", "makefile"],
+  ["mak", "makefile"],
+  ["svg", "xml"],
+  ["xhtml", "xml"],
+  ["rss", "xml"],
+  ["atom", "xml"],
+  ["xsd", "xml"],
+  ["plist", "xml"],
+  ["ipython", "python"],
+  ["jsp", "java"],
+  ["cr", "crystal"],
+  ["hx", "haxe"],
+  ["gradle", "groovy"],
+  ["vbscript", "vb"],
+  ["vbs", "vb"],
+  // Linguist language names (see `lib/languages.ts`).
+  ["1c enterprise", "bsl"],
+  ["actionscript", "actionscript-3"],
+  ["alpine abuild", "shellscript"],
+  ["assembly", "asm"],
+  ["batchfile", "bat"],
+  ["closure templates", "soy"],
+  ["common lisp", "lisp"],
+  ["dm", "dream-maker"],
+  ["edn", "clojure"],
+  ["emacs lisp", "elisp"],
+  ["freemarker", "ftl"],
+  ["gentoo ebuild", "shellscript"],
+  ["gentoo eclass", "shellscript"],
+  ["git commit", "git-commit"],
+  ["glimmer js", "gjs"],
+  ["glimmer ts", "gts"],
+  ["godot resource", "gdresource"],
+  ["gradle kotlin dsl", "kotlin"],
+  ["html+erb", "erb"],
+  ["html+razor", "razor"],
+  ["json with comments", "jsonc"],
+  ["jsonld", "json"],
+  ["jupyter notebook", "json"],
+  ["lean 4", "lean4"],
+  ["maven pom", "xml"],
+  ["npm config", "ini"],
+  ["oasv2-json", "json"],
+  ["oasv2-yaml", "yaml"],
+  ["oasv3-json", "json"],
+  ["oasv3-yaml", "yaml"],
+  ["opencl", "c"],
+  ["plpgsql", "sql"],
+  ["power query", "powerquery"],
+  ["protocol buffer", "proto"],
+  ["raml", "yaml"],
+  ["regular expression", "regexp"],
+  ["rocq prover", "coq"],
+  ["saltstack", "yaml"],
+  ["snakemake", "python"],
+  ["ssh config", "ssh-config"],
+  ["starlark", "python"],
+  ["systemverilog", "system-verilog"],
+  ["tcsh", "shellscript"],
+  ["terraform template", "terraform"],
+  ["vim script", "vim"],
+  ["webassembly", "wasm"],
+  ["windows registry entries", "reg"],
+  ["wolfram language", "wolfram"],
+  ["xml property list", "xml"],
+  ["xslt", "xsl"],
+]);
+
+function highlighterLanguageOf(language: string): string {
+  const id = language.toLowerCase();
+  return LANGUAGE_ALIASES.get(id) ?? id;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function createLanguageHighlighter(
+  highlighter: HighlighterCore,
+  language: BundledLanguage
+): CodeHighlighter {
+  return {
+    highlight(code, state) {
+      const result = highlighter.codeToTokens(code, {
+        lang: language,
+        themes: THEMES,
+        defaultColor: false,
+        grammarState: state,
+      });
+      return {
+        lines: result.tokens.map((line) =>
+          line
+            .map((token) =>
+              token.htmlStyle
+                ? `<span style="${escapeHtml(stringifyTokenStyle(token.htmlStyle))}">${escapeHtml(token.content)}</span>`
+                : escapeHtml(token.content)
+            )
+            .join("")
+        ),
+        state: result.grammarState,
+      };
+    },
+  };
 }
 
 /**
- * Highlights `code` as one block, so constructs that span lines (block
- * comments, multi-line strings) keep their colors, and returns hljs HTML
- * (escaped source and hljs spans) for each line. Null for an unknown language
- * or any internal error.
+ * A highlighter for `language` (an id or alias such as `ts`), loading the
+ * shared Shiki core and the grammar on first use. Null for a language Shiki
+ * does not bundle, such as `text`.
  */
-export function highlightLines(
-  code: string,
+export function loadCodeHighlighter(
   language: string
-): string[] | null {
-  try {
-    if (!hljs.getLanguage(language)) return null;
-    return splitHtmlLines(
-      hljs.highlight(code, { language, ignoreIllegals: true }).value
-    );
-  } catch {
-    return null;
+): Promise<CodeHighlighter | null> {
+  const id = highlighterLanguageOf(language);
+  if (!isBundledLanguage(id)) return Promise.resolve(null);
+  let promise = languagePromises.get(id);
+  if (!promise) {
+    promise = getHighlighter().then(async (highlighter) => {
+      await highlighter.loadLanguage(bundledLanguages[id]);
+      return createLanguageHighlighter(highlighter, id);
+    });
+    promise.catch(() => languagePromises.delete(id));
+    languagePromises.set(id, promise);
   }
-}
-
-/** The language of untagged code, or null when no guess is confident. */
-export function detectLanguage(code: string): string | null {
-  try {
-    const result = hljs.highlightAuto(code);
-    return result.language && result.relevance >= MIN_DETECTED_RELEVANCE
-      ? result.language
-      : null;
-  } catch {
-    return null;
-  }
+  return promise;
 }

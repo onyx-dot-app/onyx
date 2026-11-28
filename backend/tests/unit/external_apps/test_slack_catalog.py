@@ -43,7 +43,7 @@ def _matching_actions(method: str, path: str) -> set[str]:
         ("POST", "/api/files.getUploadURLExternal", {SlackAction.FILES_WRITE}),
         ("POST", "/api/files.completeUploadExternal", {SlackAction.FILES_WRITE}),
         # The raw-bytes POST to the pre-signed files.slack.com upload URL must
-        # fall under FILES_WRITE, not the whole-domain "Perform action" fallback.
+        # fall under FILES_WRITE, not the other-request action.
         ("POST", "/upload/v1/CwABgAB123", {SlackAction.FILES_WRITE}),
     ],
 )

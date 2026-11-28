@@ -1,5 +1,6 @@
 import json
 from collections.abc import Collection, Mapping
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import Integer, column, delete, exists, func, inspect, select, values
@@ -73,6 +74,7 @@ from onyx.db.models import (
     ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
+    Integration,
     QuestionRequest,
     StoredToolResult,
     ToolCall,
@@ -90,8 +92,10 @@ from onyx.llm.models import (
 from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
-from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolCallInfo
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_START_TOOL_NAMES,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
@@ -396,6 +400,14 @@ def save_chat_response_to_db(
             else None
         )
         dumps = finish_checkpoint__no_commit(session, message_id)
+        processing_time = response.pre_answer_processing_time
+        # A run stopped before its answer has no answer start; it worked
+        # until the stop, so keep that time for the stopped header.
+        if response.cancelled and processing_time is None:
+            processing_time = max(
+                0.0,
+                (datetime.now(timezone.utc) - message.time_sent).total_seconds(),
+            )
         save_chat_turn(
             message_text=answer,
             reasoning_tokens=response.reasoning,
@@ -409,7 +421,7 @@ def save_chat_response_to_db(
             emitted_citations={
                 citation.citation_number for citation in response.citation_info
             },
-            pre_answer_processing_time=response.pre_answer_processing_time,
+            pre_answer_processing_time=processing_time,
             persist_content=keeps_content,
             response_record=response.response,
             presentation=response.presentation,
@@ -851,6 +863,8 @@ def reserve_child_response__no_commit(
         token_count=0,
         message_type=MessageType.ASSISTANT,
         response_status=RunStatus.RUNNING,
+        # A child runs on its spawner's model
+        model_display_name=parent.model_display_name,
     )
     session.add(response)
     session.flush()
@@ -1342,19 +1356,34 @@ def save_response_record__no_commit(
 
 
 def read_suspended_response_replay(
-    db_session: Session, response_id: int
+    db_session: Session,
+    response_id: int,
+    *,
+    claimed: bool = False,
+    root_session_id: UUID | None = None,
 ) -> tuple[ChatExecutionRecord, ResponseReplayData]:
     """The saved output of a suspended response, to replay where its run
-    continues."""
+    continues. A `claimed` response is one whose resume already marked it
+    running, as an agent host's claim of a parked run does. Its requests are
+    still replayed. `root_session_id` is the chat that holds the requests of
+    a subagent's response; it defaults to the response's own session."""
     message = db_session.get(ChatMessage, response_id)
     if message is None:
         raise ValueError("The response is not suspended")
     read = read_chat_execution(message, load_child_responses(db_session, [message]))
-    if read is None or read[0].response.status != RunStatus.SUSPENDED:
+    if read is None or (not claimed and read[0].response.status != RunStatus.SUSPENDED):
         raise ValueError("The response is not suspended")
     execution, tool_calls = read
+    chat_approvals = load_chat_approvals(
+        db_session, root_session_id or message.chat_session_id, [message.id]
+    )
     return execution, read_response_replay_data(
-        execution, tool_calls, message, db_session
+        execution,
+        tool_calls,
+        message,
+        db_session,
+        chat_approvals,
+        show_requests=claimed,
     )
 
 
@@ -1364,13 +1393,15 @@ def read_response_replay_data(
     root: ChatMessage,
     db_session: Session,
     chat_approvals: ChatApprovals | None = None,
+    show_requests: bool = False,
 ) -> ResponseReplayData:
     """Load detached display data for an already authorized response execution.
 
     `execution` and `tool_calls` are what `read_chat_execution` read from
     `root`. `chat_approvals` holds the requests of a page of responses that
     includes this one (`load_chat_approvals`); it is read for this response
-    when not given."""
+    when not given. `show_requests` replays the requests of a running
+    response whose stream starts with this replay."""
     if chat_approvals is None:
         chat_approvals = load_chat_approvals(
             db_session, root.chat_session_id, [root.id]
@@ -1394,7 +1425,7 @@ def read_response_replay_data(
             call.id
             for step in response.steps
             for call in step.message.tool_calls
-            if call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+            if call.name in AGENT_START_TOOL_NAMES
         }
         if shown:
             run_ids.append(response.run_id)
@@ -1409,7 +1440,7 @@ def read_response_replay_data(
         )
     # Only agent tools start background agents.
     starts_agents = any(
-        call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+        call.name in AGENT_START_TOOL_NAMES
         for step in execution.response.steps
         for call in step.message.tool_calls
     )
@@ -1447,7 +1478,10 @@ def read_response_replay_data(
     # A running response's requests reach the client through its stream.
     approvals: dict[tuple[str, str], list[SavedToolApproval]] = {}
     status = execution.response.status
-    if accepted and (status.is_terminal or status == RunStatus.SUSPENDED):
+    shows_requests = (
+        show_requests or status.is_terminal or status == RunStatus.SUSPENDED
+    )
+    if accepted and shows_requests:
         for run_id in run_ids:
             for request in chat_approvals.requests.get(int(run_id), []):
                 approvals.setdefault((run_id, request.tool_call_id), []).append(request)
@@ -1537,9 +1571,16 @@ def load_chat_approvals(
         select(started.c.response_id, started.c.root_id, started.c.anchor_call_id)
     ).all()
     rows = db_session.execute(
-        select(ApprovalRequest, ChatMessage.chat_session_id, ChatSession.agent_name)
+        select(
+            ApprovalRequest,
+            ChatMessage.chat_session_id,
+            ChatSession.agent_name,
+            Integration.kind,
+            Integration.name,
+        )
         .join(ChatMessage, ChatMessage.id == ApprovalRequest.chat_message_id)
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(Integration, Integration.id == ApprovalRequest.integration_id)
         .where(
             ApprovalRequest.chat_session_id == chat_session_id,
             ApprovalRequest.chat_message_id.in_(
@@ -1548,9 +1589,11 @@ def load_chat_approvals(
         )
         .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
     ).all()
-    for request, session_id, agent_name in rows:
+    for request, session_id, agent_name, integration_kind, app_name in rows:
         approvals.requests.setdefault(request.chat_message_id, []).append(
-            SavedToolApproval.model_validate(request)
+            SavedToolApproval.model_validate(request).model_copy(
+                update={"integration_kind": integration_kind, "app_name": app_name}
+            )
         )
         if session_id != chat_session_id:
             approvals.agent_names[request.chat_message_id] = agent_name or ""

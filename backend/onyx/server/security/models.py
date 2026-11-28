@@ -1,10 +1,14 @@
+import ipaddress
 from enum import Enum
 from typing import NamedTuple
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from onyx.db.enums import IncognitoRecordMode
+from onyx.utils.audit import AuditEventCategory
+from onyx.utils.url import BLOCKED_HOSTNAMES
 
 
 class SSRFProtectionLevel(str, Enum):
@@ -62,6 +66,51 @@ def outbound_ssrf_params(level: SSRFProtectionLevel) -> OutboundSSRFParams:
         block_loopback_and_link_local=True,
         block_link_local_only=False,
     )
+
+
+_SSRF_HINT_NEVER_ALLOWED = (
+    " localhost, unspecified, and link-local/cloud-metadata addresses are never "
+    "permitted; use a loopback or private-network address instead."
+)
+_SSRF_HINT_SET_ALLOW_PRIVATE = (
+    " To reach a private-network server, set SSRF Protection to Allow Private "
+    "Network (or Disabled) in the admin Security settings (loopback and "
+    "cloud-metadata stay blocked at Allow Private Network)."
+)
+_SSRF_HINT_SET_DISABLED = (
+    " To reach a loopback server, set SSRF Protection to Disabled in the admin "
+    "Security settings (cloud-metadata stays blocked)."
+)
+
+
+def ssrf_error_hint(url: str, error: Exception) -> str:
+    """Suffix steering the operator to the remedy for a blocked host. A private
+    LAN target is reachable at Allow Private Network (or Disabled); loopback needs
+    Disabled (it hits the app host itself). Link-local/metadata, unspecified, and
+    BLOCKED_HOSTNAMES (e.g. localhost) are never reachable, so suggest a different
+    address; scheme errors get no hint. Only literal IPs are classified —
+    a bare hostname is not resolved here."""
+    if "scheme" in str(error).lower():
+        return ""
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return ""
+    if host in BLOCKED_HOSTNAMES:
+        return _SSRF_HINT_NEVER_ALLOWED
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return ""
+    if ip.is_unspecified or ip.is_link_local:
+        return _SSRF_HINT_NEVER_ALLOWED
+    # Loopback reaches the app host itself, so it needs the Disabled level; other
+    # private/reserved targets open one notch lower, at Allow Private Network.
+    if ip.is_loopback:
+        return _SSRF_HINT_SET_DISABLED
+    if not ip.is_global:
+        return _SSRF_HINT_SET_ALLOW_PRIVATE
+    return ""
 
 
 def outbound_allow_private_network(level: SSRFProtectionLevel) -> bool:
@@ -150,6 +199,15 @@ class SecuritySettingsOverrides(BaseModel):
     allow_connector_check_findings: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
+    # Which audit event categories Onyx writes. Enterprise only. Operator
+    # locked: on multi-tenant the stream goes to Onyx's logs, not the tenant's.
+    audit_event_categories: list[AuditEventCategory] | None = Field(
+        default=None, json_schema_extra=_operator_locked()
+    )
+    # Add user-written query text to activity events. Enterprise only.
+    audit_include_query_text: bool | None = Field(
+        default=None, json_schema_extra=_operator_locked()
+    )
     ssrf_protection_level: SSRFProtectionLevel | None = Field(
         default=None, json_schema_extra=_operator_locked()
     )
@@ -195,6 +253,13 @@ class SecuritySettingsOverrides(BaseModel):
     jwt_expected_issuer: str | None = Field(
         default=None, json_schema_extra=_env_pinned()
     )
+
+    @field_validator("audit_event_categories")
+    @classmethod
+    def _dedupe_categories(
+        cls, v: list[AuditEventCategory] | None
+    ) -> list[AuditEventCategory] | None:
+        return None if v is None else list(dict.fromkeys(v))
 
     @field_validator("valid_email_domains")
     @classmethod
@@ -258,6 +323,8 @@ class SecuritySettings(BaseModel):
     incognito_record_mode: IncognitoRecordMode
     allow_connector_group_restrictions: bool
     allow_connector_check_findings: bool
+    audit_event_categories: tuple[AuditEventCategory, ...]
+    audit_include_query_text: bool
     ssrf_protection_level: SSRFProtectionLevel
     mask_credential_prefix: bool
     llm_custom_config_env_injection: bool

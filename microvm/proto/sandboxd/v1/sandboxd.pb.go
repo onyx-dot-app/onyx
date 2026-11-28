@@ -74,6 +74,9 @@ const (
 	// Run or Start: the daemon already keeps the most executions (64) and all
 	// of them run, so no ended one can be dropped. Cancel one, or wait.
 	ErrorReason_EXECUTION_CAP_REACHED ErrorReason = 20
+	// BrowserStart: Chrome did not start, or its DevTools endpoint did not
+	// answer in time. The message has the end of Chrome's stderr.
+	ErrorReason_BROWSER_START_FAILED ErrorReason = 21
 )
 
 // Enum value maps for ErrorReason.
@@ -100,6 +103,7 @@ var (
 		18: "LIMIT_EXCEEDED",
 		19: "ARCHIVE_INVALID",
 		20: "EXECUTION_CAP_REACHED",
+		21: "BROWSER_START_FAILED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED": 0,
@@ -123,6 +127,7 @@ var (
 		"LIMIT_EXCEEDED":           18,
 		"ARCHIVE_INVALID":          19,
 		"EXECUTION_CAP_REACHED":    20,
+		"BROWSER_START_FAILED":     21,
 	}
 )
 
@@ -4475,11 +4480,15 @@ func (x *InstallSkillResponse) GetExpandedBytes() int64 {
 	return 0
 }
 
-// Browser placeholders.
 type BrowserStartRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Session whose directory holds the Chrome profile:
+	// <sessions root>/<profile_session_id>/chrome. The daemon checks the ID
+	// and creates the directory as for the file calls (INVALID_ARGUMENT for a
+	// bad or empty ID).
+	ProfileSessionId string `protobuf:"bytes,1,opt,name=profile_session_id,json=profileSessionId,proto3" json:"profile_session_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *BrowserStartRequest) Reset() {
@@ -4512,10 +4521,21 @@ func (*BrowserStartRequest) Descriptor() ([]byte, []int) {
 	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{55}
 }
 
+func (x *BrowserStartRequest) GetProfileSessionId() string {
+	if x != nil {
+		return x.ProfileSessionId
+	}
+	return ""
+}
+
 type BrowserStartResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Version of the browser service protocol that vsock port 3011 relays
+	// (1). 0: no service or no relay, for example an older daemon. A client
+	// must not dial port 3011 when it is 0.
+	ServiceProtocol uint32 `protobuf:"varint,3,opt,name=service_protocol,json=serviceProtocol,proto3" json:"service_protocol,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *BrowserStartResponse) Reset() {
@@ -4546,6 +4566,13 @@ func (x *BrowserStartResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use BrowserStartResponse.ProtoReflect.Descriptor instead.
 func (*BrowserStartResponse) Descriptor() ([]byte, []int) {
 	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *BrowserStartResponse) GetServiceProtocol() uint32 {
+	if x != nil {
+		return x.ServiceProtocol
+	}
+	return 0
 }
 
 type BrowserStopRequest struct {
@@ -4585,7 +4612,9 @@ func (*BrowserStopRequest) Descriptor() ([]byte, []int) {
 }
 
 type BrowserStopResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// True when a browser was running.
+	Stopped       bool `protobuf:"varint,1,opt,name=stopped,proto3" json:"stopped,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4618,6 +4647,13 @@ func (x *BrowserStopResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use BrowserStopResponse.ProtoReflect.Descriptor instead.
 func (*BrowserStopResponse) Descriptor() ([]byte, []int) {
 	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *BrowserStopResponse) GetStopped() bool {
+	if x != nil {
+		return x.Stopped
+	}
+	return false
 }
 
 type ManagedStatusRequest struct {
@@ -5318,11 +5354,14 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\x14InstallSkillResponse\x12\x1c\n" +
 	"\tinstalled\x18\x01 \x01(\bR\tinstalled\x12\x14\n" +
 	"\x05files\x18\x02 \x01(\x03R\x05files\x12%\n" +
-	"\x0eexpanded_bytes\x18\x03 \x01(\x03R\rexpandedBytes\"\x15\n" +
-	"\x13BrowserStartRequest\"\x16\n" +
-	"\x14BrowserStartResponse\"\x14\n" +
-	"\x12BrowserStopRequest\"\x15\n" +
-	"\x13BrowserStopResponse\",\n" +
+	"\x0eexpanded_bytes\x18\x03 \x01(\x03R\rexpandedBytes\"C\n" +
+	"\x13BrowserStartRequest\x12,\n" +
+	"\x12profile_session_id\x18\x01 \x01(\tR\x10profileSessionId\"`\n" +
+	"\x14BrowserStartResponse\x12)\n" +
+	"\x10service_protocol\x18\x03 \x01(\rR\x0fserviceProtocolJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\bcdp_portR\astarted\"\x14\n" +
+	"\x12BrowserStopRequest\"/\n" +
+	"\x13BrowserStopResponse\x12\x18\n" +
+	"\astopped\x18\x01 \x01(\bR\astopped\",\n" +
 	"\x14ManagedStatusRequest\x12\x14\n" +
 	"\x05mount\x18\x01 \x01(\tR\x05mount\"\xe1\x01\n" +
 	"\x10ManagedSlotState\x122\n" +
@@ -5352,7 +5391,7 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\bprevious\x18\x03 \x01(\x0e2\x1e.craft.sandboxd.v1.ManagedSlotR\bprevious\x12&\n" +
 	"\x0fprevious_in_use\x18\x04 \x01(\bR\rpreviousInUse\x12\x17\n" +
 	"\await_ms\x18\x05 \x01(\x04R\x06waitMs\x12\x14\n" +
-	"\x05mount\x18\x06 \x01(\tR\x05mount*\xd4\x03\n" +
+	"\x05mount\x18\x06 \x01(\tR\x05mount*\xee\x03\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x13\n" +
@@ -5375,7 +5414,8 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\vFILE_EXISTS\x10\x11\x12\x12\n" +
 	"\x0eLIMIT_EXCEEDED\x10\x12\x12\x13\n" +
 	"\x0fARCHIVE_INVALID\x10\x13\x12\x19\n" +
-	"\x15EXECUTION_CAP_REACHED\x10\x14*E\n" +
+	"\x15EXECUTION_CAP_REACHED\x10\x14\x12\x18\n" +
+	"\x14BROWSER_START_FAILED\x10\x15*E\n" +
 	"\fOutputStream\x12\x1d\n" +
 	"\x19OUTPUT_STREAM_UNSPECIFIED\x10\x00\x12\n" +
 	"\n" +

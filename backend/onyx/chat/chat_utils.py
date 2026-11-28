@@ -302,8 +302,7 @@ def capture_chat_history(
                 message.chat_session.incognito_record_mode
             ):
                 response_messages = messages_for_model(
-                    messages_from_steps(read_response_steps(message)),
-                    copy_messages=False,
+                    messages_from_steps(read_response_steps(message))
                 )
                 restore_response_sources(
                     response_messages,

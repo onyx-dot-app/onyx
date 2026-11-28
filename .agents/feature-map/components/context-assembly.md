@@ -78,7 +78,7 @@ Neighbours:
 
 ## Architecture
 
-`chat/agent.py:ChatAgent._prepare_step` calls
+`chat/agent.py:ChatFeature._prepare_step` calls
 `chat/prompt_utils.py:build_chat_prompt` to pick the instructions and the
 reminder. The runtime then calls `chat/prompt_utils.py:prepare_prompt` on the
 working history, after it applies any compaction checkpoint, and again for each
@@ -128,7 +128,8 @@ the messages it receives and never changes recorded history. Within one step it
 replaces a search passage that repeats an earlier result's passage (same
 document and text) with a pointer to that result
 (`chat/prompt_utils.py:_deduplicate_search_passages`), so a change to the
-search result JSON must keep that parse working. Later turns retain saved tool-result
+search result JSON must keep that parse working. Each agent passes its
+`search_passage_cache`, so each step's results are parsed once per agent. Later turns retain saved tool-result
 content until compaction or truncation moves the cutoff past it. A placeholder is used when a legacy record has missing or empty output.
 Compaction controls history growth; starting a new user turn does not rewrite
 previous evidence. A code mode result keeps what a later turn needs in its own
@@ -166,13 +167,18 @@ preamble and growing history.
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the
 `{{CURRENT_DATETIME}}`, `{{CITATION_GUIDANCE}}` and `{{REMINDER_TAG_DESCRIPTION}}`
 tags, adds the shared user-information framing and company context, then adds
-one guidance section per configured tool. `build_chat_prompt` calls it with
+a `# Tools` section with the guidance that spans tools: the search guidance,
+open a URL after a web search, the sandbox tools and code mode. With sandbox
+tools, a `# Environment` section with the VM's facts ends the prompt; it is the
+only text that names one chat. Each built-in tool's
+own guidance is in its description (`prompts/tool_prompts.py`, for example
+`MEMORY_DESCRIPTION`), so it reaches code mode stubs too. `build_chat_prompt` calls it with
 `include_user_info=False` and without `should_cite_documents`. The per-user
 block goes into a separate message from `build_user_information_prompt`, so the
 system message stays the same for every user. Two callers use
 `build_system_prompt`: `build_chat_prompt` for the live prompt, and
 `calculate_reserved_tokens` for the token estimate with
-`include_all_guidance=True`. A new parameter must reach both, or the
+`all_guidance_family`, the tool family whose names it uses. A new parameter must reach both, or the
 reservation undercounts. A change to the base prompt reaches normal chat turns
 and the Slack bot. It does not reach deep research or its research agents, which
 write their own system messages in `deep_research/agent.py` and
@@ -212,7 +218,8 @@ Failed image calls without images do not add the image reminder.
 `<system-reminder>` tags.
 
 **Budget.** In setup, `calculate_reserved_tokens` reserves a worst-case system
-prompt (`include_all_guidance=True`, so it overshoots on purpose), the
+prompt (`all_guidance_family`, so it overshoots on purpose), the longest
+description of each built-in tool with guidance, the
 replacement and agent prompts, and the files attached to the new message. Then
 `chat/files.py:extract_context_files` uses the window that remains, for the
 smallest model of the turn, to decide whether project files go inline
@@ -257,14 +264,14 @@ counts what is sent, not the stored token counts.
    the reminder. Only the image-drop notice can follow it. The head prompt must
    not change between steps, so the provider prefix cache holds. It must not depend on
    the tool results so far, the tools offered this step or the last-step flag.
-   Tool guidance uses the agent's configured tools (`ChatAgent.application_tools`),
+   Tool guidance uses the agent's configured tools (`ChatFeature.application_tools`),
    not the step's tools. The date has day precision.
 2. `no-citation-guidance-in-system-prompt` **Citation guidance is never in the
    live system prompt.** A `{{CITATION_GUIDANCE}}` tag in the base or agent
    prompt resolves to empty. The same tag in a persona task prompt resolves to
    the guidance once citing applies (saved history has citations, a citeable tool
    ran, or the turn has project files), because the task prompt is in the reminder.
-   `include_all_guidance` adds the guidance only for the token estimate.
+   `all_guidance_family` adds the guidance only for the token estimate.
 3. `agent-prompt-separate-message` **The custom agent prompt is a separate user
    message.** With a base prompt, it stays in the fixed preamble before history.
    With no base prompt or base-prompt replacement, it becomes the system message.
@@ -305,9 +312,9 @@ counts what is sent, not the stored token counts.
    missing tool, or search for an unindexed file, makes the model guess or
    search the web.
 8. `history-builder-callers` **`chat/prompt_utils.py:prepare_prompt` has
-   several callers.** `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`
+   several callers.** `ChatFeature`, `DeepResearchFeature` and `ResearchFeature`
    call it with their own arguments, such as no custom agent
-   prompt. Only `ChatAgent` passes `available_tool_names`, so a deep research
+   prompt. Only `ChatFeature` passes `available_tool_names`, so a deep research
    file notice names no tool. Check all callers after you change the signature or order.
 9. `replace-base-drops-user-block` **Replacing the base prompt drops the
    per-user block.** With `replace_base_system_prompt`, or with an empty default
@@ -331,11 +338,10 @@ counts what is sent, not the stored token counts.
     while its content-free rows keep the picks without text; a restored agent
     reads the user's current chat skills for its catalog. Add request-only context through
     `prepare_prompt`, outside recorded history. Compaction cutoffs identify
-    recorded messages; they must not reference request-only context. A resumed turn rebuilds `ChatAgent` only from
+    recorded messages; they must not reference request-only context. A resumed turn rebuilds `ChatFeature` only from
     `chat/models.py:ChatFeatureState` (`chat/restoration.py:restore_chat_agent`),
     not from the current persona or settings. A new prompt input that is not in
-    that state, `ChatAgent.capture_state` and `ChatAgent.restore_state` is lost
-    on resume or makes the restore fail.
+    that state and `chat/restoration.py:restore_chat_agent` is lost on resume.
 12. `usage-only-history-shape` **A usage-only session retains complete input groups.**
     `chat/history_store.py:RedisChatHistoryStore.prepare_messages` combines
     the selected branch of temporary history with the accepted question and its
@@ -380,8 +386,9 @@ counts what is sent, not the stored token counts.
   message get one more message with a line for each image
   (`chat/chat_utils.py:convert_chat_history`). A path depends on its file
   alone (`chat/files.py:place_chat_files`), so a message keeps its lines
-  and the prefix stays cacheable. The `exec_command` description gains the
-  layout of `attachments/` once, when the chat gets its first file.
+  and the prefix stays cacheable. The system prompt's `# Environment` section
+  gives the layout of `attachments/` in every sandbox turn, so no tool
+  definition changes when the chat gets its first file.
   Only user attachments enter the prompt as text, so turn preparation
   extracts text only for the files of user messages
   (`chat/process_message.py:prepare_chat_turn`, `text_file_ids`). Files of
@@ -419,12 +426,15 @@ counts what is sent, not the stored token counts.
 
 ## Recipes
 
-- `tool-guidance-section` **A new tool guidance section.** Copy the memory tool: `MEMORY_GUIDANCE` in
-  `prompts/tool_prompts.py` appears twice in `build_system_prompt`. Add the new
-  text to both places. The `include_all_guidance` branch returns early with its
-  own list of every section, and only that list reaches the reservation. The
-  `has_memory` branch keys the live prompt on the configured tools. List the
-  current sections with `git grep -n "_GUIDANCE" backend/onyx/chat/prompt_utils.py`.
+- `tool-guidance-section` **New tool guidance.** Guidance about one tool goes in
+  that tool's description. Copy the memory tool: `MemoryTool.DESCRIPTION` is
+  `prompts/tool_prompts.py:MEMORY_DESCRIPTION`, which says "this tool" and
+  names no other tool. Add the longest description of a built-in tool to the
+  descriptions that `calculate_reserved_tokens` counts. Guidance that spans
+  tools goes in the `# Tools` section: add it to both branches of
+  `build_system_prompt`, the live prompt by the offered tools' called names and
+  the token estimate (`all_guidance_family`) by that family's names. The
+  sections follow the tool rank (`tools/ordering.py`).
 - `workspace-setting-in-prompt` **A workspace setting in the system prompt.** Copy the company name and
   description: `prompts/prompt_utils.py:get_company_context` reads them from
   `Settings`, and `build_system_prompt` appends the result. Read the setting

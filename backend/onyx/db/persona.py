@@ -2161,18 +2161,6 @@ def delete_persona_label(label_id: int, db_session: Session) -> None:
     db_session.commit()
 
 
-def persona_has_search_tool(persona_id: int, db_session: Session) -> bool:
-    persona = (
-        db_session.query(Persona)
-        .options(selectinload(Persona.tools))
-        .filter(Persona.id == persona_id)
-        .one_or_none()
-    )
-    if persona is None:
-        raise ValueError(f"Persona with ID {persona_id} does not exist")
-    return any(tool.in_code_tool_id == "run_search" for tool in persona.tools)
-
-
 def get_default_assistant(db_session: Session) -> Persona | None:
     """Fetch the default assistant (persona with builtin_persona=True)."""
     return (

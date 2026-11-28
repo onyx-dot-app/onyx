@@ -29,15 +29,16 @@ const esmPackages = [
   "until-async",
   // Language Detection
   "linguist-languages",
-  // PowerPoint slides
-  "@jvmr",
   // Markdown & Syntax Highlighting
   "react-markdown",
   "remark-.*", // All remark packages
   "rehype-.*", // All rehype packages
   "unified",
-  "lowlight",
-  "highlight\\.js",
+  "shiki",
+  "@shikijs",
+  "oniguruma-.*",
+  "regex",
+  "regex-.*",
   // Markdown Utilities
   "bail",
   "is-plain-obj",
@@ -101,9 +102,6 @@ const sharedConfig = {
     // Mock specific components that have complex dependencies
     "^@/providers/UserProvider$":
       "<rootDir>/tests/setup/mocks/components/UserProvider.tsx",
-    // An ESM-only package: its exports have no require condition
-    "^@jvmr/pptx-to-html$":
-      "<rootDir>/node_modules/@jvmr/pptx-to-html/dist/index.js",
     // Path aliases (must come after specific mocks)
     "^@/(.*)$": "<rootDir>/src/$1",
     "^@tests/(.*)$": "<rootDir>/tests/$1",
@@ -119,7 +117,7 @@ const sharedConfig = {
 
   // Transpile-only (no type-checking; types are checked separately via `types:check`).
   transform: {
-    "^.+\\.(t|j)sx?$": [
+    "^.+\\.(m?js|jsx|tsx?)$": [
       "@swc/jest",
       {
         jsc: {

@@ -7,7 +7,7 @@
         "input": 0.0636,
         "output": 0.265
       },
-      "family": "granite",
+      "family": "granite-small",
       "limit": {
         "context": 131072,
         "output": 131072
@@ -92,7 +92,7 @@
       },
       "family": "mistral-small",
       "limit": {
-        "context": 131072,
+        "context": 128000,
         "output": 16384
       },
       "modalities": {
@@ -122,7 +122,7 @@
       "family": "gpt-oss",
       "limit": {
         "context": 131072,
-        "output": 32768
+        "output": 131072
       },
       "modalities": {
         "input": [

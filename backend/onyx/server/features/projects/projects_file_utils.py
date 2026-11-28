@@ -202,6 +202,17 @@ def _categorize_sandbox_only_file(
     results.accept(upload, token_count, skip_indexing=True)
 
 
+def _no_text_reason(upload: UploadFile, extension: str, images_disabled: bool) -> str:
+    """Why an upload with no extractable text is rejected."""
+    if get_upload_size_bytes(upload) == 0:
+        return "File is empty"
+    if images_disabled:
+        return (
+            "No text could be extracted, and image processing is disabled by an admin"
+        )
+    return f"Unsupported file type: {extension}"
+
+
 def categorize_uploaded_files(
     files: list[UploadFile], db_session: Session
 ) -> CategorizedFiles:
@@ -396,15 +407,15 @@ def categorize_uploaded_files(
                         continue
 
                     logger.warning("No text content extracted from '%s'", filename)
-                    if image_bearing_ext and not image_extraction_enabled:
-                        reason = (
-                            "No text could be extracted, and image processing "
-                            "is disabled by an admin"
-                        )
-                    else:
-                        reason = f"Unsupported file type: {extension}"
                     results.rejected.append(
-                        RejectedFile(filename=filename, reason=reason)
+                        RejectedFile(
+                            filename=filename,
+                            reason=_no_text_reason(
+                                upload,
+                                extension,
+                                image_bearing_ext and not image_extraction_enabled,
+                            ),
+                        )
                     )
                     continue
 

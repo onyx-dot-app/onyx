@@ -255,14 +255,13 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                     secret=True,
                 ),
             ],
-            setup_instructions=(
-                "In GitHub: Settings → Developer settings → OAuth Apps → New "
-                "OAuth App. Set the Authorization callback URL to this Onyx "
-                "instance's callback URL (/craft/v1/apps/oauth/callback). Save, "
-                "then generate a client secret. Paste the Client ID and Client "
-                "Secret below. The agent is granted the repo, read:org, and "
-                "read:user scopes."
-            ),
+            setup_steps=[
+                "Open OAuth Apps, then click New OAuth App.",
+                "Set the Authorization callback URL to the callback URL.",
+                "Register the app, then generate a client secret.",
+                "Paste the Client ID and Client Secret into the fields.",
+            ],
+            setup_url="https://github.com/settings/developers",
         ),
         endpoint_catalog=_ENDPOINTS,
     )

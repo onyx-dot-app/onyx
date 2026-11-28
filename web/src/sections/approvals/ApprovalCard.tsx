@@ -4,16 +4,12 @@ import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
 import { Button, Collapsible, Text, Tooltip } from "@opal/components";
-import { Content, Section } from "@opal/layouts";
-import { cn } from "@opal/utils";
-import {
-  SvgCheckSquare,
-  SvgChevronDown,
-  SvgClock,
-  SvgLoader,
-  SvgX,
-} from "@opal/icons";
+import { Section } from "@opal/layouts";
+import { cn, stripBidiControls } from "@opal/utils";
+import { SvgChevronDown, SvgLoader } from "@opal/icons";
 import CometEdge from "@/refresh-components/CometEdge";
+import { RunStep } from "@/lib/timeline/components/RunStep";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import type {
   ApprovalStatus,
   ApprovalSubmitDecision,
@@ -34,8 +30,11 @@ export interface ApprovalCardProps {
   payload: Record<string, unknown>;
   /** ISO 8601 deadline shown while the request waits. */
   expiresAt?: string | null;
-  /** What "approve for session" covers: a Craft session or a chat. */
-  sessionScope?: "session" | "chat";
+  /**
+   * What "approve for session" covers: a Craft session, a chat, or the rest of
+   * a VM command, which submits "approve_command".
+   */
+  sessionScope?: "session" | "chat" | "command";
   canApproveForSession?: boolean;
   status: ApprovalStatus;
   /**
@@ -45,10 +44,13 @@ export interface ApprovalCardProps {
   onDecide: (decision: ApprovalSubmitDecision) => Promise<void>;
 }
 
-/** A pending request shows its details and decisions; a decided one, one line. */
+/**
+ * A pending request shows its details and decisions; a decided one, a
+ * timeline step whose body holds the details.
+ */
 export default function ApprovalCard({
-  actions,
-  appName,
+  actions: rawActions,
+  appName: rawAppName,
   payload,
   expiresAt,
   sessionScope = "session",
@@ -59,6 +61,13 @@ export default function ApprovalCard({
   const t = useTranslations("common.approvalCard");
   const format = useFormatter();
   const [isOpen, setIsOpen] = useState(true);
+  const deadlineTime = expiresAt
+    ? format.dateTime(new Date(expiresAt), {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+  const deadline = deadlineTime ? t("deadline", { time: deadlineTime }) : null;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
 
@@ -77,6 +86,18 @@ export default function ApprovalCard({
     }
   }
 
+  // Integrations and tools choose these strings, so they show without bidi
+  // controls; PayloadView strips the payload's.
+  const actions = rawActions.map((item) => ({
+    ...item,
+    name: stripBidiControls(item.name),
+    description:
+      item.description === undefined
+        ? undefined
+        : stripBidiControls(item.description),
+  }));
+  const appName =
+    rawAppName === undefined ? undefined : stripBidiControls(rawAppName);
   const action = actions[0];
   const headline =
     actions.length === 1 && action
@@ -87,67 +108,72 @@ export default function ApprovalCard({
           count: actions.length,
           app: appName ?? "",
         });
-  const sessionCopy =
-    sessionScope === "chat" ? "approveChat" : "approveSession";
+  const scopeCopy = {
+    session: {
+      decision: "approve_session",
+      button: "approveSession",
+      record: "approvedForSession",
+    },
+    chat: {
+      decision: "approve_session",
+      button: "approveChat",
+      record: "approvedForChat",
+    },
+    command: {
+      decision: "approve_command",
+      button: "approveCommand",
+      record: "approvedForCommand",
+    },
+  } as const satisfies Record<
+    NonNullable<ApprovalCardProps["sessionScope"]>,
+    { decision: ApprovalSubmitDecision; button: string; record: string }
+  >;
+  const scope = scopeCopy[sessionScope];
+  const sessionCopy = scope.button;
   // A decided request leaves a one-line record in the timeline.
   const record =
     status === "pending"
       ? null
-      : t(
-          `record.${
-            status !== "approvedForSession"
-              ? status
-              : sessionScope === "chat"
-                ? "approvedForChat"
-                : "approvedForSession"
-          }`,
-          { headline }
-        );
+      : t(`record.${status !== "approvedForSession" ? status : scope.record}`, {
+          headline,
+        });
 
   const single = actions.length === 1;
 
   const details = (
-    // Indented under the header text, past the spinner.
-    <div className="ps-9 pe-3 pb-2">
-      <Section gap={1.5} alignItems="stretch" height="auto">
-        {single
-          ? action?.description && (
-              <Text
-                font="secondary-body"
-                color="text-03"
-                wordWrap="wrap-anywhere"
-              >
-                {action.description}
-              </Text>
-            )
-          : actions.map((item) => (
-              <Text
-                key={item.id}
-                font="secondary-body"
-                color="text-04"
-                wordWrap="wrap-anywhere"
-              >
-                {item.description
-                  ? t("actionWithDescription", {
-                      action: item.name,
-                      description: item.description,
-                    })
-                  : item.name}
-              </Text>
-            ))}
-        <PayloadView payload={payload} />
-        {error && (
-          <Text
-            as="p"
-            role="alert"
-            font="secondary-body"
-            color="status-error-05"
-          >
-            {t("submitError")}
-          </Text>
-        )}
-      </Section>
-    </div>
+    <Section gap={1.5} alignItems="stretch" height="auto">
+      {single
+        ? action?.description && (
+            <Text
+              font="secondary-body"
+              color="text-03"
+              wordWrap="wrap-anywhere"
+            >
+              {action.description}
+            </Text>
+          )
+        : actions.map((item) => (
+            <Text
+              key={item.id}
+              font="secondary-body"
+              color="text-04"
+              wordWrap="wrap-anywhere"
+            >
+              {item.description
+                ? t("actionWithDescription", {
+                    action: item.name,
+                    description: item.description,
+                  })
+                : item.name}
+            </Text>
+          ))}
+      <PayloadView payload={payload} />
+      {error && (
+        <Text as="p" role="alert" font="secondary-body" color="status-error-05">
+          {t("submitError")}
+        </Text>
+      )}
+    </Section>
   );
 
   return (
@@ -159,24 +185,26 @@ export default function ApprovalCard({
         </Text>
       </div>
       {record !== null ? (
-        <div aria-hidden>
-          <Content
-            font="main-ui-muted"
-            icon={
-              status === "approved" || status === "approvedForSession"
-                ? SvgCheckSquare
-                : status === "rejected" || status === "disabled"
-                  ? SvgX
-                  : SvgClock
-            }
-            title={record}
-          />
-        </div>
+        <RunStep
+          status="done"
+          icon={STEP_ICONS.request}
+          title={record}
+          body={details}
+        />
       ) : (
         <CometEdge active tone="info" speedSeconds={3.6}>
           <div className="rounded-08 border border-status-info-03 overflow-hidden bg-background-neutral-00">
             <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
-              <Collapsible.Trigger className="flex w-full items-center gap-2 px-3 py-2 text-start transition-colors hover:bg-background-tint-02">
+              {/* The spinner and the decisions show the wait; only screen
+                  readers hear "Approval requested". */}
+              <Collapsible.Trigger
+                aria-label={
+                  deadlineTime
+                    ? t("header.requiredBy", { headline, time: deadlineTime })
+                    : t("header.required", { headline })
+                }
+                className="flex w-full items-center gap-2 px-3 py-2 text-start transition-colors hover:bg-background-tint-02"
+              >
                 <SvgLoader className="size-4 shrink-0 stroke-status-info-05 motion-safe:animate-spin" />
                 <span className="min-w-0 flex-1">
                   <Text
@@ -184,21 +212,16 @@ export default function ApprovalCard({
                     color="text-04"
                     wordWrap="wrap-anywhere"
                   >
-                    {t("header.required", { headline })}
+                    {headline}
                   </Text>
                 </span>
-                {expiresAt && (
+                {deadline && (
                   <Text
                     font="secondary-body"
                     color="text-03"
                     wordWrap="whitespace-nowrap"
                   >
-                    {t("deadline", {
-                      time: format.dateTime(new Date(expiresAt), {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      }),
-                    })}
+                    {deadline}
                   </Text>
                 )}
                 <SvgChevronDown
@@ -208,7 +231,10 @@ export default function ApprovalCard({
                   )}
                 />
               </Collapsible.Trigger>
-              <Collapsible.Content>{details}</Collapsible.Content>
+              <Collapsible.Content>
+                {/* Indented under the header text, past the spinner. */}
+                <div className="ps-9 pe-3 pb-2">{details}</div>
+              </Collapsible.Content>
             </Collapsible.Root>
             <div className="px-3 pb-3 pt-1">
               <Section
@@ -236,7 +262,7 @@ export default function ApprovalCard({
                       prominence="secondary"
                       size="sm"
                       disabled={submitting}
-                      onClick={() => void decide("approve_session")}
+                      onClick={() => void decide(scope.decision)}
                       aria-label={t(`${sessionCopy}.tooltip`)}
                     >
                       {t(`${sessionCopy}.button`)}

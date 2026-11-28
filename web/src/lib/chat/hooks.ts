@@ -4,6 +4,7 @@ import { useNavigation, useSearchParams } from "@opal/navigation";
 import {
   type AnimationEvent,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -12,10 +13,10 @@ import {
 import { getConfiguredSources } from "@/lib/connectors/utils";
 import type { OnSubmitProps } from "@/hooks/useChatController";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { PacketType } from "@/app/app/services/streamingModels";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useProjectsContext } from "@/lib/projects/providers";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
 import {
@@ -23,7 +24,7 @@ import {
   type ToolConfigurationHandle,
 } from "@/lib/tools/hooks";
 
-import useSWR, { useSWRConfig } from "swr";
+import useSWR, { type SWRResponse, useSWRConfig } from "swr";
 import { useTranslations } from "next-intl";
 import { useShallow } from "zustand/react/shallow";
 import { toast } from "@opal/layouts";
@@ -43,12 +44,14 @@ import {
   readChatSessionStatus,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
-import { postQuestionAnswers } from "@/lib/chat/svc";
+import { postChatApprovalDecision, postQuestionAnswers } from "@/lib/chat/svc";
+import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 import { requestMentions } from "@/lib/chat/mentions";
 import type {
   ChatSessionQueue,
   ChatSessionStatus,
   ChatSubagent,
+  ChatSubagents,
   ComposedMessage,
   Mention,
   PendingChatMessage,
@@ -62,30 +65,46 @@ import { getUnresolvedMultiModelTurn } from "@/lib/timeline/chat/message/multiMo
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useChatSessionStore,
+  useCurrentChatState,
   useCurrentMessageTree,
 } from "@/app/app/stores/useChatSessionStore";
 import {
+  type ChatArtifactFile,
   chatPublishedFiles,
   type LoadedPublishedFiles,
+  parseArtifactLink,
 } from "@/lib/chat/publishedFiles";
 import {
   awaitsDecision,
   type AwaitingUser,
+  decidedStatus,
   readToolApprovals,
-  readToolQuestions,
   readWaitingQuestions,
   readWaitingToolRequests,
   type ToolRequestRecord,
   toolApprovalStatus,
-  toolQuestionStatus,
+  ToolRequestDeciderContext,
   useToolRequestUi,
   type WaitingToolRequest,
 } from "@/lib/chat/toolApprovals";
-import type { Packet, PublishedFile } from "@/app/app/services/streamingModels";
+import {
+  readToolQuestions,
+  toolQuestionStatus,
+} from "@/lib/chat/toolQuestions";
+import type {
+  Packet,
+  PublishedFile,
+  StreamCursor,
+} from "@/app/app/services/streamingModels";
+import { processRawChatHistory } from "@/app/app/services/lib";
+import { handleSSEStream } from "@/lib/search/streamingUtils";
+import { SubagentPathContext } from "@/lib/chat/subagents";
 import {
   APPROVAL_PENDING_ERROR_CODE,
+  type BackendMessage,
   type ChatSession,
   type ChatStream,
+  type Message,
 } from "@/app/app/types";
 import {
   exportChatSession,
@@ -95,6 +114,14 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import type { DropdownAction } from "@opal/components";
 import { SvgChevronLeft, SvgDownload, SvgFileText, SvgHash } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import {
+  type ChatRunStatus,
+  endedRunStatus,
+  isWorking,
+  liveRunStatus,
+  useUnseenRuns,
+} from "@/lib/chat/runStatus";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const SERVER_WORK_POLL_MS = 2000;
@@ -132,7 +159,7 @@ export interface ResponseToolRequests {
   /** Requests and questions that wait no more, as records in the reply's
    * timeline. */
   records: ToolRequestRecord[];
-  /** What the reply's own requests wait for from this user, if anything. */
+  /** What the reply's own requests wait for, if anything. */
   awaiting: AwaitingUser | null;
 }
 
@@ -144,6 +171,7 @@ export interface ResponseToolRequests {
 export function useToolRequests(rawPackets: Packet[]): ResponseToolRequests {
   const approvals = readToolApprovals(rawPackets).entries;
   const questions = readToolQuestions(rawPackets).entries;
+  const viewerDecides = useContext(ToolRequestDeciderContext);
   // Only this response's statuses, so other decisions do not re-render it.
   const localStatuses = useToolRequestUi(
     useShallow((state) =>
@@ -198,15 +226,17 @@ export function useToolRequests(rawPackets: Packet[]): ResponseToolRequests {
         });
       else if (status.kind === "pending") awaitingAnswer = true;
     });
-    return {
-      records,
-      awaiting: awaitingApproval
+    const awaiting: AwaitingUser | null = awaitingApproval
+      ? viewerDecides
         ? "approval"
-        : awaitingAnswer
+        : "ownerApproval"
+      : awaitingAnswer
+        ? viewerDecides
           ? "answer"
-          : null,
-    };
-  }, [approvals, questions, localStatuses, localAnswers]);
+          : "ownerAnswer"
+        : null;
+    return { records, awaiting };
+  }, [approvals, questions, localStatuses, localAnswers, viewerDecides]);
 }
 
 /**
@@ -349,6 +379,36 @@ export function isClosedRequestError(error: unknown): boolean {
 }
 
 /**
+ * Sends this user's decision on an approval request and follows the response
+ * that it continues. The decided status shows until the resolution packet
+ * confirms it; a request that no longer waits shows as closed.
+ */
+export function useToolApprovalDecision(
+  approvalId: string
+): (decision: ApprovalSubmitDecision) => Promise<void> {
+  const follow = useFollowUserInput();
+  return useCallback(
+    async (decision: ApprovalSubmitDecision) => {
+      const { recordStatus } = useToolRequestUi.getState();
+      const sessionId = useChatSessionStore.getState().currentSessionId;
+      let continuation: ChatStream | null;
+      try {
+        const response = await postChatApprovalDecision(approvalId, decision);
+        recordStatus(approvalId, decidedStatus(response));
+        continuation = response.continuation;
+      } catch (cause) {
+        if (!isClosedRequestError(cause)) throw cause;
+        recordStatus(approvalId, "closed");
+        if (sessionId !== null) await follow.refused(sessionId);
+        return;
+      }
+      if (sessionId !== null) await follow.continued(sessionId, continuation);
+    },
+    [approvalId, follow]
+  );
+}
+
+/**
  * The questions on the selected branch that wait for the user's answer, by
  * request ID, oldest first. A typed message answers them all: it goes to the
  * first, and the server answers every question of its response that waits.
@@ -369,6 +429,64 @@ export function useWaitingQuestionIds(): string[] {
   );
   // A string key keeps the same list while the tree streams.
   return useMemo(() => (ids ? ids.split(" ") : []), [ids]);
+}
+
+export type JumpToLatestReason = "approval" | "question" | "newAnswer";
+
+/**
+ * Why the user should return to the end of the chat while the
+ * scroll-to-bottom button shows (`visible`): an approval or a question
+ * waits, or a run that went on after the button appeared has ended with new
+ * output. Output that only loads, such as an opened chat's history, is not
+ * new.
+ */
+export function useJumpToLatestReason(
+  visible: boolean
+): JumpToLatestReason | null {
+  const tree = useCurrentMessageTree();
+  const chatState = useCurrentChatState();
+  const localStatuses = useToolRequestUi((state) => state.localStatuses);
+  const waitingQuestionIds = useWaitingQuestionIds();
+  const approvalWaits = useMemo(
+    () =>
+      tree
+        ? readWaitingToolRequests(tree).some(
+            (item) =>
+              item.kind === "approval" &&
+              !localStatuses.has(item.request.approval_id)
+          )
+        : false,
+    [tree, localStatuses]
+  );
+  const contentKey = useMemo(() => {
+    if (!tree) return "";
+    const chain = getLatestMessageChain(tree);
+    const last = chain[chain.length - 1];
+    const visiblePackets =
+      last?.packets.filter(({ obj }) => obj.type !== PacketType.STOP).length ??
+      0;
+    return `${chain.length}:${visiblePackets}`;
+  }, [tree]);
+  const sessionId = useChatSessionStore((state) => state.currentSessionId);
+  const running = chatState === "loading" || chatState === "streaming";
+  // The content when the button last appeared or went away, and whether a
+  // run went on since.
+  const [seen, setSeen] = useState({
+    visible,
+    sessionId,
+    contentKey,
+    ran: false,
+  });
+  if (seen.visible !== visible || seen.sessionId !== sessionId)
+    setSeen({ visible, sessionId, contentKey, ran: false });
+  else if (visible && running && !seen.ran) setSeen({ ...seen, ran: true });
+
+  if (!visible) return null;
+  if (approvalWaits) return "approval";
+  if (waitingQuestionIds.length > 0) return "question";
+  if (chatState === "input" && seen.ran && seen.contentKey !== contentKey)
+    return "newAnswer";
+  return null;
 }
 
 /**
@@ -417,16 +535,62 @@ export function useAnswerWithMessage(): (
 }
 
 /**
- * How often a chat's status reloads. Pending input and background work can
- * start a turn this client did not send; a decided agent request counts as
- * background work until its agent settles. Pass it in a new arrow on each
- * render: SWR reschedules its poll only when `refreshInterval` changes, so a
- * stable function reads only the data from before the first load.
+ * How often a chat's status reloads. It polls while a reply streams, which
+ * can start agents, and while a shown request waits: another tab or client
+ * can decide it and continue the response there. Pending input and
+ * background work can start a turn this client did not send; a decided agent
+ * request counts as background work until its agent settles.
  */
-function statusPollInterval(current: ChatSessionStatus | undefined): number {
-  return current?.has_startable_input || current?.has_active_subagents
+function statusPollInterval(
+  current: ChatSessionStatus | undefined,
+  streaming: boolean,
+  requestWaits: boolean
+): number {
+  return streaming ||
+    requestWaits ||
+    current?.has_startable_input ||
+    current?.has_active_subagents
     ? SERVER_WORK_POLL_MS
     : 0;
+}
+
+/**
+ * A chat's status, which every reader of it loads through this hook so that
+ * all poll by one rule, `statusPollInterval`. Pass a null `sessionId` to load
+ * nothing.
+ */
+export function useChatSessionStatus(
+  sessionId: string | null
+): SWRResponse<ChatSessionStatus, Error> {
+  // Primitives only: the message tree changes on every streamed frame.
+  const { streaming, requestWaits } = useChatSessionStore(
+    useShallow((state) => {
+      const session = sessionId ? state.sessions.get(sessionId) : undefined;
+      const streaming = session !== undefined && session.chatState !== "input";
+      return {
+        streaming,
+        requestWaits:
+          !streaming && session !== undefined
+            ? readWaitingToolRequests(session.messageTree).length > 0
+            : false,
+      };
+    })
+  );
+  const key = sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null;
+  // The current status, for the interval below. SWR restarts its poll timer
+  // each time `refreshInterval` changes, so the interval is a number that
+  // changes only when the rule's answer does, not a new function per render.
+  // It has the fetcher too: SWR sends a key's focus and mutate reloads to one
+  // of its subscribers only.
+  const { data: cached } = useSWR<ChatSessionStatus, Error>(
+    key,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+  return useSWR<ChatSessionStatus, Error>(key, errorHandlingFetcher, {
+    refreshInterval: statusPollInterval(cached, streaming, requestWaits),
+    onErrorRetry: skipRetryOnAuthError,
+  });
 }
 
 /**
@@ -462,10 +626,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
   // An incognito chat has no server queue, but its background agents' requests
   // still arrive through its status.
-  const statusKey =
-    (enabled || incognito) && sessionId
-      ? SWR_KEYS.chatSessionStatus(sessionId)
-      : null;
+  const statusSessionId = enabled || incognito ? sessionId : null;
 
   // Key-addressed, unlike the mutate useSWR returns, which follows the current key.
   const { mutate } = useSWRConfig();
@@ -474,14 +635,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError }
   );
-  const { data: status } = useSWR<ChatSessionStatus, Error>(
-    statusKey,
-    errorHandlingFetcher,
-    {
-      refreshInterval: (current) => statusPollInterval(current),
-      onErrorRetry: skipRetryOnAuthError,
-    }
-  );
+  const { data: status } = useChatSessionStatus(statusSessionId);
 
   // A reader owns a busy session; an idle one attaches to turns the server
   // started, whichever status read found them.
@@ -533,7 +687,6 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   // One request per chat at a time. The composer keeps new input until it ends.
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const busy = busyKey !== null && busyKey === pendingKey;
-  const hasActiveSubagents = status?.has_active_subagents ?? false;
   const showPendingRequest = useShowPendingRequest();
 
   return useMemo(() => {
@@ -555,7 +708,9 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       action: (key: string) => Promise<T>
     ): Promise<T | null> {
       const key = pendingKey;
-      const status = statusKey;
+      const status = statusSessionId
+        ? SWR_KEYS.chatSessionStatus(statusSessionId)
+        : null;
       if (!key || !status || busy) return null;
       setBusyKey(key);
       try {
@@ -573,7 +728,6 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       messages: messages ?? EMPTY_PENDING_MESSAGES,
       error: error ? t("loadFailed") : null,
       busy,
-      hasActiveSubagents,
       needsResponseSelection,
       submit: async ({ message, mentions }, delivery, turn) =>
         (await request(async (key) => {
@@ -645,32 +799,16 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
           }
         });
       },
-      stopSubagents: async () => {
-        const status = statusKey;
-        if (!sessionId || !status) return;
-        try {
-          await errorHandlingFetchWith<unknown>(
-            `/api/chat/chat-session/${sessionId}/stop-subagents`,
-            { method: "POST" }
-          );
-        } catch (failure) {
-          toast.error(fetchErrorDetail(failure) ?? t("stopSubagentsFailed"));
-        } finally {
-          // A status change also reloads the agents list (`useChatSubagents`)
-          void mutate(status);
-        }
-      },
     };
   }, [
     enabled,
     messages,
     error,
     busy,
-    hasActiveSubagents,
     needsResponseSelection,
     sessionId,
     pendingKey,
-    statusKey,
+    statusSessionId,
     mutate,
     t,
     showPendingRequest,
@@ -724,7 +862,6 @@ export function useSendChatMessageFromURL({
   const navigation = useNavigation();
   const searchParams = useSearchParams();
 
-  const { currentMessageFiles } = useProjectsContext();
   const {
     availableSources,
     isLoading: sourcesLoading,
@@ -908,14 +1045,15 @@ export function useSendChatMessageFromURL({
     setPendingMessage(null);
     onSubmit({
       ...pendingMessage,
-      currentMessageFiles,
+      currentMessageFiles: [],
       deepResearch,
     });
-  }, [pendingMessage, onSubmit, currentMessageFiles, deepResearch]);
+  }, [pendingMessage, onSubmit, deepResearch]);
 }
 
 // A chat's loads of its file list and its message tree
 export interface PublishedFilesSource {
+  sessionId: string;
   loadedPublishedFiles: LoadedPublishedFiles;
   messageTree: MessageTreeState;
 }
@@ -935,41 +1073,42 @@ export function publishedFilesOf(
   source: PublishedFilesSource | undefined | null
 ): PublishedFile[] {
   if (!source) return NO_PUBLISHED_FILES;
-  const { loadedPublishedFiles: loaded, messageTree } = source;
+  const { sessionId, loadedPublishedFiles: loaded, messageTree } = source;
   const cached = publishedFilesByTree.get(messageTree);
   if (cached && cached.loaded === loaded) return cached.files;
-  const files = chatPublishedFiles(loaded, messageTree);
+  const files = chatPublishedFiles(loaded, messageTree, sessionId);
   publishedFilesByTree.set(messageTree, { loaded, files });
   return files;
 }
 
+const NO_SUBAGENTS: ChatSubagent[] = [];
+
+/** The most agents the agents endpoint returns: the backend's
+ * `MAX_DISCOVERED_AGENTS` (onyx/chat/models.py). */
+export const MAX_LISTED_SUBAGENTS = 128;
+
 /**
- * The chat's background agents, by the newest response that started them.
- * They load once the chat's status does, again when it changes whether agents
- * are active or which response is newest, and poll while agents are active.
- * The status polls as the queue's does, also for chats without a queue, and
- * while a reply streams (`streaming`), which can start agents.
+ * The chat's background agents, by the newest response that started them,
+ * and `stopAgent`, which stops one agent and the agents below it. They load
+ * once the chat's status does, again when it changes whether agents are
+ * active or which response is newest, and poll while agents are active. The
+ * status polls by `useChatSessionStatus`, also for chats without a queue.
+ * `loaded` turns true
+ * once a list has been read from the server since the hook mounted.
  */
-export function useChatSubagents(
-  sessionId: string,
-  streaming: boolean
-): ChatSubagent[] {
-  const { data: status } = useSWR<ChatSessionStatus, Error>(
-    SWR_KEYS.chatSessionStatus(sessionId),
-    errorHandlingFetcher,
-    {
-      // A number while a reply streams: each streamed packet renders the
-      // caller again, and a new function would restart SWR's timer
-      refreshInterval: streaming
-        ? SERVER_WORK_POLL_MS
-        : (current) => statusPollInterval(current),
-      onErrorRetry: skipRetryOnAuthError,
-    }
-  );
+export function useChatSubagents(sessionId: string | null): ChatSubagents {
+  const t = useTranslations("chat.activity.agents");
+  const { data: status, mutate: reloadStatus } =
+    useChatSessionStatus(sessionId);
   const active = status?.has_active_subagents ?? false;
-  const url = SWR_KEYS.chatSessionAgents(sessionId);
-  const { data } = useSWR<ChatSubagent[], Error>(
-    status ? [url, active, status.latest_response_id] : null,
+  const url = sessionId ? SWR_KEYS.chatSessionAgents(sessionId) : "";
+  const {
+    data,
+    error,
+    isValidating,
+    mutate: reloadAgents,
+  } = useSWR<ChatSubagent[], Error>(
+    status && sessionId ? [url, active, status.latest_response_id] : null,
     () => errorHandlingFetcher<ChatSubagent[]>(url),
     {
       refreshInterval: active ? SERVER_WORK_POLL_MS : 0,
@@ -977,7 +1116,99 @@ export function useChatSubagents(
       onErrorRetry: skipRetryOnAuthError,
     }
   );
-  return data ?? [];
+  // A cached list from an earlier visit is stale until a read here succeeds;
+  // SWR keeps the cached list after a failed read.
+  const [loaded, setLoaded] = useState(false);
+  if (!loaded && data !== undefined && !isValidating && error === undefined) {
+    setLoaded(true);
+  }
+  const stopAgent = useCallback(
+    async (agentId: string) => {
+      if (!sessionId) return;
+      try {
+        await errorHandlingFetchWith<unknown>(
+          `/api/chat/chat-session/${sessionId}/stop-subagents`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agent_id: agentId }),
+          }
+        );
+      } catch (failure) {
+        toast.error(fetchErrorDetail(failure) ?? t("stopFailed"));
+      } finally {
+        void reloadStatus();
+        void reloadAgents();
+      }
+    },
+    [sessionId, t, reloadStatus, reloadAgents]
+  );
+  return {
+    agents: data ?? NO_SUBAGENTS,
+    loaded,
+    stopAgent,
+  };
+}
+
+/**
+ * Opens, with `openFile`, the artifact version that the URL names
+ * (SEARCH_PARAM_NAMES.ARTIFACT_ID and ARTIFACT_VERSION, which the artifact
+ * link page sets) once its chat is `loadedChatId`, the chat that the page
+ * shows and has loaded, then drops the parameters so a reload does not open
+ * it again. A URL that names a version pins the file's tab to it.
+ */
+export function useOpenArtifactFromUrl(
+  loadedChatId: string | null,
+  openFile: (file: PublishedFile, pinVersion: boolean) => void
+): void {
+  const t = useTranslations("chat.messages");
+  const searchParams = useSearchParams();
+  const navigation = useNavigation();
+  const artifactId = searchParams?.get(SEARCH_PARAM_NAMES.ARTIFACT_ID);
+  const version = searchParams?.get(SEARCH_PARAM_NAMES.ARTIFACT_VERSION);
+  // Read as the link that sets them, so only a UUID and a whole version
+  // number reach the request URL.
+  const link = artifactId
+    ? parseArtifactLink(
+        `/app/artifacts/${artifactId}${version ? `/v${version}` : ""}`
+      )
+    : null;
+  const {
+    data: file,
+    error,
+    isValidating,
+  } = useSWR<ChatArtifactFile, Error>(
+    link ? SWR_KEYS.chatArtifact(link.artifactId, link.version) : null,
+    errorHandlingFetcher
+  );
+  const pinVersion = link?.version != null;
+  useEffect(() => {
+    if (!artifactId || isValidating || !searchParams) return;
+    // A cached response of an earlier visit can name an older version, or a
+    // file that is gone, which SWR keeps when its reload fails
+    if (error) {
+      toast.error(t("memoizedLink.artifactError.message"));
+    } else if (!file || file.chat_id !== loadedChatId) {
+      return;
+    } else {
+      openFile(file, pinVersion);
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(SEARCH_PARAM_NAMES.ARTIFACT_ID);
+    params.delete(SEARCH_PARAM_NAMES.ARTIFACT_VERSION);
+    navigation.go(`?${params.toString()}`, { replace: true, scroll: false });
+  }, [
+    file,
+    error,
+    isValidating,
+    pinVersion,
+    loadedChatId,
+    openFile,
+    searchParams,
+    navigation,
+    artifactId,
+    t,
+  ]);
 }
 
 /**
@@ -1092,5 +1323,266 @@ export function useChatExportMenu(
           ],
         }),
     },
+  };
+}
+
+/** The run status that a chat's sidebar row shows. */
+export function useChatRunStatus(sessionId: string): ChatRunStatus | null {
+  const localStatuses = useToolRequestUi((state) => state.localStatuses);
+  const localAnswers = useToolRequestUi((state) => state.localAnswers);
+  const session = useChatSessionStore((state) => state.sessions.get(sessionId));
+  const live = useMemo(
+    () =>
+      session ? liveRunStatus(session, localStatuses, localAnswers) : null,
+    [session, localStatuses, localAnswers]
+  );
+  const unseen = useUnseenRuns((state) => state.unseen.get(sessionId) ?? null);
+  return live ?? unseen;
+}
+
+/**
+ * Records how runs end while their chat is not on screen, and clears that
+ * record when the user opens the chat. Mount once, in the app sidebar.
+ */
+export function useTrackChatRuns(): void {
+  const visibleChatId = useAppPosition().chat();
+  const visibleChatIdRef = useRef(visibleChatId);
+
+  useEffect(() => {
+    visibleChatIdRef.current = visibleChatId;
+    if (visibleChatId) useUnseenRuns.getState().markSeen(visibleChatId);
+  }, [visibleChatId]);
+
+  useEffect(
+    () =>
+      useChatSessionStore.subscribe((state, prev) => {
+        if (state.sessions === prev.sessions) return;
+        for (const [sessionId, session] of state.sessions) {
+          const before = prev.sessions.get(sessionId);
+          if (
+            !before ||
+            before === session ||
+            session.incognito ||
+            session.runMarkerSuppressed ||
+            !isWorking(before) ||
+            isWorking(session) ||
+            sessionId === visibleChatIdRef.current
+          )
+            continue;
+          const ended = endedRunStatus(session);
+          if (ended === "failed" || ended === "done")
+            useUnseenRuns.getState().markUnseen(sessionId, ended);
+        }
+      }),
+    []
+  );
+}
+
+/** A background agent's saved conversation, with its live stream. */
+interface SubagentHistory {
+  messages: BackendMessage[];
+  packets: Packet[][];
+  stream: { stream_id: number; response_ids: number[] } | null;
+}
+
+interface SpawnedSubagents {
+  /** The agent for each name; undefined for an empty or unlisted name. */
+  agents: (ChatSubagent | undefined)[];
+  /**
+   * The chat has an agents list. Without one (such as a shared chat), an
+   * undefined agent is unknown, not starting. While the list loads, a spawn
+   * still counts as starting, so a running group does not flash done.
+   */
+  available: boolean;
+  /**
+   * The list is not cut off at the endpoint's cap, so an agent it lacks has
+   * not started yet. In a full list, an older agent can be missing.
+   */
+  complete: boolean;
+}
+
+/**
+ * The open chat's agents that the rendering agent spawned with these names,
+ * once the agents list holds them.
+ */
+export function useSpawnedSubagents(
+  names: readonly string[]
+): SpawnedSubagents {
+  const base = useContext(SubagentPathContext);
+  const sessionId = useChatSessionStore((state) => state.currentSessionId);
+  const { agents } = useChatSubagents(sessionId);
+  return {
+    agents: names.map((name) =>
+      name
+        ? agents.find((agent) => agent.path === `${base}/${name}`)
+        : undefined
+    ),
+    available: sessionId !== null,
+    complete: agents.length < MAX_LISTED_SUBAGENTS,
+  };
+}
+
+function isPacket(item: Packet | StreamCursor): item is Packet {
+  return "obj" in item;
+}
+
+async function* followSubagentStream(
+  sessionId: string,
+  agentId: string,
+  streamId: number,
+  cursor: number,
+  signal: AbortSignal
+): AsyncGenerator<Packet | StreamCursor, void, unknown> {
+  const response = await fetch(
+    `/api/chat/chat-session/${sessionId}/agents/${agentId}/stream?stream_id=${streamId}&cursor=${cursor}`,
+    { signal }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `HTTP error! status: ${response.status}`,
+      response.status,
+      null
+    );
+  yield* handleSSEStream<Packet | StreamCursor>(response, signal);
+}
+
+const RECONNECT_DELAY_MS = 1000;
+
+interface SubagentTranscript {
+  /** The conversation's messages, oldest first. */
+  messages: Message[];
+  loading: boolean;
+  failed: boolean;
+}
+
+/**
+ * A subagent's conversation: its saved history, and its running response's
+ * packets from the live stream, which the saved packets lag. `streamId` is
+ * the agents list's live stream for the agent: a new one reloads the history,
+ * which names the stream to follow; its end reloads the history too. The
+ * history reloads when the stream ends, and a dropped stream resumes from its
+ * last cursor. `runId` is the agent's latest run on the selected branch: the
+ * history is keyed on it, so another branch's transcript replaces the old one.
+ */
+export function useSubagentTranscript(
+  sessionId: string,
+  agentId: string,
+  streamId: number | null,
+  runId: number | null
+): SubagentTranscript {
+  const url = SWR_KEYS.chatSubagentHistory(sessionId, agentId);
+  const { data, error, isLoading, mutate } = useSWR<SubagentHistory, Error>(
+    [url, runId],
+    () => errorHandlingFetcher<SubagentHistory>(url),
+    { onErrorRetry: skipRetryOnAuthError, revalidateOnFocus: false }
+  );
+  const stream = data?.stream ?? null;
+  const followed = stream?.stream_id ?? null;
+  const liveResponseId = stream?.response_ids[0] ?? null;
+
+  // The agents list names another stream, or none once the agent ended
+  useEffect(() => {
+    if (streamId !== followed) void mutate();
+  }, [streamId, followed, mutate]);
+
+  const [live, setLive] = useState<{ streamId: number; packets: Packet[] }>({
+    streamId: 0,
+    packets: [],
+  });
+  useEffect(() => {
+    if (followed === null) return;
+    const controller = new AbortController();
+    let pending: Packet[] = [];
+    let frame: number | null = null;
+    // Packets land once per frame, as the chat's own stream does
+    const flush = () => {
+      frame = null;
+      const batch = pending;
+      pending = [];
+      setLive((current) =>
+        current.streamId === followed
+          ? { streamId: followed, packets: [...current.packets, ...batch] }
+          : { streamId: followed, packets: batch }
+      );
+    };
+    setLive({ streamId: followed, packets: [] });
+    void (async () => {
+      let cursor = 0;
+      let stopped = false;
+      // Until the stream sends its stop, or no longer serves this stream
+      while (!stopped && !controller.signal.aborted) {
+        // The stream sends a cursor after each batch of packets. A batch
+        // lands with its cursor, so a drop before it cannot repeat packets
+        let batch: Packet[] = [];
+        try {
+          for await (const item of followSubagentStream(
+            sessionId,
+            agentId,
+            followed,
+            cursor,
+            controller.signal
+          )) {
+            if (!isPacket(item)) {
+              cursor = item.next_cursor;
+              if (batch.length > 0) {
+                pending.push(...batch);
+                if (batch.some((packet) => packet.obj.type === "stop"))
+                  stopped = true;
+                batch = [];
+                if (frame === null) frame = requestAnimationFrame(flush);
+              }
+              continue;
+            }
+            const type = item.obj.type;
+            if (type === "chat_heartbeat" || type === "replay_end") continue;
+            batch.push(item);
+          }
+        } catch (failure) {
+          if (controller.signal.aborted) return;
+          // Gone, or no longer allowed: the history reload shows which
+          if (
+            failure instanceof FetchError &&
+            [401, 403, 404].includes(failure.status)
+          )
+            break;
+          console.warn("The subagent's live stream dropped", failure);
+        }
+        if (!stopped)
+          await new Promise((resolve) =>
+            setTimeout(resolve, RECONNECT_DELAY_MS)
+          );
+      }
+      if (controller.signal.aborted) return;
+      if (frame !== null) cancelAnimationFrame(frame);
+      flush();
+      // The saved response replaces the stream
+      void mutate();
+    })();
+    return () => {
+      controller.abort();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [sessionId, agentId, followed, mutate]);
+
+  const messages = useMemo(() => {
+    if (!data) return [];
+    // Each message the parent sends starts a reply that no earlier reply
+    // links to as its latest child, so the conversation reads in order
+    const chain = [
+      ...processRawChatHistory(data.messages, data.packets).values(),
+    ].sort((a, b) => (a.messageId ?? 0) - (b.messageId ?? 0));
+    const streamed = live.streamId === followed ? live.packets : [];
+    if (liveResponseId === null || streamed.length === 0) return chain;
+    return chain.map((message) =>
+      message.messageId === liveResponseId
+        ? { ...message, packets: streamed }
+        : message
+    );
+  }, [data, live, followed, liveResponseId]);
+
+  return {
+    messages,
+    loading: isLoading,
+    failed: error !== undefined,
   };
 }

@@ -1,5 +1,10 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 
+/** An option's accessible name, which also holds its description. */
+function optionName(option: string): RegExp {
+  return new RegExp(`^${option.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`);
+}
+
 /**
  * The question cards of a chat. A card whose questions wait for the user's
  * answers shows in the region after the last message; once the questions
@@ -33,12 +38,9 @@ export class ToolQuestionCard {
   async expectOptions(options: string[]): Promise<void> {
     await expect(this.card.getByRole("radio")).toHaveCount(options.length);
     for (const [index, option] of options.entries())
-      // The name also holds the option's description.
       await expect(
         this.card.getByRole("radio").nth(index)
-      ).toHaveAccessibleName(
-        new RegExp(`^${option.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`)
-      );
+      ).toHaveAccessibleName(optionName(option));
   }
 
   async choose(option: string): Promise<void> {
@@ -46,6 +48,29 @@ export class ToolQuestionCard {
       .getByRole("radio")
       .filter({ has: this.page.getByText(option, { exact: true }) })
       .click();
+  }
+
+  /** The hint that a multi-select question shows. */
+  async expectMultiSelectHint(): Promise<void> {
+    await expect(
+      this.card.getByText("Choose all that apply.", { exact: true })
+    ).toBeVisible();
+  }
+
+  /** Toggles an option of a multi-select question. */
+  async toggle(option: string): Promise<void> {
+    await this.card
+      .getByRole("checkbox")
+      .filter({ has: this.page.getByText(option, { exact: true }) })
+      .click();
+  }
+
+  /** The options of a multi-select question that are chosen. */
+  async expectChecked(options: string[]): Promise<void> {
+    const checked = this.card.getByRole("checkbox", { checked: true });
+    await expect(checked).toHaveCount(options.length);
+    for (const [index, option] of options.entries())
+      await expect(checked.nth(index)).toHaveAccessibleName(optionName(option));
   }
 
   /** Types the question's "Other" answer. */
@@ -87,18 +112,18 @@ export class ToolQuestionCard {
   }
 
   /**
-   * The record of the questions that `line` names: how they ended, and a
-   * line per question. Nothing waits after it.
+   * The record of the questions: a timeline step titled with the answer
+   * count, or else with how the questions ended. Its live region announces
+   * the same title. Nothing waits after it.
    */
-  async expectRecord(
-    title: string,
-    line: string,
-    timeout = 30_000
-  ): Promise<void> {
+  async expectRecord(outcome: string, timeout = 30_000): Promise<void> {
     const record = this.records.filter({
-      has: this.page.getByText(line, { exact: true }),
+      has: this.page.getByRole("button", {
+        name: `Expand ${outcome}`,
+        exact: true,
+      }),
     });
-    await expect(record.getByRole("status")).toHaveText(title, { timeout });
+    await expect(record.getByRole("status")).toHaveText(outcome, { timeout });
     await expect(this.region).toHaveCount(0);
   }
 }

@@ -33,7 +33,9 @@ export function requiredSignIns(
 export function needsAdmin(integration: MemberIntegration): boolean {
   return (
     connectAction(integration) === null &&
-    integration.status.state !== "connected"
+    integration.status.state !== "connected" &&
+    // The member fixes an Onyx login by signing in to Onyx again.
+    integration.auth_method !== "onyx_login"
   );
 }
 

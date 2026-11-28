@@ -50,7 +50,7 @@ test.describe("Integration access", () => {
       oauth_client: null,
       config: {
         shape: "openapi",
-        openapi_spec: {
+        openapi_document: JSON.stringify({
           openapi: "3.0.0",
           info: { title: name, description: "Health", version: "1.0.0" },
           servers: [{ url: "https://example.com" }],
@@ -63,7 +63,7 @@ test.describe("Integration access", () => {
               },
             },
           },
-        },
+        }),
       },
     };
   }

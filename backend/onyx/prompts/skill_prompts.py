@@ -1,5 +1,3 @@
-from onyx.tools.constants import SKILLS_READ_TOOL_NAME
-
 # Codex's skills instructions, adapted to chat: SKILL.md comes from the read
 # tool, and a skill's other files reach the sandbox only through the load
 # tool. The steps address the agent that reads the catalog, which can be a
@@ -76,7 +74,9 @@ MENTIONED_SKILL_PROMPT = """<skill>
 {instructions}
 </skill>"""
 
-MENTIONED_SKILL_TRUNCATED_NOTE = f"""
+# Saved with the message, so it names no tool: the model that reads it can
+# have another tool family.
+MENTIONED_SKILL_TRUNCATED_NOTE = """
 
-[SKILL.md continues. Call `{SKILLS_READ_TOOL_NAME}` with name="{{name}}" and \
-start_char={{start_char}} to read the rest.]"""
+[SKILL.md continues. Read the rest of skill "{name}" from \
+start_char={start_char}.]"""

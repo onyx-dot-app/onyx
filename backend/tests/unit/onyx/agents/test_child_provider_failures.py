@@ -8,8 +8,8 @@ from litellm.exceptions import APIConnectionError
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEndEvent, AgentEvent
-from onyx.agents.models import RunFailureKind, RunStatus
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.agents.models import AgentState, RunFailureKind, RunStatus
+from onyx.deep_research.agent import DeepResearchFeature
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
@@ -83,8 +83,7 @@ def test_research_continues_after_child_provider_failure() -> None:
     )
     llm = ScriptedLLM([], 128000)
     llm.steps = responses
-    feature = DeepResearchAgent(
-        messages=[],
+    agent = DeepResearchFeature(
         allowed_tools=[],
         llm=llm,
         token_counter=len,
@@ -93,7 +92,7 @@ def test_research_continues_after_child_provider_failure() -> None:
         reasoning_effort=ReasoningEffort.LOW,
         all_injected_file_metadata=None,
         skip_clarification=True,
-    )
+    ).agent(AgentState())
 
     def observe(event: AgentEvent) -> None:
         if (
@@ -103,7 +102,7 @@ def test_research_continues_after_child_provider_failure() -> None:
         ):
             responses.failure_observed.set()
 
-    run = feature.start(
+    run = agent.start(
         max_steps=4,
         messages=[UserMessage(content="Research both topics")],
         coordinator=AgentCoordinator(),
@@ -126,7 +125,7 @@ def test_research_continues_after_child_provider_failure() -> None:
     assert failed.failure.llm_error.error_code == "CONNECTION_ERROR"
     results = [
         message
-        for message in feature.state.messages
+        for message in agent.state.messages
         if isinstance(message, ToolResultMessage)
         and message.tool_name == RESEARCH_AGENT_TOOL_NAME
     ]

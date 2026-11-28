@@ -198,7 +198,7 @@ curl -X PATCH localhost:9651/_mock/config -H 'content-type: application/json' \
 `effective_access` is what Onyx's permission sync must store for the securable:
 `{"user_emails", "group_ids", "is_public"}`. A user with a direct grant is listed by email. A
 group is listed by the name Onyx stores, in lower case, with each group inside it: a site group
-as `<site url>::<name>` and an Entra group as `<name>_<id>`. Limited Access grants nothing, and
+as `<site url>::<name>` and an Entra group as its id. Limited Access grants nothing, and
 "Everyone except external users" makes the securable public.
 
 Set permissions:

@@ -2,7 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
-import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
+import {
+  RootLayout,
+  RootLayoutRightPanelSlotContext,
+  Section,
+} from "@opal/layouts";
 import { cn, markdown } from "@opal/utils";
 import { INTERACTIVE_SELECTOR } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -13,7 +17,8 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import useChatSessions from "@/hooks/useChatSessions";
 import { showErrorNotification } from "@/lib/sidebar/utils";
 import { endIncognitoSession } from "@/app/app/services/lib";
-import { useChatExportMenu } from "@/lib/chat/hooks";
+import { useChatExportMenu, useChatSubagents } from "@/lib/chat/hooks";
+import { subagentName, useSubagentNavigation } from "@/lib/chat/subagents";
 import ChatActivity from "@/sections/chat/ChatActivity";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
@@ -37,7 +42,10 @@ import {
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/navigation/hooks";
+import {
+  getNewSessionNavigation,
+  useAppPosition,
+} from "@/lib/navigation/hooks";
 import { PendingRoute, useNavigation } from "@opal/navigation";
 import { AppChromeLoader } from "@/layouts/chromes/AppChromeLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -50,6 +58,61 @@ import { PANEL_TOGGLE_ROOM } from "@/lib/outputPanel/layout";
 // ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
+
+interface ChatTitleProps {
+  sessionId: string;
+  title: string;
+}
+
+/** The chat's title; with a subagent open, `chat / subagent`, as T3 Code. */
+function ChatTitle({ sessionId, title }: ChatTitleProps) {
+  const { shownId } = useSubagentNavigation();
+  const { agents } = useChatSubagents(sessionId);
+  const agent = shownId
+    ? agents.find((candidate) => candidate.id === shownId)
+    : undefined;
+  if (!agent)
+    return (
+      <Text
+        as="p"
+        font="main-ui-action"
+        color="text-04"
+        maxLines={1}
+        overflowTooltip
+      >
+        {title}
+      </Text>
+    );
+  return (
+    <Section flexDirection="row" justifyContent="start" gap={0.5} height="fit">
+      {/* The chat's title gives way to the subagent's */}
+      <Section alignItems="stretch" height="fit" grow={0}>
+        <Text
+          as="p"
+          font="main-ui-action"
+          color="text-03"
+          maxLines={1}
+          overflowTooltip
+        >
+          {title}
+        </Text>
+      </Section>
+      <Text font="main-ui-action" color="text-03">
+        /
+      </Text>
+      <Section width="fit" height="fit">
+        <Text
+          as="p"
+          font="main-ui-action"
+          color="text-04"
+          wordWrap="whitespace-nowrap"
+        >
+          {subagentName(agent.path)}
+        </Text>
+      </Section>
+    </Section>
+  );
+}
 
 function Header() {
   const t = useTranslations("chat.appChrome");
@@ -66,6 +129,7 @@ function Header() {
     incognitoAvailable,
     incognitoEnabled,
     incognitoLocked,
+    incognitoSessionId,
     toggleIncognito,
     setIncognitoEnabled,
   } = useIncognito();
@@ -99,7 +163,8 @@ function Header() {
   // into a session being torn down. The server deletes that session's uploads
   // itself, including any that landed late.
   const handleExitIncognito = useCallback(async () => {
-    const sessionId = currentChatSessionId;
+    const sessionId = currentChatSessionId ?? incognitoSessionId;
+    const navigationAtExit = getNewSessionNavigation();
     if (sessionId) {
       let tornDown = false;
       try {
@@ -113,15 +178,22 @@ function Header() {
         showErrorNotification("Could not end the incognito chat. Try again.");
         return;
       }
-      removeSession(sessionId);
+      if (currentChatSessionId) removeSession(currentChatSessionId);
+    }
+    if (navigationAtExit !== getNewSessionNavigation()) return;
+    const liveChatId = useChatSessionStore.getState().currentSessionId;
+    if (!currentChatSessionId && liveChatId === sessionId && liveChatId) {
+      removeSession(liveChatId);
+      useChatSessionStore.getState().setCurrentSession(null);
     }
     setIncognitoEnabled(false);
     setCurrentMessageFiles([]);
-    if (sessionId) {
+    if (currentChatSessionId || (liveChatId && liveChatId === sessionId)) {
       navigation.go("/app", { replace: true });
     }
   }, [
     currentChatSessionId,
+    incognitoSessionId,
     setIncognitoEnabled,
     setCurrentMessageFiles,
     removeSession,
@@ -239,15 +311,10 @@ function Header() {
                   currentChatSession?.id === appPosition.chat() &&
                   currentChatSession.name && (
                     <div className="min-w-0 px-2">
-                      <Text
-                        as="p"
-                        font="main-ui-action"
-                        color="text-04"
-                        maxLines={1}
-                        overflowTooltip
-                      >
-                        {currentChatSession.name}
-                      </Text>
+                      <ChatTitle
+                        sessionId={currentChatSession.id}
+                        title={currentChatSession.name}
+                      />
                     </div>
                   )}
               </div>
@@ -268,6 +335,7 @@ function Header() {
               {/*
           Right:
           - share menu
+          - activity card toggle
         */}
               {/* Without center content, the left side takes the free room */}
               <div
@@ -300,19 +368,6 @@ function Header() {
                     )}
                   </FrostedDiv>
                 )}
-                {/* Once the store holds the chat on screen, also for a chat
-                    outside the loaded Recents */}
-                {appPosition.isChat() &&
-                  storeSessionId !== null &&
-                  storeSessionId === appPosition.chat() &&
-                  !incognitoEnabled && (
-                    <FrostedDiv className="flex shrink flex-row items-center">
-                      <ChatActivity
-                        key={storeSessionId}
-                        sessionId={storeSessionId}
-                      />
-                    </FrostedDiv>
-                  )}
                 {/* Only for the chat on screen: during a navigation to another
                     chat, the URL's session is still the one these act on. */}
                 {appPosition.isChat() &&
@@ -347,6 +402,19 @@ function Header() {
                           ]}
                         />
                       </Dropdown>
+                    </FrostedDiv>
+                  )}
+                {/* After the share menu. Once the store holds the chat on
+                    screen, also for a chat outside the loaded Recents */}
+                {appPosition.isChat() &&
+                  storeSessionId !== null &&
+                  storeSessionId === appPosition.chat() &&
+                  !incognitoEnabled && (
+                    <FrostedDiv className="flex shrink flex-row items-center">
+                      <ChatActivity
+                        key={storeSessionId}
+                        sessionId={storeSessionId}
+                      />
                     </FrostedDiv>
                   )}
               </div>
@@ -498,8 +566,7 @@ export default function AppChrome({ children }: AppChromeProps) {
               ref={pageRef}
               data-app-page
               className={cn(
-                // Eases the room for the panel toggle with the panel's slide
-                "@container relative isolate flex-1 flex flex-col min-h-0 [transition-property:--panel-toggle-reserve] ease-in-out duration-300 motion-reduce:transition-none",
+                "@container relative isolate flex-1 flex flex-col min-h-0",
                 // A docked activity card covers the workspace's end below the
                 // header: the chat's scrolled content, its input row
                 // (`data-activity-room`) and the footer make room. The header

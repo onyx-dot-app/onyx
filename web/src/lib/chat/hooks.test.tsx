@@ -1,12 +1,18 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { SWRConfig, useSWRConfig } from "swr";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import {
   Packet,
   PacketType,
+  StopReason,
   ToolApprovalRequest,
 } from "@/app/app/services/streamingModels";
 import {
   useChatSessionQueue,
+  useChatSessionStatus,
+  useChatSubagents,
+  useJumpToLatestReason,
+  useOpenArtifactFromUrl,
   usePublishedFiles,
   useSendChatMessageFromURL,
   useToolRequests,
@@ -14,20 +20,27 @@ import {
 import type { Message } from "@/app/app/types";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { useToolRequestUi } from "@/lib/chat/toolApprovals";
+import {
+  ToolRequestDeciderContext,
+  useToolRequestUi,
+} from "@/lib/chat/toolApprovals";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { endedRunStatus } from "@/lib/chat/runStatus";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
+import type { ChatArtifactFile } from "@/lib/chat/publishedFiles";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 
 jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 jest.mock("@/lib/chat/settleChatSession", () => ({
   ...jest.requireActual("@/lib/chat/settleChatSession"),
   refreshChatSession: jest.fn(async () => {}),
 }));
-let mockSearchParams = new URLSearchParams({
+const SEND_ON_LOAD_PARAMS = new URLSearchParams({
   "user-prompt": "hello",
   "send-on-load": "true",
   tags: "eng",
 });
+let mockSearchParams = SEND_ON_LOAD_PARAMS;
 jest.mock("@opal/navigation", () => ({
   ...jest.requireActual("@opal/navigation"),
   useNavigation: () => ({ go: jest.fn() }),
@@ -91,6 +104,7 @@ function question(questionRequestId: string, turnIndex: number): Packet {
             { label: "All", description: "Every file." },
             { label: "Some", description: "Some files." },
           ],
+          multi_select: false,
         },
       ],
     },
@@ -186,6 +200,36 @@ describe("useToolRequests", () => {
   });
 });
 
+describe("useToolRequests in a chat that the viewer only reads", () => {
+  function readOnly({ children }: { children: React.ReactNode }) {
+    return (
+      <ToolRequestDeciderContext.Provider value={false}>
+        {children}
+      </ToolRequestDeciderContext.Provider>
+    );
+  }
+
+  it("waits for the owner's approval, not the viewer's", () => {
+    const packets = [request("a", 1)];
+
+    const { result } = renderHook(() => useToolRequests(packets), {
+      wrapper: readOnly,
+    });
+
+    expect(result.current.awaiting).toBe("ownerApproval");
+  });
+
+  it("waits for the owner's answer, not the viewer's", () => {
+    const packets = [question("q", 1)];
+
+    const { result } = renderHook(() => useToolRequests(packets), {
+      wrapper: readOnly,
+    });
+
+    expect(result.current.awaiting).toBe("ownerAnswer");
+  });
+});
+
 describe("useChatSessionQueue", () => {
   beforeEach(() => jest.mocked(refreshChatSession).mockClear());
   afterEach(() => jest.restoreAllMocks());
@@ -242,6 +286,43 @@ describe("useChatSessionQueue", () => {
     );
   });
 
+  it("polls the status while a shown request waits, so a decision made elsewhere arrives", async () => {
+    startChat("waiting-session");
+    const node = (
+      nodeId: number,
+      type: Message["type"],
+      parentNodeId: number | null
+    ): Message => ({
+      nodeId,
+      messageId: nodeId,
+      type,
+      message: "",
+      files: [],
+      packets: type === "assistant" ? [request("a", 1)] : [],
+      toolCall: null,
+      parentNodeId,
+      latestChildNodeId: type === "user" ? 2 : null,
+    });
+    useChatSessionStore.getState().updateSessionMessageTree(
+      "waiting-session",
+      new Map([
+        [1, node(1, "user", null)],
+        [2, node(2, "assistant", 1)],
+      ])
+    );
+    const fetchMock = serveStatus("");
+    const statusReads = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/status")
+      ).length;
+
+    renderHook(() => useChatSessionQueue(true));
+
+    await waitFor(() => expect(statusReads()).toBeGreaterThanOrEqual(2), {
+      timeout: 5000,
+    });
+  });
+
   it("refreshes an incognito chat whose approvals changed, without its server queue", async () => {
     useChatSessionStore.setState({
       sessions: new Map(),
@@ -279,6 +360,180 @@ describe("useChatSessionQueue", () => {
     expect(
       fetchMock.mock.calls.every(([input]) => String(input).endsWith("/status"))
     ).toBe(true);
+  });
+});
+
+describe("useChatSessionStatus", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  // Moves the clock past one poll and lets the reads it starts settle.
+  async function passPoll(): Promise<void> {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(2500);
+    });
+  }
+
+  function serveIdleStatus() {
+    return jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_startable_input: false,
+            has_active_subagents: false,
+            latest_response_id: null,
+            approvals_version: "",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    );
+  }
+
+  function statusReads(fetchMock: jest.SpyInstance): number {
+    return fetchMock.mock.calls.filter(([input]) =>
+      String(input).endsWith("/status")
+    ).length;
+  }
+
+  function startChat(
+    sessionId: string,
+    chatState: "input" | "streaming",
+    packets: Packet[]
+  ) {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: sessionId,
+    });
+    useChatSessionStore.getState().createSession(sessionId, { chatState });
+    const user: Message = {
+      nodeId: 1,
+      messageId: 1,
+      type: "user",
+      message: "",
+      files: [],
+      packets: [],
+      toolCall: null,
+      parentNodeId: null,
+      latestChildNodeId: 2,
+    };
+    useChatSessionStore.getState().updateSessionMessageTree(
+      sessionId,
+      new Map([
+        [1, user],
+        [
+          2,
+          {
+            ...user,
+            nodeId: 2,
+            messageId: 2,
+            type: "assistant",
+            packets,
+            parentNodeId: 1,
+            latestChildNodeId: null,
+          },
+        ],
+      ])
+    );
+  }
+
+  // Each hook gets its own SWR cache, so each reads the status itself.
+  function fresh({ children }: { children: React.ReactNode }) {
+    return (
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        {children}
+      </SWRConfig>
+    );
+  }
+
+  it("reads an idle chat's status once", async () => {
+    startChat("idle-session", "input", []);
+    const fetchMock = serveIdleStatus();
+
+    renderHook(() => useChatSessionStatus("idle-session"), { wrapper: fresh });
+
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await passPoll();
+    expect(statusReads(fetchMock)).toBe(1);
+  });
+
+  it("polls while a reply streams", async () => {
+    startChat("streaming-session", "streaming", []);
+    const fetchMock = serveIdleStatus();
+
+    renderHook(() => useChatSessionStatus("streaming-session"), {
+      wrapper: fresh,
+    });
+
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await passPoll();
+    expect(statusReads(fetchMock)).toBeGreaterThan(1);
+  });
+
+  it("keeps polling while its host renders more often than it polls", async () => {
+    startChat("busy-session", "input", []);
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_startable_input: false,
+            has_active_subagents: true,
+            latest_response_id: null,
+            approvals_version: "",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    );
+
+    const { rerender } = renderHook(
+      () => useChatSessionStatus("busy-session"),
+      {
+        wrapper: fresh,
+      }
+    );
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    for (let step = 0; step < 5; step++) {
+      rerender();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(500);
+      });
+    }
+    expect(statusReads(fetchMock)).toBeGreaterThan(1);
+  });
+
+  it("reloads when its key is mutated", async () => {
+    startChat("mutated-session", "input", []);
+    const fetchMock = serveIdleStatus();
+
+    const { result } = renderHook(
+      () => {
+        useChatSessionStatus("mutated-session");
+        return useSWRConfig().mutate;
+      },
+      { wrapper: fresh }
+    );
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await act(async () => {
+      await result.current(SWR_KEYS.chatSessionStatus("mutated-session"));
+    });
+    expect(statusReads(fetchMock)).toBe(2);
+  });
+
+  it("polls for the agents list while a shown request waits, as for the queue", async () => {
+    startChat("agents-session", "input", [request("a", 1)]);
+    const fetchMock = serveIdleStatus();
+
+    renderHook(() => useChatSubagents("agents-session"), { wrapper: fresh });
+
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await passPoll();
+    expect(statusReads(fetchMock)).toBeGreaterThan(1);
   });
 });
 
@@ -425,6 +680,7 @@ describe("usePublishedFiles", () => {
           artifact_id: "artifact-1",
           version: 1,
           thumbnail_file_id: null,
+          chat_id: null,
         },
       ],
       error: null,
@@ -453,4 +709,257 @@ describe("usePublishedFiles", () => {
     rerender();
     expect(result.current).toBe(first);
   });
+});
+
+describe("useJumpToLatestReason", () => {
+  const SESSION = "jump-session";
+
+  function setReply(packets: Packet[]) {
+    const node = (
+      nodeId: number,
+      type: Message["type"],
+      parentNodeId: number | null
+    ): Message => ({
+      nodeId,
+      messageId: nodeId,
+      type,
+      message: "",
+      files: [],
+      packets: type === "assistant" ? packets : [],
+      toolCall: null,
+      parentNodeId,
+      latestChildNodeId: type === "user" ? 2 : null,
+    });
+    useChatSessionStore.getState().updateSessionMessageTree(
+      SESSION,
+      new Map([
+        [1, node(1, "user", null)],
+        [2, node(2, "assistant", 1)],
+      ])
+    );
+  }
+
+  const delta = (content: string): Packet => ({
+    placement: { turn_index: 0, tab_index: 0 },
+    obj: { type: PacketType.MESSAGE_DELTA, content },
+  });
+
+  beforeEach(() => {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: SESSION,
+    });
+    useChatSessionStore
+      .getState()
+      .createSession(SESSION, { chatState: "streaming" });
+    setReply([delta("Hello")]);
+  });
+
+  it("names nothing while the button is hidden", () => {
+    setReply([request("a", 1)]);
+    const { result } = renderHook(() => useJumpToLatestReason(false));
+    expect(result.current).toBeNull();
+  });
+
+  it("names a waiting approval until this client decides it", () => {
+    setReply([request("a", 1), question("q", 2)]);
+    const { result, rerender } = renderHook(() => useJumpToLatestReason(true));
+    expect(result.current).toBe("approval");
+
+    useToolRequestUi.getState().recordStatus("a", "approved");
+    rerender();
+    expect(result.current).toBe("question");
+  });
+
+  it("names a new answer once the run ends with output after the scroll", () => {
+    const { result, rerender } = renderHook(
+      ({ visible }) => useJumpToLatestReason(visible),
+      { initialProps: { visible: true } }
+    );
+    expect(result.current).toBeNull();
+
+    setReply([delta("Hello"), delta(" world")]);
+    rerender({ visible: true });
+    // Still streaming: the plain button stays.
+    expect(result.current).toBeNull();
+
+    useChatSessionStore.getState().updateChatState(SESSION, "input");
+    rerender({ visible: true });
+    expect(result.current).toBe("newAnswer");
+
+    // Back at the end, then away again: nothing new since.
+    rerender({ visible: false });
+    rerender({ visible: true });
+    expect(result.current).toBeNull();
+  });
+
+  it("does not call a final stop packet a new answer", () => {
+    const { result } = renderHook(() => useJumpToLatestReason(true));
+    act(() => {
+      setReply([
+        delta("Hello"),
+        {
+          placement: { turn_index: 0, tab_index: 0 },
+          obj: { type: PacketType.STOP },
+        },
+      ]);
+      useChatSessionStore.getState().updateChatState(SESSION, "input");
+    });
+    expect(result.current).toBeNull();
+  });
+
+  it.each([
+    [StopReason.TIMED_OUT, "failed"],
+    [StopReason.USER_CANCELLED, null],
+    [StopReason.FINISHED, "done"],
+  ])("records the terminal status for %s", (stop_reason, expected) => {
+    setReply([
+      delta("Hello"),
+      {
+        placement: { turn_index: 0, tab_index: 0 },
+        obj: { type: PacketType.STOP, stop_reason },
+      },
+    ]);
+    useChatSessionStore.getState().updateChatState(SESSION, "input");
+    const session = useChatSessionStore.getState().sessions.get(SESSION);
+    if (!session) throw new Error("Expected a chat session");
+    expect(endedRunStatus(session)).toBe(expected);
+  });
+
+  it("keeps a rejected local send out of the followed run's status", () => {
+    setReply([delta("Hello")]);
+    const store = useChatSessionStore.getState();
+    store.updateChatState(SESSION, "input");
+    store.setUncaughtError(SESSION, {
+      error: "A run is already active",
+      affectsRunStatus: false,
+    });
+    const session = useChatSessionStore.getState().sessions.get(SESSION);
+    if (!session) throw new Error("Expected a chat session");
+    expect(endedRunStatus(session)).toBe("done");
+  });
+
+  it("names no new answer for output that loads into an idle chat", () => {
+    useChatSessionStore.getState().updateChatState(SESSION, "input");
+    const { result, rerender } = renderHook(() => useJumpToLatestReason(true));
+
+    // An opened chat's history arrives, or its settled run is fetched again.
+    act(() => setReply([delta("Hello"), delta(" world")]));
+    rerender();
+    expect(result.current).toBeNull();
+  });
+});
+
+describe("useOpenArtifactFromUrl", () => {
+  const ARTIFACT_ID = "5b1d2c3e-0000-4000-8000-000000000000";
+  const FILE: ChatArtifactFile = {
+    file_id: "report-v1",
+    name: "report.md",
+    title: null,
+    path: "/outputs/report.md",
+    display_path: "report.md",
+    size: 1,
+    mime_type: "text/markdown",
+    artifact_id: ARTIFACT_ID,
+    version: 1,
+    thumbnail_file_id: null,
+    chat_id: "chat",
+    access: "owner",
+  };
+
+  beforeEach(() => {
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(
+        async () => new Response(JSON.stringify(FILE), { status: 200 })
+      );
+  });
+
+  afterEach(() => {
+    mockSearchParams = SEND_ON_LOAD_PARAMS;
+    jest.restoreAllMocks();
+  });
+
+  test.each([
+    ["names a version opens it pinned", "1", true],
+    ["names no version follows the newest", null, false],
+  ])("a URL that %s", async (_, version, pinned) => {
+    mockSearchParams = new URLSearchParams({
+      [SEARCH_PARAM_NAMES.ARTIFACT_ID]: ARTIFACT_ID,
+      ...(version ? { [SEARCH_PARAM_NAMES.ARTIFACT_VERSION]: version } : {}),
+    });
+    const openFile = jest.fn();
+    renderHook(() => useOpenArtifactFromUrl("chat", openFile));
+    await waitFor(() => expect(openFile).toHaveBeenCalledWith(FILE, pinned));
+  });
+
+  test("a cached response of an earlier visit waits for the newest version", async () => {
+    mockSearchParams = new URLSearchParams({
+      [SEARCH_PARAM_NAMES.ARTIFACT_ID]: ARTIFACT_ID,
+    });
+    const newer = { ...FILE, file_id: "report-v2", version: 2 };
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(
+        async () => new Response(JSON.stringify(newer), { status: 200 })
+      );
+    const cache = new Map([
+      [SWR_KEYS.chatArtifact(ARTIFACT_ID, null), { data: FILE }],
+    ]);
+    const openFile = jest.fn();
+    renderHook(() => useOpenArtifactFromUrl("chat", openFile), {
+      wrapper: ({ children }) => (
+        <SWRConfig value={{ provider: () => cache }}>{children}</SWRConfig>
+      ),
+    });
+    await waitFor(() => expect(openFile).toHaveBeenCalledWith(newer, false));
+    expect(openFile).toHaveBeenCalledTimes(1);
+  });
+
+  test("a cached response of an earlier visit stays shut when the reload fails", async () => {
+    mockSearchParams = new URLSearchParams({
+      [SEARCH_PARAM_NAMES.ARTIFACT_ID]: ARTIFACT_ID,
+    });
+    jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ detail: "Not found" }), {
+          status: 404,
+        })
+    );
+    const cache = new Map([
+      [SWR_KEYS.chatArtifact(ARTIFACT_ID, null), { data: FILE }],
+    ]);
+    const openFile = jest.fn();
+    renderHook(() => useOpenArtifactFromUrl("chat", openFile), {
+      wrapper: ({ children }) => (
+        <SWRConfig value={{ provider: () => cache, shouldRetryOnError: false }}>
+          {children}
+        </SWRConfig>
+      ),
+    });
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(openFile).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["../x", null],
+    [ARTIFACT_ID, "x"],
+    [ARTIFACT_ID, "1.5"],
+  ])(
+    "an artifact %s at version %s that no link names makes no request",
+    async (artifactId, version) => {
+      mockSearchParams = new URLSearchParams({
+        [SEARCH_PARAM_NAMES.ARTIFACT_ID]: artifactId,
+        ...(version ? { [SEARCH_PARAM_NAMES.ARTIFACT_VERSION]: version } : {}),
+      });
+      const openFile = jest.fn();
+      renderHook(() => useOpenArtifactFromUrl("chat", openFile));
+      await act(async () => {});
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(openFile).not.toHaveBeenCalled();
+    }
+  );
 });

@@ -1,9 +1,10 @@
 import datetime
+import posixpath
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from datetime import timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import (
@@ -26,6 +27,8 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
+from onyx.chat.agent_stream import read_agent_stream_pointer
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
     current_turn_owner,
@@ -37,6 +40,10 @@ from onyx.chat.chat_utils import (
     create_chat_session_from_request,
 )
 from onyx.chat.errors import unhandled_stream_error
+from onyx.chat.file_preview import (
+    convert_chat_file_preview_pdf,
+    read_stored_chat_file_preview,
+)
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
     incognito_allowed_for_user,
@@ -49,6 +56,7 @@ from onyx.chat.models import (
     PendingChatMessage,
     SavedToolQuestion,
 )
+from onyx.chat.presentation import overall_stop
 from onyx.chat.process_message import (
     USER_INPUT_PENDING,
     dispatch_pending_chat_messages,
@@ -81,6 +89,8 @@ from onyx.configs.constants import (
 )
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
+from onyx.db.access import user_can_read_chat_session
+from onyx.db.action_approval import get_chat_action_approval_for_user
 from onyx.db.approval_request import (
     approvals_version,
     close_pending_approval_requests__no_commit,
@@ -90,9 +100,11 @@ from onyx.db.approval_request import (
 from onyx.db.chat import (
     add_chat_session__no_commit,
     add_chats_to_session_from_slack_thread,
+    agent_subtree_ids,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
+    get_chat_artifact_file,
     get_chat_message,
     get_chat_message_page_ids,
     get_chat_messages_by_session,
@@ -128,7 +140,12 @@ from onyx.db.chat_response import (
     waiting_approval_reply_ids,
 )
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.chat_subagents import load_session_agent_metadata
+from onyx.db.chat_subagents import (
+    agent_run_summaries,
+    latest_agent_response,
+    load_session_agent_metadata,
+    selected_agent_message_ids,
+)
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     ApprovalDecidedVia,
@@ -139,12 +156,16 @@ from onyx.db.enums import (
     record_mode_persists_content,
 )
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.incognito import (
     is_incognito_teardown_target,
     mark_incognito_user_files_deleting,
 )
 from onyx.db.models import (
+    ApprovalRequest,
+    ChatMessage,
     ChatSessionSharedStatus,
+    FileRecord,
     Persona,
     User,
 )
@@ -158,6 +179,7 @@ from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.file_types import PDF_MIME_TYPE
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.serving import (
     ATTACHMENT_SAFE_MIME_TYPES,
@@ -165,7 +187,9 @@ from onyx.file_store.serving import (
     ensure_filename_extension,
     resolve_inline_disposition,
 )
+from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
 from onyx.integrations.models import ApprovalMode
+from onyx.integrations.policy import integration_action_always_asks
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
     get_llm_for_persona,
@@ -190,10 +214,17 @@ from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
     parse_spreadsheet_for_preview,
 )
+from onyx.server.query_and_chat.command_approvals import (
+    decide_command_approval,
+    saved_answer_or_conflict,
+)
 from onyx.server.query_and_chat.models import (
     ApprovalDecisionResponse,
     ChatApprovalDecisionRequest,
+    ChatArtifactAccess,
+    ChatArtifactFile,
     ChatFeedbackRequest,
+    ChatMessageDetail,
     ChatMessageIdentifier,
     ChatQuestionAnswersRequest,
     ChatRenameRequest,
@@ -207,6 +238,7 @@ from onyx.server.query_and_chat.models import (
     ChatSessionSummary,
     ChatSessionUpdateRequest,
     ChatSubagent,
+    ChatSubagentHistory,
     CurrentStreamInfo,
     MessageOrigin,
     PendingChatMessageRequest,
@@ -215,18 +247,22 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
     SetPreferredResponseRequest,
     StopChatResponse,
+    StopSubagentsRequest,
     StopSubagentsResponse,
     UpdateChatSessionReasoningRequest,
     UpdateChatSessionTemperatureRequest,
     UpdateChatSessionThreadRequest,
 )
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.session_loading import (
     load_session_tools,
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
+    OverallStop,
     Packet,
     StreamCursor,
+    ToolApprovalRequest,
     UserMessagePacket,
     heartbeat_packet,
 )
@@ -240,6 +276,12 @@ from onyx.server.usage_limits import (
 from onyx.server.utils import get_json_line
 from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
@@ -563,46 +605,9 @@ def get_chat_session(
             if before_message_id is None
             else (),
         )
-    session_messages = get_chat_messages_by_session(
-        chat_session_id=session_id,
-        user_id=user_id,
-        db_session=db_session,
-        message_ids=page_message_ids,
-        # we already did a permission check above with the call to
-        # `get_chat_session_by_id`, so we can skip it here
-        skip_permission_check=True,
-        # we need the tool call objs anyways, so just fetch them in a single call
-        prefetch_top_two_level_tool_calls=True,
-        prefetch_message_details=True,
-        # the replay builds search and fetch packets from these
-        prefetch_tool_call_search_docs=True,
+    chat_message_details, replay_packet_lists = _session_messages_and_packets(
+        db_session, session_id, user_id, page_message_ids
     )
-
-    # Convert messages to ChatMessageDetail format
-    chat_message_details = [
-        translate_db_message_to_chat_message_detail(msg) for msg in session_messages
-    ]
-
-    # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
-    # Each list is the set of tool calls for the given assistant message.
-    tools_by_id = load_session_tools(session_messages, db_session)
-    responses = [
-        msg for msg in session_messages if msg.message_type == MessageType.ASSISTANT
-    ]
-    chat_approvals = load_chat_approvals(
-        db_session, session_id, [msg.id for msg in responses]
-    )
-    child_responses = load_child_responses(db_session, responses)
-    replay_packet_lists: list[list[Packet]] = [
-        translate_assistant_message_to_packets(
-            chat_message=msg,
-            tools_by_id=tools_by_id,
-            chat_approvals=chat_approvals,
-            child_responses=child_responses,
-            db_session=db_session,
-        )
-        for msg in responses
-    ]
     # The client keeps the list from a latest-page load, and the shared view
     # from its full load; an older page does not need it. Read after the
     # replay, so the list holds every file that a replayed call published.
@@ -613,7 +618,8 @@ def get_chat_session(
     )
     if is_shared:
         # A shared view shows no skills the owner picked: not on questions and
-        # not on messages accepted during a response.
+        # not on messages accepted during a response. It also names no
+        # integration on an approval card, as the viewer may not have access.
         chat_message_details = [
             detail.model_copy(update={"mentions": []})
             for detail in chat_message_details
@@ -624,6 +630,10 @@ def get_chat_session(
                     update={"obj": packet.obj.model_copy(update={"mentions": []})}
                 )
                 if isinstance(packet.obj, UserMessagePacket)
+                else packet.model_copy(
+                    update={"obj": packet.obj.model_copy(update={"app_name": None})}
+                )
+                if isinstance(packet.obj, ToolApprovalRequest)
                 else packet
                 for packet in packets
             ]
@@ -724,15 +734,27 @@ def rename_chat_session(
             return RenameChatSessionResponse(new_name=DEFAULT_CHAT_SESSION_NAME)
 
     # Returns a saved name, including one the chat turn is still generating.
-    return RenameChatSessionResponse(
-        new_name=name_chat_session(
+    try:
+        new_name = name_chat_session(
             chat_session_id=chat_session_id,
             user=user,
             additional_headers=get_relevant_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
             ),
+            regenerate=rename_req.regenerate,
         )
-    )
+    except OnyxError:
+        raise
+    except Exception as error:
+        if not rename_req.regenerate:
+            raise
+        # A failed regeneration keeps the old name and reports the model failure.
+        logger.warning("Failed to regenerate chat session name: %s", error)
+        raise OnyxError(
+            OnyxErrorCode.LLM_PROVIDER_ERROR,
+            "Could not generate a new chat name",
+        ) from error
+    return RenameChatSessionResponse(new_name=new_name)
 
 
 @router.patch("/chat-session/{session_id}")
@@ -788,11 +810,12 @@ def delete_all_chat_sessions(
             "Some generated files could not be deleted yet. Try again shortly.",
         )
     try:
-        deleted_ids = delete_all_chat_sessions_for_user(
+        deleted_ids, artifact_ids = delete_all_chat_sessions_for_user(
             user=user, db_session=db_session
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+    delete_chat_artifacts_from_index(artifact_ids)
     purge_deleted_chat_sessions(user.id, deleted_ids)
     # Read after the delete commits: a park either commits first or refuses.
     if not HARD_DELETE_CHATS:
@@ -840,11 +863,12 @@ def delete_chat_session_by_id(
         actual_hard_delete = (
             hard_delete if hard_delete is not None else HARD_DELETE_CHATS
         )
-        delete_chat_session(
+        artifact_ids = delete_chat_session(
             user_id, session_id, db_session, hard_delete=actual_hard_delete
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+    delete_chat_artifacts_from_index(artifact_ids)
     purge_deleted_chat_sessions(user_id, [session_id])
     # Read after the delete commits: a park either commits first or refuses.
     if not actual_hard_delete:
@@ -1298,46 +1322,110 @@ def seed_chat_from_slack(
     )
 
 
+@router.get("/artifacts/{artifact_id}")
+def get_chat_artifact(
+    artifact_id: UUID,
+    version: int | None = Query(None),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ChatArtifactFile:
+    """A published file's version, by default its newest, and how the user
+    may open it: the owner of its chat, a reader of that chat (a public
+    share), or, for an explicit version, anyone who can download that
+    version (`user_can_access_chat_file`), such as a reader of another chat
+    that added it. 404 otherwise, and for a deleted chat; the web opens an
+    artifact link with it."""
+    found = get_chat_artifact_file(db_session, artifact_id, version)
+    if found is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
+    chat, file = found
+    access: ChatArtifactAccess
+    if chat.user_id == user.id:
+        access = "owner"
+    elif user_can_read_chat_session(db_session, chat.id, user.id):
+        access = "chat_reader"
+    elif version is not None and user_can_access_chat_file(
+        file.file_id, user, db_session
+    ):
+        access = "file_only"
+    else:
+        # The same 404, so callers cannot probe for artifacts of others.
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
+    return ChatArtifactFile(**file.model_dump(exclude={"display_path"}), access=access)
+
+
+def _readable_chat_file_record(
+    file_id: str, user: User, db_session: Session
+) -> FileRecord:
+    """The record of the chat file `file_id`, a stored file's id or a user
+    file's id, when `user` can read it. Raises OnyxError NOT_FOUND
+    otherwise, also for a file of another user, so callers cannot probe for
+    files across ownership boundaries."""
+    # For user files, we need to get the file id from the user file id
+    file_id_from_user_file = get_file_id_by_user_file_id(file_id, db_session)
+    if file_id_from_user_file:
+        file_id = file_id_from_user_file
+    if not user_can_access_chat_file(file_id, user, db_session):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+    try:
+        file_record = get_default_file_store().read_file_record(file_id)
+    except FileRecordNotFoundError:
+        file_record = None
+    if not file_record:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+    return file_record
+
+
+def _chat_file_preview_disposition(file_name: str) -> tuple[str, dict[str, str]]:
+    """The media type and security headers of the PDF preview of the chat
+    file named `file_name`: inline, named after the file with a .pdf
+    extension."""
+    return resolve_inline_disposition(
+        PDF_MIME_TYPE, filename=f"{posixpath.splitext(file_name)[0]}.pdf"
+    )
+
+
 @router.get("/file/{file_id:path}", tags=PUBLIC_API_TAGS)
 def fetch_chat_file(
     file_id: str,
     request: Request,
     parsed: bool = Query(False),
+    preview: Annotated[Literal["pdf"] | None, Query()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    # For user files, we need to get the file id from the user file id
-    file_id_from_user_file = get_file_id_by_user_file_id(file_id, db_session)
-    if file_id_from_user_file:
-        file_id = file_id_from_user_file
-
-    if not user_can_access_chat_file(file_id, user, db_session):
-        # Return 404 (rather than 403) so callers cannot probe for file
-        # existence across ownership boundaries.
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
-
+    """Download a chat file that you can read. `parsed=true` returns a
+    spreadsheet as JSON sheets. `preview=pdf` returns the stored PDF preview
+    of a PowerPoint or Word file of a chat upload or a published file, and
+    never converts: 422 `PREVIEW_UNAVAILABLE` when the file can have no PDF
+    preview (not such a file, or no upload or published file owns it, or its
+    upload is being deleted), and 409 `PREVIEW_NOT_READY` when
+    no PDF is stored yet: ask for it with `POST /chat/file/{file_id}/preview`.
+    A file that you cannot read is 404."""
+    file_record = _readable_chat_file_record(file_id, user, db_session)
+    file_id = file_record.file_id
     file_store = get_default_file_store()
-    file_record = file_store.read_file_record(file_id)
-    if not file_record:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+    file_name = file_record.display_name or file_id
 
     # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
     # the frontend cannot render); everything else is served raw as usual.
     parse_spreadsheet = parsed and is_spreadsheet_mime_type(file_record.file_type)
 
-    media_type, security_headers = resolve_inline_disposition(
-        file_record.file_type,
-        filename=ensure_filename_extension(
-            file_record.display_name or file_id, file_record.file_type
-        ),
-        attachment_types=ATTACHMENT_SAFE_MIME_TYPES,
-        # A parsed spreadsheet is served as a JSON preview, not as the stored bytes.
-        fallback_disposition=None if parse_spreadsheet else "attachment",
-    )
+    if preview is None:
+        media_type, security_headers = resolve_inline_disposition(
+            file_record.file_type,
+            filename=ensure_filename_extension(file_name, file_record.file_type),
+            attachment_types=ATTACHMENT_SAFE_MIME_TYPES,
+            # A parsed spreadsheet is served as a JSON preview, not as the stored bytes.
+            fallback_disposition=None if parse_spreadsheet else "attachment",
+        )
+        etag_variant = "-parsed" if parse_spreadsheet else ""
+    else:
+        media_type, security_headers = _chat_file_preview_disposition(file_name)
+        etag_variant = "-preview-pdf"
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
-    etag_variant: str = "-parsed" if parse_spreadsheet else ""
     etag: str = f'"{file_id}{etag_variant}-{RESPONSE_POLICY_VERSION}"'
     cache_headers: dict[str, str] = {
         "Cache-Control": "private, max-age=31536000, immutable",
@@ -1349,17 +1437,83 @@ def fetch_chat_file(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    def audit_download() -> None:
+        # One event per user, file and form in the dedup window: the browser
+        # fetches the same image each time a chat renders. Written once the
+        # content is known to be served, so a refused preview claims no window.
+        emit_audit_event(
+            AuditAction.FILE_DOWNLOAD,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="file",
+            resource_id=file_id,
+            dedup_key=f"file_download:{user.id}:{file_id}{etag_variant}",
+            extra={
+                "file_name": file_name,
+                "file_type": file_record.file_type,
+                "form": preview or ("parsed" if parse_spreadsheet else "original"),
+            },
+        )
+
+    if preview is not None:
+        stored = read_stored_chat_file_preview(db_session, file_record)
+        if stored is None:
+            raise OnyxError(
+                OnyxErrorCode.PREVIEW_NOT_READY, "The PDF preview is not made yet"
+            )
+        audit_download()
+        # The link is written once, so the ETag names one PDF.
+        return StreamingResponse(
+            stored,
+            media_type=media_type,
+            headers=cache_headers,
+        )
+
     if parse_spreadsheet:
         # Use a tempfile since openpyxl needs a seekable file and the workbook
         # may be large.
         with file_store.read_file(file_id, mode="b", use_tempfile=True) as xlsx_io:
-            preview = parse_spreadsheet_for_preview(
+            preview_sheets = parse_spreadsheet_for_preview(
                 xlsx_io, file_record.display_name or ""
             )
-        return JSONResponse(content=preview.model_dump(), headers=cache_headers)
+        audit_download()
+        return JSONResponse(content=preview_sheets.model_dump(), headers=cache_headers)
 
     file_io = file_store.read_file(file_id, mode="b")
+    audit_download()
     return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
+
+
+@router.post("/file/{file_id:path}/preview", tags=PUBLIC_API_TAGS)
+def make_chat_file_preview(
+    file_id: str,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """The PDF preview of a PowerPoint or Word file of a chat upload or a
+    published file that you can read: the stored PDF, else the PDF that the
+    sandbox of the file's owner converts, which can take some seconds, and
+    which later `GET /chat/file/{file_id}?preview=pdf` requests return.
+    Errors: 404 for a file that you cannot read. 422 `PREVIEW_UNAVAILABLE`
+    when the file has no PDF preview now (not such a file, no upload or
+    published file owns it or its upload is being deleted, larger than the
+    conversion limit, a file that the converter rejects or cannot
+    convert within its time limit, or no sandbox in the deployment):
+    download the file instead. 503 when the sandbox cannot start or be
+    reached now: try again."""
+    file_record = _readable_chat_file_record(file_id, user, db_session)
+    media_type, security_headers = _chat_file_preview_disposition(
+        file_record.display_name or file_record.file_id
+    )
+    return StreamingResponse(
+        convert_chat_file_preview_pdf(db_session, file_record),
+        media_type=media_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Vary": "Cookie",
+            **security_headers,
+        },
+    )
 
 
 @router.get("/search", tags=PUBLIC_API_TAGS)
@@ -1521,6 +1675,74 @@ def get_chat_session_processing_status(
     return status
 
 
+def _session_messages_and_packets(
+    db_session: Session,
+    session_id: UUID,
+    user_id: UUID | None,
+    message_ids: set[int] | None = None,
+    root_session_id: UUID | None = None,
+) -> tuple[list[ChatMessageDetail], list[list[Packet]]]:
+    """A session's messages and each response's replay packets. The caller
+    checked access to the session. With `root_session_id`, the session is one
+    of that chat's subagents: its approvals live under the root, and its ended
+    responses get the stop packet that a root's replay carries."""
+    agent_session = root_session_id is not None
+    session_messages = get_chat_messages_by_session(
+        chat_session_id=session_id,
+        user_id=user_id,
+        db_session=db_session,
+        message_ids=message_ids,
+        agent_session=agent_session,
+        skip_permission_check=True,
+        # we need the tool call objs anyways, so just fetch them in a single call
+        prefetch_top_two_level_tool_calls=True,
+        prefetch_message_details=True,
+        # the replay builds search and fetch packets from these
+        prefetch_tool_call_search_docs=True,
+    )
+    details = [
+        translate_db_message_to_chat_message_detail(msg) for msg in session_messages
+    ]
+    # Each response replays its tool calls for the frontend.
+    tools_by_id = load_session_tools(session_messages, db_session)
+    responses = [
+        msg for msg in session_messages if msg.message_type == MessageType.ASSISTANT
+    ]
+    chat_approvals = load_chat_approvals(
+        db_session, root_session_id or session_id, [msg.id for msg in responses]
+    )
+    child_responses = load_child_responses(db_session, responses)
+    packets = [
+        translate_assistant_message_to_packets(
+            chat_message=msg,
+            tools_by_id=tools_by_id,
+            chat_approvals=chat_approvals,
+            child_responses=child_responses,
+            db_session=db_session,
+        )
+        for msg in responses
+    ]
+    if agent_session:
+        # A child's saved output ends without the stop that a root's has; a
+        # running response's comes from its live stream.
+        for msg, response_packets in zip(responses, packets, strict=True):
+            status = msg.response_status
+            if (
+                status is not None
+                and (status.is_terminal or status == RunStatus.SUSPENDED)
+                and not any(
+                    isinstance(packet.obj, OverallStop) for packet in response_packets
+                )
+            ):
+                response_packets.append(
+                    Packet(
+                        placement=Placement(turn_index=0),
+                        obj=overall_stop(status, msg.response_failure),
+                    )
+                )
+    return details, packets
+
+
 @router.get("/chat-session/{session_id}/agents")
 def get_chat_session_agents(
     session_id: UUID,
@@ -1539,19 +1761,154 @@ def get_chat_session_agents(
         selected, branch = get_selected_branch(db_session, session_id)
     if selected is None:
         return []
-    return [
-        ChatSubagent(
-            id=UUID(agent.id),
-            path=agent.path,
-            status=agent.status,
-            stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
-        )
+    # Each loader opens its own session, so this one is closed first
+    agents = [
+        agent
         for agent in load_session_agent_metadata(
             selected.id, branch=branch, include_root=False
         )
         # `spawn_agent` children; Deep Research workers run in the foreground
         if isinstance(agent.restoration_config, ChatConfiguration)
     ]
+    with get_session_with_current_tenant() as db_session:
+        summaries = agent_run_summaries(
+            db_session,
+            [int(agent.latest_run_id) for agent in agents if agent.latest_run_id],
+        )
+    cache = get_cache_backend()
+    subagents: list[ChatSubagent] = []
+    for agent in agents:
+        run_id = int(agent.latest_run_id) if agent.latest_run_id else None
+        model, duration = (
+            summaries.get(run_id, (None, None)) if run_id is not None else (None, None)
+        )
+        live = run_id is not None and (
+            agent.status is None or not agent.status.is_terminal
+        )
+        pointer = (
+            read_agent_stream_pointer(cache, run_id)
+            if live and run_id is not None
+            else None
+        )
+        subagents.append(
+            ChatSubagent(
+                id=UUID(agent.id),
+                path=agent.path,
+                status=agent.status,
+                stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
+                started_at=agent.latest_run_started_at,
+                latest_run_id=run_id,
+                stream_id=pointer.stream_id if pointer else None,
+                activity_tool=pointer.activity_tool if pointer else None,
+                model=model,
+                duration_seconds=duration,
+            )
+        )
+    return subagents
+
+
+def _authorized_agent(session_id: UUID, agent_id: UUID, user: User) -> None:
+    """404 unless the agent is below the root of the user's chat."""
+    with get_session_with_current_tenant() as db_session:
+        try:
+            get_chat_session_by_id(
+                chat_session_id=session_id, user_id=user.id, db_session=db_session
+            )
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
+        if not agent_subtree_ids(db_session, session_id, agent_id):
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Agent not found")
+
+
+def _live_response_id(latest: ChatMessage | None) -> int | None:
+    """The response whose stream a subagent view may follow: one that has not
+    ended. A worker that died leaves its pointer behind after recovery saves
+    the failure, as the agents list knows."""
+    if latest is None:
+        return None
+    status = latest.response_status
+    return latest.id if status is None or not status.is_terminal else None
+
+
+@router.get("/chat-session/{session_id}/agents/{agent_id}/history")
+def get_chat_subagent_history(
+    session_id: UUID,
+    agent_id: UUID,
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
+) -> ChatSubagentHistory:
+    """A background agent's saved conversation, in the chat page's format,
+    with the live stream of its running response."""
+    _authorized_agent(session_id, agent_id, user)
+    with get_session_with_current_tenant() as db_session:
+        # One agent can answer on several branches after an edit; show only
+        # the selected one, as the agent list does.
+        selected, branch = get_selected_branch(db_session, session_id)
+        if selected is None:
+            return ChatSubagentHistory(messages=[], packets=[], stream=None)
+        latest = latest_agent_response(db_session, branch, str(agent_id))
+        response_id = latest.id if latest is not None else None
+        live_id = _live_response_id(latest)
+        # Read the stream before the messages: a run releases its stream
+        # after its terminal save, so a missing stream means saved output.
+        pointer = (
+            read_agent_stream_pointer(get_cache_backend(), live_id)
+            if live_id is not None
+            else None
+        )
+        messages, packets = _session_messages_and_packets(
+            db_session,
+            agent_id,
+            user.id,
+            message_ids=selected_agent_message_ids(db_session, branch, agent_id),
+            root_session_id=session_id,
+        )
+    return ChatSubagentHistory(
+        messages=messages,
+        packets=packets,
+        stream=CurrentStreamInfo(
+            stream_id=pointer.stream_id, response_ids=[response_id]
+        )
+        if pointer is not None and response_id is not None
+        else None,
+    )
+
+
+@router.get("/chat-session/{session_id}/agents/{agent_id}/stream")
+def stream_chat_subagent(
+    session_id: UUID,
+    agent_id: UUID,
+    stream_id: int = Query(..., gt=0),
+    cursor: int = Query(0, ge=0),
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
+) -> StreamingResponse:
+    """Replay a background agent's live stream from ``cursor`` and tail it,
+    as ``resume-stream`` does for the root turn."""
+    _authorized_agent(session_id, agent_id, user)
+    with get_session_with_current_tenant() as db_session:
+        selected, branch = get_selected_branch(db_session, session_id)
+        latest = (
+            latest_agent_response(db_session, branch, str(agent_id))
+            if selected is not None
+            else None
+        )
+        response_id = _live_response_id(latest)
+    cache = get_cache_backend()
+
+    def live() -> bool:
+        pointer = (
+            read_agent_stream_pointer(cache, response_id)
+            if response_id is not None
+            else None
+        )
+        return pointer is not None and pointer.stream_id == stream_id
+
+    if not live():
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No live stream for this agent")
+    return _tail_stream_buffer(cache, agent_id, stream_id, cursor, live)
 
 
 @router.get("/chat-session/{session_id}/resume-stream", tags=PUBLIC_API_TAGS)
@@ -1584,25 +1941,38 @@ def resume_chat_stream(
 
     cache = get_cache_backend()
     stream = get_processing_stream(session_id, cache)
-    stream_id = stream.stream_id if stream is not None else None
-    first_read = (
-        None
-        if stream_id is None
-        or (expected_stream_id is not None and expected_stream_id != stream_id)
-        else read_stream_chunks(
-            cache,
-            session_id,
-            stream_id,
-            cursor,
-            max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
-        )
-    )
-    if (
-        stream_id is None
-        or first_read is None
-        or first_read.gap
-        or cursor > first_read.chunk_count
+    if stream is None or (
+        expected_stream_id is not None and expected_stream_id != stream.stream_id
     ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, "No resumable stream for this chat session"
+        )
+    return _tail_stream_buffer(
+        cache,
+        session_id,
+        stream.stream_id,
+        cursor,
+        lambda: is_chat_session_processing(session_id, cache),
+    )
+
+
+def _tail_stream_buffer(
+    cache: CacheBackend,
+    buffer_session_id: UUID,
+    stream_id: int,
+    cursor: int,
+    writer_live: Callable[[], bool],
+) -> StreamingResponse:
+    """Replay a stream buffer from ``cursor`` and tail it while ``writer_live``.
+    404 when the buffer is missing or has a gap at ``cursor``."""
+    first_read = read_stream_chunks(
+        cache,
+        buffer_session_id,
+        stream_id,
+        cursor,
+        max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
+    )
+    if first_read is None or first_read.gap or cursor > first_read.chunk_count:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "No resumable stream for this chat session"
         )
@@ -1636,7 +2006,7 @@ def resume_chat_stream(
                 last_emit = time.monotonic()
             elif read.done or writer_stopped:
                 return
-            elif not is_chat_session_processing(session_id, cache):
+            elif not writer_live():
                 # Drain once more after ownership ends to catch the writer's
                 # last flush.
                 writer_stopped = True
@@ -1648,7 +2018,7 @@ def resume_chat_stream(
                 time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
             next_read = read_stream_chunks(
                 cache,
-                session_id,
+                buffer_session_id,
                 stream_id,
                 chunk_cursor,
                 max_chunks=(
@@ -1800,23 +2170,29 @@ def update_chat_tool_options(
 @router.post("/chat-session/{session_id}/stop-subagents")
 def stop_chat_subagents(
     session_id: UUID,
+    body: StopSubagentsRequest | None = None,
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> StopSubagentsResponse:
     """Stop every active background agent on the selected branch, parked
-    ones included.
+    ones included, or only the body's agent and the agents below it.
 
     The root turn and its foreground workers keep running. Pending work for
-    agents below the root is dropped. The requests that the agents wait on end
-    as the user's rejection. A stopped agent's result wakes no agent; the root
-    reads it as a notice at its next step.
+    the stopped agents is dropped. The requests that the agents wait on end
+    as the user's rejection. A stopped agent's result wakes no agent; its
+    parent reads it as a notice at its next step.
     """
     get_human_input_session(db_session, session_id, user)
     cache = get_cache_backend()
     lock_agent(db_session, str(session_id))
+    agent_ids: set[UUID] | None = None
+    if body is not None and body.agent_id is not None:
+        agent_ids = agent_subtree_ids(db_session, session_id, body.agent_id)
+        if not agent_ids:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Agent not found")
     _, branch = get_selected_branch(db_session, session_id)
-    stopped = active_agent_response_ids(db_session, branch.message_ids)
-    drop_agent_work__no_commit(db_session, branch)
+    stopped = active_agent_response_ids(db_session, branch.message_ids, agent_ids)
+    drop_agent_work__no_commit(db_session, branch, agent_ids)
     close_pending_approval_requests__no_commit(
         db_session,
         ApprovalDecision.REJECTED,
@@ -1830,6 +2206,22 @@ def stop_chat_subagents(
     for response_id in stopped:
         stop_response(cache, get_current_tenant_id(), response_id, "user")
     return StopSubagentsResponse(stopped_count=len(stopped))
+
+
+def _chat_choice(
+    db_session: Session, approval: ApprovalRequest, choice: ApprovalChoice
+) -> ApprovalChoice:
+    """The choice that a tool call in the chat can take."""
+    if choice == ApprovalChoice.APPROVE_COMMAND:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "A tool call has no command to approve for"
+        )
+    # An action that asks each time takes a chat approval as a single one.
+    if choice == ApprovalChoice.APPROVE_SESSION and integration_action_always_asks(
+        db_session, approval.integration_id, approval.action_id
+    ):
+        return ApprovalChoice.APPROVE_ONCE
+    return choice
 
 
 @router.post("/approvals/{approval_id}/decision", tags=PUBLIC_API_TAGS)
@@ -1852,51 +2244,45 @@ def decide_approval(
     request that is no longer waiting, is a conflict. Approving an action that
     the current action policies block saves a rejection by the policy
     (`decided_via` POLICY). The headers are not saved.
+
+    An app request of a command in the chat's VM takes `approve_once`,
+    `approve_command` (also its command's later requests of the same action,
+    until the command exits; `decided_via` COMMAND_GRANT) or `reject`. Its
+    decision continues no response: the command's call waits on it.
     """
     approval = get_approval_request_for_user(db_session, approval_id, user.id)
     if approval is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
-    rejected = body.decision == ApprovalChoice.REJECT
-    upgrades_to_grant = (
-        body.decision == ApprovalChoice.APPROVE_SESSION
-        and approval.decision == ApprovalDecision.APPROVED
-        and approval.decided_via == ApprovalDecidedVia.USER
-    )
-    if approval.decision is None or upgrades_to_grant:
-        blocked = action_now_blocked(
-            db_session,
-            integration_id=approval.integration_id,
-            action_id=approval.action_id,
-            user_id=user.id,
-            chat_session_id=approval.chat_session_id,
+        command_approval = get_chat_action_approval_for_user(
+            db_session, approval_id, user.id
         )
+        if command_approval is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
+        return decide_command_approval(
+            db_session, command_approval, body.decision, user.id
+        )
+    choice = _chat_choice(db_session, approval, body.decision)
+    if approval.decision is None or choice.upgrades(
+        approval.decision, approval.decided_via
+    ):
         record_approval_decision__no_commit(
             db_session,
             approval,
-            ApprovalDecision.REJECTED
-            if rejected or blocked
-            else ApprovalDecision.APPROVED,
-            ApprovalDecidedVia.POLICY
-            if blocked and not rejected
-            else ApprovalDecidedVia.SESSION_GRANT
-            if body.decision == ApprovalChoice.APPROVE_SESSION
-            else ApprovalDecidedVia.USER,
+            *choice.outcome(
+                blocked=action_now_blocked(
+                    db_session,
+                    integration_id=approval.integration_id,
+                    action_id=approval.action_id,
+                    user_id=user.id,
+                    chat_session_id=approval.chat_session_id,
+                )
+            ),
         )
     db_session.refresh(approval)
-    decided_via = approval.decided_via
-    # The answer to this body: an approval that a policy blocked was saved as
-    # a rejection. A saved answer also comes from an earlier attempt, a session
-    # grant from another request, or a concurrent decision.
-    decision = (
-        ApprovalDecision.REJECTED
-        if rejected or decided_via == ApprovalDecidedVia.POLICY
-        else ApprovalDecision.APPROVED
+    # A saved answer also comes from an earlier attempt, a session grant from
+    # another request, or a concurrent decision.
+    decision, decided_via = saved_answer_or_conflict(
+        choice, approval.decision, approval.decided_via
     )
-    if decided_via is None or approval.decision != decision:
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "This request was already decided or is no longer waiting",
-        )
     return ApprovalDecisionResponse(
         approval_id=approval_id,
         decision=decision,
@@ -1954,7 +2340,8 @@ def answer_questions(
     """Answer the questions that a chat response's agent asked the user.
 
     `answers` answer this request's questions from its card: each question
-    once, with one of its option labels, a note, or both. A `message` is text
+    once, with its option labels, a note, or both. A question takes one option
+    label at most, or several when its `multi_select` is true. A `message` is text
     that the user typed in the chat instead: it answers every question of the
     response that waits, and the agent reads it as the user typed it. A
     message is a conflict (APPROVAL_PENDING) while an approval request of the

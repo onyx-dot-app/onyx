@@ -1,11 +1,14 @@
 "use client";
 
 import { useSearchParams, useNavigation } from "@opal/navigation";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useUser } from "@/providers/UserProvider";
 import { toast, Section } from "@opal/layouts";
-import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import AppInputBar, {
+  type AppInputBarHandle,
+  type ComposerSubmission,
+} from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useLlmManager } from "@/lib/hooks";
@@ -20,7 +23,7 @@ import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
-import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
+import type { MessageEdit, UnsentMessage } from "@/lib/chat/types";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import useChatController from "@/hooks/useChatController";
@@ -35,6 +38,9 @@ import {
   useSourcesShown,
 } from "@/app/app/stores/useChatSessionStore";
 import ChatUI from "@/sections/chat/ChatUI";
+import ChatActivity from "@/sections/chat/ChatActivity";
+import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
+import { SubagentLinksContext } from "@/lib/chat/subagents";
 import { messageRowId } from "@/lib/chat/rowIds";
 import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
 import ChatScrollContainer, {
@@ -57,6 +63,7 @@ import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
+import { resendFiles } from "@/lib/projects/utils";
 
 const SearchUI = paidTierGated(EESearchUI);
 
@@ -173,6 +180,24 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const currentSessionId = useChatSessionStore(
     (state) => state.currentSessionId
   );
+  // The activity card, with its agents' Stop buttons, pins inside this page
+  const [activitySlot, setActivitySlot] = useState<HTMLElement | null>(null);
+  const workspaceElements = useMemo(
+    () => ({
+      workspace: { current: null },
+      page: { current: null },
+      panelToggleSlot: null,
+      activitySlot,
+    }),
+    [activitySlot]
+  );
+  const activity = currentSessionId ? (
+    <ChatActivity
+      key={currentSessionId}
+      sessionId={currentSessionId}
+      showFiles={false}
+    />
+  ) : null;
 
   // Memoized callback for closing document sidebar
   const handleDocumentSidebarClose = useCallback(() => {
@@ -315,6 +340,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     chatInputBarRef.current?.restore(unsent);
   }, []);
 
+  const editMessage = useCallback((edit: MessageEdit) => {
+    chatInputBarRef.current?.editMessage(edit);
+  }, []);
+
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -355,12 +384,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Handle submit from AppInputBar - routes through query controller for search/chat classification
   const handleChatInputSubmit = useCallback(
-    async (composed: ComposedMessage) => {
+    async (composed: ComposerSubmission) => {
       if (!composed.message.trim()) return;
 
       const additionalContext =
         tabReadingEnabled && currentTabUrl
-          ? `The user is currently viewing: ${currentTabUrl}. Use the open_url tool to read this page and use its content as additional context for your response.`
+          ? `The user is currently viewing: ${currentTabUrl}. Read this page with your URL reading tool and use its content as additional context for your response.`
           : undefined;
 
       const selectedModels = multiModel.isMultiModelActive
@@ -419,7 +448,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       mentions: lastUserMsg.mentions ?? [],
-      currentMessageFiles: currentMessageFiles,
+      currentMessageFiles: resendFiles(lastUserMsg, currentMessageFiles),
       deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
     });
@@ -468,285 +497,300 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   );
 
   return (
-    <div
-      className={cn(
-        "relative w-full h-full flex flex-col overflow-hidden",
-        isSidePanel
-          ? "bg-background"
-          : hasBackground && "bg-cover bg-center bg-fixed"
-      )}
-      style={
-        !isSidePanel && hasBackground
-          ? { backgroundImage: `url(${appBackgroundUrl})` }
-          : undefined
-      }
-    >
-      {/* Semi-transparent overlay for readability when background is set */}
-      {!isSidePanel && hasBackground && (
-        <div className="absolute inset-0 bg-background/80 pointer-events-none" />
-      )}
+    <AppWorkspaceElementsContext.Provider value={workspaceElements}>
+      {/* Its right side shows only Sources, so it opens no subagent */}
+      <SubagentLinksContext.Provider value={false}>
+        <div
+          className={cn(
+            "relative w-full h-full flex flex-col overflow-hidden",
+            isSidePanel
+              ? "bg-background"
+              : hasBackground && "bg-cover bg-center bg-fixed"
+          )}
+          style={
+            !isSidePanel && hasBackground
+              ? { backgroundImage: `url(${appBackgroundUrl})` }
+              : undefined
+          }
+        >
+          {/* Semi-transparent overlay for readability when background is set */}
+          {!isSidePanel && hasBackground && (
+            <div className="absolute inset-0 bg-background/80 pointer-events-none" />
+          )}
 
-      {/* Side panel header */}
-      {isSidePanel && (
-        <SidePanelHeader
-          onNewChat={handleNewChat}
-          chatSessionId={currentSessionId}
-        />
-      )}
+          {/* Side panel header */}
+          {isSidePanel && (
+            <SidePanelHeader
+              onNewChat={handleNewChat}
+              chatSessionId={currentSessionId}
+              activity={activity}
+            />
+          )}
 
-      {/* Settings button */}
-      {!isSidePanel && (
-        <div className="absolute top-0 end-0 p-4 z-10">
-          <Button
-            prominence="secondary"
-            icon={SvgMenu}
-            onClick={toggleSettings}
-            tooltip={t("nrf.page.settingsButton.tooltip")}
-          />
-        </div>
-      )}
-
-      {/* noPaste: the input bar already uploads pasted files itself. */}
-      <Dropzone onDrop={handleFileUpload} noClick noPaste>
-        {({ getRootProps }) => (
-          <div
-            {...getRootProps()}
-            className={cn(
-              "relative flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
-              isSidePanel && "px-3"
-            )}
-          >
-            {/* Chat area with messages */}
-            {hasMessages && resolvedAgent && (
-              <>
-                {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
-                {!isSidePanel && <Spacer rem={2} />}
-                <ChatScrollContainer
-                  ref={scrollContainerRef}
-                  sessionId="nrf-session"
-                  anchorSelector={anchorSelector}
-                  autoScroll={autoScrollEnabled}
-                  pauseFollowing={isStreamDraining}
-                  isStreaming={isStreaming}
-                  hideScrollbar={isSidePanel}
-                >
-                  <ChatUI
-                    activeAgent={resolvedAgent}
-                    llmManager={llmManager}
-                    currentMessageFiles={currentMessageFiles}
-                    setPresentingDocument={setPresentingDocument}
-                    onSubmit={onSubmit}
-                    onMessageSelection={() => {}}
-                    stopGenerating={stopGenerating}
-                    onResubmit={handleResubmitLastMessage}
-                    deepResearchEnabled={deepResearchEnabled}
-                    anchorNodeId={anchorNodeId}
-                    selectedModels={multiModel.selectedModels}
-                  />
-                </ChatScrollContainer>
-              </>
-            )}
-
-            {/* Welcome message - centered when no messages and not in search mode */}
-            {!hasMessages && !isSearch && (
-              <div className="relative w-full flex-1 flex flex-col items-center justify-end">
-                <Section
-                  flexDirection="row"
-                  justifyContent="between"
-                  alignItems="end"
-                  className="max-w-(--app-page-main-content-width)"
-                >
-                  <WelcomeMessage isDefaultAgent />
-                  {activeAgent && (
-                    <MultiModelSelector
-                      selectedModels={multiModel.selectedModels}
-                      onAdd={multiModel.addModel}
-                      onRemove={multiModel.removeModel}
-                      onReplace={multiModel.replaceModel}
-                      temperatureManager={llmManager}
-                      reasoningManager={llmManager}
-                    />
-                  )}
-                </Section>
-                <Spacer rem={1.5} />
-              </div>
-            )}
-
-            {/* Keeps the input bar below the absolute settings button when pinned to the top */}
-            {!hasMessages && isSearch && !isSidePanel && <Spacer rem={4} />}
-
-            {/* AppInputBar container - in normal flex flow like AppPage */}
-            <div
-              ref={inputRef}
-              className={cn(
-                "w-full flex flex-col",
-                !isSidePanel && "max-w-(--app-page-main-content-width)"
-              )}
-            >
-              {hasMessages && activeAgent && (
-                <div className="pb-1">
-                  <MultiModelSelector
-                    selectedModels={multiModel.selectedModels}
-                    onAdd={multiModel.addModel}
-                    onRemove={multiModel.removeModel}
-                    onReplace={multiModel.replaceModel}
-                    temperatureManager={llmManager}
-                    reasoningManager={llmManager}
-                  />
-                </div>
-              )}
-              <AppInputBar
-                queue={queue}
-                toolConfiguration={toolConfiguration}
-                ref={chatInputBarRef}
-                deepResearchEnabled={deepResearchEnabled}
-                toggleDeepResearch={toggleDeepResearch}
-                isMultiModelActive={multiModel.isMultiModelActive}
-                llmManager={llmManager}
-                initialMessage={message}
-                stopGenerating={stopGenerating}
-                onSubmit={handleChatInputSubmit}
-                chatState={currentChatState}
-                activeAgent={activeAgent}
-                handleFileUpload={handleFileUpload}
-                disabled={
-                  !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
-                }
-                {...(isSidePanel && {
-                  tabReadingEnabled,
-                  currentTabUrl,
-                  onToggleTabReading: handleToggleTabReading,
-                })}
-              />
-              <Spacer rem={isSidePanel ? 1 : 0.5} />
-            </div>
-
-            {/* Search results - shown when query is classified as search */}
-            {isSearch && (
-              <div
-                className={cn(
-                  "flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-hidden flex flex-col",
-                  !isSidePanel &&
-                    "pb-[calc(var(--nrf-footer-height,0px)_+_0.5rem)]"
-                )}
-              >
-                <Spacer rem={0.75} />
-                <SearchUI onDocumentClick={handleSearchDocumentClick} />
-              </div>
-            )}
-
-            {/* Spacer to push content up when showing welcome message */}
-            {!hasMessages && !isSearch && <div className="flex-1 w-full" />}
-          </div>
-        )}
-      </Dropzone>
-
-      {/* Document sidebar - shown when sources are clicked */}
-      <ChatSidePanel
-        open={sourcesPanelVisible}
-        onEscape={handleDocumentSidebarClose}
-        shows={sourcesNodeId === null ? undefined : String(sourcesNodeId)}
-        className="absolute end-0 top-0 z-20"
-      >
-        <DocumentsSidebar
-          setPresentingDocument={setPresentingDocument}
-          closeSidebar={handleDocumentSidebarClose}
-          selectedDocuments={[]}
-        />
-      </ChatSidePanel>
-
-      {/* Text/document preview modal */}
-      {presentingDocument && (
-        <PreviewModal
-          presentingDocument={presentingDocument}
-          onClose={() => setPresentingDocument(null)}
-        />
-      )}
-
-      {/* Modals - only show when not in side panel mode */}
-      {!isSidePanel && (
-        <>
-          <SettingsPanel
-            settingsOpen={settingsOpen}
-            toggleSettings={toggleSettings}
-            handleUseOnyxToggle={handleUseOnyxToggle}
-          />
-
-          <Modal open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
-            <Modal.Content width="sm">
-              <Modal.Header
-                icon={SvgAlertTriangle}
-                title={t("nrf.page.turnOffModal.title", { appName })}
-                description={t("nrf.page.turnOffModal.description", {
-                  appName,
-                })}
-                onClose={() => setShowTurnOffModal(false)}
-              />
-              <Modal.Footer>
+          {/* Settings button */}
+          {!isSidePanel && (
+            <div className="absolute top-0 end-0 p-4 z-10">
+              <Section flexDirection="row" width="fit" height="fit" gap={0.5}>
+                {activity}
                 <Button
                   prominence="secondary"
-                  onClick={() => setShowTurnOffModal(false)}
-                >
-                  {t("nrf.page.turnOffModal.cancelButton.label")}
-                </Button>
-                <Button variant="danger" onClick={confirmTurnOff}>
-                  {t("nrf.page.turnOffModal.confirmButton.label")}
-                </Button>
-              </Modal.Footer>
-            </Modal.Content>
-          </Modal>
-        </>
-      )}
-
-      {!user && (
-        <Modal open onOpenChange={() => {}}>
-          <Modal.Content width="sm" height="sm">
-            <Modal.Header
-              icon={SvgUser}
-              title={t("nrf.page.loginModal.title", { appName })}
-            />
-            <Modal.Body>
-              {/* Every new tab opens this page, so it never bounces to the IdP on its own. */}
-              {authTypeMetadata?.multiTenant === false ? (
-                <LoginPage
-                  authUrl={null}
-                  authTypeMetadata={authTypeMetadata ?? null}
-                  nextUrl="/nrf"
-                  autoRedirectToSso={false}
+                  icon={SvgMenu}
+                  onClick={toggleSettings}
+                  tooltip={t("nrf.page.settingsButton.tooltip")}
                 />
-              ) : (
-                <div className="flex flex-col items-center">
-                  <Button
-                    width="full"
-                    prominence="secondary"
-                    onClick={() => {
-                      if (window.top) {
-                        window.top.location.href = "/auth/login";
-                      } else {
-                        navigation.load("/auth/login");
-                      }
-                    }}
-                  >
-                    {t("nrf.page.loginModal.loginButton.label")}
-                  </Button>
-                </div>
-              )}
-            </Modal.Body>
-          </Modal.Content>
-        </Modal>
-      )}
+              </Section>
+            </div>
+          )}
 
-      {user && !llmManager.isLoadingProviders && !llmManager.hasAnyProvider && (
-        <Button
-          width="full"
-          prominence="secondary"
-          onClick={() => {
-            navigation.load(ADMIN_ROUTES.LLM_MODELS.path);
-          }}
-        >
-          {t("nrf.page.setupLlmButton.label")}
-        </Button>
-      )}
-    </div>
+          {/* noPaste: the input bar already uploads pasted files itself. */}
+          <Dropzone onDrop={handleFileUpload} noClick noPaste>
+            {({ getRootProps }) => (
+              <div
+                {...getRootProps()}
+                className={cn(
+                  "relative flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
+                  isSidePanel && "px-3"
+                )}
+              >
+                {/* Chat area with messages */}
+                {hasMessages && resolvedAgent && (
+                  <>
+                    {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
+                    {!isSidePanel && <Spacer rem={2} />}
+                    <ChatScrollContainer
+                      ref={scrollContainerRef}
+                      sessionId="nrf-session"
+                      anchorSelector={anchorSelector}
+                      autoScroll={autoScrollEnabled}
+                      pauseFollowing={isStreamDraining}
+                      isStreaming={isStreaming}
+                      hideScrollbar={isSidePanel}
+                    >
+                      <ChatUI
+                        activeAgent={resolvedAgent}
+                        llmManager={llmManager}
+                        setPresentingDocument={setPresentingDocument}
+                        onSubmit={onSubmit}
+                        onMessageSelection={() => {}}
+                        stopGenerating={stopGenerating}
+                        onResubmit={handleResubmitLastMessage}
+                        deepResearchEnabled={deepResearchEnabled}
+                        anchorNodeId={anchorNodeId}
+                        onEditMessage={editMessage}
+                      />
+                    </ChatScrollContainer>
+                  </>
+                )}
+
+                {/* Welcome message - centered when no messages and not in search mode */}
+                {!hasMessages && !isSearch && (
+                  <div className="relative w-full flex-1 flex flex-col items-center justify-end">
+                    <Section
+                      flexDirection="row"
+                      justifyContent="between"
+                      alignItems="end"
+                      className="max-w-(--app-page-main-content-width)"
+                    >
+                      <WelcomeMessage isDefaultAgent />
+                      {activeAgent && (
+                        <MultiModelSelector
+                          selectedModels={multiModel.selectedModels}
+                          onAdd={multiModel.addModel}
+                          onRemove={multiModel.removeModel}
+                          onReplace={multiModel.replaceModel}
+                          temperatureManager={llmManager}
+                          reasoningManager={llmManager}
+                        />
+                      )}
+                    </Section>
+                    <Spacer rem={1.5} />
+                  </div>
+                )}
+
+                {/* Keeps the input bar below the absolute settings button when pinned to the top */}
+                {!hasMessages && isSearch && !isSidePanel && <Spacer rem={4} />}
+
+                {/* AppInputBar container - in normal flex flow like AppPage */}
+                <div
+                  ref={inputRef}
+                  className={cn(
+                    "w-full flex flex-col",
+                    !isSidePanel && "max-w-(--app-page-main-content-width)"
+                  )}
+                >
+                  {hasMessages && activeAgent && (
+                    <div className="pb-1">
+                      <MultiModelSelector
+                        selectedModels={multiModel.selectedModels}
+                        onAdd={multiModel.addModel}
+                        onRemove={multiModel.removeModel}
+                        onReplace={multiModel.replaceModel}
+                        temperatureManager={llmManager}
+                        reasoningManager={llmManager}
+                      />
+                    </div>
+                  )}
+                  <AppInputBar
+                    // The extension shares this origin's storage with the web
+                    // app, so its drafts would overwrite the web app's.
+                    persistDraft={false}
+                    queue={queue}
+                    toolConfiguration={toolConfiguration}
+                    ref={chatInputBarRef}
+                    deepResearchEnabled={deepResearchEnabled}
+                    toggleDeepResearch={toggleDeepResearch}
+                    isMultiModelActive={multiModel.isMultiModelActive}
+                    llmManager={llmManager}
+                    initialMessage={message}
+                    stopGenerating={stopGenerating}
+                    onSubmit={handleChatInputSubmit}
+                    chatState={currentChatState}
+                    activeAgent={activeAgent}
+                    handleFileUpload={handleFileUpload}
+                    disabled={
+                      !llmManager.isLoadingProviders &&
+                      !llmManager.hasAnyProvider
+                    }
+                    {...(isSidePanel && {
+                      tabReadingEnabled,
+                      currentTabUrl,
+                      onToggleTabReading: handleToggleTabReading,
+                    })}
+                  />
+                  <Spacer rem={isSidePanel ? 1 : 0.5} />
+                </div>
+
+                {/* Search results - shown when query is classified as search */}
+                {isSearch && (
+                  <div
+                    className={cn(
+                      "flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-hidden flex flex-col",
+                      !isSidePanel &&
+                        "pb-[calc(var(--nrf-footer-height,0px)_+_0.5rem)]"
+                    )}
+                  >
+                    <Spacer rem={0.75} />
+                    <SearchUI onDocumentClick={handleSearchDocumentClick} />
+                  </div>
+                )}
+
+                {/* Spacer to push content up when showing welcome message */}
+                {!hasMessages && !isSearch && <div className="flex-1 w-full" />}
+              </div>
+            )}
+          </Dropzone>
+
+          {/* Document sidebar - shown when sources are clicked */}
+          <ChatSidePanel
+            open={sourcesPanelVisible}
+            onEscape={handleDocumentSidebarClose}
+            shows={sourcesNodeId === null ? undefined : String(sourcesNodeId)}
+            className="absolute end-0 top-0 z-20"
+          >
+            <DocumentsSidebar
+              setPresentingDocument={setPresentingDocument}
+              closeSidebar={handleDocumentSidebarClose}
+              selectedDocuments={[]}
+            />
+          </ChatSidePanel>
+
+          {/* Text/document preview modal */}
+          {presentingDocument && (
+            <PreviewModal
+              presentingDocument={presentingDocument}
+              onClose={() => setPresentingDocument(null)}
+            />
+          )}
+
+          {/* Modals - only show when not in side panel mode */}
+          {!isSidePanel && (
+            <>
+              <SettingsPanel
+                settingsOpen={settingsOpen}
+                toggleSettings={toggleSettings}
+                handleUseOnyxToggle={handleUseOnyxToggle}
+              />
+
+              <Modal open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
+                <Modal.Content width="sm">
+                  <Modal.Header
+                    icon={SvgAlertTriangle}
+                    title={t("nrf.page.turnOffModal.title", { appName })}
+                    description={t("nrf.page.turnOffModal.description", {
+                      appName,
+                    })}
+                    onClose={() => setShowTurnOffModal(false)}
+                  />
+                  <Modal.Footer>
+                    <Button
+                      prominence="secondary"
+                      onClick={() => setShowTurnOffModal(false)}
+                    >
+                      {t("nrf.page.turnOffModal.cancelButton.label")}
+                    </Button>
+                    <Button variant="danger" onClick={confirmTurnOff}>
+                      {t("nrf.page.turnOffModal.confirmButton.label")}
+                    </Button>
+                  </Modal.Footer>
+                </Modal.Content>
+              </Modal>
+            </>
+          )}
+
+          {!user && (
+            <Modal open onOpenChange={() => {}}>
+              <Modal.Content width="sm" height="sm">
+                <Modal.Header
+                  icon={SvgUser}
+                  title={t("nrf.page.loginModal.title", { appName })}
+                />
+                <Modal.Body>
+                  {/* Every new tab opens this page, so it never bounces to the IdP on its own. */}
+                  {authTypeMetadata?.multiTenant === false ? (
+                    <LoginPage
+                      authUrl={null}
+                      authTypeMetadata={authTypeMetadata ?? null}
+                      nextUrl="/nrf"
+                      autoRedirectToSso={false}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <Button
+                        width="full"
+                        prominence="secondary"
+                        onClick={() => {
+                          if (window.top) {
+                            window.top.location.href = "/auth/login";
+                          } else {
+                            navigation.load("/auth/login");
+                          }
+                        }}
+                      >
+                        {t("nrf.page.loginModal.loginButton.label")}
+                      </Button>
+                    </div>
+                  )}
+                </Modal.Body>
+              </Modal.Content>
+            </Modal>
+          )}
+
+          {user &&
+            !llmManager.isLoadingProviders &&
+            !llmManager.hasAnyProvider && (
+              <Button
+                width="full"
+                prominence="secondary"
+                onClick={() => {
+                  navigation.load(ADMIN_ROUTES.LLM_MODELS.path);
+                }}
+              >
+                {t("nrf.page.setupLlmButton.label")}
+              </Button>
+            )}
+          <div ref={setActivitySlot} />
+        </div>
+      </SubagentLinksContext.Provider>
+    </AppWorkspaceElementsContext.Provider>
   );
 }

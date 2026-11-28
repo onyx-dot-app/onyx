@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
@@ -213,13 +214,15 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
 
 
 def serialize_tools(tools: Sequence[app.ToolDefinition]) -> list[dict[str, JsonValue]]:
+    """Provider tool declarations that own their schemas: LiteLLM's Vertex AI
+    route changes a schema in place."""
     return [
         {
             "type": "function",
             "function": {
                 "name": tool.name,
                 "description": tool.description,
-                "parameters": tool.parameters,
+                "parameters": copy.deepcopy(tool.parameters),
                 "strict": tool.strict,
             },
         }

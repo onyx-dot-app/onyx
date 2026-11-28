@@ -1,6 +1,6 @@
 name: Quality Checks PR
 concurrency:
-  group: Quality-Checks-PR-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  group: Quality-Checks-PR-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
   cancel-in-progress: true
 
 on:
@@ -16,6 +16,14 @@ permissions:
   contents: read
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   quality-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -60,8 +68,8 @@ jobs:
         if: steps.changes.outputs.docs_only != 'true'
         working-directory: ./web
         run: bun install --frozen-lockfile
-      # web/ has its own lockfile; widget/, examples/widget/ and desktop/ live in
-      # the root bun workspace. The hooks that type-check them run `tsgo` from
+      # web/ and desktop/ have their own lockfiles; widget/ and examples/widget/
+      # live in the root bun workspace. The hooks that type-check them run `tsgo` from
       # the root node_modules, and prek never runs the post-checkout hook that
       # would install it.
       - name: Install root workspace dependencies
@@ -73,7 +81,7 @@ jobs:
         run: bun run test
       - uses: j178/prek-action@44924fe9ef4a6f88253c4b6b1bf11c689d3ce53d # ratchet:j178/prek-action@v3.1.0
         env:
-          SKIP: ty,desktop-rust-fmt,desktop-rust-clippy,desktop-v2-rust-fmt,desktop-v2-rust-clippy
+          SKIP: ty,desktop-rust-fmt,desktop-rust-clippy
           # All-files checks need the push range for translation comparisons.
           PRE_COMMIT_FROM_REF: ${{ github.event_name == 'push' && github.ref_name == 'main' && github.event.before != '0000000000000000000000000000000000000000' && github.event.before || '' }}
           # Lets the zizmor hook run its online audits. Read-only: the job

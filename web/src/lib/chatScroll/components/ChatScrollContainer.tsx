@@ -87,6 +87,10 @@ export interface ChatScrollContainerProps {
    *  the bottom" ignores it. */
   footer?: React.ReactNode;
 
+  /** Rendered over the view, outside the scroll element: it never scrolls
+   *  and has the scroll container's context. */
+  overlay?: React.ReactNode;
+
   /** Fade content opacity at the top and bottom edges. */
   fadeEdges?: boolean;
 
@@ -138,6 +142,20 @@ function findTopRow(
   return null;
 }
 
+// A footer inside the scroll element (a sticky composer) covers the bottom
+// of the viewport.
+function footerHeight(contentWrapper: HTMLElement | null): number {
+  let height = 0;
+  for (
+    let sibling = contentWrapper?.nextElementSibling;
+    sibling;
+    sibling = sibling.nextElementSibling
+  ) {
+    height += sibling.getBoundingClientRect().height;
+  }
+  return height;
+}
+
 // Build a CSS mask that fades content opacity at top/bottom edges
 function buildContentMask(): string {
   // Mask uses black = visible, transparent = hidden
@@ -154,11 +172,13 @@ const ChatScrollContainer = React.memo(
         anchorSelector,
         autoScroll = true,
         pauseFollowing = false,
+        isStreaming = false,
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
         wide = false,
         footer,
+        overlay,
         fadeEdges = true,
         className,
         scrollClassName,
@@ -198,6 +218,7 @@ const ChatScrollContainer = React.memo(
       // When the user last gave scroll input, and whether a pointer is held
       // on the view (a scrollbar drag). Only read, never acted on directly.
       const userInputAtRef = useRef(-Infinity);
+      const scrollInputRevisionRef = useRef(0);
       const pointerHeldRef = useRef(false);
       // A catch-up deferred until the user's scroll input settles.
       const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -212,6 +233,7 @@ const ChatScrollContainer = React.memo(
       );
       const autoScrollRef = useRef(autoScroll);
       const pauseFollowingRef = useRef(pauseFollowing);
+      const isStreamingRef = useRef(isStreaming);
       const anchorSelectorRef = useRef(anchorSelector);
       // The distance from the end at the last scroll event: a move that
       // keeps it is native anchoring, not the user.
@@ -224,6 +246,7 @@ const ChatScrollContainer = React.memo(
           onScrollButtonVisibilityChange;
         autoScrollRef.current = autoScroll;
         pauseFollowingRef.current = pauseFollowing;
+        isStreamingRef.current = isStreaming;
         sessionIdRef.current = sessionId;
         anchorSelectorRef.current = anchorSelector;
       }, [
@@ -231,6 +254,7 @@ const ChatScrollContainer = React.memo(
         autoScroll,
         sessionId,
         pauseFollowing,
+        isStreaming,
         anchorSelector,
       ]);
 
@@ -292,18 +316,10 @@ const ChatScrollContainer = React.memo(
           );
         }
         const contentEnd = endDivRef.current.offsetTop - unfilled;
-        // A footer inside the scroll element (a sticky composer) covers the
-        // bottom of the viewport.
-        let footerHeight = 0;
-        for (
-          let sibling = contentWrapperRef.current?.nextElementSibling;
-          sibling;
-          sibling = sibling.nextElementSibling
-        ) {
-          footerHeight += sibling.getBoundingClientRect().height;
-        }
         const viewportBottom =
-          container.scrollTop + container.clientHeight - footerHeight;
+          container.scrollTop +
+          container.clientHeight -
+          footerHeight(contentWrapperRef.current);
         const contentBelowViewport = contentEnd - viewportBottom;
 
         return {
@@ -480,6 +496,79 @@ const ChatScrollContainer = React.memo(
 
       const scrollToNewTurn = useCallback(() => glide(true), [glide]);
 
+      // Scroll a row that the user opened just enough to show its bottom
+      // above the composer, without moving its top out of view. A view that
+      // follows a streaming reply keeps to the end instead; an idle one stops
+      // following, so the click's catch-up does not jump to the end.
+      const pendingRevealRef = useRef<{
+        restoreFollowing: boolean;
+        inputRevision: number;
+        container: Element;
+      } | null>(null);
+      const prepareReveal = useCallback((row: Element) => {
+        const container = scrollContainerRef.current;
+        if (
+          !container?.isConnected ||
+          modeRef.current === "gliding" ||
+          (modeRef.current === "following" &&
+            autoScrollRef.current &&
+            isStreamingRef.current)
+        ) {
+          return;
+        }
+        const previous = pendingRevealRef.current;
+        const inputRevision = scrollInputRevisionRef.current;
+        const reveal = {
+          restoreFollowing:
+            modeRef.current === "following" ||
+            (previous?.container === container &&
+              previous.inputRevision === inputRevision &&
+              previous.restoreFollowing),
+          inputRevision,
+          container,
+        };
+        pendingRevealRef.current = reveal;
+        modeRef.current = "reading";
+        return (cancelled = false) => {
+          if (pendingRevealRef.current !== reveal) return;
+          pendingRevealRef.current = null;
+          if (
+            scrollContainerRef.current !== container ||
+            scrollInputRevisionRef.current !== inputRevision ||
+            modeRef.current !== "reading"
+          )
+            return;
+          // A step whose card closed sits in an inert fold until it unmounts.
+          if (cancelled || !row.isConnected || row.closest("[inert]")) {
+            if (reveal.restoreFollowing) modeRef.current = "following";
+            return;
+          }
+          const viewport = container.getBoundingClientRect();
+          const rect = row.getBoundingClientRect();
+          const hiddenBelow =
+            rect.bottom -
+            (viewport.bottom - footerHeight(contentWrapperRef.current));
+          const roomAbove = rect.top - viewport.top - TURN_TOP_OFFSET_PX;
+          const delta = Math.min(hiddenBelow, roomAbove);
+          if (delta <= 0) {
+            if (reveal.restoreFollowing) modeRef.current = "following";
+            return;
+          }
+          container.scrollBy({
+            top: delta,
+            behavior: prefersReducedMotion() ? "instant" : "smooth",
+          });
+        };
+      }, []);
+
+      // A jump the app makes for the user, such as to a find match: the
+      // view stays where it lands.
+      const releaseFollowing = useCallback(() => {
+        cancelGlide();
+        pendingRevealRef.current = null;
+        modeRef.current = "reading";
+      }, [cancelGlide]);
+
       useEffect(
         () => () => {
           cancelGlide();
@@ -544,6 +633,7 @@ const ChatScrollContainer = React.memo(
           // A fling keeps moving past its last input; each step stays the
           // user's. It also ends a glide.
           userInputAtRef.current = performance.now();
+          scrollInputRevisionRef.current++;
           cancelGlide();
           modeRef.current = isAtScrollEnd(container, buttonThresholdPx)
             ? "following"
@@ -576,13 +666,17 @@ const ChatScrollContainer = React.memo(
         const markInput = () => {
           userInputAtRef.current = performance.now();
         };
+        const markScrollInput = () => {
+          markInput();
+          scrollInputRevisionRef.current++;
+        };
         const onKeyDown = (event: KeyboardEvent) => {
           // Keys typed into a field inside the view do not scroll it.
           const target = event.target;
           const typing =
             target instanceof HTMLElement &&
             (target.isContentEditable || target.closest("input, textarea"));
-          if (!typing && SCROLL_KEYS.has(event.key)) markInput();
+          if (!typing && SCROLL_KEYS.has(event.key)) markScrollInput();
         };
         const onPointerDown = () => {
           pointerHeldRef.current = true;
@@ -593,16 +687,18 @@ const ChatScrollContainer = React.memo(
           pointerHeldRef.current = false;
           markInput();
         };
-        container.addEventListener("wheel", markInput, { passive: true });
-        container.addEventListener("touchmove", markInput, { passive: true });
+        container.addEventListener("wheel", markScrollInput, { passive: true });
+        container.addEventListener("touchmove", markScrollInput, {
+          passive: true,
+        });
         container.addEventListener("keydown", onKeyDown);
         container.addEventListener("focusin", markInput);
         container.addEventListener("pointerdown", onPointerDown);
         window.addEventListener("pointerup", onPointerUp);
         window.addEventListener("pointercancel", onPointerUp);
         return () => {
-          container.removeEventListener("wheel", markInput);
-          container.removeEventListener("touchmove", markInput);
+          container.removeEventListener("wheel", markScrollInput);
+          container.removeEventListener("touchmove", markScrollInput);
           container.removeEventListener("keydown", onKeyDown);
           container.removeEventListener("focusin", markInput);
           container.removeEventListener("pointerdown", onPointerDown);
@@ -779,63 +875,66 @@ const ChatScrollContainer = React.memo(
             "flex flex-col flex-1 min-h-0 w-full relative overflow-hidden"
           }
         >
-          <div
-            key={sessionId}
-            ref={scrollContainerRef}
-            data-testid={testId}
-            data-chat-scroll
-            className={
-              scrollClassName ??
-              cn(
-                // A size container: the latest turn's min-height is in cqh.
-                // Focus and scrollIntoView keep clear of a composer laid
-                // over the view.
-                "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [container-type:size] scroll-pb-(--app-composer-height)",
-                hideScrollbar ? "no-scrollbar" : "default-scrollbar",
-                // The wide width (and every width below md) drops the
-                // reserved gutters so content gets the room; the reading
-                // width keeps both-edges to avoid shift.
-                !wide && "md:[scrollbar-gutter:stable_both-edges]"
-              )
-            }
-            onScroll={() => {
-              handleScroll();
-              savePosition();
-            }}
-            style={
-              fadeEdges
-                ? {
-                    // Apply mask to fade content opacity at edges
-                    maskImage: contentMask,
-                    WebkitMaskImage: contentMask,
-                  }
-                : undefined
-            }
+          <ScrollContainerProvider
+            scrollContainerRef={scrollContainerRef}
+            contentWrapperRef={contentWrapperRef}
+            sessionId={sessionId}
+            prepareReveal={prepareReveal}
+            releaseFollowing={releaseFollowing}
           >
             <div
-              ref={contentWrapperRef}
+              key={sessionId}
+              ref={scrollContainerRef}
+              data-testid={testId}
+              data-chat-scroll
               className={
-                contentClassName ??
-                cn("w-full flex-1 flex flex-col items-center", CHAT_GUTTER)
+                scrollClassName ??
+                cn(
+                  // A size container: the latest turn's min-height is in cqh.
+                  // Focus and scrollIntoView keep clear of a composer laid
+                  // over the view.
+                  "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [container-type:size] scroll-pb-(--app-composer-height)",
+                  hideScrollbar ? "no-scrollbar" : "default-scrollbar",
+                  // The wide width (and every width below md) drops the
+                  // reserved gutters so content gets the room; the reading
+                  // width keeps both-edges to avoid shift.
+                  !wide && "md:[scrollbar-gutter:stable_both-edges]"
+                )
               }
-              data-scroll-ready={isScrollReady}
-              style={{
-                visibility: isScrollReady ? "visible" : "hidden",
+              onScroll={() => {
+                handleScroll();
+                savePosition();
               }}
+              style={
+                fadeEdges
+                  ? {
+                      // Apply mask to fade content opacity at edges
+                      maskImage: contentMask,
+                      WebkitMaskImage: contentMask,
+                    }
+                  : undefined
+              }
             >
-              <ScrollContainerProvider
-                scrollContainerRef={scrollContainerRef}
-                contentWrapperRef={contentWrapperRef}
-                sessionId={sessionId}
+              <div
+                ref={contentWrapperRef}
+                className={
+                  contentClassName ??
+                  cn("w-full flex-1 flex flex-col items-center", CHAT_GUTTER)
+                }
+                data-scroll-ready={isScrollReady}
+                style={{
+                  visibility: isScrollReady ? "visible" : "hidden",
+                }}
               >
                 {children}
-              </ScrollContainerProvider>
 
-              {/* End marker to measure content end */}
-              <div ref={endDivRef} />
+                {/* End marker to measure content end */}
+                <div ref={endDivRef} />
+              </div>
+              {footer}
             </div>
-            {footer}
-          </div>
+            {overlay}
+          </ScrollContainerProvider>
         </div>
       );
     }

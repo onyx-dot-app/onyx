@@ -253,6 +253,10 @@ USER_FILE_PROCESSING_MAX_QUEUE_DEPTH = 500
 # otherwise re-enqueue it forever.
 USER_FILE_PROCESSING_MAX_ATTEMPTS = 3
 
+# Pickups a published file's indexing gets before its artifact is marked
+# FAILED, for the same reason.
+CHAT_ARTIFACT_INDEX_MAX_ATTEMPTS = 3
+
 # How long a queued user-file-project-sync task remains valid.
 # Should be short enough to discard stale queue entries under load while still
 # allowing workers enough time to pick up new tasks.
@@ -370,6 +374,9 @@ class DocumentSource(str, Enum):
     MOCK_CONNECTOR = "mock_connector"
     # Special case for user files
     USER_FILE = "user_file"
+    # Files the model published in a chat (chat_artifact), each indexed as one
+    # document visible only to the chat's owner
+    CHAT_ARTIFACT = "chat_artifact"
     # Raw files for Craft sandbox access (xlsx, pptx, docx, etc.)
     # Uses RAW_BINARY processing mode - no text extraction
     CRAFT_FILE = "craft_file"
@@ -497,10 +504,13 @@ CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
-    # A file that the model published from its sandbox (publish_files).
+    # A file that the model published from its sandbox (artifact_operations).
     CHAT_ARTIFACT = "chat_artifact"
     # A JPEG of a published file's first page (ChatArtifactVersion).
     CHAT_ARTIFACT_THUMBNAIL = "chat_artifact_thumbnail"
+    # The PDF of a PowerPoint or Word chat file, for its preview
+    # (ChatArtifactVersion.preview_file_id, UserFile.preview_file_id).
+    CHAT_FILE_PREVIEW = "chat_file_preview"
     CONNECTOR = "connector"
     CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"
@@ -679,6 +689,13 @@ class OnyxRedisLocks:
     # Prevents the beat from re-enqueuing the same file while a delete task is already queued.
     USER_FILE_DELETE_QUEUED_PREFIX = "da_lock:user_file_delete_queued"
 
+    # Published file indexing: the beat's lock, each artifact's lock while a
+    # task indexes it, and the key that a queued task holds until a worker
+    # takes it.
+    CHAT_ARTIFACT_INDEXING_BEAT_LOCK = "da_lock:check_chat_artifact_indexing_beat"
+    CHAT_ARTIFACT_INDEXING_LOCK_PREFIX = "da_lock:chat_artifact_indexing"
+    CHAT_ARTIFACT_INDEXING_QUEUED_PREFIX = "da_lock:chat_artifact_indexing_queued"
+
     # Release notes
     RELEASE_NOTES_FETCH_LOCK = "da_lock:release_notes_fetch"
 
@@ -758,6 +775,10 @@ class OnyxCeleryTask:
     # Playground suggested questions
     GENERATE_SUGGESTED_QUESTIONS_POOL = "generate_suggested_questions_pool"
     GENERATE_SUGGESTED_QUESTIONS_FOR_USER = "generate_suggested_questions_for_user"
+
+    # Published file indexing
+    CHECK_FOR_CHAT_ARTIFACT_INDEXING = "check_for_chat_artifact_indexing"
+    PROCESS_SINGLE_CHAT_ARTIFACT = "process_single_chat_artifact"
 
     # Targeted reindex
     TARGETED_REINDEX_TASK = "targeted_reindex_task"

@@ -12,6 +12,7 @@ from uuid import UUID
 
 import pytest
 from fastapi import BackgroundTasks
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -20,16 +21,22 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import process_message
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent_stream import BackgroundRunStream
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import dispatch_pending_chat_messages
-from onyx.chat.run_store import INPUT_POLL_SECONDS, ChatRunStore
+from onyx.chat.run_store import (
+    INPUT_POLL_SECONDS,
+    RESUME_FAILED_MESSAGE,
+    ChatRunStore,
+)
+from onyx.chat.stream_buffer import read_stream_chunks
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -42,9 +49,18 @@ from onyx.llm.override_models import LLMOverride
 from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.query_and_chat.chat_backend import (
     get_chat_session_processing_status,
+    get_chat_subagent_history,
 )
+from onyx.server.query_and_chat.streaming_models import (
+    AWAITING_USER,
+    OverallStop,
+    ToolApprovalRequest,
+)
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolApprovalScope, ToolContext
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_SHAPES,
+)
 from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_chat_tool_approvals import (
@@ -58,7 +74,7 @@ from tests.external_dependency_unit.chat.test_chat_tool_approvals import (
     owned_runs,
 )
 from tests.external_dependency_unit.chat.test_run_store import chat_agent
-from tests.external_dependency_unit.chat.test_wait_agents import ScriptedLLM
+from tests.external_dependency_unit.chat.test_wait_agent import ScriptedLLM
 from tests.unit.onyx.agents.fakes import FakeModelClient
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool, until
 
@@ -73,7 +89,9 @@ def _reply(request: GenerationRequest, _signal: CancellationSignal) -> Assistant
         return AssistantMessage(content=[TextContent(text=results[-1].text)])
     return AssistantMessage(
         content=[
-            ToolCall(id="program", name=CodeModeTool.NAME, arguments={"code": PROGRAM})
+            ToolCall(
+                id="program", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": PROGRAM}
+            )
         ]
     )
 
@@ -96,7 +114,7 @@ def _gated(integration_id: int, sent: list[str]) -> FakeMCPTool:
     return tool
 
 
-def _agent(tool: FakeMCPTool, checkpoint: ExecutionCheckpoint | None) -> ChatAgent:
+def _agent(tool: FakeMCPTool, checkpoint: ExecutionCheckpoint | None) -> Agent:
     return chat_agent(
         FakeModelClient(_reply),
         agent_id=checkpoint.run_state.agent_id if checkpoint else None,
@@ -179,14 +197,16 @@ def _park_agent(
                 content=[
                     ToolCall(
                         id="spawn",
-                        name=SpawnAgentTool.name,
-                        arguments={"name": "mailer", "instruction": "Email the team"},
+                        name=SPAWN_AGENT_TOOL_NAME,
+                        arguments={"task_name": "mailer", "message": "Email the team"},
                     )
                 ]
             )
         ),
         tools=[
-            SpawnAgentTool(lambda: _agent(tool, None), max_steps=3).bind(ToolContext)
+            SpawnAgentTool(
+                lambda: _agent(tool, None), AGENT_SHAPES[ToolFamily.OPENAI], max_steps=3
+            ).bind(ToolContext)
         ],
         gated=[tool],
     )
@@ -349,7 +369,97 @@ def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
             assert coordinator.close(timeout=10)
 
 
-@pytest.mark.parametrize("unavailable", ["raises", "falls_back"])
+def test_a_parked_agents_history_shows_its_approval_and_waits(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """A subagent's saved transcript reads its approvals under the root chat,
+    and its parked response ends as waiting for the user."""
+    sent: list[str] = []
+    agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
+    agent_session_id = db_session.get_one(
+        ChatMessage, agent_response_id
+    ).chat_session_id
+    history = get_chat_subagent_history(
+        chat.chat_session_id, agent_session_id, user=chat.user
+    )
+    [*_, response] = history.packets
+    assert any(isinstance(packet.obj, ToolApprovalRequest) for packet in response)
+    assert response[-1].obj == OverallStop(stop_reason=AWAITING_USER)
+
+
+def test_a_resumed_agent_streams_its_saved_output_and_its_continuation(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The host that resumes a decided agent claims its response before the
+    run registers; the agent's live stream still starts with the saved output
+    and carries the continuation to its end."""
+    sent: list[str] = []
+    agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
+    [row] = chat.rows(db_session)
+    chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+    tool = _gated(chat.integration_id, sent)
+    streams: list[BackgroundRunStream] = []
+
+    class RecordedStream(BackgroundRunStream):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            streams.append(self)
+
+    monkeypatch.setattr("onyx.chat.run_store.BackgroundRunStream", RecordedStream)
+
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
+        return _agent(tool, checkpoint)
+
+    def agent_status() -> RunStatus | None:
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            return session.get_one(ChatMessage, agent_response_id).response_status
+
+    cache = get_cache_backend()
+    host = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=chat.chat_session_id,
+        response_id=chat.response_id,
+        visible_response_ids=[],
+        cache=cache,
+        follow_up_steps=3,
+        user=chat.user,
+        tools=[tool],
+    )
+    coordinator = AgentCoordinator()
+    host.bind(coordinator, build_agent=rebuild)
+    try:
+        until(
+            lambda: (
+                host.poll_control() is None
+                and agent_status() == RunStatus.COMPLETE
+                and not host.has_owned_work
+            ),
+            timeout=60,
+        )
+    finally:
+        assert coordinator.close(timeout=10)
+    assert sent == ["team"]
+    [stream] = streams
+    agent_session_id = db_session.get_one(
+        ChatMessage, agent_response_id
+    ).chat_session_id
+    read = read_stream_chunks(cache, agent_session_id, stream.stream_id, 0)
+    assert read is not None
+    assert not read.gap
+    assert read.done
+    text = "".join(read.blocks)
+    # The saved program call, then its result and the finished stop
+    assert '"replay_end"' in text
+    assert "sent" in text
+    assert '"finished"' in text
+
+
+@pytest.mark.parametrize("unavailable", ["raises", "invalid", "falls_back"])
 def test_a_decided_agent_whose_host_cannot_start_ends(
     db_session: Session,
     chat: ApprovalChat,
@@ -362,7 +472,9 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
     being gone, it ends the agents that it would resume, as a root
     continuation that cannot start ends its response. Model selection that
     falls back to another model counts as the model being gone. The chat then
-    has no active agents, so status reads stop dispatching."""
+    has no active agents, so status reads stop dispatching. A setup error,
+    even a validation error, is not saved data of another version, so the
+    agent gets the generic message."""
     sent: list[str] = []
     file_store = get_default_file_store()
     prefix = f"agent-checkpoint/{chat.chat_session_id}/"
@@ -374,6 +486,11 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
         requested.append(llm_override)
         if unavailable == "raises":
             raise ValueError("The model is no longer available")
+        if unavailable == "invalid":
+            raise ValidationError.from_exception_data(
+                "LLMOverride",
+                [{"type": "missing", "loc": ("model_provider",), "input": {}}],
+            )
         return ScriptedLLM(lambda *_args: pytest.fail("The agent ran on another model"))
 
     monkeypatch.setattr("onyx.chat.process_message.get_llm_for_persona", model_gone)
@@ -420,9 +537,16 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
             override and (override.model_configuration_id, override.temperature)
             for override in requested
         ] == [(4242, 0.3)]
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            failure = session.get_one(ChatMessage, agent_response_id).response_failure
+        assert failure is not None and failure.message == RESUME_FAILED_MESSAGE
         [error] = host_errors
         if unavailable == "raises":
             assert isinstance(error, ValueError)
+        elif unavailable == "invalid":
+            assert isinstance(error, ValidationError)
         else:
             assert isinstance(error, OnyxError)
             assert error.error_code == OnyxErrorCode.NOT_FOUND
@@ -454,15 +578,17 @@ def test_a_host_that_cannot_start_ends_only_the_agents_of_its_model(
                 content=[
                     ToolCall(
                         id=f"spawn-{name}",
-                        name=SpawnAgentTool.name,
-                        arguments={"name": name, "instruction": "Email the team"},
+                        name=SPAWN_AGENT_TOOL_NAME,
+                        arguments={"task_name": name, "message": "Email the team"},
                     )
                     for name in ("mailer", "notifier")
                 ]
             )
         ),
         tools=[
-            SpawnAgentTool(lambda: _agent(tool, None), max_steps=3).bind(ToolContext)
+            SpawnAgentTool(
+                lambda: _agent(tool, None), AGENT_SHAPES[ToolFamily.OPENAI], max_steps=3
+            ).bind(ToolContext)
         ],
         gated=[tool],
     )

@@ -1,3 +1,4 @@
+import { NextIntlClientProvider } from "next-intl";
 import { render, screen, setupUser, within } from "@tests/setup/test-utils";
 import ApprovalCard, {
   type ApprovalCardProps,
@@ -34,6 +35,8 @@ describe("pending", () => {
 
     const trigger = screen.getByRole("button", { name: header });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
+    // Screen readers hear the deadline too.
+    expect(trigger).toHaveAccessibleName(/Approve by \d{1,2}:\d{2}\s?[AP]M$/);
     // The deadline sits in the header row, without seconds.
     expect(
       within(trigger).getByText(/^Approve by \d{1,2}:\d{2}\s?[AP]M$/)
@@ -54,6 +57,37 @@ describe("pending", () => {
     expect(
       value.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it("takes the header label with its deadline from one message", () => {
+    // A translator may reorder the headline and deadline.
+    const reordered = {
+      ...messages,
+      common: {
+        ...messages.common,
+        approvalCard: {
+          ...copy,
+          header: { ...copy.header, requiredBy: "By {time}: {headline}" },
+        },
+      },
+    };
+    render(
+      <NextIntlClientProvider locale="en" messages={reordered}>
+        <ApprovalCard
+          actions={[{ id: "send", name: "Send message" }]}
+          payload={{}}
+          expiresAt="2099-01-01T00:00:00Z"
+          status="pending"
+          onDecide={async () => {}}
+        />
+      </NextIntlClientProvider>
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: /^By \d{1,2}:\d{2}\s?[AP]M: Send message$/,
+      })
+    ).toBeInTheDocument();
   });
 
   it("reports each decision", async () => {
@@ -125,9 +159,8 @@ describe("pending", () => {
     });
     expect(screen.getByText(description)).not.toHaveClass("truncate");
     const trigger = screen.getByRole("button", { name: header });
-    const headline = within(trigger).getByText(
-      "Approval requested: Send message in Slack"
-    );
+    // The step above says it waits, so the visible header is the headline.
+    const headline = within(trigger).getByText("Send message in Slack");
     expect(headline).not.toHaveClass("truncate");
     expect(headline.parentElement).not.toHaveClass("truncate");
     unmount();
@@ -141,6 +174,24 @@ describe("pending", () => {
     expect(screen.getByText(`Send message: ${description}`)).not.toHaveClass(
       "truncate"
     );
+  });
+
+  it("shows the headline and payload without bidi controls", () => {
+    // U+202E reverses the text after it, so "fdp.sbeR" would read "Rebs.pdf"
+    const { container } = renderCard({
+      actions: [{ id: "delete", name: "Delete \u202Efdp.sbeR" }],
+      appName: undefined,
+      payload: {
+        "Delete\u202E": ["\u202Efdp.sbeR (1 version)"],
+        nested: { name: "\u202Ex" },
+      },
+    });
+
+    expect(
+      screen.getByRole("button", { name: /Delete fdp\.sbeR/ })
+    ).toBeVisible();
+    expect(screen.getByText("fdp.sbeR (1 version)")).toBeVisible();
+    expect(container.textContent).not.toContain("\u202E");
   });
 
   it("disables the decisions while one is submitted", async () => {
@@ -230,12 +281,25 @@ describe("decided", () => {
     ["approved", "Approved: Send message in Slack"],
     ["rejected", "Not approved: Send message in Slack"],
     ["expired", "Timed out: Send message in Slack"],
+    ["disabled", "Disabled: Send message in Slack"],
     ["closed", "No longer waiting: Send message in Slack"],
-  ] as const)("leaves a one-line record of a %s request", (status, text) => {
-    renderCard({ status });
+  ] as const)(
+    "leaves a %s request as a closed step that opens onto its details",
+    async (status, text) => {
+      const user = setupUser();
+      renderCard({ status });
 
-    expect(screen.getByRole("status")).toHaveTextContent(text);
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByText("#general")).not.toBeInTheDocument();
-  });
+      expect(screen.getByRole("status")).toHaveTextContent(text);
+      expect(
+        screen.queryByRole("button", { name: copy.reject.ariaLabel })
+      ).not.toBeInTheDocument();
+      const toggle = screen.getByRole("button", { name: `Expand ${text}` });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+      await user.click(toggle);
+
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByText("#general")).toBeVisible();
+    }
+  );
 });

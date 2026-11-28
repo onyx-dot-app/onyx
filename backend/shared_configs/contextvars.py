@@ -62,6 +62,7 @@ class UsageCredentialIdentity(NamedTuple):
     credential_id: str | None = None
     credential_name: str | None = None
     credential_display: str | None = None
+    oauth_client_id: str | None = None
 
 
 CURRENT_USAGE_CREDENTIAL_CONTEXTVAR: contextvars.ContextVar[

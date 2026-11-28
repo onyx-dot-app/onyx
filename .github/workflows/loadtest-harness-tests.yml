@@ -1,0 +1,76 @@
+name: Load Test Harness Tests
+concurrency:
+  group: Load-Test-Harness-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+# The harness tests (tools/loadtest/tests) also read backend prompts and stream
+# packet names, so a nightly run catches drift from backend changes between the
+# load test runs.
+on:
+  pull_request:
+    paths:
+      - "tools/loadtest/**"
+      - ".github/workflows/loadtest-harness-tests.yml"
+  schedule:
+    # Runs daily at 11:00 UTC, after the other nightly test workflows.
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
+  loadtest-harness-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.13.8"
+          enable-cache: false
+
+      - name: Run harness tests
+        working-directory: tools/loadtest
+        run: uv run --frozen --only-group loadtest pytest tests/ -q
+
+  notify-slack-on-failure:
+    needs: [loadtest-harness-tests]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-slim
+    environment: ci-protected
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Send Slack notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          details: |
+            *Failed jobs:*
+            loadtest-harness-tests
+
+            *To reproduce locally:*
+            `cd tools/loadtest && uv run --only-group loadtest pytest tests/`
+          title: "🚨 Nightly load test harness tests failed!"
+          ref-name: ${{ github.ref_name }}

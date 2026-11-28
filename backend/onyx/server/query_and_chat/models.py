@@ -345,6 +345,8 @@ class PendingChatMessageRequest(BaseModel):
 class ChatRenameRequest(BaseModel):
     chat_session_id: UUID
     name: str | None = None
+    # With no name: replace a saved name too, instead of returning it.
+    regenerate: bool = False
 
 
 class ChatSessionUpdateRequest(BaseModel):
@@ -416,6 +418,11 @@ class QuestionAnswersResponse(BaseModel):
     # The stream that continues the question's response, when the answer
     # started it or found it running; None while the response still waits.
     continuation: CurrentStreamInfo | None = None
+
+
+class StopSubagentsRequest(BaseModel):
+    # Stops this agent and the agents below it; None stops every agent.
+    agent_id: UUID | None = None
 
 
 class StopSubagentsResponse(BaseModel):
@@ -521,6 +528,27 @@ class ChatSubagent(BaseModel):
     # None before its first run starts
     status: RunStatus | None
     stopped_by_user: bool
+    # When its current or latest run started
+    started_at: datetime | None = None
+    # Its current or latest run; another run on another branch has another id
+    latest_run_id: int | None = None
+    # The live stream of its running response (`.../agents/{id}/stream`)
+    stream_id: int | None = None
+    # The tool that its running response last called
+    activity_tool: str | None = None
+    # The model of its current or latest run
+    model: str | None = None
+    # How long its latest run worked, once saved
+    duration_seconds: float | None = None
+
+
+class ChatSubagentHistory(BaseModel):
+    """A background agent's saved conversation, as a chat session's."""
+
+    messages: list[ChatMessageDetail]
+    packets: list[list[Packet]]
+    # The live stream of its running response; its saved packets lag it
+    stream: CurrentStreamInfo | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -587,3 +615,23 @@ class ChatSearchResponse(BaseModel):
     groups: list[ChatSessionGroup]
     has_more: bool
     next_page: int | None = None
+
+
+class BrowserUploadResponse(BaseModel):
+    """Paths of uploaded files, relative to the chat session directory."""
+
+    paths: list[str]
+
+
+# How a user may open an artifact link (GET /chat/artifacts/{artifact_id}):
+# owner, the owning chat; chat_reader, the chat's shared view; file_only, the
+# version alone, which a chat that the user can read holds.
+ChatArtifactAccess = Literal["owner", "chat_reader", "file_only"]
+
+
+class ChatArtifactFile(PublishedFileView):
+    """A version of a published file, with the chat that owns it and how
+    the user may open it (GET /chat/artifacts/{artifact_id})."""
+
+    chat_id: UUID
+    access: ChatArtifactAccess

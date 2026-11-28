@@ -1,16 +1,29 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { IconFunctionComponent } from "@opal/types";
 import { Line, Presence, Text } from "@opal/components";
 import { SvgSparkle } from "@opal/icons";
 import { formatDurationSeconds } from "@opal/time";
+import { cn } from "@opal/utils";
 import { useTranslations } from "next-intl";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { Section } from "@opal/layouts";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
-import { STEP_ICONS } from "@/lib/timeline/icons";
+import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
+import {
+  findRunStepRow,
+  RunStepOpenContext,
+  type RunStepOpenState,
+  useRunStepOpenState,
+} from "@/lib/timeline/components/RunStep";
 import type {
   TimelineEntryStatus,
   TimelineStepPosition,
@@ -40,16 +53,12 @@ export interface RunCardProps<S extends RunCardStep> {
    * also work between steps, such as while it waits for an approval.
    */
   isActive?: boolean;
-  /** Whether the user stopped the run. Defaults to a stopped step. */
-  isStopped?: boolean;
   /** Fold the run closed once text follows it. */
   autoCollapse?: boolean;
   /** When the run started, for the live timer. Defaults to its first render. */
   streamingStartTime?: number;
   /** The server's duration, shown for a run that did not work here. */
   durationSeconds?: number;
-  /** The finished header's text, in place of the duration. */
-  doneText?: string | RichStr;
   /** The header's icon while the run works and once it is done. */
   icon?: IconFunctionComponent;
   /**
@@ -59,13 +68,105 @@ export interface RunCardProps<S extends RunCardStep> {
   appear?: boolean;
   /** Mount folded, even while the run works. */
   startFolded?: boolean;
+  /**
+   * Mount open, as the user's choice: it starts open even when the run
+   * settled, and the fold under text leaves it open.
+   */
+  startOpen?: boolean;
   summary?: RunCardSummary;
+  /** The run's open step ids, when the run also shows its steps elsewhere
+   * (AgentTimeline's hoisted step cards). Defaults to the card's own. */
+  stepOpenState?: RunStepOpenState;
+}
+
+/** The open card's step list scrolls inside this height. */
+export const RUN_STEP_LIST_MAX_HEIGHT_CLASS = "max-h-[min(18rem,50dvh)]";
+
+function distanceFromEnd(element: HTMLElement): number {
+  return element.scrollHeight - element.clientHeight - element.scrollTop;
+}
+
+/**
+ * Scrolls the step list as its content grows. While the run works and the
+ * user is at the end, the list stays at the end. Otherwise it keeps the step
+ * the user last opened in view. A scroll up stops both.
+ */
+function useStepListScroll(isRunning: boolean) {
+  const [list, setList] = useState<HTMLDivElement | null>(null);
+  const runningRef = useRef(isRunning);
+  useEffect(() => {
+    runningRef.current = isRunning;
+  }, [isRunning]);
+  const atEndRef = useRef(true);
+  const lastTopRef = useRef(0);
+  const revealIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!list) return;
+    lastTopRef.current = list.scrollTop;
+    const content = list.firstElementChild;
+    if (!content) return;
+    const observer = new ResizeObserver(() => {
+      if (runningRef.current && atEndRef.current) {
+        list.scrollTop = list.scrollHeight;
+        // Recorded now, so a user scroll before the scroll event still reads
+        // as a scroll up.
+        lastTopRef.current = list.scrollTop;
+        return;
+      }
+      const row =
+        revealIdRef.current === null
+          ? null
+          : findRunStepRow(list, revealIdRef.current);
+      if (!row) return;
+      const rowBox = row.getBoundingClientRect();
+      const listBox = list.getBoundingClientRect();
+      const delta = Math.min(
+        rowBox.bottom - listBox.bottom,
+        rowBox.top - listBox.top
+      );
+      if (delta > 0) {
+        list.scrollTop += delta;
+        lastTopRef.current = list.scrollTop;
+      }
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [list]);
+
+  const onScroll = useCallback(() => {
+    if (!list) return;
+    // Only a scroll up leaves the end: a growing step can leave the list
+    // short of its end between two follow scrolls.
+    // A row that closes at the end clamps the scroll down; that is no
+    // scroll up, so the end is checked first.
+    if (distanceFromEnd(list) <= 1) {
+      atEndRef.current = true;
+    } else if (list.scrollTop < lastTopRef.current) {
+      atEndRef.current = false;
+      revealIdRef.current = null;
+    }
+    lastTopRef.current = list.scrollTop;
+  }, [list]);
+
+  // Opening a step stops the follow until the user scrolls back to the end.
+  // Closing one at the end follows again: no scroll happens to say so.
+  const reveal = useCallback(
+    (id: string | null) => {
+      revealIdRef.current = id;
+      if (id !== null) atEndRef.current = false;
+      else if (list && distanceFromEnd(list) <= 1) atEndRef.current = true;
+    },
+    [list]
+  );
+
+  return { listRef: setList, onScroll, reveal };
 }
 
 /**
  * One run of steps as a card, the same in chat and Craft: the run header
- * across the top (working, finished or stopped), and the steps below it on
- * the rail. Every run folds; it is open while it works and folds once text
+ * across the top (working or finished), and the steps below it on the rail.
+ * A stopped run reads as finished: the answer already says it stopped. Every run folds; it is open while it works and folds once text
  * follows it.
  */
 export function RunCard<S extends RunCardStep>({
@@ -73,23 +174,22 @@ export function RunCard<S extends RunCardStep>({
   renderStep,
   workingText,
   isActive,
-  isStopped,
   autoCollapse = false,
   streamingStartTime,
   durationSeconds,
-  doneText,
   icon = SvgSparkle,
   appear = true,
   startFolded = false,
+  startOpen = false,
   summary,
+  stepOpenState: sharedOpenState,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
   const isRunning =
     isActive ?? steps.some((step) => step.status === "streaming");
-  const stopped =
-    !isRunning &&
-    (isStopped ?? steps.some((step) => step.status === "stopped"));
-  const [isOpen, setIsOpen] = useState(isRunning && !startFolded);
+  const [isOpen, setIsOpen] = useState(
+    startOpen || (isRunning && !startFolded)
+  );
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
   const [arrivedLive] = useState(appear && isRunning);
@@ -98,11 +198,36 @@ export function RunCard<S extends RunCardStep>({
   const [initialStepIds] = useState(
     () => new Set(steps.map((step) => step.id))
   );
+  const { listRef, onScroll, reveal } = useStepListScroll(isRunning);
+  const { rowRef, onToggle } = useRevealOnOpen();
+  // Kept here, so each step's open state survives a fold of the card.
+  const ownOpenState = useRunStepOpenState();
+  const { openIds, setOpen } = sharedOpenState ?? ownOpenState;
+  const stepOpenState = useMemo<RunStepOpenState>(
+    () => ({
+      openIds,
+      contained: true,
+      setOpen: (id, open) => {
+        // The list keeps an opened step in view, and the chat the card.
+        reveal(open ? id : null);
+        onToggle(open);
+        setOpen(id, open);
+      },
+    }),
+    [openIds, setOpen, reveal, onToggle]
+  );
+  // A card that mounts with an open step (a handover) keeps the latest one
+  // in view.
+  const [initialOpenId] = useState(() => Array.from(openIds).at(-1));
+  useEffect(() => {
+    if (initialOpenId !== undefined) reveal(initialOpenId);
+  }, [initialOpenId, reveal]);
   // A card the user folded or opened keeps their choice.
-  const userToggled = useRef(false);
+  const userToggled = useRef(startOpen);
   const toggle = () => {
     userToggled.current = true;
-    setIsOpen((prev) => !prev);
+    onToggle(!isOpen);
+    setIsOpen(!isOpen);
   };
 
   // Fold closed once text follows; fire once so a manual re-open sticks.
@@ -146,20 +271,18 @@ export function RunCard<S extends RunCardStep>({
   const visible = steps.length > 0 || isRunning;
   const foldable = steps.length > 0;
 
+  const duration = finishedSeconds
+    ? formatDurationSeconds(finishedSeconds)
+    : null;
   const headerTitle = isRunning
     ? workingText
-    : stopped
-      ? t("interruptedThinking.label")
-      : (doneText ??
-        (finishedSeconds
-          ? t("thoughtDuration.label", {
-              duration: formatDurationSeconds(finishedSeconds),
-            })
-          : t("thoughtUnknownDuration.label")));
+    : duration
+      ? t("thoughtDuration.label", { duration })
+      : t("thoughtUnknownDuration.label");
 
   return (
     <Presence show={visible} appear={arrivedLive} grow>
-      <TimelineRoot>
+      <TimelineRoot ref={rowRef}>
         <Line
           // Filled while open; otherwise only on hover, as a step card is.
           filled={isOpen}
@@ -172,11 +295,7 @@ export function RunCard<S extends RunCardStep>({
                 {/* A saved memory's tag, on the right so it never swaps the
                     summary. Shown on a finished card while it is folded. */}
                 {summary?.memoryOperation && (
-                  <Presence
-                    show={!isRunning && !stopped && !isOpen}
-                    from="end"
-                    width="fit"
-                  >
+                  <Presence show={!isRunning && !isOpen} from="end" width="fit">
                     <MemoryTagWithTooltip
                       memoryText={summary.memoryText ?? null}
                       memoryOperation={summary.memoryOperation}
@@ -224,31 +343,39 @@ export function RunCard<S extends RunCardStep>({
             // The steps, 4px apart. A step card
             // inside has no padding of its own, so its title lines up with
             // the card's own title.
-            <Section alignItems="stretch" gap={1} height="auto">
-              {steps.map((step, index) => (
-                // A step that streams in rises in, after the card opens room
-                // for it. Steps already there when the card mounts (a saved
-                // run) appear at once.
-                <Presence
-                  key={step.id}
-                  appear={isRunning && !initialStepIds.has(step.id)}
-                  grow
-                >
-                  {renderStep(step, {
-                    isFirst: index === 0,
-                    isLast: index === steps.length - 1,
-                  })}
-                </Presence>
-              ))}
-            </Section>
+            <div
+              ref={listRef}
+              onScroll={onScroll}
+              className={cn(RUN_STEP_LIST_MAX_HEIGHT_CLASS, "overflow-y-auto")}
+            >
+              <RunStepOpenContext.Provider value={stepOpenState}>
+                <Section alignItems="stretch" gap={1} height="auto">
+                  {steps.map((step, index) => (
+                    // A step that streams in rises in, after the card opens
+                    // room for it. Steps already there when the card mounts
+                    // (a saved run) appear at once.
+                    <Presence
+                      key={step.id}
+                      appear={isRunning && !initialStepIds.has(step.id)}
+                      grow
+                    >
+                      {renderStep(step, {
+                        isFirst: index === 0,
+                        isLast: index === steps.length - 1,
+                      })}
+                    </Presence>
+                  ))}
+                </Section>
+              </RunStepOpenContext.Provider>
+            </div>
           }
           // The card's own title, the same header a hoisted run card has.
-          // It swaps when the run's state changes (working, stopped, done);
+          // It swaps when the run's state changes (working, done);
           // while working, a new activity updates the text in place, so the
           // shimmer never restarts.
-          icon={stopped && !isRunning ? STEP_ICONS.stopped : icon}
+          icon={icon}
           title={headerTitle}
-          titleKey={isRunning ? "working" : stopped ? "stopped" : "done"}
+          titleKey={isRunning ? "working" : "done"}
           shimmer={isRunning}
         />
       </TimelineRoot>

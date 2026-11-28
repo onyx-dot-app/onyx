@@ -71,6 +71,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.ZOOM: "Zoom.png",
     DocumentSource.MOCK_CONNECTOR: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.USER_FILE: _DEFAULT_SOURCE_IMAGE_FILENAME,
+    DocumentSource.CHAT_ARTIFACT: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.CRAFT_FILE: _DEFAULT_SOURCE_IMAGE_FILENAME,
 }
 

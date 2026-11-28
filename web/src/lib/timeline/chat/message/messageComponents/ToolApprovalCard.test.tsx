@@ -355,6 +355,20 @@ describe("Continuation", () => {
   );
 });
 
+test("an action that asks each time offers no approval for the chat", () => {
+  render(
+    <ToolApprovalCard
+      approval={{
+        ...approval,
+        request: { ...request, can_approve_for_chat: false },
+      }}
+    />
+  );
+  expect(
+    screen.queryByRole("button", { name: copy.approveChat.tooltip })
+  ).not.toBeInTheDocument();
+});
+
 describe("Decision outcomes", () => {
   it("posts the decision and shows the server's answer before the resolution arrives", async () => {
     const fetchMock = respond(200, decided("APPROVED", "SESSION_GRANT"));
@@ -481,5 +495,105 @@ describe("Blocked send", () => {
 
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(useToolRequestUi.getState().nudge).toBeNull();
+  });
+});
+
+describe("A command's app request", () => {
+  const commandRequest: ToolApprovalRequest = {
+    ...request,
+    tool_name: "create_issue",
+    arguments: {
+      method: "POST",
+      origin: "https://api.github.com",
+      path: "/repos/acme/app/issues",
+    },
+    can_approve_for_chat: false,
+    can_approve_for_command: true,
+    app_name: "GitHub",
+  };
+
+  function CommandHarness() {
+    const status = useToolRequestUi((state) =>
+      state.localStatuses.get(request.approval_id)
+    );
+    return (
+      <ToolApprovalCard
+        approval={{
+          ...approval,
+          request: commandRequest,
+          status: status ?? "pending",
+        }}
+      />
+    );
+  }
+
+  it("offers approval for the command, not for the chat, and posts it", async () => {
+    const fetchMock = respond(200, decided("APPROVED", "COMMAND_GRANT"));
+    render(<CommandHarness />);
+
+    expect(
+      screen.getByRole("button", {
+        name: /^Approval requested: Create issue in GitHub/,
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByText("/repos/acme/app/issues")).toBeVisible();
+    expect(screen.getByText("https://api.github.com")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: copy.approveChat.tooltip })
+    ).not.toBeInTheDocument();
+
+    await setupUser().click(
+      screen.getByRole("button", { name: copy.approveCommand.tooltip })
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        copy.record.approvedForCommand.replace(
+          "{headline}",
+          "Create issue in GitHub"
+        )
+      )
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/chat/approvals/approval-1/decision",
+      expect.objectContaining({
+        body: JSON.stringify({ decision: "approve_command" }),
+      })
+    );
+  });
+
+  it("shows when the request expires", () => {
+    render(
+      <ToolApprovalCard
+        approval={{
+          ...approval,
+          request: { ...commandRequest, expires_at: "2099-01-01T00:00:00Z" },
+        }}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: /^Approval requested: Create issue in GitHub/,
+      })
+    ).toHaveTextContent(/Approve by \d{1,2}:\d{2}\s?[AP]M$/);
+  });
+
+  it("offers no wider approval for a request that asks each time", () => {
+    render(
+      <ToolApprovalCard
+        approval={{
+          ...approval,
+          request: { ...commandRequest, can_approve_for_command: false },
+        }}
+      />
+    );
+
+    expect(
+      screen.queryByRole("button", { name: copy.approveCommand.tooltip })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: copy.approveChat.tooltip })
+    ).not.toBeInTheDocument();
   });
 });

@@ -1,13 +1,19 @@
-import React, { useCallback, useEffect, useRef, useMemo, JSX } from "react";
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+  useState,
+  JSX,
+} from "react";
 import ReactMarkdown, {
   type Components,
   type ExtraProps,
 } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import rehypeHighlight from "rehype-highlight";
-import type { LanguageFn } from "highlight.js";
-import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import "@/lib/timeline/chat/message/custom-code-styles.css";
@@ -17,18 +23,24 @@ import {
   MemoizedParagraph,
 } from "@/lib/timeline/chat/message/MemoizedTextComponents";
 import {
-  extractCodeText,
   preprocessLaTeX,
   escapeIncompleteBlockMath,
   escapeIncompleteInlineMath,
-  labelBareCodeFences,
 } from "@/lib/timeline/chat/message/codeUtils";
-import { CodeBlock } from "@/lib/timeline/chat/message/CodeBlock";
+import { AnswerCodeBlock, InlineCode } from "@/lib/answerText/codeBlocks";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
+import { Text } from "@opal/components";
 import type { TextColor, TextFont } from "@opal/components";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
+import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
+import {
+  GALLERY_ALT_ATTR,
+  GALLERY_IMAGE_ATTR,
+  collectGallery,
+  type GalleryState,
+} from "@/app/app/components/files/images/gallery";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -130,6 +142,88 @@ export function ScrollableTable({
  * During typewriter animation, [[N]](url) is revealed character by character,
  * and ReactMarkdown can't parse an incomplete link: it would show as raw text.
  */
+const LinkedMarkdownImage = createContext(false);
+
+export function MarkdownLinkContent({ children }: React.PropsWithChildren) {
+  return (
+    <LinkedMarkdownImage.Provider value>
+      {children}
+    </LinkedMarkdownImage.Provider>
+  );
+}
+
+type MarkdownImageProps = React.ComponentProps<"img"> & ExtraProps;
+
+export function MarkdownImage(props: MarkdownImageProps) {
+  return <MarkdownImageContent key={String(props.src ?? "")} {...props} />;
+}
+
+function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
+  const linked = useContext(LinkedMarkdownImage);
+  const t = useTranslations("chat.messages");
+  const tFiles = useTranslations("chat.files");
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const [failed, setFailed] = useState(false);
+  const [gallery, setGallery] = useState<GalleryState | null>(null);
+  const openGallery = () => setGallery(collectGallery(triggerRef.current));
+
+  if (typeof src !== "string" || src === "" || failed) {
+    return (
+      <span className="inline-block rounded-lg border border-01 px-2 py-1">
+        <Text font="secondary-body" color="text-03">
+          {alt
+            ? t("markdownImage.unavailable.withAlt", { alt })
+            : t("markdownImage.unavailable.text")}
+        </Text>
+      </span>
+    );
+  }
+
+  const image = (
+    <img
+      src={src}
+      alt={alt ?? ""}
+      title={title}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-auto max-h-[30rem] w-auto max-w-full rounded-lg object-contain"
+    />
+  );
+  if (linked) return image;
+
+  return (
+    <>
+      <span
+        ref={triggerRef}
+        role="button"
+        tabIndex={0}
+        aria-label={alt || tFiles("inMessageImage.viewFullImage.label")}
+        {...{ [GALLERY_IMAGE_ATTR]: src, [GALLERY_ALT_ATTR]: alt ?? "" }}
+        onClick={openGallery}
+        onKeyDown={clickOnKeyDown(openGallery)}
+        className="block w-fit max-w-full cursor-zoom-in"
+      >
+        {image}
+      </span>
+      {gallery && (
+        <FullImageModal
+          images={gallery.images}
+          initialIndex={gallery.index}
+          open
+          onOpenChange={(open) => {
+            if (!open) setGallery(null);
+          }}
+          onCloseAutoFocus={(event) => {
+            if (!triggerRef.current) return;
+            event.preventDefault();
+            triggerRef.current.focus();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 export const stripPartialCitations = (content: string): string =>
   content
     .replace(/\[\[\d+\]\]\([^)]*$/, "")
@@ -144,8 +238,6 @@ export const processContent = (content: string): string => {
   // to a rendered formula the moment the closing `$$` arrives.
   content = escapeIncompleteBlockMath(content);
 
-  content = labelBareCodeFences(content);
-
   const processed = preprocessLaTeX(content);
   return escapeIncompleteInlineMath(processed);
 };
@@ -155,7 +247,6 @@ export const processContent = (content: string): string => {
  */
 export const useMarkdownComponents = (
   state: FullChatState | undefined,
-  processedContent: string,
   paragraphFont?: TextFont,
   paragraphColor?: TextColor
 ) => {
@@ -187,15 +278,19 @@ export const useMarkdownComponents = (
         );
       }
       return (
-        <MemoizedAnchor
-          updatePresentingDocument={state?.setPresentingDocument || (() => {})}
-          docs={state?.docs || []}
-          userFiles={state?.userFiles || []}
-          citations={state?.citations}
-          href={props.href}
-        >
-          {props.children}
-        </MemoizedAnchor>
+        <MarkdownLinkContent>
+          <MemoizedAnchor
+            updatePresentingDocument={
+              state?.setPresentingDocument || (() => {})
+            }
+            docs={state?.docs || []}
+            userFiles={state?.userFiles || []}
+            citations={state?.citations}
+            href={props.href}
+          >
+            {props.children}
+          </MemoizedAnchor>
+        </MarkdownLinkContent>
       );
     },
     [
@@ -209,11 +304,10 @@ export const useMarkdownComponents = (
   const markdownComponents = useMemo<Components>(
     () => ({
       a: anchorCallback,
+      img: MarkdownImage,
       p: paragraphCallback,
-      pre: ({ node, className, children }) => {
-        // Don't render the pre wrapper - CodeBlock handles its own wrapper
-        return <>{children}</>;
-      },
+      pre: AnswerCodeBlock,
+      code: InlineCode,
       b: ({ node, className, children }) => {
         return <span className={className}>{children}</span>;
       },
@@ -257,23 +351,8 @@ export const useMarkdownComponents = (
           </ScrollableTable>
         );
       },
-      code: ({ node, className, children }) => {
-        const codeText = extractCodeText(node, processedContent, children);
-
-        return (
-          <CodeBlock className={className} codeText={codeText}>
-            {children}
-          </CodeBlock>
-        );
-      },
     }),
-    [
-      anchorCallback,
-      paragraphCallback,
-      processedContent,
-      state?.docs,
-      state?.citations,
-    ]
+    [anchorCallback, paragraphCallback, state?.docs, state?.citations]
   );
 
   return markdownComponents;
@@ -285,8 +364,7 @@ export const useMarkdownComponents = (
 export const renderMarkdown = (
   content: string,
   markdownComponents: Components,
-  textSize: string = "text-base",
-  languages: Record<string, LanguageFn> | null = null
+  textSize: string = "text-base"
 ): JSX.Element => {
   return (
     <div dir="auto">
@@ -300,11 +378,7 @@ export const renderMarkdown = (
           remarkGfm,
           [remarkMath, { singleDollarTextMath: true }],
         ]}
-        rehypePlugins={
-          languages
-            ? [[rehypeHighlight, { languages }], rehypeKatex, rehypeDirection]
-            : [rehypeKatex, rehypeDirection]
-        }
+        rehypePlugins={[rehypeKatex, rehypeDirection]}
         urlTransform={transformLinkUri}
       >
         {content}
@@ -322,18 +396,11 @@ export const useMarkdownRenderer = (
   textSize: string
 ) => {
   const processedContent = useMemo(() => processContent(content), [content]);
-  const markdownComponents = useMarkdownComponents(state, processedContent);
-  const highlightLanguages = useHighlightLanguages();
+  const markdownComponents = useMarkdownComponents(state);
 
   const renderedContent = useMemo(
-    () =>
-      renderMarkdown(
-        processedContent,
-        markdownComponents,
-        textSize,
-        highlightLanguages
-      ),
-    [processedContent, markdownComponents, textSize, highlightLanguages]
+    () => renderMarkdown(processedContent, markdownComponents, textSize),
+    [processedContent, markdownComponents, textSize]
   );
 
   return {

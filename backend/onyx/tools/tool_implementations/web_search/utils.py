@@ -1,4 +1,5 @@
 import re
+from collections.abc import Iterable
 
 from pydantic import BaseModel
 
@@ -198,7 +199,7 @@ def inference_section_from_internet_search_result(
     )
 
 
-def extract_url_snippet_map(documents: list[SearchDoc]) -> dict[str, str]:
+def extract_url_snippet_map(documents: Iterable[SearchDoc]) -> dict[str, str]:
     """
     Given a list of SearchDocs, this will extract the url -> summary map.
     """

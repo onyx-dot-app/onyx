@@ -15,7 +15,7 @@ import { fetchErrorDetail } from "@/lib/fetcher";
 import { deleteMarketplace } from "@/lib/marketplaces/api";
 import { useMarketplace } from "@/lib/marketplaces/hooks";
 import type { MarketplaceSummary } from "@/lib/marketplaces/types";
-import { useRefreshSkillLists } from "@/lib/skills/hooks";
+import { useRefreshPluginLists } from "@/lib/skills/hooks";
 
 interface RemoveMarketplaceModalProps {
   marketplace: MarketplaceSummary;
@@ -35,7 +35,7 @@ export default function RemoveMarketplaceModal({
     isLoading,
     refresh,
   } = useMarketplace(marketplace.id);
-  const refreshSkillLists = useRefreshSkillLists();
+  const refreshSkillLists = useRefreshPluginLists();
   const [busy, setBusy] = useState(false);
   const plugins = detail?.plugins ?? [];
 

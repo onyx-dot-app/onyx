@@ -7,7 +7,7 @@ import { Section } from "@opal/layouts";
 import { Text } from "@opal/components/text/components";
 import { CopyButton } from "@opal/components/buttons/copy-button/components";
 import { LineLoader } from "@opal/loaders/line-loader/components";
-import type { RichStr } from "@opal/types";
+import type { RichNodes, RichStr } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,6 +59,11 @@ interface CodePanelLinesProps {
    * answer text, whose page scrolls. @default false
    */
   grow?: boolean;
+  /**
+   * Wrap long lines to fit the panel. Off, a long line scrolls sideways.
+   * @default true
+   */
+  wrap?: boolean;
 }
 
 interface CodePanelColumnsProps {
@@ -67,8 +72,8 @@ interface CodePanelColumnsProps {
 }
 
 interface CodePanelOutputProps {
-  /** The output text. */
-  children?: string;
+  /** The output text, or styled nodes made with `richNodes()`. */
+  children?: string | RichNodes;
   /** Error output: red text on a red tint. @default false */
   error?: boolean;
   /**
@@ -123,6 +128,7 @@ function CodePanelHeader({
       >
         <div className="opal-code-panel-title">
           <Text
+            as="p"
             font="secondary-mono"
             color="text-03"
             maxLines={1}
@@ -162,6 +168,7 @@ function CodePanelLines({
   markers = false,
   copyText,
   grow = false,
+  wrap = true,
 }: CodePanelLinesProps) {
   const columns = 1 + (lineNumbers ? 1 : 0) + (markers ? 1 : 0);
   const table = (
@@ -170,6 +177,7 @@ function CodePanelLines({
       dir="ltr"
       className="opal-code-panel-lines"
       data-grow={grow || undefined}
+      data-nowrap={!wrap || undefined}
     >
       <table>
         <tbody>

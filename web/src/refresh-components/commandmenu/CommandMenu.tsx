@@ -374,7 +374,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
 const CommandMenuContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   CommandMenuContentProps
->(({ children }, ref) => {
+>(({ children, onCloseAutoFocus }, ref) => {
   const t = useTranslations("common.commandMenu");
   const { handleKeyDown } = useCommandMenuContext();
   const { centerX, hasContainerCenter } = useContainerCenter();
@@ -395,6 +395,7 @@ const CommandMenuContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         onKeyDown={handleKeyDown}
+        onCloseAutoFocus={onCloseAutoFocus}
         style={
           hasContainerCenter && centerX !== null ? { left: centerX } : undefined
         }
@@ -513,7 +514,7 @@ function CommandMenuHeader({
 function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
   const t = useTranslations("common.commandMenu");
   const { isKeyboardNav, onListMouseLeave } = useCommandMenuContext();
-  const childCount = React.Children.count(children);
+  const childCount = React.Children.toArray(children).length;
 
   if (childCount === 0 && emptyMessage) {
     return (

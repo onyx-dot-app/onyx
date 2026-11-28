@@ -323,7 +323,7 @@ describe("BuildMessageList thinking visibility", () => {
     expect(await screen.findByText(/^Final answer/)).toBeInTheDocument();
     expect(
       await screen.findByRole("button", {
-        name: /^Expand Thought/,
+        name: /^Expand Worked/,
         expanded: false,
       })
     ).toBeInTheDocument();

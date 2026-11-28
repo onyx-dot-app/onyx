@@ -21,7 +21,7 @@ import {
   isExternalRepositoryLimit,
   marketplaceSyncState,
 } from "@/lib/marketplaces/utils";
-import { useRefreshSkillLists } from "@/lib/skills/hooks";
+import { useRefreshPluginLists } from "@/lib/skills/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 const POLL_MS = 3000;
@@ -35,7 +35,7 @@ function syncKey(marketplace: MarketplaceSummary): string {
 }
 
 export function useMarketplaces(enabled = true) {
-  const refreshSkillLists = useRefreshSkillLists();
+  const refreshPluginLists = useRefreshPluginLists();
   const { data, error, isLoading, mutate } = useSWR<MarketplaceList, Error>(
     enabled ? SWR_KEYS.marketplaces : null,
     errorHandlingFetcher,
@@ -62,8 +62,8 @@ export function useMarketplaces(enabled = true) {
       (before.size !== next.size ||
         Array.from(next).some(([id, key]) => before.get(id) !== key))
     )
-      refreshSkillLists();
-  }, [data, refreshSkillLists]);
+      refreshPluginLists();
+  }, [data, refreshPluginLists]);
   return {
     marketplaces: data?.marketplaces,
     error,
@@ -71,6 +71,8 @@ export function useMarketplaces(enabled = true) {
     refresh: mutate,
   };
 }
+
+export type MarketplacesState = ReturnType<typeof useMarketplaces>;
 
 export function useMarketplace(marketplaceId: string | null) {
   const { data, error, isLoading, mutate } = useSWR<MarketplaceDetail, Error>(
@@ -92,9 +94,12 @@ export function useMarketplaceAdded(): (
 ) => void {
   const t = useTranslations("plugins.marketplaces.add");
   const { mutate } = useSWRConfig();
+  const refreshPluginLists = useRefreshPluginLists();
   return (marketplace) => {
     toast.success(t("added", { name: marketplace.name }));
-    void mutate(SWR_KEYS.marketplaces);
+    // useMarketplaces refreshes the plugins only on a change after its first
+    // response, and that response may already show this sync as finished.
+    void mutate(SWR_KEYS.marketplaces).then(refreshPluginLists);
   };
 }
 

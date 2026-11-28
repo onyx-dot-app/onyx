@@ -1,0 +1,319 @@
+"""Approval cards for the app requests of a command in the chat's VM.
+
+A command's app requests carry its command ID to the egress proxy
+(`harness_sandbox.py:command_proxy_user`). While an exec_command or
+write_stdin call waits on the command, `CommandApprovals` marks the command
+as in the foreground, so the proxy holds an Ask request of the command
+instead of refusing it (`sandbox_proxy/addons/gate.py`). A thread shows each
+waiting request as an approval card on the call, and its end as the card's
+resolution. The user decides through `POST /chat/approvals/{id}/decision`,
+which wakes the proxy. The call does not yield while a card waits (`holds`).
+
+When the last call that waits on the command ends, the command leaves the
+foreground and its requests that still wait end: rejected by the user on a
+Stop, expired otherwise. Each card that a call shows ends with its request's
+outcome; the renderer closes the cards of a stopped call.
+
+Only a call that a client streams holds requests (`ToolContext.
+shows_command_approvals`); a background agent, a non-streaming caller or
+the desktop launcher holds none, so the proxy refuses the command's Ask requests.
+"""
+
+import threading
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from onyx.agents.tools import ToolProgress, ToolUpdate
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
+from onyx.db import action_approval
+from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
+from onyx.db.models import ActionApproval
+from onyx.external_apps.matching.engine import (
+    MatchedAction,
+    actions_requiring_approval,
+)
+from onyx.llm.cancellation import AgentCancelled
+from onyx.sandbox_proxy import approval_cache
+from onyx.server.features.build.sandbox.harness_base import CommandHold
+from onyx.tools.tool_implementations.sandbox.models import (
+    CommandApprovalOutcome,
+    CommandApprovalRequest,
+    CommandApprovalResolved,
+)
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+# The watcher blocks this long on the announce list (`end` ends the wait),
+# then renews the foreground mark and reads the command's waiting requests and
+# the decisions of the cards it shows.
+_POLL_SECONDS = 1
+_JOIN_SECONDS = 5.0
+
+# The calls of this process that wait on each command. Parallel write_stdin
+# calls can wait on one command; only the last one to end ends its requests.
+# The lock guards only these dicts: the cleanup IO runs outside it.
+_WAITING_LOCK = threading.Lock()
+_waiting: dict[UUID, int] = {}
+# The commands whose cleanup runs; set when it is done.
+_cleaning: dict[UUID, threading.Event] = {}
+
+
+def _outcome(row: ActionApproval) -> CommandApprovalOutcome:
+    if row.decision == ApprovalDecision.APPROVED:
+        return (
+            "approved_for_command"
+            if row.decided_via == ApprovalDecidedVia.COMMAND_GRANT
+            else "approved"
+        )
+    if row.decision == ApprovalDecision.REJECTED:
+        # An approval of an action that the policies now block.
+        if row.decided_via == ApprovalDecidedVia.POLICY:
+            return "disabled"
+        return "rejected"
+    return "cancelled"
+
+
+def _card(row: ActionApproval) -> CommandApprovalRequest:
+    actions = [MatchedAction.model_validate(a) for a in row.actions]
+    asked = set(actions_requiring_approval(actions))
+    names = [a.display_name for a in actions if a.action_type in asked]
+    return CommandApprovalRequest(
+        approval_id=str(row.approval_id),
+        app_name=row.app_name,
+        action_type=actions[0].action_type,
+        display_name=", ".join(names) or actions[0].display_name,
+        arguments=row.payload,
+        can_approve_for_command=bool(approval_cache.command_grant_actions(row.actions)),
+        expires_at=action_approval.wait_deadline(row.created_at),
+    )
+
+
+def _rows(db: Session, approval_ids: set[UUID]) -> list[ActionApproval]:
+    return [
+        row
+        for approval_id in approval_ids
+        if (row := action_approval.get_action_approval(db, approval_id)) is not None
+    ]
+
+
+class CommandApprovals(CommandHold):
+    """The proxy approvals of the command that one call waits on. Implements
+    `harness_base.CommandHold`; the call calls `end` once it returns."""
+
+    def __init__(
+        self, *, tenant_id: str, chat_session_id: UUID, update: ToolUpdate
+    ) -> None:
+        self._tenant_id = tenant_id
+        self._chat_session_id = chat_session_id
+        self._update = update
+        self._lock = threading.Lock()
+        self._command_id: UUID | None = None
+        # Cards on screen whose request still waits.
+        self._shown: set[UUID] = set()
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def _cache(self) -> CacheBackend:
+        return get_cache_backend(tenant_id=self._tenant_id)
+
+    def begin(self, command_id: UUID) -> None:
+        self._command_id = command_id
+        with _WAITING_LOCK:
+            _waiting[command_id] = _waiting.get(command_id, 0) + 1
+            cleanup = _cleaning.get(command_id)
+        # A new call of the command marks it and holds its requests only after
+        # the last call's cleanup.
+        if cleanup is not None:
+            cleanup.wait()
+        try:
+            approval_cache.mark_command_foreground(
+                command_id, self._chat_session_id, self._cache()
+            )
+        except Exception:
+            # The proxy then refuses the command's Ask requests.
+            logger.exception("command_foreground_mark_failed command=%s", command_id)
+        self._thread = threading.Thread(
+            target=self._watch,
+            args=(command_id,),
+            name=f"command-approvals-{command_id.hex[:8]}",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def holds(self) -> bool:
+        """A request of the command waits for the user."""
+        command_id = self._command_id
+        if command_id is None:
+            raise RuntimeError("holds() before begin()")
+        try:
+            with get_session_with_tenant(tenant_id=self._tenant_id) as db:
+                return bool(self._waiting(db, command_id))
+        except Exception:
+            logger.exception("command_approvals_read_failed command=%s", command_id)
+            return False
+
+    def end(self, *, cancelled: bool) -> None:
+        """The call returned. When no other call waits on the command, it
+        leaves the foreground and its requests that wait end."""
+        self._stop.set()
+        command_id = self._command_id
+        if command_id is None:
+            return
+        if self._thread is not None:
+            try:
+                # The watcher's wait for an announcement ends now, not at its
+                # timeout.
+                approval_cache.end_announcement_wait(command_id, self._cache())
+            except Exception:
+                logger.exception("command_watch_wake_failed command=%s", command_id)
+            self._thread.join(timeout=_JOIN_SECONDS)
+        decision = ApprovalDecision.REJECTED if cancelled else ApprovalDecision.EXPIRED
+        ended: list[UUID] = []
+        cleanup: threading.Event | None = None
+        with _WAITING_LOCK:
+            _waiting[command_id] -= 1
+            if _waiting[command_id] == 0:
+                del _waiting[command_id]
+                cleanup = _cleaning[command_id] = threading.Event()
+        if cleanup is not None:
+            try:
+                ended = self._end_command(command_id, decision)
+            finally:
+                with _WAITING_LOCK:
+                    del _cleaning[command_id]
+                cleanup.set()
+        # Every card on screen ends with its request's outcome, also one that
+        # the user decided after the watcher's last read.
+        with self._lock:
+            shown = set(self._shown)
+            self._shown.clear()
+        if not shown:
+            return
+        try:
+            with get_session_with_tenant(tenant_id=self._tenant_id) as db:
+                rows = _rows(db, shown)
+            for row in rows:
+                self._report(
+                    CommandApprovalResolved(
+                        approval_id=str(row.approval_id),
+                        outcome="cancelled"
+                        if row.approval_id in ended
+                        else _outcome(row),
+                    )
+                )
+        except AgentCancelled:
+            # A stopped call reports nothing more; the renderer closes its
+            # open cards (`chat/renderer.py:ToolRenderer.complete`).
+            pass
+        except Exception:
+            logger.exception("command_approvals_report_failed command=%s", command_id)
+
+    def _end_command(self, command_id: UUID, decision: ApprovalDecision) -> list[UUID]:
+        """Take the command out of the foreground and end its requests that
+        wait with `decision`; the IDs of the requests that it ended."""
+        cache: CacheBackend | None = None
+        try:
+            cache = self._cache()
+            approval_cache.clear_command_foreground(command_id, cache)
+        except Exception:
+            logger.exception("command_foreground_clear_failed command=%s", command_id)
+        ended: list[UUID] = []
+        try:
+            with get_session_with_tenant(tenant_id=self._tenant_id) as db:
+                pending = action_approval.list_pending_command_action_approvals(
+                    db,
+                    chat_session_id=self._chat_session_id,
+                    command_id=command_id,
+                )
+                decided = [
+                    row.approval_id
+                    for row in pending
+                    if action_approval.try_record_decision(
+                        db,
+                        approval_id=row.approval_id,
+                        decision=decision,
+                        decided_via=ApprovalDecidedVia.USER
+                        if decision == ApprovalDecision.REJECTED
+                        else None,
+                    )
+                ]
+                db.commit()
+                ended = decided
+        except Exception:
+            logger.exception("command_approvals_end_failed command=%s", command_id)
+        if cache is not None:
+            approval_cache.send_wakes(ended, decision, cache)
+        return ended
+
+    def _watch(self, command_id: UUID) -> None:
+        cache = self._cache()
+        while not self._stop.is_set():
+            try:
+                self._renew(command_id, cache)
+                # An announcement only wakes the watcher early.
+                approval_cache.pop_announcement(command_id, _POLL_SECONDS, cache)
+                self._poll(command_id)
+            except AgentCancelled:
+                return
+            except Exception:
+                logger.exception(
+                    "command_approvals_watch_failed command=%s", command_id
+                )
+                self._stop.wait(_POLL_SECONDS)
+
+    def _renew(self, command_id: UUID, cache: CacheBackend) -> None:
+        """Renew the foreground mark. A renewal that `end` stops while it
+        writes clears the mark once no call of this process waits on the
+        command: either the cleanup clears after the write, or this sees the
+        cleanup began."""
+        approval_cache.mark_command_foreground(command_id, self._chat_session_id, cache)
+        if not self._stop.is_set():
+            return
+        with _WAITING_LOCK:
+            idle = command_id not in _waiting
+        if idle:
+            approval_cache.clear_command_foreground(command_id, cache)
+
+    def _waiting(self, db: Session, command_id: UUID) -> list[ActionApproval]:
+        return action_approval.list_pending_command_action_approvals(
+            db,
+            chat_session_id=self._chat_session_id,
+            command_id=command_id,
+            created_after=action_approval.waiting_cutoff(),
+        )
+
+    def _poll(self, command_id: UUID) -> None:
+        """Show the new waiting requests and resolve the decided cards."""
+        with get_session_with_tenant(tenant_id=self._tenant_id) as db:
+            waiting = self._waiting(db, command_id)
+            with self._lock:
+                left = self._shown - {row.approval_id for row in waiting}
+            decided = [row for row in _rows(db, left) if row.decision is not None]
+        for row in waiting:
+            with self._lock:
+                new = row.approval_id not in self._shown
+                self._shown.add(row.approval_id)
+            if new:
+                self._report(_card(row))
+        for row in decided:
+            with self._lock:
+                self._shown.discard(row.approval_id)
+            self._report(
+                CommandApprovalResolved(
+                    approval_id=str(row.approval_id), outcome=_outcome(row)
+                )
+            )
+
+    def _report(
+        self, details: CommandApprovalRequest | CommandApprovalResolved
+    ) -> None:
+        try:
+            self._update(ToolProgress(details=details))
+        except AgentCancelled:
+            raise
+        except Exception:
+            logger.exception("command_approval_report_failed")

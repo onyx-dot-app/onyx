@@ -19,13 +19,31 @@ class Counts:
     code_waits: int = 0
     nested_search_calls: int = 0
     code_failures: int = 0
+    code_planned_failures: int = 0
+    code_output_chars: int = 0
 
 
 METRIC_NAMES = tuple(field.name for field in fields(Counts))
+# Counts that a turn's stream summary (onyx_client/stream_parser.py) adds.
+STREAM_COUNTS = tuple(
+    name for name in METRIC_NAMES if name not in ("active", "started", "finished")
+)
 
 local: dict[str, Counts] = {}
 workers: dict[str, dict[str, dict[str, int]]] = {}
 next_user = 0
+
+# Session turn ranges that per-turn-index latency is reported in; ranges keep
+# the number of metric names small.
+TURN_RANGES = ((1, 1), (2, 5), (6, 10), (11, 20), (21, 40), (41, 80))
+
+
+def turn_range(turn: int) -> str:
+    """The range label of a 1-based session turn: "1", "2-5", ..., "81+"."""
+    for low, high in TURN_RANGES:
+        if low <= turn <= high:
+            return str(low) if low == high else f"{low}-{high}"
+    return f"{TURN_RANGES[-1][1] + 1}+"
 
 
 def reset() -> None:

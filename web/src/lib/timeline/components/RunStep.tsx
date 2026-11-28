@@ -1,13 +1,54 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import { Line, Presence } from "@opal/components";
 import { LineLoader } from "@opal/loaders";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
+import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
 import type { TimelineEntryStatus } from "@/lib/timeline/types";
 
+/** The open steps of a run card, kept while the card folds and reopens. */
+export interface RunStepOpenState {
+  openIds: ReadonlySet<string>;
+  setOpen: (id: string, open: boolean) => void;
+  /** The steps sit in a run card's scrolling list, which reveals them. */
+  contained?: boolean;
+}
+
+export const RunStepOpenContext = createContext<RunStepOpenState | null>(null);
+
+/** A run's open step ids, in the order the user opened them. */
+export function useRunStepOpenState(): RunStepOpenState {
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set());
+  return useMemo(
+    () => ({
+      openIds,
+      setOpen: (id, open) =>
+        setOpenIds((previous) => {
+          const next = new Set(previous);
+          if (open) next.add(id);
+          else next.delete(id);
+          return next;
+        }),
+    }),
+    [openIds]
+  );
+}
+
+/** The row `RunStep` renders for the step `id`, within `root`. */
+export function findRunStepRow(
+  root: ParentNode,
+  id: string
+): HTMLElement | null {
+  return root.querySelector<HTMLElement>(
+    `[data-run-step-id="${CSS.escape(id)}"]`
+  );
+}
+
 export interface RunStepProps {
+  /** Keeps the step's open state in its run card. Such a step starts closed. */
+  id?: string;
   status: TimelineEntryStatus;
   /** The step kind's icon; a running or failed step shows its status. */
   icon?: IconFunctionComponent;
@@ -47,6 +88,7 @@ function statusIcon(
  * finishes), with a chevron that opens its body.
  */
 export function RunStep({
+  id,
   status,
   icon,
   title,
@@ -58,10 +100,23 @@ export function RunStep({
   hideHeader = false,
   loading = false,
 }: RunStepProps) {
-  const [open, setOpen] = useState(defaultExpanded);
+  const [localOpen, setLocalOpen] = useState(defaultExpanded);
+  const openState = useContext(RunStepOpenContext);
+  const { rowRef, onToggle } = useRevealOnOpen();
   if (hideHeader) return <>{body}</>;
+  const shared = openState !== null && id !== undefined;
+  const open = shared ? openState.openIds.has(id) : localOpen;
+  const toggle = () => {
+    // A run card's step list reveals its own steps.
+    if (!(shared && openState.contained)) onToggle(!open);
+    if (shared) openState.setOpen(id, !open);
+    else setLocalOpen(!open);
+  };
 
-  const shownTitle = status === "done" ? (doneTitle ?? title) : title;
+  // A failed step has finished too: it shows how it ended, e.g. "failed
+  // (HTTP 401)".
+  const shownTitle =
+    status === "done" || status === "error" ? (doneTitle ?? title) : title;
   // A running step can always be opened (it still starts closed): before its
   // first content arrives, its body is a loading shimmer. A finished step
   // with nothing to show is a static row, so a click cannot open it.
@@ -84,19 +139,23 @@ export function RunStep({
     : { expandable: false as const };
 
   return (
-    <Line
-      icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
-      title={shownTitle ?? ""}
-      titleKey={titleKey}
-      shimmer={status === "streaming"}
-      rightChildren={headerAccessory}
-      // Filled while open; otherwise only on hover.
-      filled={hasBody && open}
-      onClick={hasBody ? () => setOpen((prev) => !prev) : undefined}
-      // The body starts under the title text.
-      bodyInset="title"
-      {...cardBody}
-    />
+    <div ref={rowRef} data-run-step-id={id}>
+      <Line
+        icon={statusIcon(status) ?? icon ?? STEP_ICONS.thinking}
+        title={shownTitle ?? ""}
+        titleKey={titleKey}
+        shimmer={status === "streaming"}
+        // A failed step is tinted red, as its icon already is.
+        variant={status === "error" ? "error-heavy" : "default"}
+        rightChildren={headerAccessory}
+        // Filled while open; otherwise only on hover.
+        filled={hasBody && open}
+        onClick={hasBody ? toggle : undefined}
+        // The body starts under the title text.
+        bodyInset="title"
+        {...cardBody}
+      />
+    </div>
   );
 }
 

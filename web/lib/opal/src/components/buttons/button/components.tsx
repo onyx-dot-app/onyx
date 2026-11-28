@@ -4,6 +4,7 @@ import type {
   DistributiveOmit,
   ExtremaSizeVariants,
   RichStr,
+  Rounding,
 } from "@opal/types";
 import { type TooltipSide, Tooltip } from "@opal/components";
 import { ButtonLabel } from "@opal/components/buttons/button/label";
@@ -41,6 +42,7 @@ type ButtonProps = DistributiveOmit<InteractiveStatelessProps, "children"> &
      * Size preset — controls gap, text size, and Container height/rounding.
      */
     size?: ContainerSizeVariants;
+    rounding?: Rounding;
 
     /** Tooltip text shown on hover. */
     tooltip?: string;
@@ -64,6 +66,7 @@ function Button({
   children,
   rightIcon: RightIcon,
   size = "lg",
+  rounding,
   type = "button",
   width,
   tooltip,
@@ -107,7 +110,7 @@ function Button({
         border={interactiveProps.prominence === "secondary"}
         size={size}
         width={width}
-        rounding={isLarge ? 3 : size === "2xs" ? 1 : 2}
+        rounding={rounding ?? (isLarge ? 3 : size === "2xs" ? 1 : 2)}
       >
         <div className="flex flex-row items-center gap-1">
           {iconWrapper(Icon, size, !!children)}

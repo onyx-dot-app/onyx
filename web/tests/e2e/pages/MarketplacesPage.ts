@@ -30,6 +30,10 @@ export class MarketplacesPage {
 
   async enterSource(source: MarketplaceSourceInput): Promise<void> {
     await this.addDialog.getByLabel("Repository").fill(source.repository);
+    if (source.folder || source.ref)
+      await this.addDialog
+        .getByRole("button", { name: "Expand Advanced" })
+        .click();
     if (source.folder)
       await this.addDialog.getByLabel("Folder").fill(source.folder);
     if (source.ref)
@@ -63,13 +67,6 @@ export class MarketplacesPage {
       .getByRole("button", { name: "Add marketplace", exact: true })
       .click();
     await expect(this.addDialog).toBeHidden();
-  }
-
-  async gotoManage(): Promise<void> {
-    await this.page.goto("/app/customize/plugins/marketplaces");
-    await expect(
-      this.page.getByRole("heading", { name: "Marketplaces" })
-    ).toBeVisible();
   }
 
   row(name: string): Locator {

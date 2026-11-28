@@ -6,11 +6,11 @@ and handles connection initialization, session management, and protocol communic
 """
 
 import json
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Iterator
 from enum import Enum
 from typing import Any, Dict, TypeVar
 
-from httpx import HTTPStatusError
+from httpx import HTTPStatusError, TransportError
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.sse import sse_client
@@ -33,6 +33,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
+from onyx.utils.fleet_telemetry import MCPFailure, count_failure, error_category
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import (
     run_async_sync_no_cancel,
@@ -158,6 +159,35 @@ def has_auth_rejection_response(error: BaseException) -> bool:
 
 
 def _has_status_response(error: BaseException, statuses: frozenset[int]) -> bool:
+    return any(
+        isinstance(current, HTTPStatusError)
+        and current.response.status_code in statuses
+        for current in _chained_errors(error)
+    )
+
+
+def http_status(error: BaseException) -> int | None:
+    """The status of the first HTTP response in the error's chain, if any."""
+    return next(
+        (
+            current.response.status_code
+            for current in _chained_errors(error)
+            if isinstance(current, HTTPStatusError)
+        ),
+        None,
+    )
+
+
+def is_unreachable_error(error: BaseException) -> bool:
+    """Whether the server did not answer: no connection, or no answer in time."""
+    return any(
+        isinstance(current, (TransportError, TimeoutError))
+        for current in _chained_errors(error)
+    )
+
+
+def _chained_errors(error: BaseException) -> Iterator[BaseException]:
+    """The error, the errors of its groups, and the errors that caused it."""
     pending = [error]
     seen: set[int] = set()
     while pending:
@@ -165,18 +195,13 @@ def _has_status_response(error: BaseException, statuses: frozenset[int]) -> bool
         if id(current) in seen:
             continue
         seen.add(id(current))
-        if (
-            isinstance(current, HTTPStatusError)
-            and current.response.status_code in statuses
-        ):
-            return True
+        yield current
         if isinstance(current, BaseExceptionGroup):
             pending.extend(current.exceptions)
         if current.__cause__ is not None:
             pending.append(current.__cause__)
         elif current.__context__ is not None and not current.__suppress_context__:
             pending.append(current.__context__)
-    return False
 
 
 def log_exception_group(e: ExceptionGroup) -> Exception | None:
@@ -339,6 +364,14 @@ async def _discover_mcp_tools(session: ClientSession) -> list[MCPLibTool]:
     return tools_response.tools
 
 
+def _discovery_failure(error: Exception) -> MCPFailure:
+    if has_auth_rejection_response(error):
+        return MCPFailure.DISCOVERY_AUTH
+    if error_category(error) == "timeout":
+        return MCPFailure.DISCOVERY_TIMEOUT
+    return MCPFailure.DISCOVERY_ERROR
+
+
 def discover_mcp_tools(
     server_url: str,
     connection_headers: dict[str, str] | None = None,
@@ -357,6 +390,7 @@ def discover_mcp_tools(
             auth,
         )
     except Exception as error:
+        count_failure(_discovery_failure(error))
         if has_unauthorized_response(error):
             raise OnyxError(
                 OnyxErrorCode.UNAUTHENTICATED,

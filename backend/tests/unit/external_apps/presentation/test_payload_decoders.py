@@ -72,6 +72,17 @@ def test_html_only_body_is_extracted() -> None:
     assert "Hello" in decoded["body"]
 
 
+def test_a_different_html_version_is_shown_with_the_plain_text() -> None:
+    """The recipient may see the HTML version, so the review shows it."""
+    message = _message(body="Pay invoice 1")
+    message.add_alternative("<p>Pay invoice 2</p>", subtype="html")
+
+    decoded = _SEND_DECODER.decode(_raw(message))
+
+    assert decoded["body"] == "Pay invoice 1"
+    assert decoded["html_body"] == "<p>Pay invoice 2</p>"
+
+
 def test_attachment_surfaced_as_metadata_only() -> None:
     message = _message(body="see attached")
     message.add_attachment(

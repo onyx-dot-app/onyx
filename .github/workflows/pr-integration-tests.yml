@@ -3,7 +3,7 @@ concurrency:
   # Pushes to main share a group and queue: one run in progress and the
   # newest one pending, so a burst of merges runs at most twice and every
   # run finishes (cancelling would starve main while merges keep landing).
-  group: Run-Integration-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref) || github.run_id }}
+  group: Run-Integration-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 
 on:
@@ -18,14 +18,16 @@ on:
   push:
     paths-ignore:
       - "documentation/**"
-    # A push to main runs the full EE + MIT matrix after each merge.
+    # A push to main runs the full EE + MIT matrix after each merge, except
+    # the daily-only suites.
     branches:
       - main
     tags:
       - "v*.*.*"
   schedule:
     # Daily run of the suites that PRs skip unless related code changes (the
-    # reindex port suite). 11:00 UTC is 3 AM PST / 4 AM PDT.
+    # reindex port suite), and of the daily-only suites. 11:00 UTC is 3 AM PST
+    # / 4 AM PDT.
     - cron: "0 11 * * *"
   workflow_dispatch:
 
@@ -59,6 +61,14 @@ env:
   GITHUB_TEST_USER_2_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_2_EMAIL }}
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   changes:
     # Decides whether the integration test matrix runs. On pull_request
     # we use paths-filter; on push (main, tags) we default to `true` so
@@ -164,12 +174,6 @@ jobs:
               - 'backend/onyx/connectors/github/**'
               - 'backend/ee/onyx/external_permissions/github/**'
               - 'backend/tests/integration/connector_job_tests/github/**'
-            google:
-              - *connector_shared
-              - 'backend/onyx/connectors/google_drive/**'
-              - 'backend/onyx/connectors/google_utils/**'
-              - 'backend/ee/onyx/external_permissions/google_drive/**'
-              - 'backend/tests/integration/connector_job_tests/google/**'
             jira:
               - *connector_shared
               - 'backend/onyx/connectors/jira/**'
@@ -217,7 +221,7 @@ jobs:
         run: |
           skipped=""
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            for suite in azure_datalake github google jira onedrive sharepoint slack; do
+            for suite in azure_datalake github jira onedrive sharepoint slack; do
               if [[ "$(jq -r --arg suite "$suite" '.[$suite] // "false"' <<< "$FILTER_OUTPUTS")" != "true" ]]; then
                 skipped="$skipped $suite"
               fi
@@ -257,19 +261,22 @@ jobs:
           if [[ "$REINDEX_PORT_CHANGED" == "true" ]]; then
             tests_dirs="$tests_dirs reindex_port"
           fi
+          # The Drive suite creates and deletes a shared drive in the live test
+          # Workspace, so it runs once a day, not on every PR and merge.
+          daily_connector_dirs="google"
           connector_dirs=""
           for dir in $(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort); do
-            if [[ " $SKIPPED_CONNECTOR_SUITES " != *" $dir "* ]]; then
+            if [[ " $SKIPPED_CONNECTOR_SUITES $daily_connector_dirs " != *" $dir "* ]]; then
               connector_dirs="$connector_dirs $dir"
             fi
           done
           # The chat suites run a second time with code mode on, where the model
-          # calls most tools from `execute_code` programs.
+          # calls most tools from code mode programs.
           code_mode_dirs="chat llm_workflows skills streaming_endpoints tools"
           # The daily run covers only the suites that PRs skip by default.
           if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
             tests_dirs="reindex_port"
-            connector_dirs=""
+            connector_dirs="$daily_connector_dirs"
             code_mode_dirs=""
           fi
 
@@ -809,6 +816,7 @@ jobs:
         "run-id=${{ github.run_id }}-multitenant-tests",
         "extras=ecr-cache",
         "volume=100gb",
+        spot=false,
       ]
     timeout-minutes: 15
 

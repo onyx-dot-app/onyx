@@ -2,13 +2,15 @@
   "aliases": {},
   "models": {
     "glm-4-32b-0414-128k": {
+      "attachment": false,
       "cost": {
-        "input": 0.09999999999999999,
-        "output": 0.09999999999999999
+        "input": 0.1,
+        "output": 0.1
       },
+      "family": "glm",
       "limit": {
         "context": 128000,
-        "output": 32000
+        "output": 16384
       },
       "modalities": {
         "input": [
@@ -19,7 +21,12 @@
         ]
       },
       "mode": "chat",
-      "name": "glm-4-32b-0414-128k",
+      "name": "GLM-4-32B-0414-128K",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-14",
+      "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "glm-4.5": {
@@ -159,7 +166,7 @@
         "input": 0.6,
         "output": 1.8
       },
-      "family": "glm",
+      "family": "glmv",
       "limit": {
         "context": 64000,
         "output": 16384
@@ -219,7 +226,7 @@
         "input": 0.3,
         "output": 0.9
       },
-      "family": "glm",
+      "family": "glmv",
       "limit": {
         "context": 128000,
         "output": 32768
@@ -249,7 +256,7 @@
         "input": 0,
         "output": 0
       },
-      "family": "glm-flash",
+      "family": "glmv-flash",
       "limit": {
         "context": 128000,
         "output": 32768
@@ -418,7 +425,7 @@
         "input": 1.2,
         "output": 4
       },
-      "family": "glm",
+      "family": "glm-turbo",
       "limit": {
         "context": 200000,
         "output": 131072
@@ -594,6 +601,38 @@
       "temperature": true,
       "tool_call": true
     },
+    "glm-5.3-flashx-legal": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "cache_write": 0,
+        "input": 0.37,
+        "output": 1.25
+      },
+      "family": "glm-flash-legal",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3-FlashX-Legal",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "glm-5v-turbo": {
       "attachment": true,
       "cost": {
@@ -602,7 +641,7 @@
         "input": 1.2,
         "output": 4
       },
-      "family": "glm",
+      "family": "glmv-turbo",
       "limit": {
         "context": 200000,
         "output": 131072

@@ -1,11 +1,16 @@
 """The logic of the integration API: who manages an integration, create,
 update and delete, the views, the action policies and the connections."""
 
+import json
 from collections.abc import Collection, Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
+import requests
+import urllib3
+from graphql import get_introspection_query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, has_permission
@@ -25,14 +30,15 @@ from onyx.db.enums import (
 from onyx.db.external_app import associate_built_in_skill__no_commit
 from onyx.db.integration import (
     create_external_app_row__no_commit,
+    create_graphql_app_row__no_commit,
     create_mcp_server_row__no_commit,
     create_openapi_tool_row__no_commit,
     delete_integration__no_commit,
     delete_oauth_client__no_commit,
+    get_api_app_for_integration,
     get_external_app_for_integration,
     get_integration_by_id,
     get_mcp_server_for_integration,
-    get_openapi_tool_for_integration,
     insert_integration__no_commit,
     list_external_apps_by_integration,
     list_integration_actions,
@@ -76,7 +82,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
-from onyx.external_apps.url_glob import UrlGlob
 from onyx.integrations.actions import (
     count_actions,
     integration_actions,
@@ -91,6 +96,7 @@ from onyx.integrations.connection_models import (
 from onyx.integrations.connections import (
     IntegrationStatus,
     MissingHeaderValueError,
+    checked_credential_fields,
     connect_with_fields__no_commit,
     credential_field_keys,
     credential_fields_json,
@@ -104,8 +110,10 @@ from onyx.integrations.connections import (
     sign_in_host,
     sign_in_settings_for,
 )
-from onyx.integrations.craft import always_asks, craft_service_urls
-from onyx.integrations.kinds.api import sync_integration_actions__no_commit
+from onyx.integrations.craft import craft_service_urls
+from onyx.integrations.kinds.api import (
+    sync_integration_actions__no_commit,
+)
 from onyx.integrations.kinds.mcp_server import (
     check_mcp_credential_fields,
     fetch_mcp_actions,
@@ -115,21 +123,34 @@ from onyx.integrations.models import (
     EffectivePolicy,
     IntegrationActionSpec,
 )
+from onyx.integrations.openapi_endpoints import (
+    EndpointLinesError,
+    apply_endpoint_lines,
+    drop_uncallable_operations,
+    endpoint_lines,
+)
 from onyx.integrations.policy import (
     DEFAULT_ACTION_KEY,
     STORED_TO_EFFECTIVE,
     action_default_policy,
     admin_policy,
+    always_asks,
 )
-from onyx.integrations.presets import PRESETS, Preset, get_preset
-from onyx.server.features.build.utils import is_craft_available_for_deployment
+from onyx.integrations.presets import (
+    PRESET_OAUTH_REDIRECT_URI,
+    PRESETS,
+    Preset,
+    get_preset,
+)
 from onyx.server.features.integrations.models import (
     ActionGrantsResponse,
     AdminIntegration,
     AdminIntegrationDetail,
     AgentIntegrationOption,
     CredentialField,
-    CustomConfigInput,
+    CustomConfigView,
+    GraphQLConfigInput,
+    GraphQLIntrospectRequest,
     IntegrationAccess,
     IntegrationActionsResponse,
     IntegrationActionsUpdate,
@@ -149,23 +170,44 @@ from onyx.server.features.integrations.models import (
     OAuthClientInput,
     OAuthClientView,
     OpenApiConfigInput,
+    OpenApiConfigView,
+    OpenApiEndpointsRequest,
     PresetConfigInput,
     PresetConfigView,
     PresetView,
 )
 from onyx.server.features.mcp.client import discover_mcp_tools
 from onyx.server.features.mcp.ssrf import validate_mcp_url
-from onyx.tools.tool_implementations.custom.custom_tool import validate_custom_tool_url
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.server.security.models import outbound_ssrf_params, ssrf_error_hint
+from onyx.server.security.store import get_security_settings
+from onyx.tools.tool_implementations.api_app.graphql_tool import introspection_to_sdl
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
+    check_nesting_depth,
     openapi_to_url,
+    parse_openapi_document,
     validate_openapi_schema,
+)
+from onyx.tools.tool_implementations.api_app.rest_tool import validate_api_app_url
+from onyx.tools.tool_implementations.http_request import (
+    ToolRequestError,
+    ToolRequestFailure,
+    send_tool_request,
 )
 from onyx.utils.encryption import is_masked_credential, mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException
+from onyx.utils.url import (
+    BodyReadError,
+    BodyReadFailure,
+    SSRFException,
+    read_bounded_body,
+    ssrf_safe_get,
+)
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+_MAX_SPEC_BYTES = 5 * 1024 * 1024
+_SPEC_FETCH_TIMEOUT_SECONDS = 15
 
 _CLIENT_CREDENTIAL_KEYS = ("client_id", "client_secret")
 
@@ -271,9 +313,14 @@ def _external_apps(
 
 
 def _shapes(
-    integrations: Collection[Integration], external_apps: Mapping[int, ExternalApp]
+    integrations: Collection[Integration],
+    external_apps: Mapping[int, ExternalApp],
+    *,
+    skip_unknown: bool = False,
 ) -> dict[int, tuple[IntegrationShape, str | None]]:
-    """The shape and the preset id of each integration."""
+    """The shape and the preset id of each integration. ``skip_unknown``
+    leaves out an integration with no shape, e.g. one that a later release
+    wrote, so that a list still shows the others."""
     shapes: dict[int, tuple[IntegrationShape, str | None]] = {}
     for integration in integrations:
         if integration.kind is IntegrationKind.MCP:
@@ -282,8 +329,19 @@ def _shapes(
         if integration.tool_id is not None:
             shapes[integration.id] = (IntegrationShape.OPENAPI, None)
             continue
+        # For one release a REST app also has its tool row, so an api_app
+        # row alone is a GraphQL app.
+        if integration.api_app_id is not None:
+            shapes[integration.id] = (IntegrationShape.GRAPHQL, None)
+            continue
         app = external_apps.get(integration.id)
         if app is None:
+            if skip_unknown:
+                logger.warning(
+                    "Skipping integration %s: it has no settings of a known shape.",
+                    integration.id,
+                )
+                continue
             raise OnyxError(
                 OnyxErrorCode.NOT_FOUND,
                 f"Integration {integration.id} has no API settings.",
@@ -342,23 +400,32 @@ def _preset_methods(preset: Preset) -> list[IntegrationAuthMethod | None]:
     return [None]
 
 
-def preset_views(user: User) -> list[PresetView]:
-    """The presets an admin can add. Empty when Craft is not available:
-    only Craft runs a preset app."""
-    if not is_craft_available_for_deployment(user):
-        return []
+def _preset_view(preset: Preset) -> PresetView:
+    descriptor = preset.provider.spec.descriptor
+    oauth = (
+        preset.provider
+        if isinstance(preset.provider, OAuthExternalAppProvider)
+        else None
+    )
+    return PresetView(
+        id=preset.id,
+        name=preset.name,
+        auth_methods=_preset_methods(preset),
+        required_org_credential_fields=[
+            CredentialField(key=field.key, label=field.label, secret=field.secret)
+            for field in descriptor.required_org_credential_fields
+        ],
+        setup_steps=list(descriptor.setup_steps),
+        setup_url=descriptor.setup_url,
+        callback_url=PRESET_OAUTH_REDIRECT_URI if oauth else None,
+        scopes=oauth.spec.oauth.requested_scopes() if oauth else [],
+    )
+
+
+def preset_views() -> list[PresetView]:
+    """The presets an admin can add."""
     return [
-        PresetView(
-            id=preset.id,
-            name=preset.name,
-            auth_methods=_preset_methods(preset),
-            required_org_credential_fields=[
-                CredentialField(key=field.key, label=field.label, secret=field.secret)
-                for field in preset.provider.spec.descriptor.required_org_credential_fields
-            ],
-            setup_instructions=preset.provider.spec.descriptor.setup_instructions
-            or None,
-        )
+        _preset_view(preset)
         for preset in sorted(PRESETS.values(), key=lambda preset: preset.name)
         if not _is_onyx_managed(preset)
     ]
@@ -369,20 +436,31 @@ def _allowed_methods(
 ) -> list[IntegrationAuthMethod | None]:
     if shape is IntegrationShape.PRESET and preset is not None:
         return _preset_methods(preset)
-    if shape is IntegrationShape.CUSTOM:
-        return [IntegrationAuthMethod.API_KEY]
     return list(_TOKEN_METHODS)
 
 
-def validate_openapi_definition(definition: dict[str, Any]) -> None:
+def _check_server_url(server_url: str, *, allow_relative: bool = False) -> None:
     try:
-        validate_openapi_schema(definition)
-    except (ValueError, TypeError, KeyError, AttributeError) as e:
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
-    server_url = openapi_to_url(definition)
+        parsed = urlparse(server_url)
+    except ValueError as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Server URL '{server_url}' is not valid: {e}",
+        ) from e
+    if parsed.query or parsed.fragment:
+        # Tools append the endpoint path to the whole server URL.
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Server URL '{server_url}' cannot have a query or a fragment.",
+        )
+    if allow_relative and not parsed.scheme:
+        if not parsed.netloc:
+            return
+        # The client gives a scheme-relative URL the scheme of the spec URL.
+        server_url = f"https:{server_url}"
     try:
         # No DNS at save time; each call resolves and checks again.
-        validate_custom_tool_url(server_url, resolve_dns=False)
+        validate_api_app_url(server_url, resolve_dns=False)
     except (SSRFException, ValueError) as e:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
@@ -390,17 +468,254 @@ def validate_openapi_definition(definition: dict[str, Any]) -> None:
         ) from e
 
 
-def _validate_url_patterns(patterns: list[str]) -> None:
-    if not patterns:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Add at least one URL pattern.")
-    for pattern in patterns:
-        try:
-            UrlGlob.parse(pattern)
-        except ValueError as error:
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+def validate_openapi_definition(definition: dict[str, Any]) -> None:
+    try:
+        validate_openapi_schema(definition)
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+    _check_server_url(openapi_to_url(definition))
+
+
+def check_api_document_size(text: str, label: str) -> None:
+    """Refuse an API document, endpoint list or schema that the spec import
+    could not take."""
+    if len(text.encode()) > _MAX_SPEC_BYTES:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE, f"The {label} is larger than 5 MB."
+        )
+
+
+def _openapi_document(
+    config: OpenApiConfigInput,
+    stored: str | None,
+    *,
+    title: str,
+    description: str | None,
+) -> tuple[str, dict[str, Any]]:
+    """The document to store and its parsed spec: the one sent, or the
+    endpoint lines applied to the one sent, else to ``stored``. A line error
+    names its line in ``extra.line_errors``."""
+    if config.openapi_document is not None:
+        check_api_document_size(config.openapi_document, "spec")
+    if config.endpoints is not None:
+        check_api_document_size("\n".join(config.endpoints), "endpoint list")
+    try:
+        if config.endpoints is None:
+            if config.openapi_document is None:
+                raise RuntimeError("Bug: the model requires a document or lines.")
+            document = config.openapi_document
+        else:
+            document = apply_endpoint_lines(
+                (
+                    config.openapi_document
+                    if config.openapi_document is not None
+                    else stored
+                ),
+                title=title,
+                description=description,
+                base_url=(config.base_url or "").strip(),
+                lines=config.endpoints,
+            )
+            if document != stored:
+                check_api_document_size(document, "spec")
+        spec = parse_openapi_document(document)
+    except EndpointLinesError as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            str(e),
+            extra={"line_errors": [error.model_dump() for error in e.errors]},
+        ) from e
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+    validate_openapi_definition(spec)
+    return document, spec
+
+
+def _openapi_view(document: str, spec: dict[str, Any]) -> OpenApiConfigView:
+    try:
+        base_url = openapi_to_url(spec)
+    except ValueError:
+        base_url = ""
+    return OpenApiConfigView(
+        openapi_document=document, base_url=base_url, endpoints=endpoint_lines(spec)
+    )
+
+
+def _imported_view(document: str) -> OpenApiConfigView:
+    """The view of a spec to import, without the operations that no tool can
+    call. Runs the checks of create except the server URL ones: the client
+    may still set the URL. A document that is not a spec at all is
+    ``INVALID_INPUT``; a spec that fails the checks is ``VALIDATION_ERROR``."""
+    try:
+        spec = parse_openapi_document(document)
+    except ValueError as e:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"This is not an OpenAPI spec: {e}"
+        ) from e
+    if "openapi" not in spec and "swagger" not in spec:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This is not an OpenAPI spec: it has no `openapi` field.",
+        )
+    try:
+        check_nesting_depth(spec)
+        document, skipped = drop_uncallable_operations(document, spec)
+        validate_openapi_schema(spec, check_server_url=False)
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+    view = _openapi_view(document, spec)
+    view.skipped = skipped
+    return view
+
+
+def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigView:
+    """The base URL and the endpoint lines of a spec to import. A spec URL
+    that Onyx cannot reach is ``BAD_GATEWAY``. A non-2xx answer is
+    ``INVALID_INPUT``: the server is up, but the URL is not a spec, as for a
+    GraphQL endpoint that only takes POST."""
+    if request.openapi_document is not None:
+        check_api_document_size(request.openapi_document, "spec")
+        return _checked_import(_imported_view(request.openapi_document), fetched=False)
+    if request.spec_url is None:
+        raise RuntimeError("Bug: the model requires the spec text or a URL.")
+    spec_url = request.spec_url.strip()
+    policy = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
+    try:
+        with ssrf_safe_get(
+            spec_url,
+            timeout=_SPEC_FETCH_TIMEOUT_SECONDS,
+            trust_env=False,
+            allow_private_network=policy.allow_private_network,
+            block_loopback_and_link_local=policy.block_loopback_and_link_local,
+            block_link_local_only=policy.block_link_local_only,
+            stream=True,
+        ) as response:
+            if not 200 <= response.status_code < 300:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"The spec URL answered with HTTP {response.status_code}.",
+                )
+            body = read_bounded_body(
+                response,
+                max_bytes=_MAX_SPEC_BYTES,
+                deadline_seconds=_SPEC_FETCH_TIMEOUT_SECONDS,
+            ).content
+    except BodyReadError as e:
+        if e.failure is BodyReadFailure.TOO_LARGE:
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE, "The spec is larger than 5 MB."
+            ) from e
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, "The spec URL did not answer in time."
+        ) from e
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Onyx cannot fetch the spec: {e}{ssrf_error_hint(spec_url, e)}",
+        ) from e
+    except (requests.RequestException, urllib3.exceptions.HTTPError) as e:
+        # The URL and the error text can carry tokens of a signed spec URL.
+        logger.warning(
+            "Could not fetch the spec at host %s: %s",
+            urlparse(spec_url).hostname,
+            type(e).__name__,
+        )
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, "Onyx could not connect to the spec URL."
+        ) from e
+    return _checked_import(
+        _imported_view(body.decode("utf-8", errors="replace")), fetched=True
+    )
+
+
+def _checked_import(view: OpenApiConfigView, *, fetched: bool) -> OpenApiConfigView:
+    # The client hides the base URL field for the single server URL of a
+    # spec, so the admin cannot correct it after the import. The client
+    # resolves a relative URL against the spec URL of a fetched spec. For an
+    # uploaded spec, the admin's base URL replaces a URL with no scheme.
+    base_url = view.base_url.strip()
+    try:
+        absolute = bool(urlparse(base_url).scheme)
+    except ValueError:
+        absolute = True
+    if fetched or absolute:
+        _check_server_url(base_url, allow_relative=True)
+    return view
+
+
+def _graphql_endpoint_url(config: GraphQLConfigInput) -> str:
+    """The stripped endpoint URL. Raises ``OnyxError`` for a blocked host or
+    a schema over the size limit."""
+    check_api_document_size(config.graphql_schema, "schema")
+    endpoint_url = config.endpoint_url.strip()
+    try:
+        # No DNS at save time; each call resolves and checks again.
+        validate_api_app_url(endpoint_url, resolve_dns=False)
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Endpoint URL '{endpoint_url}' is not allowed: {e}",
+        ) from e
+    return endpoint_url
+
+
+def introspect_graphql_endpoint(
+    request: GraphQLIntrospectRequest,
+) -> GraphQLConfigInput:
+    """The schema of an endpoint that answers an introspection query with no
+    sign-in. An endpoint that Onyx cannot reach is ``BAD_GATEWAY``."""
+    endpoint_url = request.endpoint_url.strip()
+    try:
+        response = send_tool_request(
+            "POST",
+            endpoint_url,
+            headers={},
+            # An admin setup fetch: the admin SSRF level, as for the spec URL
+            # import and MCP servers, not the chat tool policy.
+            ssrf=outbound_ssrf_params(get_security_settings().ssrf_protection_level),
+            max_response_bytes=_MAX_SPEC_BYTES,
+            json_body={"query": get_introspection_query(descriptions=True)},
+            # The HTTP rules of the spec URL fetch and MCP setup.
+            timeout=_SPEC_FETCH_TIMEOUT_SECONDS,
+            trust_env=False,
+        )
+    except ToolRequestError as e:
+        reason: str = e.failure.value
+        if e.failure is ToolRequestFailure.BLOCKED and isinstance(
+            e.__cause__, Exception
+        ):
+            reason = f"{e.__cause__}{ssrf_error_hint(endpoint_url, e.__cause__)}"
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, f"Onyx could not reach the endpoint: {reason}"
+        ) from e
+    if not response.ok:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"The endpoint answered with HTTP {response.status_code}.",
+        )
+    if response.truncated:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            "The schema is larger than 5 MB. Upload a smaller SDL file.",
+        )
+    try:
+        sdl = introspection_to_sdl(json.loads(response.body))
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+    return GraphQLConfigInput(endpoint_url=endpoint_url, graphql_schema=sdl)
 
 
 _TOKEN_PLACEHOLDERS = frozenset({"access_token", "refresh_token", "token_type"})
+
+
+def _unfillable_placeholders(
+    auth_method: IntegrationAuthMethod | None,
+    header_template: Mapping[str, str] | None,
+) -> list[str]:
+    if auth_method is IntegrationAuthMethod.API_KEY or not header_template:
+        return []
+    allowed = _TOKEN_PLACEHOLDERS if auth_method is not None else frozenset()
+    return sorted(set(header_field_keys(header_template)) - allowed)
 
 
 def _check_template_fits(
@@ -409,10 +724,7 @@ def _check_template_fits(
 ) -> None:
     """A header template may use only the placeholders the sign-in method
     fills; an API key method fills the fields that the template names."""
-    if auth_method is IntegrationAuthMethod.API_KEY or not header_template:
-        return
-    allowed = _TOKEN_PLACEHOLDERS if auth_method is not None else frozenset()
-    unknown = sorted(set(header_field_keys(header_template)) - allowed)
+    unknown = _unfillable_placeholders(auth_method, header_template)
     if unknown:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -436,6 +748,14 @@ def _validate_sign_in(
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "An integration with no sign-in has no sign-in method.",
+            )
+        if (
+            shape is IntegrationShape.PRESET
+            and preset is not None
+            and None not in _preset_methods(preset)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, "This integration needs a sign-in."
             )
         return
     if auth_method is None:
@@ -650,14 +970,6 @@ def create_integration__no_commit(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Give the integration a name.")
     config = request.config
     shape = IntegrationShape(config.shape)
-    if shape in (
-        IntegrationShape.PRESET,
-        IntegrationShape.CUSTOM,
-    ) and not is_craft_available_for_deployment(user):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Craft is not available, so you cannot add an external app.",
-        )
     preset = (
         _preset_or_400(config.preset_id)
         if isinstance(config, PresetConfigInput)
@@ -692,10 +1004,16 @@ def create_integration__no_commit(
     )
     if isinstance(config, McpServerConfigInput):
         validate_mcp_url(config.server_url, "server_url", require_https=False)
-    elif isinstance(config, OpenApiConfigInput):
-        validate_openapi_definition(config.openapi_spec)
-    elif isinstance(config, CustomConfigInput):
-        _validate_url_patterns(config.upstream_url_patterns)
+    openapi = (
+        _openapi_document(config, None, title=name, description=request.description)
+        if isinstance(config, OpenApiConfigInput)
+        else None
+    )
+    graphql_endpoint_url = (
+        _graphql_endpoint_url(config)
+        if isinstance(config, GraphQLConfigInput)
+        else None
+    )
     mcp_actions: list[IntegrationActionSpec] | None = None
     if (
         isinstance(config, McpServerConfigInput)
@@ -716,6 +1034,7 @@ def create_integration__no_commit(
     mcp_server_id: int | None = None
     tool_id: int | None = None
     external_app_id: int | None = None
+    api_app_id: int | None = None
     if isinstance(config, McpServerConfigInput):
         mcp_server_id = create_mcp_server_row__no_commit(
             name=name,
@@ -725,12 +1044,18 @@ def create_integration__no_commit(
             transport=config.transport,
             db_session=db_session,
         ).id
-    elif isinstance(config, OpenApiConfigInput):
+    elif openapi is not None:
         tool_id = create_openapi_tool_row__no_commit(
             name=name,
             description=request.description,
             user_id=user.id,
-            openapi_spec=config.openapi_spec,
+            openapi_spec=openapi[1],
+            db_session=db_session,
+        ).id
+    elif isinstance(config, GraphQLConfigInput) and graphql_endpoint_url is not None:
+        api_app_id = create_graphql_app_row__no_commit(
+            endpoint_url=graphql_endpoint_url,
+            graphql_schema=config.graphql_schema,
             db_session=db_session,
         ).id
     elif preset is not None:
@@ -746,14 +1071,6 @@ def create_integration__no_commit(
         )
         associate_built_in_skill__no_commit(db_session, app)
         external_app_id = app.id
-    elif isinstance(config, CustomConfigInput):
-        external_app_id = create_external_app_row__no_commit(
-            name=name,
-            app_type=ExternalAppType.CUSTOM,
-            upstream_url_patterns=config.upstream_url_patterns,
-            auth_template=dict(header_template or {}),
-            db_session=db_session,
-        ).id
     integration = insert_integration__no_commit(
         name=name,
         description=request.description,
@@ -774,10 +1091,11 @@ def create_integration__no_commit(
         mcp_server_id=mcp_server_id,
         external_app_id=external_app_id,
         tool_id=tool_id,
+        api_app_id=api_app_id,
         db_session=db_session,
     )
-    if isinstance(config, OpenApiConfigInput):
-        write_openapi_document__no_commit(integration, config.openapi_spec, db_session)
+    if openapi is not None:
+        write_openapi_document__no_commit(integration, *openapi, db_session)
 
     if auth_method is IntegrationAuthMethod.OAUTH2 and request.oauth_client:
         _write_oauth_client(
@@ -821,46 +1139,58 @@ def _apply_config(
         server = get_mcp_server_for_integration(integration.id, db_session)
         if server is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "The MCP server is missing.")
+        changed = (server.server_url, server.transport) != (
+            config.server_url,
+            config.transport,
+        )
         server.server_url = config.server_url
         server.transport = config.transport
-        return False
+        return changed
     if isinstance(config, OpenApiConfigInput):
-        validate_openapi_definition(config.openapi_spec)
-        write_openapi_document__no_commit(integration, config.openapi_spec, db_session)
+        stored = get_api_app_for_integration(integration.id, db_session)
+        document, spec = _openapi_document(
+            config,
+            stored.openapi_document if stored is not None else None,
+            title=integration.name,
+            description=integration.description,
+        )
+        write_openapi_document__no_commit(integration, document, spec, db_session)
+        return True
+    if isinstance(config, GraphQLConfigInput):
+        endpoint_url = _graphql_endpoint_url(config)
+        api_app = get_api_app_for_integration(integration.id, db_session)
+        if api_app is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "The GraphQL app is missing.")
+        api_app.base_url = endpoint_url
+        api_app.graphql_schema = config.graphql_schema
         return True
     app = get_external_app_for_integration(integration.id, db_session)
     if app is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "The app settings are missing.")
-    if isinstance(config, PresetConfigInput):
-        preset = _preset_or_400(config.preset_id)
-        if preset.app_type != app.app_type:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "The preset of an integration cannot change.",
+    preset = _preset_or_400(config.preset_id)
+    if preset.app_type != app.app_type:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The preset of an integration cannot change.",
+        )
+    if config.organization_credentials is not None:
+        org_credentials = _preset_org_credentials(
+            preset, config.organization_credentials
+        )
+        app.upstream_url_patterns = preset.provider.resolve_upstream_url_patterns(
+            _host_values(org_credentials),
+            list(preset.provider.spec.descriptor.upstream_url_patterns),
+        )
+        if integration.auth_method is IntegrationAuthMethod.OAUTH2:
+            _write_oauth_client(
+                integration,
+                oauth_client
+                or OAuthClientInput(provider_mode=IntegrationOAuthProviderMode.PRESET),
+                shape,
+                org_credentials,
+                keep_secret=True,
+                db_session=db_session,
             )
-        if config.organization_credentials is not None:
-            org_credentials = _preset_org_credentials(
-                preset, config.organization_credentials
-            )
-            app.upstream_url_patterns = preset.provider.resolve_upstream_url_patterns(
-                _host_values(org_credentials),
-                list(preset.provider.spec.descriptor.upstream_url_patterns),
-            )
-            if integration.auth_method is IntegrationAuthMethod.OAUTH2:
-                _write_oauth_client(
-                    integration,
-                    oauth_client
-                    or OAuthClientInput(
-                        provider_mode=IntegrationOAuthProviderMode.PRESET
-                    ),
-                    shape,
-                    org_credentials,
-                    keep_secret=True,
-                    db_session=db_session,
-                )
-        return False
-    _validate_url_patterns(config.upstream_url_patterns)
-    app.upstream_url_patterns = config.upstream_url_patterns
     return False
 
 
@@ -877,13 +1207,19 @@ def _updated_header_template(
             if request.header_template is not None
             else None
         )
-    if (
-        integration.auth_method is IntegrationAuthMethod.API_KEY
-        and auth_method is not IntegrationAuthMethod.API_KEY
+    if auth_method is integration.auth_method:
+        return integration.header_template
+    if integration.auth_method is IntegrationAuthMethod.API_KEY or (
+        _unfillable_placeholders(auth_method, integration.header_template)
     ):
-        # The API key placeholders cannot be filled with another method.
+        # The new method cannot fill the placeholders of the old one.
         return None
     return integration.header_template
+
+
+_SIGN_IN_FIELDS = frozenset(
+    {"auth_mode", "auth_method", "header_template", "credential_fields", "oauth_client"}
+)
 
 
 def update_integration__no_commit(
@@ -942,21 +1278,24 @@ def update_integration__no_commit(
     header_template = _updated_header_template(integration, request, auth_method)
     if "header_template" in fields:
         _check_template_fits(auth_method, header_template)
-    header_template_changed = header_template != integration.header_template
     if auth_method is not integration.auth_method or fields & {
         "config",
         "header_template",
     }:
         _check_onyx_login(user, auth_method)
-    _validate_sign_in(
-        shape=shape,
-        preset=preset,
-        auth_mode=auth_mode,
-        auth_method=auth_method,
-        header_template=header_template,
-        oauth_client=request.oauth_client if "oauth_client" in fields else None,
-        has_stored_client=stored_client is not None,
-    )
+    # A save that changes no sign-in setting keeps the stored one. A migrated
+    # API key integration has no header template: its headers are in its
+    # legacy connection.
+    if fields & _SIGN_IN_FIELDS:
+        _validate_sign_in(
+            shape=shape,
+            preset=preset,
+            auth_mode=auth_mode,
+            auth_method=auth_method,
+            header_template=header_template,
+            oauth_client=request.oauth_client if "oauth_client" in fields else None,
+            has_stored_client=stored_client is not None,
+        )
     integration.auth_mode = auth_mode
     integration.auth_method = auth_method
     integration.header_template = header_template
@@ -987,10 +1326,6 @@ def update_integration__no_commit(
         needs_sync = _apply_config(
             integration, shape, request.config, request.oauth_client, db_session
         )
-    if shape is IntegrationShape.CUSTOM and header_template_changed:
-        app = get_external_app_for_integration(integration.id, db_session)
-        if app is not None:
-            app.auth_template = dict(header_template or {})
     db_session.flush()
 
     after = sign_in_settings_for(
@@ -1002,8 +1337,39 @@ def update_integration__no_commit(
     if before != after or not set(credential_field_keys(integration)) <= fields_before:
         mark_sign_in_settings_changed(integration.id, db_session)
     if needs_sync:
-        sync_integration_actions__no_commit(integration, db_session)
+        if integration.kind is IntegrationKind.MCP:
+            _reload_mcp_actions(integration, user, db_session)
+        else:
+            sync_integration_actions__no_commit(integration, db_session)
     return integration
+
+
+def _reload_mcp_actions(
+    integration: Integration, user: User, db_session: Session
+) -> None:
+    """The actions of a changed MCP server. A server that does not answer
+    with the current credential leaves no actions until a refresh, so the
+    old server's actions do not stay. Their policies stay for the refresh."""
+    try:
+        with _reaching(integration.name):
+            actions = fetch_mcp_actions(integration, user, db_session)
+    except OnyxError as error:
+        logger.info(
+            "Integration %s: no actions until a refresh: %s",
+            integration.id,
+            error.detail,
+        )
+        replace_integration_actions__no_commit(
+            integration.id,
+            IntegrationActionSource.MCP,
+            [],
+            db_session,
+            keep_policies=True,
+        )
+        return
+    replace_integration_actions__no_commit(
+        integration.id, IntegrationActionSource.MCP, actions, db_session
+    )
 
 
 def delete_integration_for_user__no_commit(
@@ -1089,7 +1455,7 @@ def _credential_fields(integration: Integration) -> list[CredentialField]:
 
 
 def _action_views(
-    integration: Integration,
+    kind: IntegrationKind,
     actions: list[IntegrationAction],
     admin_rows: Mapping[str, IntegrationActionPolicyValue],
 ) -> list[IntegrationActionView]:
@@ -1106,7 +1472,7 @@ def _action_views(
                 else None
             ),
             effective_admin_policy=admin_policy(admin_rows, action.key, action),
-            always_asks=always_asks(integration.kind, action.key),
+            always_asks=always_asks(kind, action.key),
         )
         for action in actions
     ]
@@ -1117,7 +1483,7 @@ def action_views(
 ) -> list[IntegrationActionView]:
     rows = get_policy_rows(db_session, integration.id, None)
     return _action_views(
-        integration, integration_actions(integration.id, db_session), rows.admin
+        integration.kind, integration_actions(integration.id, db_session), rows.admin
     )
 
 
@@ -1210,7 +1576,15 @@ def _admin_views(
     user: User,
     integrations: Collection[Integration],
     db_session: Session,
+    *,
+    skip_unknown: bool = False,
 ) -> list[AdminIntegration]:
+    shapes = _shapes(
+        integrations,
+        _external_apps(integrations, db_session),
+        skip_unknown=skip_unknown,
+    )
+    integrations = [i for i in integrations if i.id in shapes]
     owner_emails = _owner_emails(integrations, db_session)
     statuses = _organization_statuses(integrations, db_session)
     access = _access_views(
@@ -1220,7 +1594,6 @@ def _admin_views(
         integration_statuses(integrations, user, db_session),
         db_session,
     )
-    shapes = _shapes(integrations, _external_apps(integrations, db_session))
     action_counts = count_actions(
         [integration.id for integration in integrations], db_session
     )
@@ -1268,7 +1641,7 @@ def list_admin_integrations(user: User, db_session: Session) -> list[AdminIntegr
             for integration in integrations
             if integration.id in accessible or manages_integration(user, integration)
         ]
-    return _admin_views(user, integrations, db_session)
+    return _admin_views(user, integrations, db_session, skip_unknown=True)
 
 
 def _config_view(
@@ -1283,16 +1656,27 @@ def _config_view(
             transport=server.transport or MCPTransport.STREAMABLE_HTTP,
         )
     if shape is IntegrationShape.OPENAPI:
-        tool = get_openapi_tool_for_integration(integration.id, db_session)
-        if tool is None or tool.openapi_schema is None:
+        api_app = get_api_app_for_integration(integration.id, db_session)
+        if api_app is None or api_app.openapi_document is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "The OpenAPI schema is missing.")
-        return OpenApiConfigInput(openapi_spec=tool.openapi_schema)
+        try:
+            spec = parse_openapi_document(api_app.openapi_document)
+        except ValueError as e:
+            raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+        return _openapi_view(api_app.openapi_document, spec)
+    if shape is IntegrationShape.GRAPHQL:
+        api_app = get_api_app_for_integration(integration.id, db_session)
+        if api_app is None or api_app.graphql_schema is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "The GraphQL schema is missing.")
+        return GraphQLConfigInput(
+            endpoint_url=api_app.base_url, graphql_schema=api_app.graphql_schema
+        )
     app = get_external_app_for_integration(integration.id, db_session)
     if app is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "The app settings are missing.")
     if shape is IntegrationShape.PRESET:
         return PresetConfigView(preset_id=app.app_type.value)
-    return CustomConfigInput(upstream_url_patterns=list(app.upstream_url_patterns))
+    return CustomConfigView(upstream_url_patterns=list(app.upstream_url_patterns))
 
 
 def _oauth_client_view(
@@ -1392,7 +1776,7 @@ def admin_actions(
             STORED_TO_EFFECTIVE[default_row] if default_row is not None else None
         ),
         actions=_action_views(
-            integration,
+            integration.kind,
             integration_actions(integration.id, db_session),
             rows.admin,
         ),
@@ -1425,6 +1809,7 @@ def save_connection_fields__no_commit(
     """Check the key with the server of an MCP integration, then save the
     connection of ``user``, or of the organization when ``user`` is None.
     The check runs before the save locks the integration row."""
+    fields = checked_credential_fields(integration, fields)
     check_mcp_credential_fields(
         integration, fields, user.email if user is not None else None, db_session
     )
@@ -1503,11 +1888,14 @@ def _member_views(
     integrations: Collection[Integration],
     states: Mapping[int, UserIntegrationState],
     db_session: Session,
+    *,
+    skip_unknown: bool = False,
 ) -> list[MemberIntegration]:
+    external_apps = _external_apps(integrations, db_session)
+    shapes = _shapes(integrations, external_apps, skip_unknown=skip_unknown)
+    integrations = [i for i in integrations if i.id in shapes]
     statuses = integration_statuses(integrations, user, db_session)
     access = _access_views(user, integrations, states, statuses, db_session)
-    external_apps = _external_apps(integrations, db_session)
-    shapes = _shapes(integrations, external_apps)
     mcp_servers = list_mcp_servers_by_integration(
         [
             integration.id
@@ -1554,7 +1942,11 @@ def list_member_integrations(
     made available only to groups the user is not in (``no_access``)."""
     states = _integration_states(user, db_session)
     return _member_views(
-        user, list_integrations_by_ids(list(states), db_session), states, db_session
+        user,
+        list_integrations_by_ids(list(states), db_session),
+        states,
+        db_session,
+        skip_unknown=True,
     ) + _no_access_views(
         user,
         list_integrations_by_ids(
@@ -1568,6 +1960,10 @@ def _no_access_views(
     user: User, integrations: Collection[Integration], db_session: Session
 ) -> list[MemberIntegration]:
     """Only what a row shows: no configuration, connection or owner."""
+    shapes = _shapes(
+        integrations, _external_apps(integrations, db_session), skip_unknown=True
+    )
+    integrations = [i for i in integrations if i.id in shapes]
     status = IntegrationStatus(state=ConnectionState.NOT_CONNECTED, reason=None)
     access = _access_views(
         user,
@@ -1576,7 +1972,6 @@ def _no_access_views(
         {integration.id: status for integration in integrations},
         db_session,
     )
-    shapes = _shapes(integrations, _external_apps(integrations, db_session))
     return [
         MemberIntegration(
             id=integration.id,
@@ -1636,7 +2031,7 @@ def member_actions(
             ),
         )
         for view in _action_views(
-            integration,
+            integration.kind,
             integration_actions(integration.id, db_session),
             rows.admin,
         )
@@ -1668,7 +2063,8 @@ def set_action_grants__no_commit(
     db_session: Session,
 ) -> None:
     lock_integration__no_commit(integration.id, db_session)
-    if not integration.users_can_save_always_allow:
+    saves_allow = any(value == "allow" for value in grants.values())
+    if saves_allow and not integration.users_can_save_always_allow:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             f"Your admin does not let users save Always allow for {integration.name}.",
@@ -1689,7 +2085,7 @@ def set_action_grants__no_commit(
         if always_asks(integration.kind, key):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
-                f"Craft asks for approval for each {key} request. "
+                f"Onyx asks for approval for each {key} request. "
                 "You cannot save Always allow for it.",
             )
         if admin_policies[key] is EffectivePolicy.ALLOW:
@@ -1711,15 +2107,16 @@ def set_action_grants__no_commit(
 def agent_catalog(user: User, db_session: Session) -> list[AgentIntegrationOption]:
     """Each integration that the user has access to and that an admin did
     not turn off, in name order."""
-    integrations = [
+    enabled = [
         integration
         for integration in list_integrations_by_ids(
             list(_integration_states(user, db_session)), db_session
         )
         if integration.enabled
     ]
+    shapes = _shapes(enabled, _external_apps(enabled, db_session), skip_unknown=True)
+    integrations = [i for i in enabled if i.id in shapes]
     integration_ids = [integration.id for integration in integrations]
-    shapes = _shapes(integrations, _external_apps(integrations, db_session))
     actions = integration_actions_by_id(integration_ids, db_session)
     admin_rows = list_admin_policy_rows(db_session, integration_ids)
     return [
@@ -1731,7 +2128,7 @@ def agent_catalog(user: User, db_session: Session) -> list[AgentIntegrationOptio
             shape=shapes[integration.id][0],
             users_can_save_always_allow=integration.users_can_save_always_allow,
             actions=_action_views(
-                integration, actions[integration.id], admin_rows[integration.id]
+                integration.kind, actions[integration.id], admin_rows[integration.id]
             ),
         )
         for integration in sorted(

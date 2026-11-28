@@ -8,7 +8,13 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.agents.agent_coordination import AgentCoordinator, ToolApprovals
-from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
+from onyx.agents.events import InputEndedEvent, InputRequiredEvent
+from onyx.agents.models import (
+    ExecutionStatus,
+    RunStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
@@ -33,7 +39,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import ResponsePresenter, replay_response
 from onyx.chat.process_message import gather_stream_full
-from onyx.chat.renderer import ToolRenderer
+from onyx.chat.renderer import CUSTOM_TOOL_ERROR_RESPONSE_TYPE, ToolRenderer
 from onyx.chat.tool_approvals import tool_answer
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.llm.cancellation import CancellationSignal
@@ -50,6 +56,7 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
+    CustomToolDelta,
     CustomToolStart,
     OverallStop,
     Packet,
@@ -62,6 +69,8 @@ from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 CALL = ToolCall(id="send-call", name="send_email", arguments={"to": "team"})
+# The integration of the call's action, which the card names.
+APP_NAME = "Mail"
 
 
 APPROVAL_ID = UUID("8f9a6a52-4c4e-4d55-9a0e-2f43e7d1c001")
@@ -78,6 +87,7 @@ class _Approvals(ToolApprovals):
             request_id=str(APPROVAL_ID),
             prompt="Allow?",
             mode=InputMode.EXECUTE,
+            app_name=APP_NAME,
         )
 
     def withdraw_approval(self, request_id: str) -> None:  # noqa: ARG002
@@ -95,6 +105,7 @@ def _saved(
         id=approval_id,
         chat_message_id=1,
         tool_call_id=CALL.id,
+        action_id="send_email",
         tool_name=CALL.name,
         display_name="Send email",
         arguments={"to": "team"},
@@ -102,6 +113,7 @@ def _saved(
         decision=decision,
         decided_via=decided_via,
         decided_at=created_at if decision is not None else None,
+        app_name=APP_NAME,
     )
 
 
@@ -184,6 +196,8 @@ def test_a_program_call_that_ends_without_a_decision_reports_how(
         ToolApprovalResolved,
     ]
     assert approval[0].placement == approval[1].placement
+    assert isinstance(approval[0].obj, ToolApprovalRequest)
+    assert approval[0].obj.app_name == APP_NAME
     assert approval[1].obj == ToolApprovalResolved(
         approval_id=str(APPROVAL_ID), outcome=ends
     )
@@ -254,6 +268,7 @@ _REQUEST = ToolApprovalRequest(
     tool_name=CALL.name,
     display_name="Send email",
     arguments={"to": "team"},
+    app_name=APP_NAME,
 )
 
 
@@ -402,3 +417,94 @@ def test_a_non_streaming_response_returns_the_requests_that_wait() -> None:
     assert [
         pending.approval_id for pending in response.pending_tool_approvals
     ] == approval_ids[:2]
+
+
+def _failure_markers(packets: list[Packet]) -> list[Packet]:
+    return [
+        packet
+        for packet in packets
+        if isinstance(packet.obj, CustomToolDelta)
+        and packet.obj.response_type == CUSTOM_TOOL_ERROR_RESPONSE_TYPE
+    ]
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [
+        _saved(ApprovalDecision.REJECTED, ApprovalDecidedVia.USER),
+        _saved(ApprovalDecision.REJECTED, ApprovalDecidedVia.POLICY),
+    ],
+    ids=["rejected", "disabled"],
+)
+@pytest.mark.parametrize("live", [True, False], ids=["live", "saved"])
+def test_a_call_that_was_not_approved_is_a_decision_not_a_failure(
+    saved: SavedToolApproval, live: bool
+) -> None:
+    """Its error result says that it did not run; its card shows the decision
+    and no failure."""
+    answer = tool_answer(APPROVAL_ID, saved)
+    assert answer.result is not None and answer.result.is_error
+    result = ToolResultMessage(
+        tool_call_id=CALL.id,
+        tool_name=CALL.name,
+        content=answer.result.text,
+        is_error=True,
+    )
+    if live:
+        renderer = ToolRenderer(CALL, Placement(turn_index=0))
+        request = PendingToolInput(
+            request_id=str(APPROVAL_ID),
+            prompt="Allow?",
+            mode=InputMode.EXECUTE,
+            approval=True,
+        )
+        packets = renderer.start()
+        packets += renderer.consume(
+            InputRequiredEvent(
+                run_id="1",
+                message_id="message",
+                step_index=0,
+                tool_call=CALL,
+                request=request,
+            )
+        )
+        packets += renderer.consume(
+            InputEndedEvent(
+                run_id="1",
+                message_id="message",
+                step_index=0,
+                tool_call=CALL,
+                request=request,
+                answer=answer,
+            )
+        )
+        packets += renderer.complete(result)
+    else:
+        response = _response(RunStatus.COMPLETE)
+        response.steps[0].tools[CALL.id] = ToolExecutionRecord(
+            status=ExecutionStatus.ERROR, result=result
+        )
+        packets = replay_response(
+            response, {}, {}, {}, approvals={("1", CALL.id): [saved]}
+        )
+
+    assert any(isinstance(packet.obj, ToolApprovalResolved) for packet in packets)
+    assert _failure_markers(packets) == []
+
+
+def test_a_call_that_failed_after_its_approval_shows_the_failure() -> None:
+    saved = _saved(ApprovalDecision.APPROVED, ApprovalDecidedVia.USER)
+    response = _response(RunStatus.COMPLETE)
+    response.steps[0].tools[CALL.id] = ToolExecutionRecord(
+        status=ExecutionStatus.ERROR,
+        result=ToolResultMessage(
+            tool_call_id=CALL.id,
+            tool_name=CALL.name,
+            content="The mail server refused the message.",
+            is_error=True,
+        ),
+    )
+
+    packets = replay_response(response, {}, {}, {}, approvals={("1", CALL.id): [saved]})
+
+    assert len(_failure_markers(packets)) == 1

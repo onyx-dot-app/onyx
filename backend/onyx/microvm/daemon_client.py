@@ -76,6 +76,10 @@ _WINDOW_MARGIN_SECONDS = 5.0
 _TRANSFER_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 600.0)
 # WriteFile/UploadFile data messages (the daemon accepts up to 4 MiB).
 _WRITE_CHUNK_BYTES = 1 << 20
+# BrowserStart waits for Chrome and then the browser service to answer.
+_BROWSER_START_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 60.0)
+# BrowserStop kills what is left of Chrome after 5 s.
+_BROWSER_STOP_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 20.0)
 # The guest daemon's caps on one StatFiles call.
 STAT_FILES_MAX_PATHS = 1000
 STAT_FILES_MAX_PATH_BYTES = 1 << 20
@@ -104,6 +108,7 @@ class SandboxDaemonErrorReason(str, Enum):
     LIMIT_EXCEEDED = "LIMIT_EXCEEDED"
     ARCHIVE_INVALID = "ARCHIVE_INVALID"
     EXECUTION_CAP_REACHED = "EXECUTION_CAP_REACHED"
+    BROWSER_START_FAILED = "BROWSER_START_FAILED"
 
 
 # The daemon will not accept this VM's key: nothing can use the VM.
@@ -568,21 +573,61 @@ class SandboxDaemonClient:
             raise sandbox_daemon_error(e) from e
         return [_execution(x) for x in r.executions]
 
+    # Browser: the VM's one Chrome and its browser service, owned by the
+    # daemon (BROWSER_SERVICE_PORT in browser_protocol).
+
+    def browser_start(self, *, profile_session_id: str) -> int:
+        """Make sure that Chrome, with the profile in the session directory
+        `profile_session_id/chrome`, and the browser service run. Returns the
+        browser service protocol that the daemon relays, 0 for none. A daemon
+        without a browser raises UNIMPLEMENTED; a failed start
+        BROWSER_START_FAILED."""
+        try:
+            r = self._stub.BrowserStart(
+                sandboxd_pb2.BrowserStartRequest(profile_session_id=profile_session_id),
+                metadata=self._authed(),
+                timeout=_BROWSER_START_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return r.service_protocol
+
+    def browser_stop(self) -> None:
+        """Stop the browser service, then close Chrome cleanly so that it
+        writes its cookies to the profile."""
+        try:
+            self._stub.BrowserStop(
+                sandboxd_pb2.BrowserStopRequest(),
+                metadata=self._authed(),
+                timeout=_BROWSER_STOP_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+
     # Files. Paths are relative to /home/onyx/workspaces/<session_id>/; with
     # session_id="" they are absolute VM paths (not upload or saves).
 
     def read_file(
-        self, *, session_id: str, path: str, offset: int = 0, length: int = 0
+        self,
+        *,
+        session_id: str,
+        path: str,
+        offset: int = 0,
+        length: int = 0,
+        timeout_seconds: float | None = None,
     ) -> tuple[FileEntry, Iterator[bytes]]:
         """The file's info and its bytes from `offset` (length 0 = to the
         end), in chunks of at most 64 KiB. FILE_NOT_FOUND raises here.
-        Closing or dropping the chunk iterator cancels the stream."""
+        Closing or dropping the chunk iterator cancels the stream.
+        `timeout_seconds` replaces the transfer timeout."""
         call: _ResponseStream[sandboxd_pb2.ReadFileResponse] = self._stub.ReadFile(
             sandboxd_pb2.ReadFileRequest(
                 session_id=session_id, path=path, offset=offset, length=length
             ),
             metadata=self._authed(),
-            timeout=_TRANSFER_TIMEOUT_SECONDS,
+            timeout=_TRANSFER_TIMEOUT_SECONDS
+            if timeout_seconds is None
+            else timeout_seconds,
         )
         try:
             first: sandboxd_pb2.ReadFileResponse = next(call)

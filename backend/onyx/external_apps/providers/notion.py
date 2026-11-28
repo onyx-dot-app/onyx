@@ -235,14 +235,15 @@ class NotionProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                     secret=True,
                 ),
             ],
-            setup_instructions=(
-                "In Notion: notion.so/my-integrations → New integration → set "
-                "type to Public. Under OAuth Domain & URIs, add this Onyx "
-                "instance's callback URL (/craft/v1/apps/oauth/callback) as a "
-                "Redirect URI. Configure the integration's capabilities (read "
-                "and/or write content). Save, then copy the OAuth Client ID and "
-                "Client Secret and paste them below."
-            ),
+            setup_steps=[
+                "Create a new integration.",
+                "Set the integration type to Public.",
+                "Under OAuth Domain & URIs, add the callback URL as a Redirect URI.",
+                "Select the capabilities: read content, write content, or both.",
+                "Save, then copy the OAuth Client ID and Client Secret.",
+                "Paste the OAuth Client ID and Client Secret into the fields.",
+            ],
+            setup_url="https://www.notion.so/my-integrations",
         ),
         endpoint_catalog=_ENDPOINTS,
     )

@@ -143,6 +143,19 @@ AND (acl contains ...)
 AND (user_projects contains 7)
 ```
 
+## Owner-only sources
+
+User files (`user_file`) and published files (`chat_artifact`) carry their
+owner's email in `access_control_list` and none of the knowledge-scope
+fields. So:
+
+- An unscoped search finds them through the ACL, for their owner only.
+- A knowledge-scoped search (agent knowledge, a project) never finds a
+  published file, and finds a user file only through its `personas` or
+  `user_projects` tag.
+
+No filter in `_get_search_filters` names these sources.
+
 ## Field reference
 
 | Filter field | OpenSearch field | OpenSearch type | Purpose |

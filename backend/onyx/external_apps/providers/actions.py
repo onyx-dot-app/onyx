@@ -89,13 +89,15 @@ def path_matches(template: str, path: str) -> bool:
 
 class GraphQLOp(BaseModel):
     """Recognises a GraphQL request as an action by operation type + the root
-    field in the request body (the URL is identical for every operation)."""
+    field in the request body. Only a POST to the GraphQL endpoint ``path``
+    matches, so a GraphQL body cannot label a request to another endpoint."""
 
     model_config = ConfigDict(frozen=True)
 
     kind: Literal["graphql"] = "graphql"
     operation_type: Literal["query", "mutation", "subscription"]
     field: str
+    path: str = "/graphql"
     resource_type: str | None = None
 
 

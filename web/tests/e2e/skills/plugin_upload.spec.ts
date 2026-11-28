@@ -145,7 +145,11 @@ test.describe("Plugin upload", () => {
     );
     await plugins.expectSaveLine(`Updates ${name} to Onyx version 2`);
     await plugins.setSaveAsNew(true);
-    await plugins.expectSaveLine(`New plugin: ${name}-2`);
+    await plugins.expectSaveLine(`New plugin: ${name}`);
+    await plugins.expectPreviewText(
+      `${name} is already in use. Pick a different name.`
+    );
+    await plugins.expectSaveDisabled();
     await plugins.setSaveAsNew(false);
     await plugins.expectSaveLine(`Updates ${name} to Onyx version 2`);
     expect(await plugins.saveUpload()).toBe(firstId);
@@ -195,16 +199,8 @@ test.describe("Plugin upload", () => {
       "pw-sign-in",
       /^Connect PW Plugin pw-sign-in/
     );
-    await plugins.expectNeed(
-      "pw-disabled",
-      "Turned off",
-      "Turned off by your admin"
-    );
-    await plugins.expectNeed(
-      "pw-local",
-      "Not supported",
-      "Not supported in Onyx"
-    );
+    await plugins.expectNeed("pw-disabled", "Turned off");
+    await plugins.expectNeed("pw-local", "Not supported");
     await plugins.expectNeed("pw-missing", "Not added");
 
     await plugins.expectNeed("pw-off", "On");

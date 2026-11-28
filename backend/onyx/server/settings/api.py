@@ -32,6 +32,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.oauth_provider.config import OAUTH_PROVIDER_SETTINGS
 from onyx.server.features.build.utils import (
     is_craft_available_for_deployment,
@@ -285,6 +286,11 @@ def fetch_settings(
         vector_db_enabled=not DISABLE_VECTOR_DB,
         hide_onyx_branding=HIDE_ONYX_BRANDING
         and tier_at_least(resolved_tier, Tier.ENTERPRISE),
+        # The browser routes refuse the anonymous user.
+        chat_browser_available=HARNESS_SANDBOX_ENABLED
+        and general_settings.browser_enabled
+        and user is not None
+        and not user.is_anonymous,
         hooks_enabled=not MULTI_TENANT,
         is_playground=IS_PLAYGROUND,
         playground_restrictions=playground_restrictions(),

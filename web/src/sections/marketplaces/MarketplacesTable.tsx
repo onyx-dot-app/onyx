@@ -12,7 +12,7 @@ import {
   type TableColumn,
   useCreateModal,
 } from "@opal/components";
-import { Content, IllustrationContent, Section, toast } from "@opal/layouts";
+import { Content, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import {
   SvgMoreHorizontal,
@@ -22,14 +22,13 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
-import SvgNoResult from "@opal/illustrations/no-result";
 import { fetchErrorDetail } from "@/lib/fetcher";
 import {
   replaceMarketplaceLogin,
   syncMarketplace,
 } from "@/lib/marketplaces/api";
 import useScreenSize from "@/hooks/useScreenSize";
-import { useMarketplaces } from "@/lib/marketplaces/hooks";
+import type { MarketplacesState } from "@/lib/marketplaces/hooks";
 import type {
   MarketplaceDetail,
   MarketplaceSummary,
@@ -81,9 +80,14 @@ function Attention({ marketplaces, busy, onSync }: AttentionProps) {
   );
 }
 
-export default function MarketplacesTable() {
+interface MarketplacesTableProps {
+  /** The page's one subscription, so a sync refreshes the skill lists once. */
+  list: MarketplacesState;
+}
+
+export default function MarketplacesTable({ list }: MarketplacesTableProps) {
   const t = useTranslations("plugins.marketplaces");
-  const { marketplaces, error, isLoading, refresh } = useMarketplaces();
+  const { marketplaces, error, isLoading, refresh } = list;
   const { isMobile } = useScreenSize();
   const [openId, setOpenId] = useState<string | null>(null);
   const [defaultTarget, setDefaultTarget] = useState<MarketplaceSummary | null>(
@@ -196,11 +200,16 @@ export default function MarketplacesTable() {
     ];
   }
 
+  // The source repeats the name for a marketplace named after its repository.
+  const sourceLine = (row: MarketplaceSummary) => {
+    const source = marketplaceSource(row);
+    return source === row.name ? undefined : source;
+  };
   const nameCell = (row: MarketplaceSummary) => (
     <Content
       title={row.name}
       titleMaxLines={1}
-      description={marketplaceSource(row)}
+      description={sourceLine(row)}
       descriptionMaxLines={1}
       badge={{ title: t(`scope.${row.scope}`) }}
     />
@@ -235,20 +244,30 @@ export default function MarketplacesTable() {
       field: "name",
       title: t("columns.marketplace"),
       weight: 100,
-      cell: (_name, row) => (
-        <Content
-          title={row.name}
-          titleMaxLines={1}
-          description={`${marketplaceSource(row)} · ${t("items", {
-            count: row.plugin_count,
-          })}`}
-          descriptionMaxLines={1}
-          badge={{
-            title: t(`sync.state.${marketplaceSyncState(row)}`),
-            color: SYNC_STATE_COLOR[marketplaceSyncState(row)],
-          }}
-        />
-      ),
+      cell: (_name, row) => {
+        // Attention lists only the failed rows that the user can manage.
+        const failure =
+          !row.can_manage && marketplaceSyncState(row) === "failed"
+            ? row.last_error
+            : null;
+        return (
+          <Content
+            title={row.name}
+            titleMaxLines={1}
+            description={
+              failure ??
+              [sourceLine(row), t("items", { count: row.plugin_count })]
+                .filter(Boolean)
+                .join(" · ")
+            }
+            descriptionMaxLines={failure ? 2 : 1}
+            badge={{
+              title: t(`sync.state.${marketplaceSyncState(row)}`),
+              color: SYNC_STATE_COLOR[marketplaceSyncState(row)],
+            }}
+          />
+        );
+      },
     },
     actionsColumn,
   ];
@@ -266,7 +285,10 @@ export default function MarketplacesTable() {
       id: "sync",
       title: t("columns.sync"),
       width: { weight: 40 },
-      cell: (row) => <MarketplaceSyncStatus marketplace={row} />,
+      // The Attention cards give the reason only for rows the user can manage.
+      cell: (row) => (
+        <MarketplaceSyncStatus marketplace={row} showError={!row.can_manage} />
+      ),
     },
     {
       kind: "data",
@@ -305,23 +327,15 @@ export default function MarketplacesTable() {
   return (
     <Section gap={2} alignItems="stretch" height="auto">
       <Attention marketplaces={attention} busy={busy} onSync={syncNow} />
-      {rows.length > 0 ? (
-        <Table
-          label={t("tableLabel")}
-          items={rows}
-          columns={isMobile ? phoneColumns : columns}
-          getRowId={(row) => row.id}
-          pageSize={false}
-          onRowClick={(row) => setOpenId(row.id)}
-          getRowLabel={(row) => t("open", { name: row.name })}
-        />
-      ) : (
-        <IllustrationContent
-          illustration={SvgNoResult}
-          title={t("empty.title")}
-          description={t("empty.description")}
-        />
-      )}
+      <Table
+        label={t("tableLabel")}
+        items={rows}
+        columns={isMobile ? phoneColumns : columns}
+        getRowId={(row) => row.id}
+        pageSize={false}
+        onRowClick={(row) => setOpenId(row.id)}
+        getRowLabel={(row) => t("open", { name: row.name })}
+      />
       {openId && (
         <MarketplaceDetailModal
           marketplaceId={openId}

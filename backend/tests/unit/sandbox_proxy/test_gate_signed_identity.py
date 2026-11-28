@@ -60,6 +60,7 @@ class _NoMatch(RequestEvaluator):
         request: Any,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        session_tag: UUID | None = None,  # noqa: ARG002
     ) -> None:
         return None
 

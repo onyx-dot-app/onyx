@@ -176,12 +176,22 @@ export interface ToolApprovalRequest {
   arguments: Record<string, unknown>;
   // The subagent that asks; null or absent for the root agent's own requests
   agent_name?: string | null;
+  // False when the card must not offer "Approve for this chat"
+  can_approve_for_chat?: boolean;
+  // An app request of a command: the card offers "Approve for this command"
+  // in place of "Approve for this chat"
+  can_approve_for_command?: boolean;
+  // The app of such a request
+  app_name?: string | null;
+  // When a command's request expires; set only for a command's requests
+  expires_at?: string | null;
 }
 
 export interface ToolApprovalResolved {
   type: "tool_approval_resolved";
   approval_id: string;
-  // approved | approved_for_chat | rejected | disabled | cancelled;
+  // approved | approved_for_chat | approved_for_command | rejected | disabled |
+  // cancelled;
   // anything else is ignored
   outcome: string;
 }
@@ -200,10 +210,14 @@ export interface ToolQuestion {
   options: ToolQuestionOption[];
 }
 
-/** The user's answer to one question: one of its options, a note, or both. */
+/**
+ * The user's answer to one question: its chosen options, in the question's
+ * order, a note, or both. This card chooses at most one option, which also
+ * answers a multi-select question.
+ */
 export interface ToolQuestionAnswer {
   question_id: string;
-  option_label?: string | null;
+  option_labels: string[];
   user_note?: string | null;
 }
 
@@ -238,6 +252,7 @@ export interface ChatStream {
 export interface ApprovalDecisionResponse {
   decision: "APPROVED" | "REJECTED";
   // "POLICY": the action policy disabled the tool, so the approval rejected it.
+  // "COMMAND_GRANT": approved for the rest of a VM command.
   decided_via: string;
   // The stream that continues the response; null while other requests still
   // wait, or for a background agent's request, which continues without one

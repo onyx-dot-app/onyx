@@ -19,6 +19,12 @@ from onyx.server.pat.models import (
 )
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.tier_order import get_current_tier, tier_at_least
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -114,6 +120,22 @@ def create_token(
     # %r escapes control chars in the user-supplied name so it can't forge log
     # lines (CR/LF injection) in the shared log stream.
     logger.info("User %s created PAT %r", user.email, request.name)
+    emit_audit_event(
+        AuditAction.PAT_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="pat",
+        resource_id=pat.id,
+        extra={
+            "name": request.name,
+            "expiration_days": request.expiration_days,
+            "scopes": (
+                [scope.value for scope in request.scopes]
+                if request.scopes is not None
+                else None
+            ),
+        },
+    )
 
     return CreatedTokenResponse(
         **TokenResponse.model_validate(pat).model_dump(),
@@ -134,4 +156,11 @@ def delete_token(
     db_session.commit()
 
     logger.info("User %s revoked token %s", user.email, token_id)
+    emit_audit_event(
+        AuditAction.PAT_REVOKE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="pat",
+        resource_id=token_id,
+    )
     return {"message": "Token deleted successfully"}

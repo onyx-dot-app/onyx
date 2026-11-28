@@ -39,6 +39,7 @@ from onyx.chat.models import (
     PresentationMode,
     ResponseRecord,
     ResponseReplayData,
+    RunDocuments,
     SavedToolApproval,
     SavedToolQuestion,
     ToolHistorySnapshot,
@@ -64,19 +65,19 @@ from onyx.chat.tool_results import (
 )
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
+from onyx.integrations.policy import always_asks
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
+    APPROVAL_EXPIRED,
     AWAITING_USER,
     OverallStop,
     Packet,
     ReplayEnd,
     ToolApprovalRequest,
-    ToolApprovalResolved,
     ToolQuestionRequest,
     UserMessagePacket,
 )
-from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
@@ -85,6 +86,9 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.sandbox.models import PublishedFiles
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_START_TOOL_NAMES,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -271,6 +275,8 @@ def message_presentation(metadata: BaseModel | None) -> MessageRendering:
 
 
 def message_documents(metadata: BaseModel | None) -> dict[str, SearchDoc]:
+    """The documents of one step's metadata by ID: the sources and documents
+    that it adds to its run (see RunDocuments)."""
     if isinstance(metadata, ChatMessageMetadata):
         return {
             doc.document_id: doc
@@ -341,21 +347,23 @@ def _project_response_display(
     pending = [snapshot]
     while pending:
         node = pending.pop()
+        run_documents = RunDocuments()
         for step_index, step in enumerate(node.steps):
             message = step.message
             message_id = _message_identity(message)
             setting = message_presentation(message.metadata)
             presentation[message_id] = setting
-            if node is not snapshot or setting.mode not in (
+            if node is not snapshot:
+                continue
+            run_documents = run_documents.add_steps(
+                [(setting, message_documents(message.metadata))]
+            )
+            if setting.mode not in (
                 PresentationMode.ANSWER,
                 PresentationMode.RESEARCH,
             ):
                 continue
-            renderer = MessageRenderer(
-                setting,
-                message_documents(message.metadata),
-                ResponseLayout(),
-            )
+            renderer = MessageRenderer(setting, run_documents, ResponseLayout())
             is_answer = step_index == node.answer_step_index
             renderer.complete(message)
             if not is_answer and snapshot.status == RunStatus.COMPLETE:
@@ -419,6 +427,8 @@ class ResponsePresenter:
         self.layout = ResponseLayout()
         self.renderers: dict[str, MessageRenderer] = {}
         self.tools: dict[tuple[str, str, str], ToolRenderer] = {}
+        # By run ID, the documents of the run's steps so far.
+        self.run_documents: dict[str, RunDocuments] = {}
 
     def replay(
         self,
@@ -439,6 +449,7 @@ class ResponsePresenter:
             agent_approvals=replay.agent_approvals,
             questions=replay.questions,
             open_calls=self.tools,
+            run_documents=self.run_documents,
         ):
             self.emitter.emit(packet)
         self.emitter.emit(Packet(placement=Placement(turn_index=0), obj=ReplayEnd()))
@@ -460,9 +471,14 @@ class ResponsePresenter:
                 self.emitter.llm_step_started()
             if parent is not None:
                 parent.has_child_output = True
+            setting = message_presentation(event.metadata)
+            documents = self.run_documents.get(event.run_id, RunDocuments()).add_steps(
+                [(setting, message_documents(event.metadata))]
+            )
+            self.run_documents[event.run_id] = documents
             self.renderers[event.run_id] = MessageRenderer(
-                message_presentation(event.metadata),
-                message_documents(event.metadata),
+                setting,
+                documents,
                 self.layout,
                 parent.placement if parent else None,
             )
@@ -536,6 +552,8 @@ def overall_stop(status: RunStatus, failure: RunFailure | None) -> OverallStop:
         return OverallStop(stop_reason="finished")
     if failure is not None and failure.kind == RunFailureKind.DEADLINE:
         return OverallStop(stop_reason="timed_out")
+    if failure is not None and failure.kind == RunFailureKind.APPROVAL_EXPIRED:
+        return OverallStop(stop_reason=APPROVAL_EXPIRED)
     return OverallStop(stop_reason="user_cancelled")
 
 
@@ -553,6 +571,7 @@ def replay_response(
     ] = _NO_AGENT_APPROVALS,
     questions: Mapping[tuple[str, str], SavedToolQuestion] = _NO_QUESTIONS,
     open_calls: dict[tuple[str, str, str], ToolRenderer] | None = None,
+    run_documents: dict[str, RunDocuments] | None = None,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
 
@@ -566,18 +585,24 @@ def replay_response(
     left them. With `open_calls`, the replay starts a stream that continues the
     response: it collects the renderer of each call it draws, ended or open
     and in child runs too, by run, message and call ID, so that the call's
-    live events reuse its card, and sends no stop. The session response carries the saved message error separately.
+    live events reuse its card, and sends no stop; `run_documents` then
+    collects, by run ID, the documents of each replayed run, which its live
+    messages add to. The session response carries the saved message error separately.
     Stop packets close rendering; they do not classify execution success or
     failure.
     """
     layout = layout or ResponseLayout()
     packets: list[Packet] = []
+    documents_so_far = RunDocuments()
     for step in response.steps:
         packets.extend(user_message_packets(step.input_messages, layout, parent))
         message = step.message
         message_id = _message_identity(message)
         setting = settings.get(message_id) or MessageRendering()
-        renderer = MessageRenderer(setting, documents, layout, parent)
+        documents_so_far = documents_so_far.add_steps([(setting, documents)])
+        if run_documents is not None:
+            run_documents[response.run_id] = documents_so_far
+        renderer = MessageRenderer(setting, documents_so_far, layout, parent)
         packets.extend(renderer.complete(message))
         calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
         if not calls:
@@ -634,7 +659,12 @@ def replay_response(
                             tool_name=approval.tool_name,
                             display_name=approval.display_name,
                             arguments=approval.arguments,
+                            can_approve_for_chat=approval.integration_kind is None
+                            or not always_asks(
+                                approval.integration_kind, approval.action_id
+                            ),
                             agent_name=agent_name,
+                            app_name=approval.app_name,
                         ),
                     )
                 )
@@ -643,9 +673,8 @@ def replay_response(
                 packets.append(
                     Packet(
                         placement=tool_placement,
-                        obj=ToolApprovalResolved(
-                            approval_id=approval_id,
-                            outcome=approval_outcome(ended_answer(approval)),
+                        obj=renderer_of_call.approval_resolved(
+                            approval_id, approval_outcome(ended_answer(approval))
                         ),
                     )
                 )
@@ -674,7 +703,7 @@ def replay_response(
             for child in response.child_runs:
                 # Agent tools start background runs, whose output arrives separately.
                 if (
-                    call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+                    call.name in AGENT_START_TOOL_NAMES
                     or child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
@@ -690,6 +719,7 @@ def replay_response(
                         tool_placement,
                         approvals=approvals,
                         open_calls=open_calls,
+                        run_documents=run_documents,
                     )
                 )
             if open_calls is not None:

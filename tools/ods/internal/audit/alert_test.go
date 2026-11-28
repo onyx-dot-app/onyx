@@ -556,3 +556,48 @@ func TestSync_closesIssuesOfCleanScannedPackages(t *testing.T) {
 		})
 	}
 }
+
+func TestGroupAlertsKeepsBothImageAndLockfileOwners(t *testing.T) {
+	image := Finding{ID: "CVE-test", Package: "example", Ecosystem: "npm", Image: "dhi.io/node:24-dev@sha256:a", Severity: SeverityCritical}
+	lockfile := image
+	lockfile.Image = ""
+	lockfile.Manifest = "web/bun.lock"
+	for _, tc := range []struct {
+		findings []Finding
+		only     bool
+		pinned   bool
+	}{{[]Finding{image}, true, true}, {[]Finding{lockfile, image}, false, true}, {[]Finding{lockfile}, false, false}} {
+		got := groupAlerts(tc.findings, nil, "main")[0]
+		if got.PinnedImagesOnly != tc.only || (len(got.PinnedImages) > 0) != tc.pinned || slices.Contains(got.ImageFamilies, "node") != tc.pinned {
+			t.Fatalf("wrong repair owners: %+v", got)
+		}
+	}
+}
+
+func TestTrackingIssueGrowsWhenAnotherImageShipsTheSameAdvisory(t *testing.T) {
+	finding := Finding{ID: "CVE-fixture", Ecosystem: "npm", Package: "example", Image: "node:24@sha256:aaa"}
+	original := groupAlerts([]Finding{finding}, nil, "main")[0]
+	issue, ok := parseTrackedIssue(1, "url", renderAlertBody(original), false)
+	if !ok {
+		t.Fatal("could not read tracking issue")
+	}
+	finding.Image = "node:24@sha256:bbb"
+	rotated := groupAlerts([]Finding{finding}, nil, "main")
+	if got := planAlerts(rotated, []trackedIssue{issue}, nil); len(got.Known) != 1 {
+		t.Fatalf("digest rotation generated an update: %+v", got)
+	}
+	other := finding
+	other.Image = "dhi.io/node:24-dev@sha256:ccc"
+	grown := groupAlerts([]Finding{finding, other}, nil, "main")
+	if got := planAlerts(grown, []trackedIssue{issue}, nil); len(got.Update) != 1 {
+		t.Fatalf("new affected image went unreported: %+v", got)
+	}
+	body := renderAlertBody(grown[0])
+	if !strings.Contains(body, other.Image) {
+		t.Fatalf("image missing from issue: %s", body)
+	}
+	updated, ok := parseTrackedIssue(1, "url", body, false)
+	if !ok || len(planAlerts(grown, []trackedIssue{updated}, nil).Known) != 1 {
+		t.Fatal("updated issue did not settle")
+	}
+}

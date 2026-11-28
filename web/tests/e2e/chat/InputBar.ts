@@ -30,8 +30,6 @@ export class InputBar {
   readonly processingFileChips: Locator;
   readonly queuedMessages: Locator;
   readonly pendingMessageHint: Locator;
-  readonly subagentActivity: Locator;
-  readonly stopSubagentsButton: Locator;
   readonly skillPicker: Locator;
 
   readonly tile: Locator;
@@ -49,11 +47,6 @@ export class InputBar {
     this.textbox = page.locator("#onyx-chat-input-textbox");
     this.sendButton = page.locator("#onyx-chat-input-send-button");
     this.processingFileChips = this.container.getByText("Processing...");
-    this.subagentActivity = page.getByTestId("subagent-activity");
-    this.stopSubagentsButton = this.subagentActivity.getByRole("button", {
-      name: "Stop subagents",
-      exact: true,
-    });
     this.queuedMessages = page.getByTestId("queued-message-bar");
     this.pendingMessageHint = this.container.getByTestId(
       "pending-message-hint"
@@ -215,12 +208,17 @@ export class InputBar {
   // Submission
   // ---------------------------------------------------------------------------
 
-  async stopSubagents(): Promise<void> {
-    await this.stopSubagentsButton.click();
-  }
-
   async send(): Promise<void> {
     await this.page.keyboard.press("Enter");
+  }
+
+  /** Sends, and waits for the server's reply to the send. */
+  async sendAndWaitForReply(): Promise<void> {
+    const reply = this.page.waitForResponse((response) =>
+      response.url().includes("/api/chat/send-chat-message")
+    );
+    await this.send();
+    await reply;
   }
 
   async queue(): Promise<void> {

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import { FilePreviewLoading } from "@/app/craft/components/output-panel/FilePreviewLoading";
+import { FilePreviewLoading } from "@/sections/file-preview/FilePreviewLoading";
 import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -13,7 +13,7 @@ import {
   type BinaryPreviewKind,
 } from "@/app/craft/services/filePreview";
 import { downloadArtifactFile } from "@/app/craft/services/apiServices";
-import { PreviewUnavailable } from "@/app/craft/components/output-panel/PreviewUnavailable";
+import { PreviewUnavailable } from "@/sections/file-preview/PreviewUnavailable";
 import MediaPreview from "@/app/craft/components/output-panel/MediaPreview";
 import SpreadsheetPreview from "@/app/craft/components/output-panel/SpreadsheetPreview";
 import type { FilePreviewContentProps } from "@/app/craft/components/output-panel/FilePreviewContent";

@@ -308,7 +308,7 @@ def test_background_agent_result_wakes_the_idle_chat(
                 ToolCall(
                     id="spawn-research",
                     name="spawn_agent",
-                    arguments={"name": "research", "instruction": child_task},
+                    arguments={"task_name": "research", "message": child_task},
                 )
             ]
         ),
@@ -439,7 +439,7 @@ def test_the_agent_list_follows_a_background_agent(
                 ToolCall(
                     id="spawn-counter",
                     name="spawn_agent",
-                    arguments={"name": "counter", "instruction": child_task},
+                    arguments={"task_name": "counter", "message": child_task},
                 )
             ]
         ),
@@ -509,7 +509,7 @@ def test_a_background_agent_runs_programs_in_code_mode(
                 ToolCall(
                     id="spawn-compute",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "compute", "instruction": child_task},
+                    arguments={"task_name": "compute", "message": child_task},
                 )
             ],
             conditions=RequestConditions(
@@ -583,24 +583,26 @@ def test_turns_the_server_starts_use_the_saved_tool_options(
             "auth_method": None,
             "config": {
                 "shape": "openapi",
-                "openapi_spec": {
-                    "openapi": "3.0.0",
-                    "info": {
-                        "title": "Ping",
-                        "description": "Ping",
-                        "version": "1.0.0",
-                    },
-                    "servers": [{"url": "https://example.com"}],
-                    "paths": {
-                        "/ping": {
-                            "get": {
-                                "summary": "Ping the service",
-                                "operationId": "ping",
-                                "responses": {"200": {"description": "ok"}},
+                "openapi_document": json.dumps(
+                    {
+                        "openapi": "3.0.0",
+                        "info": {
+                            "title": "Ping",
+                            "description": "Ping",
+                            "version": "1.0.0",
+                        },
+                        "servers": [{"url": "https://example.com"}],
+                        "paths": {
+                            "/ping": {
+                                "get": {
+                                    "summary": "Ping the service",
+                                    "operationId": "ping",
+                                    "responses": {"200": {"description": "ok"}},
+                                }
                             }
-                        }
-                    },
-                },
+                        },
+                    }
+                ),
             },
         },
         admin_user,

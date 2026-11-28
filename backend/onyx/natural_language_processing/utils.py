@@ -1,4 +1,5 @@
 import os
+import threading
 from abc import ABC, abstractmethod
 from copy import copy
 
@@ -79,6 +80,12 @@ class HuggingFaceTokenizer(BaseTokenizer):
             if revision is None
             else Tokenizer.from_pretrained(model_name, revision=revision)
         )
+        # Some tokenizer.json files enable truncation or fixed-length padding
+        # (thenlper/gte-small: both at 128). Callers count and split tokens,
+        # so encodes must cover the whole text and nothing more. The model
+        # server truncates embedding input with its own tokenizer.
+        self.encoder.no_truncation()
+        self.encoder.no_padding()
 
     def _safer_encode(self, string: str) -> Encoding:
         """
@@ -105,15 +112,25 @@ class HuggingFaceTokenizer(BaseTokenizer):
 
 
 _TOKENIZER_CACHE: dict[tuple[EmbeddingProvider | None, str | None], BaseTokenizer] = {}
+# One load at a time. A load takes about 250 MB, and the threads of a cold
+# worker all miss the cache at the same moment.
+_TOKENIZER_LOAD_LOCK = threading.RLock()
 
 
 def _check_tokenizer_cache(
     model_provider: EmbeddingProvider | None, model_name: str | None
 ) -> BaseTokenizer:
-    global _TOKENIZER_CACHE
     id_tuple = (model_provider, model_name)
 
-    if id_tuple not in _TOKENIZER_CACHE:
+    cached = _TOKENIZER_CACHE.get(id_tuple)
+    if cached is not None:
+        return cached
+
+    with _TOKENIZER_LOAD_LOCK:
+        cached = _TOKENIZER_CACHE.get(id_tuple)
+        if cached is not None:
+            return cached
+
         tokenizer = None
 
         if model_name:
@@ -127,8 +144,7 @@ def _check_tokenizer_cache(
             tokenizer = _get_default_tokenizer()
 
         _TOKENIZER_CACHE[id_tuple] = tokenizer
-
-    return _TOKENIZER_CACHE[id_tuple]
+        return tokenizer
 
 
 def _try_initialize_tokenizer(
@@ -177,7 +193,9 @@ def _get_default_tokenizer() -> BaseTokenizer:
     """Lazy-load the default tokenizer to avoid loading it at module import time."""
     global _DEFAULT_TOKENIZER
     if _DEFAULT_TOKENIZER is None:
-        _DEFAULT_TOKENIZER = HuggingFaceTokenizer(DEFAULT_TOKENIZER_MODEL)
+        with _TOKENIZER_LOAD_LOCK:
+            if _DEFAULT_TOKENIZER is None:
+                _DEFAULT_TOKENIZER = HuggingFaceTokenizer(DEFAULT_TOKENIZER_MODEL)
     return _DEFAULT_TOKENIZER
 
 

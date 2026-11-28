@@ -1,7 +1,7 @@
 """Chat response persistence: referenced files and text sanitization."""
 
 from contextlib import nullcontext
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -385,6 +385,7 @@ def test_saved_cancelled_answer_preserves_the_stop_reason(
     session_id = uuid4()
     session = MagicMock()
     session.get.return_value.chat_session_id = session_id
+    session.get.return_value.time_sent = datetime.now(UTC) - timedelta(seconds=5)
     monkeypatch.setattr(
         chat_response, "get_session_with_current_tenant", lambda: nullcontext(session)
     )
@@ -423,10 +424,14 @@ def test_saved_cancelled_answer_preserves_the_stop_reason(
     )
     assert answer == "Partial answer ... \n\n" + reason
     assert save.call_args.kwargs["message_text"] == answer
+    assert save.call_args.kwargs["pre_answer_processing_time"] >= 5
 
 
-def test_history_keeps_deadline_cancellation_out_of_error_fields() -> None:
-    failure = RunFailure(kind=RunFailureKind.DEADLINE, message="Deadline reached")
+@pytest.mark.parametrize(
+    "kind", [RunFailureKind.DEADLINE, RunFailureKind.STOPPED_BY_USER]
+)
+def test_history_keeps_a_stop_out_of_error_fields(kind: RunFailureKind) -> None:
+    failure = RunFailure(kind=kind, message="Stopped")
     message = ChatMessage(
         mentions=[],
         id=1,

@@ -27,9 +27,15 @@ from onyx.agents.models import (
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution
+from onyx.chat.agent_stream import _pointer_key
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
-from onyx.chat.models import CreateChatSessionID, PendingChatMessage, ResponseOwner
+from onyx.chat.models import (
+    AgentStreamPointer,
+    CreateChatSessionID,
+    PendingChatMessage,
+    ResponseOwner,
+)
 from onyx.chat.presentation import replay_response
 from onyx.chat.process_message import (
     dispatch_pending_chat_messages,
@@ -174,7 +180,9 @@ def app(db_session: Session, owner: User) -> FastAPI:
     register_onyx_exception_handlers(app)
     for route in app.routes:
         if not isinstance(route, APIRoute) or not (
-            "pending-messages" in route.path or "stop-subagents" in route.path
+            "pending-messages" in route.path
+            or "stop-subagents" in route.path
+            or "/agents" in route.path
         ):
             continue
         for dependency in route.dependant.dependencies:
@@ -632,7 +640,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
     """A send reaches the response at its next step boundary.
 
     With code mode, the send arrives while a program runs and the step waits
-    on it with `wait_code`; the program finishes before the next step reads it.
+    on it with `wait`; the program finishes before the next step reads it.
     """
     path = f"/chat/chat-session/{chat.id}/pending-messages"
     entered, release, waiting = Event(), Event(), Event()
@@ -687,7 +695,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
                 content=[
                     ModelToolCall(
                         id="wait",
-                        name="wait_code",
+                        name="wait",
                         arguments={"cell_id": 1, "yield_time_ms": 30000},
                     )
                 ]
@@ -1215,7 +1223,7 @@ def test_a_send_after_a_failed_turn_continues_the_conversation(
     ]
     [(kind, result_text)] = history[3:]
     assert kind == "UserMessage"
-    assert result_text.startswith("Background agent result")
+    assert result_text.startswith("<agent_notification>")
     assert "Worker stopped early" in result_text
     db_session.expire_all()
     question = db_session.scalar(
@@ -2447,7 +2455,7 @@ def _idle_worker_with_queued_message(
                 ModelToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "worker", "instruction": "Initial task"},
+                    arguments={"task_name": "worker", "message": "Initial task"},
                 )
             ]
         )
@@ -2728,7 +2736,7 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
                 ModelToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "worker", "instruction": "Long task"},
+                    arguments={"task_name": "worker", "message": "Long task"},
                 )
             ]
         )
@@ -2795,3 +2803,239 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
     # The root's next step reads the stop as a notice.
     _stream_turn(chat, owner, "What happened?")
     assert any("The user stopped this agent." in text for text in seen)
+
+
+def test_a_background_agent_streams_live_and_its_history_and_activity_show(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A running background agent's output streams from its own buffer, its
+    newest tool shows as its activity, and its history reads as a chat's; the
+    stream ends with the run and its pointer goes."""
+    listed, release = Event(), Event()
+
+    def generate(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        texts = [message.text for message in request.messages]
+        results = [
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        if "Long task" in texts:
+            if not any(result.tool_call_id == "list" for result in results):
+                return AssistantMessage(
+                    content=[
+                        TextContent(text="Checking the team"),
+                        ModelToolCall(id="list", name="list_agents", arguments={}),
+                    ]
+                )
+            listed.set()
+            with signal.on_cancel(release.set):
+                assert release.wait(30)
+            return AssistantMessage(content=[TextContent(text="Worker result")])
+        if results:
+            return AssistantMessage(content=[TextContent(text="Started")])
+        return AssistantMessage(
+            content=[
+                ModelToolCall(
+                    id="spawn",
+                    name=SPAWN_AGENT_TOOL_NAME,
+                    arguments={"task_name": "worker", "message": "Long task"},
+                )
+            ]
+        )
+
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    streamed: list[str] = []
+    try:
+        for _packet in handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(
+                message="Start a worker",
+                chat_session_id=chat.id,
+                accepts_follow_ups=True,
+            ),
+            user=owner,
+        ):
+            pass
+        assert listed.wait(15)
+        (agent,) = client.get(f"/chat/chat-session/{chat.id}/agents").json()
+        assert agent["stream_id"] is not None
+        assert agent["activity_tool"] == "list_agents"
+
+        history = client.get(
+            f"/chat/chat-session/{chat.id}/agents/{agent['id']}/history"
+        )
+        assert history.status_code == 200, history.text
+        assert any(
+            message["message"] == "Long task" for message in history.json()["messages"]
+        )
+        assert history.json()["stream"]["stream_id"] == agent["stream_id"]
+
+        assert (
+            client.get(
+                f"/chat/chat-session/{chat.id}/agents/{uuid4()}/history"
+            ).status_code
+            == 404
+        )
+
+        def follow() -> None:
+            with client.stream(
+                "GET",
+                f"/chat/chat-session/{chat.id}/agents/{agent['id']}/stream",
+                params={"stream_id": agent["stream_id"], "cursor": 0},
+            ) as response:
+                assert response.status_code == 200
+                streamed.extend(response.iter_lines())
+
+        reader = start_thread_future(follow, name="agent-stream-reader")
+        release.set()
+        reader.result(timeout=30)
+        assert chat_turn_work.wait_idle(timeout=30)
+    finally:
+        release.set()
+    text = "\n".join(streamed)
+    assert "Checking the team" in text
+    assert "Worker result" in text
+    assert '"stop_reason": "finished"' in text or '"stop_reason":"finished"' in text
+    (agent,) = client.get(f"/chat/chat-session/{chat.id}/agents").json()
+    assert agent["status"] == "complete"
+    assert agent["stream_id"] is None
+    # A child runs on its spawner's model, and its saved run gives its time
+    db_session.expire_all()
+    root_models = set(
+        db_session.scalars(
+            select(ChatMessage.model_display_name).where(
+                ChatMessage.chat_session_id == chat.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+        )
+    )
+    assert agent["model"] is not None
+    assert root_models == {agent["model"]}
+    assert agent["duration_seconds"] is not None
+    finished = client.get(f"/chat/chat-session/{chat.id}/agents/{agent['id']}/history")
+    assert finished.json()["stream"] is None
+    # The saved reply ends, as a root's replay does
+    assert finished.json()["packets"][-1][-1]["obj"] == {
+        "type": "stop",
+        "stop_reason": "finished",
+    }
+    assert any(
+        "Worker result" in message["message"] for message in finished.json()["messages"]
+    )
+
+    # A worker that dies leaves its pointer behind; the ended run's view does
+    # not follow it.
+    get_cache_backend().set(
+        _pointer_key(int(agent["latest_run_id"])),
+        AgentStreamPointer(stream_id=999).model_dump_json(),
+        ex=60,
+    )
+    stale = client.get(f"/chat/chat-session/{chat.id}/agents/{agent['id']}/history")
+    assert stale.json()["stream"] is None
+    assert (
+        client.get(
+            f"/chat/chat-session/{chat.id}/agents/{agent['id']}/stream",
+            params={"stream_id": 999, "cursor": 0},
+        ).status_code
+        == 404
+    )
+
+
+def test_stop_subagents_with_an_agent_id_stops_only_that_agent(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The agents list gives each run's start, and Stop with an agent id leaves
+    the other agents running."""
+    started = {"Task A": Event(), "Task B": Event()}
+    released = {"Task A": Event(), "Task B": Event()}
+
+    def generate(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        texts = [message.text for message in request.messages]
+        task = next((task for task in started if task in texts), None)
+        if task is not None:
+            started[task].set()
+            with signal.on_cancel(released[task].set):
+                assert released[task].wait(30)
+            return AssistantMessage(content=[TextContent(text="Too late")])
+        if any(isinstance(message, ToolResultMessage) for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="Started")])
+        return AssistantMessage(
+            content=[
+                ModelToolCall(
+                    id=f"spawn-{name}",
+                    name=SPAWN_AGENT_TOOL_NAME,
+                    arguments={"task_name": name, "message": task},
+                )
+                for name, task in (("alpha", "Task A"), ("beta", "Task B"))
+            ]
+        )
+
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    try:
+        for _packet in handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(
+                message="Start two workers",
+                chat_session_id=chat.id,
+                accepts_follow_ups=True,
+            ),
+            user=owner,
+        ):
+            pass
+        assert all(event.wait(15) for event in started.values())
+        agents = {
+            agent.path: agent
+            for agent in chat_backend.get_chat_session_agents(chat.id, owner)
+        }
+        assert set(agents) == {"/root/alpha", "/root/beta"}
+        assert all(agent.started_at is not None for agent in agents.values())
+
+        missing = client.post(
+            f"/chat/chat-session/{chat.id}/stop-subagents",
+            json={"agent_id": str(uuid4())},
+        )
+        assert missing.status_code == 404, missing.text
+        stopped = client.post(
+            f"/chat/chat-session/{chat.id}/stop-subagents",
+            json={"agent_id": str(agents["/root/alpha"].id)},
+        )
+        assert stopped.status_code == 200, stopped.text
+        assert stopped.json() == {"stopped_count": 1}
+        assert released["Task A"].wait(15)
+        assert not released["Task B"].is_set()
+        db_session.expire_all()
+        status = chat_backend.get_chat_session_processing_status(
+            chat.id, BackgroundTasks(), _NO_HEADERS, owner
+        )
+        assert status.has_active_subagents
+        # Without a body, Stop ends the rest.
+        assert client.post(f"/chat/chat-session/{chat.id}/stop-subagents").json() == {
+            "stopped_count": 1
+        }
+        assert chat_turn_work.wait_idle(timeout=30)
+    finally:
+        for event in released.values():
+            event.set()
+    runs = chat_backend.get_chat_session_agents(chat.id, owner)
+    assert {run.path for run in runs} == {"/root/alpha", "/root/beta"}
+    assert all(run.status == RunStatus.CANCELLED for run in runs)
+    assert all(run.stopped_by_user for run in runs)

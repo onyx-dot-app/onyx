@@ -1,4 +1,11 @@
-import { render, screen, setupUser, within } from "@tests/setup/test-utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
 import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
 import CustomizeSkillsPage from "@/sections/customize/CustomizeSkillsPage";
 import messages from "@/i18n/messages/en.json";
@@ -6,9 +13,9 @@ import {
   builtinFixture,
   customFixture,
 } from "@/lib/skills/__fixtures__/picker";
+import type { ChatSkill } from "@/lib/skills/types";
 
 const copy = messages.customize.skills;
-let mockCraftEnabled = false;
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -16,13 +23,6 @@ jest.mock("next/navigation", () => ({
   ).nextNavigationMock,
   usePathname: () => window.location.pathname,
   useSearchParams: () => new URLSearchParams(window.location.search),
-}));
-jest.mock("@/lib/settings/hooks", () => ({
-  ...jest.requireActual("@/lib/settings/hooks"),
-  useSettings: () => ({
-    appName: "Onyx",
-    onyx_craft_enabled: mockCraftEnabled,
-  }),
 }));
 jest.mock("@/lib/permissions/hooks", () => ({
   usePermissionAuthority: () => ({
@@ -44,9 +44,10 @@ const off = customFixture({
   owner: { id: "user-me", email: "me@example.com" },
 });
 
-function open() {
+function open(chatSkills: ChatSkill[] = []) {
   window.history.replaceState(null, "", "/app/customize/skills");
   const fetchMock = mockFetch({
+    "/api/skills/chat": chatSkills,
     "/api/skills": {
       builtins: [builtinFixture({ id: "pptx", name: "pptx" })],
       customs: [
@@ -67,10 +68,9 @@ function open() {
 
 afterEach(() => {
   jest.restoreAllMocks();
-  mockCraftEnabled = false;
 });
 
-test("lists the skills in groups and hides built-ins with Craft off", async () => {
+test("lists the skills in groups and hides built-ins that chat does not offer", async () => {
   open();
   const mine = await screen.findByRole("region", { name: copy.groups.mine });
   expect(within(mine).getByText("standup")).toBeInTheDocument();
@@ -84,9 +84,17 @@ test("lists the skills in groups and hides built-ins with Craft off", async () =
   ).not.toBeInTheDocument();
 });
 
-test("shows built-in skills with Craft on", async () => {
-  mockCraftEnabled = true;
-  open();
+test("shows the built-in skills that chat offers", async () => {
+  open([
+    {
+      name: "pptx",
+      description: "Make slides",
+      short_description: null,
+      version_id: "pptx",
+      built_in_skill_id: "pptx",
+      plugin_id: null,
+    },
+  ]);
   const builtins = await screen.findByRole("region", {
     name: copy.groups.builtin,
   });
@@ -102,6 +110,34 @@ test("Turn on enables a skill that is off", async () => {
   expect(
     requestBody(fetchMock, "PUT", "/api/skills/off-skill/enabled")
   ).toEqual({ enabled: true, replace_conflict: false });
+});
+
+test("the second click of a double-click on Turn on does not open the skill", async () => {
+  window.history.replaceState(null, "", "/app/customize/skills");
+  let enabled = false;
+  mockFetch({
+    "/api/skills": () => ({ builtins: [], customs: [{ ...off, enabled }] }),
+    "PUT /api/skills/off-skill/enabled": () => {
+      enabled = true;
+      return { ...off, enabled };
+    },
+  });
+  render(<CustomizeSkillsPage />);
+  const mine = await screen.findByRole("region", { name: copy.groups.mine });
+  await setupUser().click(
+    within(mine).getByRole("button", { name: copy.menu.turnOn })
+  );
+  await waitFor(() =>
+    expect(
+      within(mine).queryByRole("button", { name: copy.menu.turnOn })
+    ).not.toBeInTheDocument()
+  );
+
+  fireEvent.click(within(mine).getByRole("button", { name: "Open standup" }), {
+    detail: 2,
+  });
+
+  expect(window.location.pathname).toBe("/app/customize/skills");
 });
 
 test("a synced skill names its marketplace and whether it is personal", async () => {

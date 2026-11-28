@@ -13,6 +13,9 @@ import {
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import { SandboxCallContent } from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
 import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
+import { DiffBody } from "@/lib/timeline/components/bodies/DiffBody";
+import { DiffStat } from "@/lib/timeline/components/bodies/DiffStat";
+import { parseApplyPatch } from "@/lib/timeline/components/bodies/diffLines";
 import { useSandboxCallStatus } from "@/lib/sandbox/hooks";
 
 // git-style status letters for the changed files
@@ -50,7 +53,12 @@ export function ApplyPatchToolRenderer({
     }
     return { start, end, progress };
   }, [packets]);
+  const tRead = useTranslations("craft.toolCards.read");
   const patch = start?.patch ?? "";
+  const parsed = useMemo(
+    () => (patch === "" ? null : parseApplyPatch(patch)),
+    [patch]
+  );
   const { isComplete, error, stopped } = useSandboxCallStatus(
     packets,
     end,
@@ -110,20 +118,72 @@ export function ApplyPatchToolRenderer({
           .join("\n")
       : "";
 
-  // One panel: the patch as a diff, then the output band, which waits with a
-  // loading shimmer while the patch applies, then lists the changed files or
-  // shows the error.
+  // One panel: each file's diff. The output band shows only when it adds
+  // something: the error, or the changed files when some have no panel
+  // (past the line limit, or a header the preview did not read).
+  const showOutput =
+    error !== null ||
+    !parsed?.files.length ||
+    parsed.omittedFiles > 0 ||
+    (end !== null && parsed.files.length < end.files.length);
   const content = (
     <SandboxCallContent renderType={renderType}>
-      <CommandBody
-        command={patch}
-        diff
-        title={t("sandbox.patch.title")}
-        output={changedFiles}
-        error={error ?? undefined}
-        outputLoading={!isComplete}
-        emptyLabel=""
-      />
+      {parsed?.files.map((file, index) => (
+        <DiffBody
+          key={index}
+          title={stripBidiControls(file.path) || t("sandbox.patch.title")}
+          copyText={index === 0 ? patch : undefined}
+          lines={[
+            // The title is the new path, so a cut title keeps where it went
+            ...(file.movedFrom !== null
+              ? [
+                  {
+                    type: "header" as const,
+                    content: t("sandbox.patch.movedFrom.label", {
+                      path: stripBidiControls(file.movedFrom),
+                    }),
+                  },
+                ]
+              : []),
+            // A delete or an empty new file has no lines; the panel names the
+            // operation, which holds before and after the call ends.
+            ...(file.change !== "update" && file.lines.length === 0
+              ? [
+                  {
+                    type: "header" as const,
+                    content: t("sandbox.patch.noLines.label", {
+                      change: file.change,
+                    }),
+                  },
+                ]
+              : file.lines),
+          ]}
+          counts={{ added: file.added, removed: file.removed }}
+        />
+      ))}
+      {parsed !== null && parsed.omittedLines > 0 && (
+        <DiffBody
+          title={t("sandbox.patch.title")}
+          copyText={patch}
+          lines={[
+            {
+              type: "header",
+              content: tRead("moreLines.label", {
+                count: parsed.omittedLines,
+              }),
+            },
+          ]}
+        />
+      )}
+      {showOutput && (
+        <CommandBody
+          command=""
+          output={changedFiles}
+          error={error ?? undefined}
+          outputLoading={!isComplete}
+          emptyLabel=""
+        />
+      )}
     </SandboxCallContent>
   );
 
@@ -134,6 +194,10 @@ export function ApplyPatchToolRenderer({
       // The live progress updates in place; only the end of the call swaps
       // the title.
       statusKey: liveProgress === null ? undefined : "progress",
+      headerAccessory:
+        error === null && !stopped ? (
+          <DiffStat added={parsed?.added ?? 0} removed={parsed?.removed ?? 0} />
+        ) : undefined,
       supportsCollapsible: true,
       // Nothing to open until the patch, its end or an error arrives; until
       // then the step shows a loading shimmer.

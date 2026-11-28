@@ -1,4 +1,4 @@
-"""exec_command, write_stdin, apply_patch, edit, write and publish_files
+"""exec_command, write_stdin, apply_patch, edit, write and library_create_library_file
 against FirecrackerHarnessSandbox with a fake host agent: chat turns through the chat flow (streamed and
 replayed packets, code mode values, approvals, Stop, turns that offer no
 sandbox), the tools' model text and file effects, published files (access,
@@ -14,7 +14,7 @@ from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from typing import Any
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, MagicMock, call, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -28,11 +28,15 @@ from onyx.agents.models import InputSource, MessageDelivery, RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.auth.users import get_anonymous_user
+from onyx.background.celery.tasks.chat_artifact_indexing.tasks import (
+    process_single_chat_artifact,
+)
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat import execution, process_message
 from onyx.chat import files as chat_files
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.chat.chat_processing_checker import get_processing_stream
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.incognito_context import teardown_incognito_session
@@ -45,10 +49,14 @@ from onyx.chat.process_message import (
 from onyx.chat.renderer import SPILLED_OUTPUT_NOTE
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import (
+    CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
     DEFAULT_PERSONA_ID,
     DocumentSource,
     FileOrigin,
     MessageType,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
 )
 from onyx.context.search.models import (
     InferenceChunk,
@@ -94,14 +102,20 @@ from onyx.db.sandbox import (
     get_or_create_sandbox,
     get_sandbox_by_user_id,
 )
+from onyx.db.search_settings import get_current_search_settings
 from onyx.db.skill import delete_skill
 from onyx.db.tools import get_builtin_tool
 from onyx.db.users import fetch_user_by_id
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.agent import DeepResearchFeature
+from onyx.document_index.factory import build_opensearch_document_index
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id
+from onyx.indexing.chat_artifact_index import (
+    chat_artifact_queued_key,
+    delete_chat_artifacts_from_index,
+)
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import (
     AgentCancelled,
@@ -109,6 +123,7 @@ from onyx.llm.cancellation import (
     cancellation_scope,
 )
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_request import UserMessage as PromptUserMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -118,6 +133,7 @@ from onyx.llm.model_response import (
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
+    SystemMessage,
     TextContent,
     TextContentPart,
     ToolCall,
@@ -146,7 +162,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
 from onyx.server.features.build.sandbox.firecracker.models import ExecSessionTable
 from onyx.server.features.build.sandbox.harness_base import (
     ONYX_VM_FILES_ROOT,
-    RENDER_FIRST_PAGE_ROOT,
+    RENDER_PREVIEW_ROOT,
     TOOL_RESULTS_ROOT,
     ExecSessionNotFoundError,
 )
@@ -175,12 +191,14 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.tools.constants import (
-    CODE_MODE_TOOL_NAME,
+    EXEC_COMMAND_TOOL_NAME,
+    EXECUTE_CODE_TOOL_NAME,
     INTERNAL_SEARCH_TOOL_NAME,
     LOAD_SKILL_TOOL_NAME,
     POSTGRES_TOOL_NAME,
     SKILLS_READ_TOOL_NAME,
     SPAWN_AGENT_TOOL_NAME,
+    WRITE_STDIN_TOOL_NAME,
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
@@ -194,35 +212,48 @@ from onyx.tools.models import (
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CLAUDE_CODE_MODE,
+    OPENAI_CODE_MODE,
+)
 from onyx.tools.tool_implementations.open_url import open_url_tool
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     MAX_CHARS_ACROSS_URLS,
     MAX_URLS_PER_CALL,
+    OPEN_URL_SHAPES,
     IndexedDocumentRequest,
     IndexedRetrievalResult,
     OpenedPage,
     OpenURLTool,
 )
-from onyx.tools.tool_implementations.sandbox import file_copies, sandbox_tools, spill
+from onyx.tools.tool_implementations.sandbox import (
+    artifact_operations,
+    file_copies,
+    sandbox_tools,
+    spill,
+)
 from onyx.tools.tool_implementations.sandbox.file_copies import CopyStatus
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_FILES,
     ApplyPatchFileChange,
     ApplyPatchResult,
+    ArtifactPublished,
     PublishedFile,
     PublishedFiles,
     PublishFileArgument,
     SandboxExecResult,
     SpilledOutput,
+    artifact_url,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
     EditTool,
     ExecCommandTool,
-    PublishFilesTool,
+    LibraryCreateLibraryFileTool,
     WriteStdinTool,
     WriteTool,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.spill import (
     FULL_VALUE_NOTE,
     SPILL_FAILED_NOTE,
@@ -235,10 +266,11 @@ from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_page_scrape,
 )
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_chat_tool_approvals import ACTION
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
-from tests.external_dependency_unit.chat.test_wait_agents import (
-    ScriptedLLM as WaitAgentsLLM,
+from tests.external_dependency_unit.chat.test_wait_agent import (
+    ScriptedLLM as WaitAgentLLM,
 )
 from tests.external_dependency_unit.code_mode_helpers import (
     ChatLLM,
@@ -286,7 +318,7 @@ from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool
 pytestmark = pytest.mark.usefixtures("tenant_context")
 
 SANDBOX_NAMES = frozenset(
-    {ExecCommandTool.NAME, WriteStdinTool.NAME, ApplyPatchTool.NAME}
+    {EXEC_COMMAND_TOOL_NAME, WRITE_STDIN_TOOL_NAME, ApplyPatchTool.NAME}
 )
 ADD_A = "*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch"
 
@@ -301,10 +333,13 @@ class SandboxTools(BaseModel):
     ref: HarnessSandboxRef
     exec_command: ExecCommandTool
     write_stdin: WriteStdinTool
+    # The shell of the Claude shape.
+    bash: ExecCommandTool
+    bash_write_stdin: WriteStdinTool
     apply_patch: ApplyPatchTool
     edit: EditTool
     write: WriteTool
-    publish_files: PublishFilesTool
+    create_file: LibraryCreateLibraryFileTool
 
     @property
     def all(self) -> list[Tool]:
@@ -360,12 +395,17 @@ def user(
 def make_tools(db_session: Session, user: User) -> MakeTools:
     def make(chat_session_id: UUID | None = None) -> SandboxTools:
         session_id = chat_session_id or uuid4()
-        turn = SandboxTurn(
-            tenant_id=TENANT_ID,
-            user_id=user.id,
-            chat_session_id=session_id,
-            vm_chat_files=[],
-            copy_vm_chat_files=False,
+        # A turn of each shell shape, on the same sandbox session.
+        turn, claude_turn = (
+            SandboxTurn(
+                tenant_id=TENANT_ID,
+                user_id=user.id,
+                chat_session_id=session_id,
+                vm_chat_files=[],
+                copy_vm_chat_files=False,
+                shell=SHELL_SHAPES[family],
+            )
+            for family in (ToolFamily.OPENAI, ToolFamily.CLAUDE)
         )
         return SandboxTools(
             turn=turn,
@@ -376,10 +416,12 @@ def make_tools(db_session: Session, user: User) -> MakeTools:
             ),
             exec_command=ExecCommandTool(turn),
             write_stdin=WriteStdinTool(turn),
+            bash=ExecCommandTool(claude_turn),
+            bash_write_stdin=WriteStdinTool(claude_turn),
             apply_patch=ApplyPatchTool(turn),
-            edit=EditTool(turn),
-            write=WriteTool(turn),
-            publish_files=PublishFilesTool(turn),
+            edit=EditTool(claude_turn),
+            write=WriteTool(claude_turn),
+            create_file=LibraryCreateLibraryFileTool(turn),
         )
 
     return make
@@ -561,7 +603,7 @@ def test_a_chat_turn_streams_saves_and_replays_its_sandbox_calls(
     ended = _ended_turns(monkeypatch, sandbox)
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi there"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "exec", {"cmd": "echo hi there"}),
             tool_step(ApplyPatchTool.NAME, "patch", {"input": ADD_A}),
             Delta(content="Done."),
         ]
@@ -622,7 +664,9 @@ def test_a_program_gets_a_dict_from_exec_command_and_a_failed_call_raises(
         "except Exception as error:\n"
         "    print('raised:', error)\n"
     )
-    llm = ChatLLM([code_step("code", program), Delta(content="Done.")])
+    llm = ChatLLM(
+        [code_step(OPENAI_CODE_MODE, "code", program), Delta(content="Done.")]
+    )
     chat.send(llm, code_mode=True)
 
     text = last_tool_text(llm, "code")
@@ -643,6 +687,7 @@ def test_a_program_call_whose_saved_output_is_cut_is_marked_truncated(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 f"r = await tools.exec_command(cmd='echo {'x' * 3_000}')\n"
                 "print(len(r['output']))\n",
@@ -697,9 +742,9 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     monkeypatch.setattr("onyx.chat.execution.construct_tools", with_gated_tool)
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "exec", {"cmd": "echo hi"}),
             tool_step(gated.name, "send", {"value": "team"}),
-            tool_step(ExecCommandTool.NAME, "again", {"cmd": "echo again"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "again", {"cmd": "echo again"}),
             Delta(content="Done."),
         ]
     )
@@ -817,10 +862,10 @@ def test_a_stop_kills_the_command_that_its_call_waits_on(
         [
             # Its call returns while the command runs.
             tool_step(
-                ExecCommandTool.NAME, "earlier", {"cmd": "cat", "yield_time_ms": 250}
+                EXEC_COMMAND_TOOL_NAME, "earlier", {"cmd": "cat", "yield_time_ms": 250}
             ),
             tool_step(
-                ExecCommandTool.NAME,
+                EXEC_COMMAND_TOOL_NAME,
                 "exec",
                 {"cmd": "say partial", "yield_time_ms": 30_000},
             ),
@@ -860,6 +905,7 @@ def test_a_stop_kills_the_command_that_a_program_call_waits_on(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
                 "await tools.exec_command(cmd='say partial', yield_time_ms=30000)",
             )
@@ -941,7 +987,13 @@ def test_a_stop_during_a_program_patch_ends_the_turn_after_its_write(
     releaser = threading.Thread(target=copy_context().run, args=(release_later,))
     releaser.start()
     join = _stop_when(chat, writing.is_set)
-    llm = ChatLLM([code_step("code", f"await tools.apply_patch(input={ADD_A!r})")])
+    llm = ChatLLM(
+        [
+            code_step(
+                OPENAI_CODE_MODE, "code", f"await tools.apply_patch(input={ADD_A!r})"
+            )
+        ]
+    )
     try:
         parts = chat.send(llm, code_mode=True)
     finally:
@@ -994,7 +1046,7 @@ def test_incognito_and_multi_model_turns_offer_no_sandbox(
         multi_model=True,
     )
     assert len(both) == 2
-    assert all(ExecCommandTool.NAME not in tools for tools in both)
+    assert all(EXEC_COMMAND_TOOL_NAME not in tools for tools in both)
 
     db_session.execute(
         update(ChatSession)
@@ -1004,7 +1056,7 @@ def test_incognito_and_multi_model_turns_offer_no_sandbox(
     db_session.commit()
     try:
         [tools] = offered(ChatLLM([Delta(content="No sandbox.")]), multi_model=False)
-        assert ExecCommandTool.NAME not in tools
+        assert EXEC_COMMAND_TOOL_NAME not in tools
     finally:
         teardown_incognito_session(chat.chat_session_id)
 
@@ -1030,7 +1082,7 @@ def test_a_bot_turn_offers_no_sandbox(
         approval_mode=ApprovalMode.NO_APPROVER,
     )
     [request] = llm.requests
-    assert ExecCommandTool.NAME not in str(request.get("tools"))
+    assert EXEC_COMMAND_TOOL_NAME not in str(request.get("tools"))
 
 
 @pytest.mark.usefixtures("sandbox", "node")
@@ -1061,7 +1113,7 @@ def test_an_anonymous_turn_offers_no_sandbox(
         ]
         assert errors == []
         [request] = llm.requests
-        assert ExecCommandTool.NAME not in str(request.get("tools"))
+        assert EXEC_COMMAND_TOOL_NAME not in str(request.get("tools"))
     finally:
         assert chat_turn_work.wait_idle(timeout=30)
         delete_chat_session(anonymous.id, chat_session_id, db_session, hard_delete=True)
@@ -1105,12 +1157,13 @@ def test_the_live_output_of_a_call_stops_at_its_character_budget(
     make_tools: MakeTools,
 ) -> None:
     """The final output replaces the live preview, so the preview streams no
-    more than max_output_chars characters."""
+    more than the call's character budget (max_output_tokens, 4 characters a
+    token)."""
     tools = make_tools()
     # The budget counts a multi-byte character as one and never splits it.
     text = "a" * 79 + "é" * 2 + "z" * 200
     result, progress = _run(
-        tools.exec_command, {"cmd": f"echo {text}", "max_output_chars": 80}
+        tools.exec_command, {"cmd": f"echo {text}", "max_output_tokens": 20}
     )
     streamed = "".join(
         update.details.text
@@ -1130,12 +1183,57 @@ def test_the_live_output_of_a_call_stops_at_its_character_budget(
     )
 
 
+@pytest.mark.usefixtures("sandbox", "node")
+def test_the_claude_shell_runs_commands_by_its_own_arguments(
+    monkeypatch: pytest.MonkeyPatch, make_tools: MakeTools
+) -> None:
+    """bash takes `command`; its `timeout` is how long the call waits, and
+    `run_in_background` returns at once with the session ID while the
+    command runs. write_stdin takes its wait as `timeout` too, and
+    `description` changes nothing."""
+    monkeypatch.setattr(harness_sandbox, "POLL_MIN_YIELD_MS", 250)
+    tools = make_tools()
+    assert tools.bash.name == "bash"
+    bash = tools.bash.tool_definition().parameters["properties"]
+    write = tools.bash_write_stdin.tool_definition().parameters["properties"]
+    assert isinstance(bash, dict) and isinstance(write, dict)
+    assert set(bash) == {"command", "timeout", "description", "run_in_background"}
+    assert set(write) == {"session_id", "chars", "timeout"}
+    done, _ = _run(tools.bash, {"command": "echo hi", "description": "Say hi"})
+    assert isinstance(done.details, SandboxExecResult)
+    assert done.details.exit_code == 0
+    assert done.content.endswith("Output:\nhi\n")
+
+    background, _ = _run(
+        tools.bash, {"command": "cat", "run_in_background": True, "timeout": 30_000}
+    )
+    running = background.details
+    assert isinstance(running, SandboxExecResult)
+    assert running.session_id is not None and running.exit_code is None
+    assert running.wall_time_seconds < 5
+    echoed, _ = _run(
+        tools.bash_write_stdin,
+        {"session_id": running.session_id, "chars": "hello", "timeout": 250},
+    )
+    assert echoed.content.endswith("Output:\nhello")
+    _run(tools.bash_write_stdin, {"session_id": running.session_id, "chars": "\u0003"})
+
+    waited, _ = _run(tools.bash, {"command": "sleep 30", "timeout": 500})
+    assert isinstance(waited.details, SandboxExecResult)
+    assert waited.details.session_id is not None
+    assert waited.details.wall_time_seconds < 5
+    _run(
+        tools.bash_write_stdin,
+        {"session_id": waited.details.session_id, "chars": "\u0003"},
+    )
+
+
 @pytest.mark.usefixtures("node")
 def test_a_numeric_session_id_keeps_the_exec_card(chat: SandboxChat) -> None:
     # Models may send the session ID as a number.
     llm = ChatLLM(
         [
-            tool_step(WriteStdinTool.NAME, "poll", {"session_id": 123}),
+            tool_step(WRITE_STDIN_TOOL_NAME, "poll", {"session_id": 123}),
             Delta(content="Done."),
         ]
     )
@@ -1151,7 +1249,9 @@ def test_a_numeric_session_id_keeps_the_exec_card(chat: SandboxChat) -> None:
     llm = ChatLLM(
         [
             code_step(
-                "code", "await tools.write_stdin(session_id='nope', yield_time_ms=1000)"
+                OPENAI_CODE_MODE,
+                "code",
+                "await tools.write_stdin(session_id='nope', yield_time_ms=1000)",
             ),
             Delta(content="Done."),
         ]
@@ -1599,10 +1699,6 @@ class NamedChatLLM(ChatLLM):
         )
 
 
-def _claude(steps: Sequence[Delta]) -> NamedChatLLM:
-    return NamedChatLLM(steps, model_name="claude-opus-4-5")
-
-
 @pytest.mark.parametrize(
     ("model_name", "deployment_name", "claude"),
     [
@@ -1628,19 +1724,42 @@ def test_claude_models_get_edit_and_write_and_others_apply_patch(
     assert offered & (file_tools | {ApplyPatchTool.NAME}) == (
         file_tools if claude else {ApplyPatchTool.NAME}
     )
-    # The system prompt's sandbox section names the turn's file tools.
-    assert (
-        "edit files with `edit` and create or overwrite files with `write`."
-        if claude
-        else "edit files with `apply_patch`."
-    ) in str(request["prompt"])
+    # The file tools say that the user sees each change as a diff.
+    descriptions = {
+        tool["function"]["name"]: tool["function"]["description"]
+        for tool in request.get("tools") or []
+    }
+    assert all(
+        "The user sees the change as a diff." in descriptions[name]
+        for name in (file_tools if claude else {ApplyPatchTool.NAME})
+    )
+    # The browser tools (on by default) come with their usage guidance in
+    # browser_open's description; the system prompt does not name them.
+    assert "browser_open" in offered
+    assert "take control" in descriptions["browser_open"]
+    assert "browser_open" not in str(request["prompt"])
+
+
+@pytest.mark.usefixtures("node")
+def test_the_browser_setting_turns_the_browser_tools_off(
+    monkeypatch: pytest.MonkeyPatch, chat: SandboxChat
+) -> None:
+    monkeypatch.setattr(process_message, "load_browser_enabled", lambda: False)
+    llm = NamedChatLLM([Delta(content="Ready.")], model_name="gpt-5.1")
+    chat.send(llm)
+
+    [request] = llm.requests
+    offered = {tool["function"]["name"] for tool in request.get("tools") or []}
+    assert SHELL_SHAPES[ToolFamily.OPENAI].name in offered
+    assert not {name for name in offered if name.startswith("browser_")}
+    assert "browser_open" not in str(request["prompt"])
 
 
 @pytest.mark.usefixtures("node")
 def test_edit_and_write_calls_render_patch_cards_live_and_on_replay(
     db_session: Session, node: RunningFakeAgent, chat: SandboxChat
 ) -> None:
-    llm = _claude(
+    llm = ChatLLM(
         [
             tool_step(
                 WriteTool.NAME, "create", {"file_path": "a.py", "content": "x = 1\n"}
@@ -1661,7 +1780,8 @@ def test_edit_and_write_calls_render_patch_cards_live_and_on_replay(
                 {"file_path": "a.py", "old_string": "zzz", "new_string": "q"},
             ),
             Delta(content="Done."),
-        ]
+        ],
+        family=ToolFamily.CLAUDE,
     )
     parts = chat.send(llm)
 
@@ -1726,13 +1846,12 @@ def test_a_program_edits_and_writes_files(
         "except Exception as error:\n"
         "    print('raised:', error)\n"
     )
-    llm = _claude([code_step("code", program), Delta(content="Done.")])
+    llm = ChatLLM(
+        [code_step(CLAUDE_CODE_MODE, "code", program), Delta(content="Done.")],
+        family=ToolFamily.CLAUDE,
+    )
     chat.send(llm, code_mode=True)
 
-    assert (
-        "edit files with `tools.edit` and create or overwrite files with "
-        "`tools.write`." in str(llm.requests[0]["prompt"])
-    )
     text = last_tool_text(llm, "code")
     assert "File created successfully at: a.txt" in text
     assert "The file a.txt has been updated successfully." in text
@@ -1775,11 +1894,12 @@ def test_file_calls_of_one_step_take_turns(
         "edit",
         {"file_path": "a.py", "old_string": "a = 1", "new_string": "a = 2"},
     ).tool_calls
-    llm = _claude(
+    llm = ChatLLM(
         [
             Delta(tool_calls=[write_call, edit_call.model_copy(update={"index": 1})]),
             Delta(content="Done."),
-        ]
+        ],
+        family=ToolFamily.CLAUDE,
     )
     chat.send(llm)
 
@@ -1944,11 +2064,13 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
                 ToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "helper", "instruction": "Task helper"},
+                    arguments={"task_name": "helper", "message": "Task helper"},
                 ),
                 ToolCall(
                     id="exec",
-                    name=CODE_MODE_TOOL_NAME if code_mode else ExecCommandTool.NAME,
+                    name=EXECUTE_CODE_TOOL_NAME
+                    if code_mode
+                    else EXEC_COMMAND_TOOL_NAME,
                     arguments={"code": "await tools.exec_command(cmd='echo hi')"}
                     if code_mode
                     else {"cmd": "echo hi"},
@@ -1956,7 +2078,7 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
             ]
         )
 
-    model = WaitAgentsLLM(generate)
+    model = WaitAgentLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
@@ -2048,15 +2170,15 @@ def test_every_agent_gets_the_sandbox_tools_when_harness_sandboxes_run(
     enabled: bool,
 ) -> None:
     monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", enabled)
-    built: list[ChatAgent | DeepResearchAgent] = []
+    built: list[tuple[Agent, ChatFeature | DeepResearchFeature]] = []
     create_chat_agent = execution.create_chat_agent
 
     def recorded_create_chat_agent(
         *args: Any, **kwargs: Any
-    ) -> ChatAgent | DeepResearchAgent:
-        agent = create_chat_agent(*args, **kwargs)
-        built.append(agent)
-        return agent
+    ) -> tuple[Agent, ChatFeature | DeepResearchFeature]:
+        created = create_chat_agent(*args, **kwargs)
+        built.append(created)
+        return created
 
     monkeypatch.setattr(execution, "create_chat_agent", recorded_create_chat_agent)
     no_tools = upsert_persona(
@@ -2083,8 +2205,10 @@ def test_every_agent_gets_the_sandbox_tools_when_harness_sandboxes_run(
         assert SANDBOX_NAMES & offered == (SANDBOX_NAMES if enabled else set())
 
     assert len(built) == 2
-    for agent in built:
-        tools = [tool for tool in agent.application_tools if tool.name in SANDBOX_NAMES]
+    for agent, feature in built:
+        tools = [
+            tool for tool in feature.application_tools if tool.name in SANDBOX_NAMES
+        ]
         if enabled:
             # The three tools have no tool row; the root's runs end their turn.
             assert sorted(tool.name for tool in tools) == sorted(SANDBOX_NAMES)
@@ -2120,13 +2244,13 @@ def test_a_deep_research_turn_offers_no_sandbox(
         )
     try:
         assert not setup.sandbox_tools
-        agent = execution.create_chat_agent(
+        agent, feature = execution.create_chat_agent(
             setup, user, 0, CancellationSignal(), False, with_subagents=False
         )
     finally:
         setup.admission.release()
-    assert isinstance(agent, DeepResearchAgent)
-    assert not {tool.name for tool in agent.application_tools} & SANDBOX_NAMES
+    assert isinstance(feature, DeepResearchFeature)
+    assert not {tool.name for tool in feature.application_tools} & SANDBOX_NAMES
     assert agent.on_drained is None
 
 
@@ -2264,15 +2388,16 @@ def test_a_bulk_delete_keeps_a_chat_created_while_it_runs(
     monkeypatch.setattr(
         db_chat, "delete_messages_and_files_from_chat_session", delete_and_create
     )
-    assert delete_all_chat_sessions_for_user(user, db_session, hard_delete=True) == [
-        first
-    ]
+    assert delete_all_chat_sessions_for_user(user, db_session, hard_delete=True) == (
+        [first],
+        [],
+    )
     db_session.expire_all()
     assert db_session.get(ChatSession, first) is None
     assert db_session.get(ChatSession, created[0]) is not None
 
 
-# publish_files
+# library_create_library_file
 
 
 def _published_records(db_session: Session, chat_session_id: UUID) -> list[FileRecord]:
@@ -2328,18 +2453,19 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
     llm = ChatLLM(
         [
             tool_step(
-                PublishFilesTool.NAME,
+                LibraryCreateLibraryFileTool.NAME,
                 "publish",
                 {
-                    "files": [
-                        {"path": "out/report.csv", "title": "Report"},
-                        {"path": chart},
-                    ],
+                    "files": ["out/report.csv", chart],
                     "description": "The report and its chart.",
                 },
             ),
             # Publishing a path again adds a version of its artifact.
-            tool_step(PublishFilesTool.NAME, "again", {"files": [{"path": report}]}),
+            tool_step(
+                LibraryCreateLibraryFileTool.NAME,
+                "again",
+                {"file": report, "title": "Report"},
+            ),
             Delta(content="Done."),
         ]
     )
@@ -2352,9 +2478,9 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
         (file.name, file.title, file.path, file.size, file.mime_type, file.version)
         for file in published
     ] == [
-        ("report.csv", "Report", report, 8, "text/csv", 1),
+        ("report.csv", None, report, 8, "text/csv", 1),
         ("chart.svg", None, chart, 6, "image/svg+xml", 1),
-        ("report.csv", None, report, 8, "text/csv", 2),
+        ("report.csv", "Report", report, 8, "text/csv", 2),
     ]
     assert len({file.file_id for file in published}) == 3
     assert published[0].artifact_id == published[2].artifact_id
@@ -2362,26 +2488,37 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
     assert live == [
         packets.PublishFilesStart(
             files=[
-                PublishFileArgument(path="out/report.csv", title="Report"),
+                PublishFileArgument(path="out/report.csv"),
                 PublishFileArgument(path=chart),
             ],
             description="The report and its chart.",
         ),
         ends[0],
         packets.SectionEnd(),
-        packets.PublishFilesStart(files=[PublishFileArgument(path=report)]),
+        packets.PublishFilesStart(
+            files=[PublishFileArgument(path=report, title="Report")]
+        ),
         ends[1],
         packets.SectionEnd(),
     ]
     [replayed] = chat.replayed(db_session)
     assert _sandbox_packets(replayed) == live
-    text = last_tool_text(llm, "publish")
-    assert text.startswith("Published.")
-    assert (
-        f"- {report}: version 1, file ID {published[0].file_id}, 8 bytes, text/csv"
-        in text
-    )
-    assert chart in text
+    # The model gets each file's version and link.
+    assert [
+        (file.file_id, file.version_number, file.path, file.url)
+        for file in ArtifactPublished.model_validate_json(
+            last_tool_text(llm, "publish")
+        ).files
+    ] == [
+        (
+            file.file_id,
+            1,
+            file.display_path,
+            artifact_url(file.artifact_id, 1),
+        )
+        for file in published[:2]
+        if file.artifact_id is not None
+    ]
 
     store = get_default_file_store()
     for file, data in zip(
@@ -2439,7 +2576,7 @@ def test_everyone_who_can_read_the_chat_can_download_a_published_file(
     )
     tools = make_tools(chat_session.id)
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
-    result, _ = _run(tools.publish_files, {"files": [{"path": "report.md"}]})
+    result, _ = _run(tools.create_file, {"file": "report.md"})
     assert isinstance(result.details, PublishedFiles)
     [file] = result.details.files
     other = make_test_user("published_viewer")
@@ -2466,6 +2603,19 @@ def test_everyone_who_can_read_the_chat_can_download_a_published_file(
         get_default_file_store().delete_file(file.file_id)
 
 
+def _preview_ids(db_session: Session, name: str) -> list[str]:
+    """The preview PDF records of published files named `name`."""
+    db_session.expire_all()
+    return list(
+        db_session.scalars(
+            select(FileRecord.file_id).where(
+                FileRecord.file_origin == FileOrigin.CHAT_FILE_PREVIEW,
+                FileRecord.display_name == f"{name} preview",
+            )
+        )
+    )
+
+
 def _thumbnail_ids(db_session: Session, name: str) -> list[str]:
     """The thumbnail records of published files named `name`."""
     db_session.expire_all()
@@ -2490,7 +2640,9 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
 ) -> None:
     """A PDF, a deck and a Word file each get a JPEG of their first page, also
     under the Onyx directory, which reads with the file's chat access and goes
-    with the chat's hard delete. A markdown file gets none."""
+    with the chat's hard delete. The deck and the Word file also get the PDF
+    of the same LibreOffice run, which only their preview request serves and
+    which goes with the hard delete too. A markdown file gets neither."""
     chat_session = create_chat_session(
         db_session, "thumbnails", user.id, persona_id=DEFAULT_PERSONA_ID
     )
@@ -2504,14 +2656,14 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
     node.agent.files[(str(tools.ref.sandbox_id), "", chart)] = b"%PDF-1.7 chart"
 
     result, _ = _run(
-        tools.publish_files,
+        tools.create_file,
         {
             "files": [
-                {"path": "out/report.pdf"},
-                {"path": "out/q3.deck.pptx"},
-                {"path": "memo.docx"},
-                {"path": chart},
-                {"path": "notes.md"},
+                "out/report.pdf",
+                "out/q3.deck.pptx",
+                "memo.docx",
+                chart,
+                "notes.md",
             ]
         },
     )
@@ -2537,6 +2689,38 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
         file.thumbnail_file_id
         for file in get_chat_published_files(chat_session.id, db_session)
     ] == [*thumbnail_ids, None]
+    previews = dict(
+        db_session.execute(
+            select(
+                ChatArtifactVersion.file_id, ChatArtifactVersion.preview_file_id
+            ).where(
+                ChatArtifactVersion.file_id.in_(
+                    [file.file_id for file in result.details.files]
+                )
+            )
+        )
+        .tuples()
+        .all()
+    )
+    assert [previews[file.file_id] for file in (pdf, chart_file, notes)] == [
+        None,
+        None,
+        None,
+    ]
+    preview_ids = [
+        preview_id
+        for preview_id in (previews[deck.file_id], previews[memo.file_id])
+        if preview_id is not None
+    ]
+    assert len(preview_ids) == 2
+    for preview_id, source in zip(preview_ids, (b"deck", b"memo"), strict=True):
+        record = store.read_file_record(preview_id)
+        assert (record.file_origin, record.file_type) == (
+            FileOrigin.CHAT_FILE_PREVIEW,
+            "application/pdf",
+        )
+        assert store.read_file(preview_id).read() == b"%PDF-" + source
+        assert not user_can_access_chat_file(preview_id, user, db_session)
 
     # Office files convert to a PDF in a scratch directory of their own,
     # which the render deletes.
@@ -2569,13 +2753,13 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
     assert all(
         execution.env == {"SAL_USE_VCLPLUGIN": "svp"}
         and execution.argv[1].startswith(
-            f"-env:UserInstallation=file://{RENDER_FIRST_PAGE_ROOT}/"
+            f"-env:UserInstallation=file://{RENDER_PREVIEW_ROOT}/"
         )
         for execution in commands
         if execution.argv[0] == "soffice"
     )
     assert not any(
-        key[2].startswith(RENDER_FIRST_PAGE_ROOT + "/") for key in node.agent.files
+        key[2].startswith(RENDER_PREVIEW_ROOT + "/") for key in node.agent.files
     )
 
     other = make_test_user("thumbnail_viewer")
@@ -2588,7 +2772,33 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
     delete_chat_session_by_id(
         chat_session.id, hard_delete=True, user=user, db_session=db_session
     )
-    assert _remaining_file_ids(db_session, thumbnail_ids) == []
+    assert _remaining_file_ids(db_session, [*thumbnail_ids, *preview_ids]) == []
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_deck_whose_pdf_is_too_large_publishes_with_its_thumbnail(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+) -> None:
+    monkeypatch.setattr(harness_sandbox, "RENDER_PREVIEW_MAX_PDF_BYTES", 3)
+    tools = make_tools(
+        create_chat_session(
+            db_session, "large deck", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
+    name = f"{uuid4().hex}.pptx"
+    sandbox.write_file(tools.ref, name, b"deck")
+
+    result, _ = _run(tools.create_file, {"files": [name]})
+
+    assert isinstance(result.details, PublishedFiles)
+    [deck] = result.details.files
+    assert deck.thumbnail_file_id is not None
+    assert _thumbnail_ids(db_session, name) == [deck.thumbnail_file_id]
+    assert _preview_ids(db_session, name) == []
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
@@ -2602,9 +2812,9 @@ def test_a_chat_delete_deletes_the_thumbnail_of_a_file_that_its_message_lists(
         ChatLLM(
             [
                 tool_step(
-                    PublishFilesTool.NAME,
+                    LibraryCreateLibraryFileTool.NAME,
                     "publish",
-                    {"files": [{"path": "report.pdf"}]},
+                    {"file": "report.pdf"},
                 ),
                 Delta(content="Done."),
             ]
@@ -2640,9 +2850,9 @@ def test_a_failed_thumbnail_delete_keeps_the_file_for_the_next_chat_delete(
         ChatLLM(
             [
                 tool_step(
-                    PublishFilesTool.NAME,
+                    LibraryCreateLibraryFileTool.NAME,
                     "publish",
-                    {"files": [{"path": "report.pdf"}]},
+                    {"file": "report.pdf"},
                 ),
                 Delta(content="Done."),
             ]
@@ -2721,9 +2931,7 @@ def test_a_failed_publish_keeps_a_file_whose_thumbnail_delete_fails(
 
     monkeypatch.setattr(store_type, "delete_file", failing_delete)
 
-    result, _ = _run(
-        tools.publish_files, {"files": [{"path": first}, {"path": "missing.md"}]}
-    )
+    result, _ = _run(tools.create_file, {"files": [first, "missing.md"]})
 
     assert result.is_error
     [thumbnail_id] = _thumbnail_ids(db_session, first)
@@ -2760,7 +2968,7 @@ def test_a_file_that_does_not_render_publishes_without_a_thumbnail(
     name = f"{uuid4().hex}.pdf"
     sandbox.write_file(tools.ref, name, b"not a pdf")
 
-    result, _ = _run(tools.publish_files, {"files": [{"path": name}]})
+    result, _ = _run(tools.create_file, {"file": name})
 
     assert not result.is_error
     assert isinstance(result.details, PublishedFiles)
@@ -2796,32 +3004,33 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
     error: str,
     user: User,
 ) -> None:
-    monkeypatch.setattr(sandbox_tools, "PUBLISH_FILES_MAX_BYTES", 16)
+    monkeypatch.setattr(artifact_operations, "PUBLISH_FILES_MAX_BYTES", 16)
     tools = make_tools(
         create_chat_session(
             db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
         ).id
     )
-    # It renders: the fake pdftoppm reads a file that starts with "%PDF".
-    first = f"{uuid4().hex}.pdf"
-    sandbox.write_file(tools.ref, first, b"%PDF")
+    # It renders, to a thumbnail and a preview PDF.
+    first = f"{uuid4().hex}.pptx"
+    sandbox.write_file(tools.ref, first, b"deck")
     sandbox.write_file(tools.ref, "out/a.txt", b"a")
     sandbox.write_file(tools.ref, "big.bin", b"x" * 17)
     for vm_path in ("/tmp/chart.svg", f"{ONYX_VM_FILES_ROOT}/dir/a.svg"):
         node.agent.files[(str(tools.ref.sandbox_id), "", vm_path)] = b"<svg/>"
 
-    result, _ = _run(tools.publish_files, {"files": [{"path": first}, {"path": path}]})
+    result, _ = _run(tools.create_file, {"files": [first, path]})
 
     assert result.is_error
     assert result.text.endswith(error)
     # The file that the call copied first is deleted again, with its
-    # thumbnail and its artifact.
+    # thumbnail, its preview and its artifact.
     assert _published_records(db_session, tools.ref.session_id) == []
     assert any(
-        execution.argv[0] == "pdftoppm" and execution.argv[-2].endswith(f"/{first}")
+        execution.argv[0] == "soffice" and execution.argv[-1].endswith(f"/{first}")
         for execution in node.agent.executions[str(tools.ref.sandbox_id)].values()
     )
     assert _thumbnail_ids(db_session, first) == []
+    assert _preview_ids(db_session, first) == []
     assert (
         db_session.scalars(
             select(ChatArtifact.id).where(
@@ -2830,6 +3039,104 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
         ).all()
         == []
     )
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_publish_sends_the_indexing_task_of_each_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+    user: User,
+) -> None:
+    tools = make_tools(
+        create_chat_session(
+            db_session, "indexed", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
+    sandbox.write_file(tools.ref, "a.md", b"a")
+    sandbox.write_file(tools.ref, "b.md", b"b")
+    send_task = MagicMock()
+    monkeypatch.setattr(client_app, "send_task", send_task)
+
+    result, _ = _run(tools.create_file, {"files": ["a.md", "b.md"]})
+
+    assert isinstance(result.details, PublishedFiles)
+    artifact_ids = [file.artifact_id for file in result.details.files]
+    try:
+        assert send_task.mock_calls == [
+            call(
+                OnyxCeleryTask.PROCESS_SINGLE_CHAT_ARTIFACT,
+                kwargs={
+                    "artifact_id": str(artifact_id),
+                    "tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                },
+                queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
+                priority=OnyxCeleryPriority.HIGH,
+                expires=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+            )
+            for artifact_id in artifact_ids
+        ]
+    finally:
+        cache = get_cache_backend()
+        for artifact_id in artifact_ids:
+            if artifact_id is not None:
+                cache.delete(chat_artifact_queued_key(artifact_id))
+
+
+@pytest.mark.usefixtures(
+    "node", "initialize_file_store", "full_deployment_setup", "fake_embeddings"
+)
+def test_a_failed_publish_takes_an_artifact_indexed_meanwhile_out_of_the_index(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+    user: User,
+) -> None:
+    """The indexing beat indexes the call's first file before its second
+    file fails; the call's clean-up deletes that artifact's document."""
+    monkeypatch.setattr(artifact_operations, "PUBLISH_FILES_MAX_BYTES", 16)
+    tools = make_tools(
+        create_chat_session(
+            db_session, "unpublished", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
+    sandbox.write_file(tools.ref, "a.md", b"Pelicans")
+    sandbox.write_file(tools.ref, "big.bin", b"x" * 17)
+    indexed_ids: list[UUID] = []
+    save = artifact_operations.save_chat_artifact
+    document_index = build_opensearch_document_index(
+        get_current_search_settings(db_session)
+    )
+
+    def indexed() -> bool:
+        """Whether the PRESENT index holds the document, after a refresh."""
+        return bool(document_index.get_documents_with_any_chunk([str(indexed_ids[0])]))
+
+    def save_then_index(*args: Any, **kwargs: Any) -> PublishedFile:
+        published = save(*args, **kwargs)
+        if published.artifact_id is None:
+            raise RuntimeError("save_chat_artifact always sets the artifact")
+        process_single_chat_artifact.run(
+            artifact_id=str(published.artifact_id),  # ty: ignore[invalid-argument-type]
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,  # ty: ignore[invalid-argument-type]
+        )
+        indexed_ids.append(published.artifact_id)
+        if not indexed():
+            raise RuntimeError("the beat's write did not land")
+        return published
+
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save_then_index)
+    try:
+        result, _ = _run(tools.create_file, {"files": ["a.md", "big.bin"]})
+
+        assert result.is_error
+        assert result.text.endswith("'big.bin' is larger than the limit of 16 bytes")
+        assert len(indexed_ids) == 1
+        assert not indexed()
+    finally:
+        delete_chat_artifacts_from_index(indexed_ids)
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
@@ -2848,14 +3155,9 @@ def test_a_paged_chat_load_lists_the_latest_version_of_each_artifact(
             ChatLLM(
                 [
                     tool_step(
-                        PublishFilesTool.NAME,
+                        LibraryCreateLibraryFileTool.NAME,
                         "publish",
-                        {
-                            "files": [
-                                {"path": "report.md", "title": "Report"},
-                                {"path": "chart.svg"},
-                            ]
-                        },
+                        {"files": ["report.md", "chart.svg"]},
                     ),
                     Delta(content="Done."),
                 ]
@@ -2866,8 +3168,9 @@ def test_a_paged_chat_load_lists_the_latest_version_of_each_artifact(
             ChatLLM(
                 [
                     code_step(
+                        OPENAI_CODE_MODE,
                         "code",
-                        "print(await tools.publish_files(files=[{'path': 'report.md'}]))\n",
+                        "print(await tools.library__create_library_file(file='report.md'))\n",
                     ),
                     Delta(content="Done."),
                 ]
@@ -2938,15 +3241,17 @@ def test_a_program_publishes_files_that_belong_to_the_message(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "code",
-                "print(await tools.publish_files(files=[{'path': 'report.md'}]))\n",
+                "print(await tools.library__create_library_file(file='report.md'))\n",
             ),
             Delta(content="Done."),
         ]
     )
     chat.send(llm, code_mode=True)
 
-    assert "Published." in last_tool_text(llm, "code")
+    # The program gets the publish result as a dict.
+    assert "{'files': [{'library_file_id': " in last_tool_text(llm, "code")
     [cell] = saved_cells(db_session, chat.chat_session_id)
     [call] = cell.calls
     assert isinstance(call.details, PublishedFiles)
@@ -2968,7 +3273,7 @@ def test_the_non_streaming_response_lists_published_files(
     llm = ChatLLM(
         [
             tool_step(
-                PublishFilesTool.NAME, "publish", {"files": [{"path": "report.md"}]}
+                LibraryCreateLibraryFileTool.NAME, "publish", {"file": "report.md"}
             ),
             Delta(content="Done."),
         ]
@@ -2998,6 +3303,7 @@ def test_the_non_streaming_response_lists_published_files(
                 )
             ).one(),
             version=1,
+            chat_id=chat.chat_session_id,
             name="report.md",
             path=f"{session_workspace(chat.chat_session_id)}/report.md",
             size=9,
@@ -3048,8 +3354,8 @@ def test_a_publish_in_the_step_of_a_patch_publishes_the_patched_file(
                             ("patch", ApplyPatchTool.NAME, {"input": ADD_A}),
                             (
                                 "publish",
-                                PublishFilesTool.NAME,
-                                {"files": [{"path": "a.txt"}]},
+                                LibraryCreateLibraryFileTool.NAME,
+                                {"file": "a.txt"},
                             ),
                         ]
                     )
@@ -3061,8 +3367,9 @@ def test_a_publish_in_the_step_of_a_patch_publishes_the_patched_file(
     chat.send(llm)
 
     # The file tools take turns, so the publish sees the patch's file.
-    assert last_tool_text(llm, "publish").startswith("Published.")
     [record] = _published_records(db_session, chat.chat_session_id)
+    [file] = ArtifactPublished.model_validate_json(last_tool_text(llm, "publish")).files
+    assert file.file_id == record.file_id
     assert get_default_file_store().read_file(record.file_id).read() == b"x\n"
     delete_chat_session_by_id(
         chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
@@ -3081,9 +3388,9 @@ def test_a_later_turn_reads_no_text_of_published_files(
         ChatLLM(
             [
                 tool_step(
-                    PublishFilesTool.NAME,
+                    LibraryCreateLibraryFileTool.NAME,
                     "publish",
-                    {"files": [{"path": "report.csv"}]},
+                    {"file": "report.csv"},
                 ),
                 Delta(content="Done."),
             ]
@@ -3126,20 +3433,20 @@ def test_a_stop_during_the_last_copy_publishes_nothing(
     )
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
     cancellation = CancellationSignal()
-    save_chat_artifact = sandbox_tools.save_chat_artifact
+    save_chat_artifact = artifact_operations.save_chat_artifact
 
     def save_then_stop(*args: Any, **kwargs: Any) -> PublishedFile:
         file = save_chat_artifact(*args, **kwargs)
         cancellation.cancel()
         return file
 
-    monkeypatch.setattr(sandbox_tools, "save_chat_artifact", save_then_stop)
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save_then_stop)
 
     with pytest.raises(AgentCancelled):
-        tools.publish_files.run(
+        tools.create_file.run(
             ToolInvocation(
                 call_id="publish",
-                arguments={"files": [{"path": "report.md"}]},
+                arguments={"file": "report.md"},
                 cancellation=cancellation,
                 update=lambda _progress: None,
             ),
@@ -3170,7 +3477,7 @@ def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_delet
     llm = ChatLLM(
         [
             tool_step(
-                PublishFilesTool.NAME, "publish", {"files": [{"path": "report.md"}]}
+                LibraryCreateLibraryFileTool.NAME, "publish", {"file": "report.md"}
             ),
             tool_step(gated.name, "send", {"value": "team"}),
             Delta(content="Done."),
@@ -3241,8 +3548,8 @@ def test_a_publish_of_too_many_files_publishes_none(
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
 
     result, _ = _run(
-        tools.publish_files,
-        {"files": [{"path": "report.md"}] * (PUBLISH_FILES_MAX_FILES + 1)},
+        tools.create_file,
+        {"files": ["report.md"] * (PUBLISH_FILES_MAX_FILES + 1)},
     )
 
     assert result.is_error
@@ -3329,8 +3636,9 @@ def _spills(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, bytes]:
 
 def _note(path: str, size: int, body: str, *, code_mode: bool = False) -> str:
     """The model's note of a spilled result."""
+    # In code mode the shell is a function of programs.
     read_with = (
-        "exec_command in an execute_code program" if code_mode else "exec_command"
+        "tools.exec_command in execute_code programs" if code_mode else "exec_command"
     )
     return (
         f'<persisted-output path="{path}" bytes={size}>\n{body}\n'
@@ -3481,7 +3789,10 @@ def test_a_cell_over_its_output_limit_saves_its_output_to_the_vm(
 ) -> None:
     program = _ROWS_PROGRAM + "'done'\n"
     llm = ChatLLM(
-        [code_step("rows", program, max_output_chars=5_000), Delta(content="Done.")]
+        [
+            code_step(OPENAI_CODE_MODE, "rows", program, max_output_tokens=1_250),
+            Delta(content="Done."),
+        ]
     )
     parts = chat.send(llm, code_mode=True)
 
@@ -3524,7 +3835,10 @@ def test_a_cell_counts_the_printed_output_that_it_dropped_before_the_save(
     printed = 700_000
     program = f"print('h' * 1000 + 'm' * {printed - 2000} + 't' * 1000)\n"
     llm = ChatLLM(
-        [code_step("big", program, max_output_chars=5_000), Delta(content="Done.")]
+        [
+            code_step(OPENAI_CODE_MODE, "big", program, max_output_tokens=1_250),
+            Delta(content="Done."),
+        ]
     )
     chat.send(llm, code_mode=True)
 
@@ -3551,8 +3865,8 @@ def test_cell_results_within_their_limit_never_spill(
     program = f"print({rows!r}, end='')\nyield_control()\nprint({rows!r}, end='')\n"
     llm = ChatLLM(
         [
-            code_step("start", program, max_output_chars=160_000),
-            wait_step("more", 1, max_output_chars=160_000),
+            code_step(OPENAI_CODE_MODE, "start", program, max_output_tokens=40_000),
+            wait_step(OPENAI_CODE_MODE, "more", 1, max_tokens=40_000),
             Delta(content="Done."),
         ]
     )
@@ -3592,7 +3906,7 @@ def test_a_cell_that_closes_after_a_large_observation_spills_both_records(
     )
     llm = ChatLLM(
         [
-            code_step("start", program, max_output_chars=5_000),
+            code_step(OPENAI_CODE_MODE, "start", program, max_output_tokens=1_250),
             Delta(content="Started."),
         ]
     )
@@ -3651,8 +3965,8 @@ def test_root_sandbox_results_end_with_the_file_status_and_errors_do_not(
     given = _scripted_status(monkeypatch)
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "ok", {"cmd": "echo hi"}),
-            tool_step(WriteStdinTool.NAME, "bad", {"session_id": "nope"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "ok", {"cmd": "echo hi"}),
+            tool_step(WRITE_STDIN_TOOL_NAME, "bad", {"session_id": "nope"}),
             tool_step(ApplyPatchTool.NAME, "patch", {"input": "not a patch"}),
             Delta(content="Done."),
         ]
@@ -3678,7 +3992,7 @@ def test_the_file_status_follows_a_spilled_result(
     given = _scripted_status(monkeypatch)
     llm = ChatLLM(
         [
-            code_step("big", _ROWS_PROGRAM, max_output_chars=5_000),
+            code_step(OPENAI_CODE_MODE, "big", _ROWS_PROGRAM, max_output_tokens=1_250),
             Delta(content="Done."),
         ]
     )
@@ -3697,7 +4011,7 @@ def test_the_file_status_follows_a_spilled_exec_result(
     given = _scripted_status(monkeypatch)
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "seq", {"cmd": "seq 20000"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "seq", {"cmd": "seq 20000"}),
             Delta(content="Done."),
         ]
     )
@@ -3725,7 +4039,9 @@ def test_a_code_cell_gets_the_file_status_and_its_calls_do_not_read_it(
         "    print((await tools.exec_command(cmd='echo hi'))['output'])\n"
         f"print(await tools.apply_patch(input={ADD_A!r}))\n"
     )
-    llm = ChatLLM([code_step("code", program), Delta(content="Done.")])
+    llm = ChatLLM(
+        [code_step(OPENAI_CODE_MODE, "code", program), Delta(content="Done.")]
+    )
     chat.send(llm, code_mode=True)
 
     # One read, for the cell's result; the program's calls read none.
@@ -3756,7 +4072,10 @@ def test_a_closed_cell_keeps_one_file_status_line(
         "print('started')\nyield_control()\nawait asyncio.sleep(60)\n"
     )
     llm = ChatLLM(
-        [code_step("start", "import asyncio\n" + program), Delta(content="Started.")]
+        [
+            code_step(OPENAI_CODE_MODE, "start", "import asyncio\n" + program),
+            Delta(content="Started."),
+        ]
     )
     chat.send(llm, code_mode=True)
 
@@ -3795,7 +4114,7 @@ def test_subagent_sandbox_results_do_not_read_the_file_status(
                 content=[
                     ToolCall(
                         id="child-exec",
-                        name=ExecCommandTool.NAME,
+                        name=EXEC_COMMAND_TOOL_NAME,
                         arguments={"cmd": "echo child"},
                     )
                 ]
@@ -3807,12 +4126,12 @@ def test_subagent_sandbox_results_do_not_read_the_file_status(
                 ToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "helper", "instruction": "Task helper"},
+                    arguments={"task_name": "helper", "message": "Task helper"},
                 )
             ]
         )
 
-    model = WaitAgentsLLM(generate)
+    model = WaitAgentLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
@@ -3847,7 +4166,7 @@ def test_a_chat_without_a_sandbox_keeps_a_large_result_whole(
     chat.send(llm)
 
     value = {"tool_result": _big("big")}
-    assert ExecCommandTool.NAME not in str(llm.requests[0].get("tools"))
+    assert EXEC_COMMAND_TOOL_NAME not in str(llm.requests[0].get("tools"))
     assert last_tool_text(llm, "big") == json.dumps(value)
     [saved] = _saved_results(db_session, chat.chat_session_id)
     assert isinstance(saved.details, CustomToolCallSummary)
@@ -3877,7 +4196,7 @@ def test_parallel_cells_over_their_limit_spill_in_one_step_past_the_budget(
                 function=ResponseFunctionCall(
                     name="execute_code",
                     arguments=json.dumps(
-                        {"code": _ROWS_PROGRAM, "max_output_chars": 5_000}
+                        {"code": _ROWS_PROGRAM, "max_output_tokens": 1_250}
                     ),
                 ),
             )
@@ -3909,7 +4228,7 @@ def test_parallel_cells_over_their_limit_spill_in_one_step_past_the_budget(
     "steps",
     [
         pytest.param(
-            [tool_step(ExecCommandTool.NAME, "echo", {"cmd": "echo hi"})],
+            [tool_step(EXEC_COMMAND_TOOL_NAME, "echo", {"cmd": "echo hi"})],
             id="after_a_command",
         ),
         # The spill alone sets up no session on the VM.
@@ -4038,7 +4357,7 @@ def test_the_model_gets_its_cut_of_large_command_output_and_the_file_the_rest(
 ) -> None:
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "seq", {"cmd": f"seq {count}"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "seq", {"cmd": f"seq {count}"}),
             Delta(content="Done."),
         ]
     )
@@ -4085,13 +4404,15 @@ def test_command_output_that_its_cut_barely_shortens_still_spills(
     chat: SandboxChat,
 ) -> None:
     output = _seq(20_000)
-    max_chars = len(output) - 1
+    # The largest budget, in tokens of 4 characters, that cuts the output.
+    max_tokens = (len(output) - 1) // 4
+    max_chars = max_tokens * 4
     llm = ChatLLM(
         [
             tool_step(
-                ExecCommandTool.NAME,
+                EXEC_COMMAND_TOOL_NAME,
                 "seq",
-                {"cmd": "seq 20000", "max_output_chars": max_chars},
+                {"cmd": "seq 20000", "max_output_tokens": max_tokens},
             ),
             Delta(content="Done."),
         ]
@@ -4116,7 +4437,7 @@ def test_command_output_that_the_vm_cannot_take_keeps_its_cut(
     )
     llm = ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "seq", {"cmd": "seq 20000"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "seq", {"cmd": "seq 20000"}),
             Delta(content="Done."),
         ]
     )
@@ -4145,7 +4466,7 @@ def test_exec_results_are_exempt_from_the_step_budget(
                 id=call_id,
                 index=index,
                 function=ResponseFunctionCall(
-                    name=ExecCommandTool.NAME, arguments='{"cmd": "seq 5000"}'
+                    name=EXEC_COMMAND_TOOL_NAME, arguments='{"cmd": "seq 5000"}'
                 ),
             )
             for index, call_id in enumerate(call_ids)
@@ -4171,7 +4492,9 @@ def test_a_program_gets_all_the_output_that_a_command_kept(
         "result = await tools.exec_command(cmd='seq 20000')\n"
         "print(len(result['output']), result['output'].endswith('19999\\n20000\\n'))\n"
     )
-    llm = ChatLLM([code_step("count", program), Delta(content="Done.")])
+    llm = ChatLLM(
+        [code_step(OPENAI_CODE_MODE, "count", program), Delta(content="Done.")]
+    )
     chat.send(llm, code_mode=True)
 
     assert last_tool_text(llm, "count").endswith(f"Output:\n{len(output)} True")
@@ -4188,7 +4511,7 @@ def test_a_program_that_prints_a_mebibyte_of_command_output_spills_its_cell(
     program = (
         "result = await tools.exec_command(cmd='seq 300000')\nprint(result['output'])\n"
     )
-    llm = ChatLLM([code_step("big", program), Delta(content="Done.")])
+    llm = ChatLLM([code_step(OPENAI_CODE_MODE, "big", program), Delta(content="Done.")])
     chat.send(llm, code_mode=True)
 
     [(path, data)] = _spills(node, chat.ref(db_session)).items()
@@ -4269,7 +4592,7 @@ def attach(db_session: Session, user: User) -> Attach:
 def _exec_turn() -> ChatLLM:
     return ChatLLM(
         [
-            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "exec", {"cmd": "echo hi"}),
             Delta(content="Done."),
         ]
     )
@@ -4503,54 +4826,55 @@ def test_a_hosted_agent_run_copies_the_chat_files(
     attach: Attach,
 ) -> None:
     """An agent host runs a worker whose sandbox call copies the chat's
-    files, so a worker on a VM that lost them gets them again. Its
-    exec_command describes the chat's files as the root's does."""
+    files, so a worker on a VM that lost them gets them again. Its system
+    prompt describes the chat's files as the root's does."""
     monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", False)
-    exec_descriptions: dict[str, str] = {}
+    system_prompts: dict[str, str] = {}
 
     def generate(
         request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
         texts = [message.text for message in request.messages]
-        [description] = [
-            tool.description
-            for tool in request.tools
-            if tool.name == ExecCommandTool.NAME
-        ]
+        system_prompt = "\n".join(
+            message.text
+            for message in request.messages
+            if isinstance(message, SystemMessage)
+        )
         if "Initial task" in texts:
-            if "Follow up" in texts and not isinstance(
-                request.messages[-1], ToolResultMessage
-            ):
-                exec_descriptions["hosted"] = description
+            if "Follow up" in texts and "hosted" not in system_prompts:
+                system_prompts["hosted"] = system_prompt
                 return AssistantMessage(
                     content=[
                         ToolCall(
                             id="hosted-exec",
-                            name=ExecCommandTool.NAME,
+                            name=EXEC_COMMAND_TOOL_NAME,
                             arguments={"cmd": "echo hosted"},
                         )
                     ]
                 )
+            if "Follow up" in texts:
+                # Keep this turn active until its background copy finishes.
+                _wait_until(lambda: _attachments(node, ref) == copied)
             return AssistantMessage(content=[TextContent(text="Worker done.")])
-        if any(isinstance(message, ToolResultMessage) for message in request.messages):
+        if "root" in system_prompts:
             return AssistantMessage(content=[TextContent(text="Started.")])
-        exec_descriptions["root"] = description
+        system_prompts["root"] = system_prompt
         return AssistantMessage(
             content=[
                 ToolCall(
                     id="root-exec",
-                    name=ExecCommandTool.NAME,
+                    name=EXEC_COMMAND_TOOL_NAME,
                     arguments={"cmd": "echo root"},
                 ),
                 ToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "worker", "instruction": "Initial task"},
+                    arguments={"task_name": "worker", "message": "Initial task"},
                 ),
             ]
         )
 
-    model = WaitAgentsLLM(generate)
+    model = WaitAgentLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
@@ -4630,8 +4954,8 @@ def test_a_hosted_agent_run_copies_the_chat_files(
     hosted_generation = cache.get(copy_generation_key(chat.chat_session_id))
     assert hosted_generation is not None
     assert int(hosted_generation) > int(generation)
-    assert exec_descriptions["root"].endswith(CHAT_FILES_LAYOUT)
-    assert exec_descriptions["hosted"] == exec_descriptions["root"]
+    assert CHAT_FILES_LAYOUT in system_prompts["root"]
+    assert CHAT_FILES_LAYOUT in system_prompts["hosted"]
 
 
 @pytest.mark.usefixtures("sandbox", "node")
@@ -4720,7 +5044,11 @@ def _search_and_open(pages: Sequence[MockWebContent], answer: str) -> ChatLLM:
     return ChatLLM(
         [
             tool_step(WebSearchTool.NAME, "search", {"queries": ["guide"]}),
-            tool_step(OpenURLTool.NAME, "open", {"urls": [p.url for p in pages]}),
+            tool_step(
+                OPEN_URL_SHAPES[ToolFamily.OPENAI].name,
+                "open",
+                {"urls": [p.url for p in pages]},
+            ),
             Delta(content=answer),
         ]
     )
@@ -4924,7 +5252,11 @@ def test_a_page_past_the_call_limit_keeps_the_excerpt_that_the_model_got(
     if code_mode:
         llm = ChatLLM(
             [
-                code_step("cell", _program_pages([page.url for page in pages])),
+                code_step(
+                    OPENAI_CODE_MODE,
+                    "cell",
+                    _program_pages([page.url for page in pages]),
+                ),
                 Delta(content="Done."),
             ]
         )
@@ -4989,7 +5321,11 @@ def test_a_page_that_the_limit_cuts_short_keeps_its_excerpt(
     if code_mode:
         llm = ChatLLM(
             [
-                code_step("cell", _program_pages([page.url for page in pages])),
+                code_step(
+                    OPENAI_CODE_MODE,
+                    "cell",
+                    _program_pages([page.url for page in pages]),
+                ),
                 Delta(content="Done."),
             ]
         )
@@ -5023,7 +5359,9 @@ def test_a_program_gets_less_of_one_call_than_a_direct_call(
     pages = [_web_page(index, 150_000) for index in range(1, 3)]
     llm = ChatLLM(
         [
-            code_step("cell", _program_pages([page.url for page in pages])),
+            code_step(
+                OPENAI_CODE_MODE, "cell", _program_pages([page.url for page in pages])
+            ),
             Delta(content="Done."),
         ]
     )
@@ -5060,7 +5398,11 @@ def test_a_spilled_page_keeps_the_citation_number_of_an_earlier_turn(
     pages = [_web_page(index, 40_000) for index in range(1, 4)]
     first = ChatLLM(
         [
-            tool_step(OpenURLTool.NAME, "first", {"urls": [pages[1].url]}),
+            tool_step(
+                OPEN_URL_SHAPES[ToolFamily.OPENAI].name,
+                "first",
+                {"urls": [pages[1].url]},
+            ),
             Delta(content="Read."),
         ]
     )
@@ -5070,7 +5412,11 @@ def test_a_spilled_page_keeps_the_citation_number_of_an_earlier_turn(
     ).results[0]
     second = ChatLLM(
         [
-            tool_step(OpenURLTool.NAME, "again", {"urls": [p.url for p in pages]}),
+            tool_step(
+                OPEN_URL_SHAPES[ToolFamily.OPENAI].name,
+                "again",
+                {"urls": [p.url for p in pages]},
+            ),
             Delta(content=f"As before [{earlier.document}]."),
         ]
     )
@@ -5136,7 +5482,9 @@ def _open_pages(
     llm = ChatLLM(
         [
             tool_step(
-                OpenURLTool.NAME, "open", {"urls": ["https://docs.example.com/page"]}
+                OPEN_URL_SHAPES[ToolFamily.OPENAI].name,
+                "open",
+                {"urls": ["https://docs.example.com/page"]},
             ),
             Delta(content="Done."),
         ]
@@ -5232,7 +5580,10 @@ def test_an_indexed_document_spills_whole(
     text = "i" * 200_000
     _index_document(monkeypatch, url, text)
     llm = ChatLLM(
-        [tool_step(OpenURLTool.NAME, "open", {"urls": [url]}), Delta(content="Done.")]
+        [
+            tool_step(OPEN_URL_SHAPES[ToolFamily.OPENAI].name, "open", {"urls": [url]}),
+            Delta(content="Done."),
+        ]
     )
     with use_mock_content_provider():
         chat.send(llm, tool_ids=[get_builtin_tool(db_session, OpenURLTool).id])
@@ -5265,7 +5616,10 @@ def test_an_indexed_document_past_the_call_limit_keeps_more_than_its_excerpt(
     tool_ids = [get_builtin_tool(db_session, OpenURLTool).id]
     if code_mode:
         llm = ChatLLM(
-            [code_step("cell", _program_pages([url])), Delta(content="Done.")]
+            [
+                code_step(OPENAI_CODE_MODE, "cell", _program_pages([url])),
+                Delta(content="Done."),
+            ]
         )
         with use_mock_content_provider():
             chat.send(llm, tool_ids=tool_ids, code_mode=True)
@@ -5273,7 +5627,10 @@ def test_an_indexed_document_past_the_call_limit_keeps_more_than_its_excerpt(
         assert cut and MAX_CHARS_ACROSS_URLS < length < len(text)
         return
     llm = ChatLLM(
-        [tool_step(OpenURLTool.NAME, "open", {"urls": [url]}), Delta(content="Done.")]
+        [
+            tool_step(OPEN_URL_SHAPES[ToolFamily.OPENAI].name, "open", {"urls": [url]}),
+            Delta(content="Done."),
+        ]
     )
     with use_mock_content_provider():
         chat.send(llm, tool_ids=tool_ids)
@@ -5317,7 +5674,7 @@ def test_only_load_skill_puts_the_skill_files_in_the_vm(
     llm = ChatLLM(
         [
             tool_step(SKILLS_READ_TOOL_NAME, "read", {"name": "pptx"}),
-            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            tool_step(EXEC_COMMAND_TOOL_NAME, "exec", {"cmd": "echo hi"}),
             tool_step(LOAD_SKILL_TOOL_NAME, "load", {"name": "pptx"}),
             tool_step(LOAD_SKILL_TOOL_NAME, "again", {"name": "pptx"}),
             tool_step(LOAD_SKILL_TOOL_NAME, "custom", {"name": custom}),

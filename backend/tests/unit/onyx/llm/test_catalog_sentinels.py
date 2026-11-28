@@ -147,7 +147,8 @@ def test_uncataloged_name_falls_back_to_chat(
 
 def test_image_generation_models_skip_pruned_and_dated_snapshots() -> None:
     models = model_catalog.iter_image_generation_models(LlmProviderNames.OPENAI)
-    assert "gpt-image-2" in models
+    assert "gpt-image-2.5-flare" in models
+    assert "gpt-image-2" not in models  # deprecated upstream
     assert "gpt-image-1" not in models
     assert "dall-e-3" not in models
     assert "gpt-image-2-2026-04-21" not in models

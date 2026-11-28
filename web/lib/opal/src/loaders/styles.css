@@ -66,6 +66,15 @@
   max-width: 100%;
 }
 
+/* One line: the wave becomes the block that clips, so the ellipsis takes the
+   shimmer too. */
+.opal-text-loader[data-truncate] .opal-text-loader-wave {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .opal-text-loader-wave {
   color: transparent;
   background-image:

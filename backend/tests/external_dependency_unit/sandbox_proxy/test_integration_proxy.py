@@ -31,6 +31,7 @@ from onyx.db.enums import (
 from onyx.db.models import (
     ActionApproval,
     BuildSession,
+    ChatSession,
     Integration,
     IntegrationActionPolicy,
     MCPServer,
@@ -43,7 +44,7 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.integrations.craft import list_task_integration_views
-from onyx.integrations.models import EffectivePolicy, LinkValue
+from onyx.integrations.models import ApiShape, EffectivePolicy, LinkValue
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
@@ -61,12 +62,17 @@ from onyx.server.features.build.sandbox.util.mcp_config import (
 )
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.db.agent_sharing_helpers import (
+    create_test_persona,
+)
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
+    link_persona,
     make_app_integration,
     make_mcp_integration,
     make_openapi_integration,
+    set_policy,
     turn_off_integrations,
 )
 from tests.external_dependency_unit.integrations.conftest import add_connection
@@ -182,6 +188,14 @@ class _UnusedIdentity(SandboxIdentityResolver):
         raise AssertionError("not used")
 
     def resolve_session_by_id(
+        self,
+        session_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> UUID | None:
+        raise AssertionError("not used")
+
+    def resolve_chat_session(
         self,
         session_id: UUID,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
@@ -541,7 +555,7 @@ def test_an_ask_action_in_a_session_opens_an_approval_with_the_integration(
     resolved = addon._resolve_request_policies(ctx, matched)
     assert resolved.governing_action.policy is ActionPolicy.ASK
 
-    approval_id = addon._persist_approval_row(ctx, resolved)
+    approval_id = addon._persist_approval_row(ctx, resolved, resolved.payload)
     addon._parked.remove(TENANT, approval_id)
     db_session.expire_all()
     row = db_session.get(ActionApproval, approval_id)
@@ -576,7 +590,7 @@ def test_a_session_grant_approves_the_same_actions_of_the_integration(
     )
     db_session.commit()
 
-    applied = addon._apply_session_grant(ctx, resolved)
+    applied = addon._apply_session_grant(ctx, resolved, resolved.payload)
     assert applied is not None
     assert (
         db_session.scalar(
@@ -590,7 +604,9 @@ def test_a_session_grant_approves_the_same_actions_of_the_integration(
         _request(f"https://{other_host}/mcp", _tool_call("update")), user
     )
     other_resolved = addon._resolve_request_policies(ctx, other_matched)
-    assert addon._apply_session_grant(ctx, other_resolved) is None
+    assert (
+        addon._apply_session_grant(ctx, other_resolved, other_resolved.payload) is None
+    )
 
 
 def test_the_craft_mcp_config_lists_only_connected_integrations_that_are_on(
@@ -726,3 +742,142 @@ def test_the_task_catalog_keeps_an_integration_that_an_admin_turned_off(
     settings = views[mcp.id].action_settings
     assert settings is not None
     assert settings.actions == {"update": LinkValue.ALLOW}
+
+
+def test_a_chat_session_takes_the_policies_of_its_chat(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    """A command of a chat gets the policies of the agent of that chat, which
+    a Craft session does not read. A request that is no operation stays Ask
+    even with a saved Always allow, so the gate refuses it, and an admin
+    block stays a block."""
+    host = _host()
+    rest, _ = make_openapi_integration(
+        db_session,
+        openapi_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Items", "description": "Items", "version": "1"},
+            "servers": [{"url": f"https://{host}"}],
+            "paths": {
+                "/items": {"post": {"operationId": "createItem", "summary": "Create"}},
+                "/items/{id}": {
+                    "get": {"operationId": "readItem", "summary": "Read"},
+                    "delete": {"operationId": "deleteItem", "summary": "Delete"},
+                },
+            },
+        },
+    )
+    created.append(rest.id)
+    _run(db_session, [rest])
+    set_policy(db_session, rest.id, "createItem", IntegrationActionPolicyValue.BLOCKED)
+    set_policy(
+        db_session,
+        rest.id,
+        "unspecified",
+        IntegrationActionPolicyValue.ALLOW,
+        user_id=user.id,
+    )
+    agent = create_test_persona(db_session, user)
+    link_persona(db_session, agent.id, rest.id, {"actions": {"readItem": "blocked"}})
+    chat = ChatSession(
+        id=uuid4(),
+        user_id=user.id,
+        persona_id=agent.id,
+        description="proxy chat",
+    )
+    db_session.add(chat)
+    db_session.commit()
+    craft_ctx = _sandbox(user).with_session(chat.id)
+    chat_ctx = _sandbox(user).with_session(chat.id, chat_command_id=uuid4())
+    addon = _addon()
+
+    def policy(method: str, path: str, ctx: SessionContext = chat_ctx) -> ActionPolicy:
+        matched = _evaluate(_request(f"https://{host}{path}", method=method), user)
+        assert matched.target.api_shape is ApiShape.OPENAPI
+        resolved = addon._resolve_request_policies(ctx, matched)
+        return resolved.governing_action.policy
+
+    assert policy("GET", "/items/7") is ActionPolicy.DENY
+    assert policy("GET", "/items/7", craft_ctx) is ActionPolicy.ALWAYS
+    assert policy("POST", "/items") is ActionPolicy.DENY
+    assert policy("DELETE", "/items/7") is ActionPolicy.ASK
+    assert policy("GET", "/other") is ActionPolicy.ASK
+
+
+def test_a_chat_matches_the_linked_integrations_of_its_agent(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    """A custom agent uses its linked integrations whether the user turned
+    them on or not, so a command of its chat matches a linked app that is
+    off. Craft keeps the on/off choice of the user."""
+    host = _host()
+    app = _custom_app(db_session, created, host)
+    _run(db_session, [app])
+    turn_off_integrations(db_session, user.id, [app])
+    agent = create_test_persona(db_session, user)
+    link_persona(db_session, agent.id, app.id)
+    chat = ChatSession(
+        id=uuid4(), user_id=user.id, persona_id=agent.id, description="linked"
+    )
+    db_session.add(chat)
+    db_session.commit()
+    request = _request(f"https://{host}/items")
+
+    matched = IntegrationRequestEvaluator().evaluate(request, TENANT, user.id, chat.id)
+
+    assert isinstance(matched, AllMatchedActions)
+    assert matched.target.integration_id == app.id
+    # A URL-pattern app has no chat tool that the gate can name.
+    assert matched.target.api_shape is ApiShape.URL_PATTERN
+    assert _evaluate(request, user) is None
+    assert (
+        IntegrationRequestEvaluator().evaluate(request, TENANT, user.id, uuid4())
+        is None
+    )
+
+
+def test_a_command_gets_only_the_sandbox_owners_credential(
+    db_session: Session,
+    created: list[int],
+    user: User,
+    make_test_user: MakeTestUser,
+) -> None:
+    """The proxy injects the personal key of the sandbox's owner, never the
+    key of another user. A sandbox cannot borrow the agent of another
+    user's chat by sending that chat's tag."""
+    host = _host()
+    app = _custom_app(
+        db_session,
+        created,
+        host,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Api-Key": "{api_key}"},
+    )
+    _run(db_session, [app])
+    other = make_test_user("integration_proxy_other")
+    no_key = make_test_user("integration_proxy_no_key")
+    for owner, key in ((user, "my-key"), (other, "other-key")):
+        add_connection(
+            db_session, app, owner.id, ConnectionSecret(fields={"api_key": key})
+        )
+    request = _request(f"https://{host}/items", method="GET")
+
+    for owner, key in ((user, "my-key"), (other, "other-key")):
+        assert _headers(request, owner, _evaluate(request, owner)) == {"X-Api-Key": key}
+    with pytest.raises(CredentialUnavailableError):
+        _headers(request, no_key, _evaluate(request, no_key))
+
+    # The other user's chat links the app, which this user turned off.
+    turn_off_integrations(db_session, user.id, [app])
+    agent = create_test_persona(db_session, other)
+    link_persona(db_session, agent.id, app.id)
+    others_chat = ChatSession(
+        id=uuid4(), user_id=other.id, persona_id=agent.id, description="other"
+    )
+    db_session.add(others_chat)
+    db_session.commit()
+    assert (
+        IntegrationRequestEvaluator().evaluate(request, TENANT, user.id, others_chat.id)
+        is None
+    )

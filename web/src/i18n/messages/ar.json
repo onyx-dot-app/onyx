@@ -141,44 +141,6 @@
         "tooltip": "{description}\nفضّل هذه الأداة لهذه المحادثة. قد يجيب الوكيل دون استخدامها."
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "إلغاء"
-      },
-      "copyButton": {
-        "tooltip": "نسخ التعريف"
-      },
-      "definition": {
-        "invalidJson": "تنسيق JSON غير صالح",
-        "placeholder": "أدخل مخطط OpenAPI هنا",
-        "required": "تعريف مخطط OpenAPI مطلوب",
-        "subDescription": "حدد مخطط OpenAPI يعرّف واجهات API التي تريد إتاحتها ضمن هذه الإضافة. يمكنك استخدام العناصر النائبة `CHAT_SESSION_ID` و`MESSAGE_ID` و`USER_ID` و`USER_EMAIL` في أي مكان في المخطط (مثل عنوان الخادم أو المسارات أو القيم الافتراضية للمعاملات) وستُستبدل بقيم الطلب الحالي وقت الاستدعاء. اعرف المزيد عن [إضافات OpenAPI]({docsUrl}).",
-        "title": "تعريف مخطط OpenAPI"
-      },
-      "empty": {
-        "description": "قدّم مخطط OpenAPI لمعاينة الإجراءات هنا.",
-        "title": "لم يتم العثور على إجراءات"
-      },
-      "formatButton": {
-        "tooltip": "تنسيق التعريف"
-      },
-      "method": {
-        "noSummary": "لا يوجد ملخص"
-      },
-      "toasts": {
-        "actionCreated": "تم إنشاء إضافة OpenAPI بنجاح",
-        "invalidJson": "تنسيق JSON غير صالح في تعريف مخطط OpenAPI"
-      },
-      "humanDescription": {
-        "title": "وصف للبشر",
-        "hint": "يظهر في بطاقة الإضافة وتفاصيلها."
-      },
-      "agentDescription": {
-        "title": "وصف للوكلاء",
-        "hint": "يحرر info.description في مخطط OpenAPI.",
-        "disabled": "أدخل مخططًا صالحًا لتحرير هذا الحقل."
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "(غير متصل)"
@@ -360,10 +322,8 @@
       "detectedTransport": "النقل: {transport}",
       "authenticationUndetected": "اختر طريقة المصادقة في الصفحة التالية.",
       "details": "التفاصيل",
-      "checking": "جارٍ التحقق من الخادم…",
       "serverDetails": "تفاصيل الخادم",
       "authentication": "المصادقة",
-      "continue": "متابعة",
       "back": "رجوع"
     },
     "policyEditor": {
@@ -512,6 +472,9 @@
         },
         "userFile": {
           "description": "الملفات المرفوعة في الدردشة"
+        },
+        "chatArtifact": {
+          "description": "الملفات المنشورة في الدردشة"
         },
         "googleSites": {
           "description": "صفحات مستضافة على Google"
@@ -1521,6 +1484,10 @@
           "description": "البحث في الويب عن معلومات آنية ونتائج محدّثة.",
           "title": "البحث في الويب"
         }
+      },
+      "browser": {
+        "title": "المتصفح",
+        "description": "اسمح للوكيل باستخدام متصفح ويب في بيئة الحماية الخاصة به. يمكن للمستخدمين مشاهدته وتولي التحكم من لوحة المحادثة."
       }
     },
     "codeInterpreter": {
@@ -7932,6 +7899,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "سجلات التدقيق وSIEM",
+          "description": "يكتب Onyx أحداث التدقيق كسطور JSON في سجلاته. يرسلها ناقل السجلات لديك إلى نظام SIEM. [إعداد إعادة التوجيه إلى SIEM]({url})."
+        },
+        "status": {
+          "title": "حالة تدفق التدقيق",
+          "description": "الأحداث التي كتبها Onyx. لا يستطيع Onyx رؤية ناقل السجلات أو نظام SIEM لديك، لذا تأكد من وصول الأحداث إليهما.",
+          "loadFailed": {
+            "title": "تعذر تحميل حالة تدفق التدقيق",
+            "description": "أعد تحميل الصفحة للمحاولة مرة أخرى."
+          },
+          "notEnabled": {
+            "title": "لا يكتب Onyx أحداث التدقيق",
+            "description": "يتطلب تدفق التدقيق ترخيص Enterprise."
+          },
+          "logFormat": {
+            "title": "استخدم سجلات JSON",
+            "description": "تنسيق السجل هو {logFormat}. اضبط LOG_FORMAT=json حتى يتمكن ناقل السجلات من تحليل كل سجل."
+          },
+          "noEvents": "لا توجد أحداث بعد",
+          "eventSummary": "{count, plural, one {حدث واحد} other {# أحداث}} خلال آخر 24 ساعة. آخر حدث {lastEvent}.",
+          "eventCount": "{count, plural, one {حدث واحد} other {# أحداث}} خلال آخر 24 ساعة.",
+          "classes": {
+            "authentication": "المصادقة",
+            "account_change": "تغييرات الحساب",
+            "user_access_management": "إدارة وصول المستخدمين",
+            "group_management": "إدارة المجموعات",
+            "api_activity": "نشاط واجهة API",
+            "credential_access": "الوصول إلى بيانات الاعتماد"
+          }
+        },
+        "auditEvents": {
+          "title": "أحداث التدقيق",
+          "description": "تغييرات الأمان والإدارة. هذه مفعّلة افتراضيًا."
+        },
+        "userActivity": {
+          "title": "نشاط المستخدمين",
+          "description": "ما فعله كل مستخدم، للتحقيق في الحوادث. هذه معطّلة افتراضيًا وقد تضيف أحداثًا كثيرة."
+        },
+        "categories": {
+          "authentication": {
+            "title": "المصادقة",
+            "description": "تسجيلات الدخول، ومحاولات الدخول الفاشلة، وتسجيلات الخروج، وإعادة تعيين كلمات المرور."
+          },
+          "user_and_group_management": {
+            "title": "إدارة المستخدمين والمجموعات",
+            "description": "تغييرات المستخدمين والأدوار والمجموعات، وموافقات عملاء MCP."
+          },
+          "configuration": {
+            "title": "تغييرات التكوين",
+            "description": "تغييرات الإعدادات والموصلات وبيانات الاعتماد والوكلاء ومجموعات المستندات ومفاتيح API ورموز الوصول."
+          },
+          "credential_access": {
+            "title": "الوصول إلى بيانات الاعتماد",
+            "description": "عمليات فك تشفير بيانات الاعتماد المخزنة. قد يتجاهل Onyx التكرار لنفس بيانات الاعتماد ونفس المستخدم خلال 10 دقائق."
+          },
+          "data_export": {
+            "title": "تصدير البيانات",
+            "description": "تنزيلات سجل الاستعلامات وتقارير الاستخدام وتصدير السجلات."
+          },
+          "chat": {
+            "title": "رسائل الدردشة",
+            "description": "كل إجابة في الدردشة، مع الوكيل والنموذج والأدوات والمستندات التي رآها المستخدم."
+          },
+          "search": {
+            "title": "عمليات البحث",
+            "description": "كل بحث من صفحة البحث أو واجهة API أو عميل MCP، مع المستندات التي عثر عليها."
+          },
+          "llm_gateway": {
+            "title": "طلبات بوابة LLM",
+            "description": "كل استدعاء عبر بوابة LLM، مع النموذج وعدد الرموز."
+          },
+          "file_download": {
+            "title": "تنزيلات الملفات",
+            "description": "كل ملف دردشة يقوم المستخدم بتنزيله."
+          }
+        },
+        "queryText": {
+          "title": "تضمين نص الاستعلام",
+          "description": "يضيف ما كتبه المستخدم إلى أحداث الدردشة والبحث. يضيفه Onyx فقط عندما يكون سجل الاستعلامات عاديًا."
+        }
       }
     },
     "serviceAccounts": {
@@ -10412,51 +10462,22 @@
     },
     "integrations": {
       "title": "التكاملات",
-      "description": "اربط خوادم MCP والتطبيقات. لكل تكامل مالك وإعداد تثبيت ومشاركات خاصة به.",
+      "description": "اربط خوادم MCP والتطبيقات.",
       "search": "البحث في التكاملات",
       "open": "فتح {name}",
       "loadFailed": "تعذّر تحميل التكاملات.",
       "add": {
         "label": "إضافة",
-        "title": "إضافة تكامل",
-        "description": "اربط خدمة ليتمكن الأشخاص من استخدامها في المحادثة وCraft.",
         "created": "تمت إضافة {name}.",
         "createFailed": "تعذّرت إضافة التكامل.",
-        "openapi": {
-          "title": "إضافة تطبيق OpenAPI",
-          "schema": {
-            "title": "المخطط",
-            "description": "أضف مخطط OpenAPI الذي يحدد الإجراءات.",
-            "added": "{count, plural, zero {لا يحتوي المخطط على مسارات.} one {يحتوي المخطط على مسار واحد.} two {يحتوي المخطط على مسارين.} few {يحتوي المخطط على # مسارات.} many {يحتوي المخطط على # مسارًا.} other {يحتوي المخطط على # مسار.}}",
-            "required": "أضف مخططًا.",
-            "add": "إضافة مخطط",
-            "edit": "تعديل المخطط"
-          }
-        },
         "preset": {
-          "title": "البدء من",
           "loadFailed": "تعذّر تحميل القوالب الجاهزة.",
-          "instructions": "تعليمات الإعداد",
-          "credentialRequired": "أدخل هذه القيمة.",
-          "description": "يملأ الإعداد المسبق اسم تطبيق مدمج وطريقة تسجيل الدخول إليه. اختر تطبيق مخصص لإعداد أي خدمة HTTP.",
-          "custom": "تطبيق مخصص"
+          "credentialRequired": "أدخل هذه القيمة."
         },
         "name": {
           "title": "الاسم",
           "placeholder": "أدخل اسمًا",
           "required": "أدخل اسمًا."
-        },
-        "descriptionField": {
-          "title": "الوصف",
-          "placeholder": "أدخل وصفًا"
-        },
-        "custom": {
-          "patterns": {
-            "title": "أنماط URL",
-            "description": "ضع نمط URL واحدًا في كل سطر، مثل https://api.example.com/*.",
-            "placeholder": "https://api.example.com/*",
-            "required": "أضف نمط URL واحدًا على الأقل."
-          }
         },
         "mcp": {
           "url": {
@@ -10465,7 +10486,6 @@
             "error": "أدخل عنوان URL صالحًا للخادم."
           },
           "probe": {
-            "checking": "جارٍ فحص الخادم…",
             "public": "{count, plural, zero {لم يُعثر على أي أداة} one {تم العثور على أداة واحدة} two {تم العثور على أداتين} few {تم العثور على # أدوات} many {تم العثور على # أداة} other {تم العثور على # أداة}}. لا يتطلب الخادم تسجيل الدخول.",
             "oauth": "يستخدم الخادم تسجيل الدخول عبر OAuth.",
             "authUnknown": "يتطلب الخادم تسجيل الدخول. أضف ترويسة مفتاح API أو OAuth.",
@@ -10476,8 +10496,7 @@
             "title": "النقل",
             "streamableHttp": "HTTP قابل للبث",
             "sse": "أحداث مُرسلة من الخادم (SSE)"
-          },
-          "suggested": "خوادم مقترحة"
+          }
         },
         "owner": {
           "title": "المالك",
@@ -10489,31 +10508,118 @@
         "submit": "إضافة",
         "adding": "جارٍ الإضافة…",
         "cancel": "إلغاء",
-        "type": {
-          "title": "النوع",
-          "description": "اختر طريقة اتصال Onyx بالخدمة.",
-          "mcp_server": {
-            "title": "خادم MCP",
-            "description": "اربط خادم MCP بعيدًا عبر عنوان URL الخاص به."
+        "rest": {
+          "import": {
+            "title": "استيراد مواصفات",
+            "description": "ارفع مواصفات OpenAPI بتنسيق JSON أو YAML أو الصقها، أو استوردها من عنوان URL. يملأ Onyx عنوان URL الأساسي ونقطة نهاية لكل عملية.",
+            "upload": "ارفع المواصفات أو الصقها",
+            "url": "عنوان URL للمواصفات",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "استيراد",
+            "done": "{count, plural, zero {لم يتم استيراد أي نقطة نهاية.} one {تم استيراد نقطة نهاية واحدة.} two {تم استيراد نقطتي نهاية.} few {تم استيراد # نقاط نهاية.} many {تم استيراد # نقطة نهاية.} other {تم استيراد # نقطة نهاية.}}",
+            "failed": "تعذر استيراد المواصفات.",
+            "noActions": "تخطّى Onyx كل العمليات في المواصفة، لذا تبقى نقاط النهاية الحالية. استخدم مواصفة أخرى."
           },
-          "openapi": {
-            "title": "تطبيق OpenAPI",
-            "description": "أنشئ إجراءات من مخطط OpenAPI."
+          "baseUrl": {
+            "title": "عنوان URL الأساسي",
+            "placeholder": "https://api.example.com",
+            "required": "أضف عنوان URL أساسيًا."
           },
-          "app": {
-            "title": "تطبيق",
-            "description": "ابدأ من إعداد مسبق، مثل GitHub، أو من تطبيق مخصص."
+          "endpoints": {
+            "title": "نقاط النهاية",
+            "description": "ضع نقطة نهاية واحدة في كل سطر: الطريقة والمسار ومعلمات الاستعلام الاختيارية والاسم. تصبح كل نقطة نهاية إجراءً.",
+            "placeholder": "GET /tickets?status&limit عرض التذاكر",
+            "required": "أضف نقطة نهاية واحدة على الأقل.",
+            "lineError": "السطر {line} ({text}): {message}"
           }
         },
-        "details": {
-          "title": "التفاصيل"
+        "graphql": {
+          "endpointUrl": {
+            "title": "عنوان URL لنقطة النهاية",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "أضف عنوان URL لنقطة النهاية."
+          },
+          "schema": {
+            "title": "المخطط",
+            "description": "الصق المخطط بصيغة GraphQL SDL، أو ارفع ملف .graphql، أو حمّله من نقطة النهاية. يصبح كل استعلام وتعديل إجراءً.",
+            "upload": "رفع ملف .graphql",
+            "required": "أضف مخططًا."
+          },
+          "introspect": {
+            "submit": "التحميل من نقطة النهاية",
+            "done": "تم تحميل المخطط.",
+            "failed": "تعذر تحميل المخطط."
+          }
         },
-        "signIn": {
-          "title": "تسجيل الدخول"
+        "menu": {
+          "mcpServer": "خادم MCP",
+          "customApi": "واجهة API مخصصة",
+          "fromCatalog": "من الكتالوج"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "إضافة خادم MCP",
+            "description": "اربط خادم MCP بعيدًا عبر عنوان URL الخاص به."
+          },
+          "api": {
+            "title": "إضافة واجهة API مخصصة",
+            "description": "اربط واجهة REST أو GraphQL. يجد Onyx نقاط النهاية من عنوان URL أو من مواصفة."
+          },
+          "catalog": {
+            "title": "إضافة من الكتالوج",
+            "description": "اختر تطبيقًا أو خادم MCP لإعداده."
+          },
+          "namedTitle": "إضافة {name}"
+        },
+        "catalog": {
+          "title": "تصفح الكتالوج",
+          "description": "تطبيقات وخوادم MCP مستضافة يعرف Onyx كيف يتصل بها.",
+          "browse": "تصفح"
+        },
+        "api": {
+          "url": {
+            "title": "عنوان URL",
+            "description": "عنوان URL لمواصفة OpenAPI أو نقطة نهاية GraphQL أو عنوان URL أساسي",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "أدخل عنوان URL صالحًا أو ارفع مواصفة.",
+            "needed": "أضف عنوان URL لواجهة API. المواصفة لا تحدده."
+          },
+          "upload": {
+            "label": "رفع ملف مواصفة",
+            "chosen": "المواصفة: {file}",
+            "remove": "إزالة المواصفة"
+          },
+          "failed": "تعذّرت قراءة المواصفة.",
+          "specError": "تعذّرت إضافة المواصفة: {detail}",
+          "tooLarge": "حجم الملف أكبر من 5 ميغابايت.",
+          "checkFailed": "تعذّر على Onyx التحقق من عنوان URL. حاول مرة أخرى.",
+          "noActions": "تخطّى Onyx كل العمليات في المواصفة، لذلك لا تعطي أي إجراءات. استخدم مواصفة أخرى، أو أزل المواصفة وأدخل عنوان URL الأساسي للواجهة لإضافة نقاط النهاية يدويًا."
+        },
+        "detected": {
+          "openapi": "واجهة REST، {count, plural, one {# نقطة نهاية} other {# نقاط نهاية}}",
+          "openapiSkipped": "واجهة REST، {count, plural, one {# نقطة نهاية} other {# نقاط نهاية}}. تم تخطي {skipped}.",
+          "skippedTitle": "نقاط النهاية التي تم تخطيها",
+          "rest": "واجهة REST بدون مواصفة. أضف نقاط النهاية أدناه.",
+          "restUnreachable": "لا يمكن لـ Onyx الوصول إلى عنوان URL: {detail} لا يزال بإمكانك إضافته كواجهة REST بدون مواصفة. أضف نقاط النهاية أدناه.",
+          "restTooLarge": "لا يمكن لـ Onyx التحقق من وجود مواصفة في عنوان URL: {detail} لا يزال بإمكانك إضافته كواجهة REST بدون مواصفة، أو رفع ملف مواصفة أصغر. أضف نقاط النهاية أدناه.",
+          "graphql": "واجهة GraphQL، {queries, plural, one {# استعلام} other {# استعلامات}} و{mutations, plural, one {# تعديل} other {# تعديلات}}",
+          "preset": "تطبيق مدمج. يستدعي Onyx واجهة API الخاصة به."
+        },
+        "continue": "متابعة",
+        "back": "رجوع",
+        "detecting": "جارٍ فحص عنوان URL…",
+        "advanced": "متقدم",
+        "setup": {
+          "title": "إعداد {name}",
+          "callbackUrl": "عنوان URL لرد الاتصال",
+          "copyCallbackUrl": "نسخ عنوان URL لرد الاتصال",
+          "scopes": "النطاقات",
+          "open": "فتح {name}"
         }
       },
       "filters": {
         "label": "نوع التكامل",
+        "selected": "نوع التكامل: {type}",
         "all": "كل الأنواع",
         "mcp": "خوادم MCP",
         "api": "التطبيقات"
@@ -10533,9 +10639,10 @@
       },
       "shape": {
         "mcp_server": "خادم MCP",
-        "openapi": "تطبيق OpenAPI",
+        "openapi": "تطبيق REST",
         "preset": "تطبيق",
-        "custom": "تطبيق مخصص"
+        "custom": "تطبيق أنماط URL",
+        "graphql": "تطبيق GraphQL"
       },
       "signInSummary": "{mode, select, none {بدون تسجيل دخول} shared {{method, select, oauth2 {حساب المؤسسة (OAuth)} api_key {مفتاح API للمؤسسة} onyx_login {تسجيل الدخول إلى Onyx} managed {يديره Onyx} other {حساب المؤسسة}}} individual {{method, select, oauth2 {كل مستخدم (OAuth)} api_key {كل مستخدم (مفتاح API)} onyx_login {تسجيل الدخول إلى Onyx} managed {يديره Onyx} other {كل مستخدم}}} other {غير معروف}}",
       "status": {
@@ -10612,7 +10719,6 @@
         "overview": {
           "readOnly": "يمكنك رؤية هذا التكامل، لكن لا يمكنك تغييره.",
           "noDescription": "لا يوجد وصف",
-          "type": "النوع",
           "signIn": "تسجيل الدخول",
           "createdBy": "أضافه",
           "needsSetup": "يحتاج إلى إعداد",
@@ -10643,19 +10749,18 @@
           },
           "description": "الوصف",
           "menu": "إجراءات أخرى",
-          "owner": "المالك"
+          "owner": "المالك",
+          "urlPatternApp": {
+            "title": "يستخدم هذا التطبيق أنماط URL",
+            "description": "لم يعد Onyx يضيف تطبيقات أنماط URL. لاستبدال هذا التطبيق، أضف تطبيق REST مخصصًا لكل مضيف تصل إليه أنماط URL الخاصة به. نفّذ خطوات الإعداد الواردة في الوثائق قبل حذف هذا التطبيق."
+          }
         },
         "configuration": {
           "readOnly": "يمكنك رؤية هذا التكامل، لكن لا يمكنك تغييره.",
           "connection": {
             "title": "الاتصال",
             "serverUrl": "عنوان URL للخادم",
-            "serverUrlError": "أدخل عنوان URL صالحًا للخادم.",
-            "urlPatterns": "أنماط URL",
-            "urlPatternsDescription": "ضع نمط URL واحدًا في كل سطر.",
-            "schema": "مخطط OpenAPI",
-            "schemaDescription": "يزامن Onyx الإجراءات مرة أخرى عند حفظ مخطط معدّل.",
-            "schemaError": "أدخل المخطط ككائن JSON."
+            "serverUrlError": "أدخل عنوان URL صالحًا للخادم."
           },
           "signIn": {
             "title": "تسجيل الدخول",
@@ -10703,11 +10808,11 @@
           },
           "usesDefault": "يستخدم الافتراضي",
           "setByAdmin": "حدده المسؤول",
-          "alwaysAsks": "يطلب Craft الموافقة قبل كل طلب لا يطابق أي إجراء آخر. لا يمكنك تعيين السماح.",
+          "alwaysAsks": "يطلب Onyx الموافقة قبل كل طلب لا يطابق أي إجراء آخر. لا يمكنك تعيين السماح.",
           "useDefaults": "استخدام القيم الافتراضية",
-          "readOnly": "إجراءات القراءة فقط ({count})",
-          "write": "إجراءات الكتابة ({count})",
-          "other": "إجراءات أخرى ({count})",
+          "readOnly": "إجراءات القراءة فقط",
+          "write": "إجراءات الكتابة",
+          "other": "إجراءات أخرى",
           "empty": "لا يحتوي هذا التكامل على إجراءات.",
           "connectFirst": {
             "title": "اتصل بالخادم أولًا",
@@ -10723,8 +10828,8 @@
         "saved": "أصبح {name} الآن {policy}.",
         "saveFailed": "تعذّر حفظ إعداد التثبيت.",
         "title": "إعداد التثبيت",
-        "description": "من يحصل على هذا التكامل. غير متاح يبقيه خاصًا: لا يستخدمه إلا مالكه والأشخاص الذين تمت مشاركته معهم والمجموعات التي لها إعدادها الخاص. أزل إعدادات المجموعات هذه لقصره على المالك والمشاركات.",
-        "notAvailable": "خاص. لا يستخدمه إلا المالك والأشخاص الذين تمت مشاركته معهم والمجموعات التي لها إعدادها الخاص.",
+        "description": "من يحصل على هذا التكامل في المؤسسة.",
+        "notAvailable": "خاص. لا يستخدمه إلا المالك والأشخاص الذين تمت مشاركته معهم.",
         "required": "يجب على الأعضاء الذين يسجّلون الدخول بحساباتهم الخاصة ربطه قبل استخدام الدردشة وCraft."
       },
       "ownedBy": "يملكه {owner}",
@@ -10732,6 +10837,10 @@
         "saved": "تم حفظ إعدادات المجموعة لـ {name}.",
         "saveFailed": "تعذّر حفظ إعداد المجموعة."
       }
+    },
+    "plugins": {
+      "title": "الإضافات",
+      "description": "ارفع إضافات Claude Code وCodex، وزامن الأسواق من GitHub. الإضافة مجموعة من المهارات، وهي تذكر التكاملات التي تحتاجها هذه المهارات."
     },
     "serviceStatus": {
       "page": {
@@ -11069,7 +11178,7 @@
         "loadFailed": "تعذر تحميل التكاملات.",
         "lock": {
           "adminBlocked": "السماح غير متاح: حظر أحد المسؤولين هذا الإجراء.",
-          "alwaysAsks": "السماح غير متاح: يطلب Craft الموافقة على كل طلب من هذه الطلبات.",
+          "alwaysAsks": "السماح غير متاح: يطلب Onyx الموافقة على كل طلب من هذه الطلبات.",
           "adminFinal": "السماح غير متاح: إعداد المسؤول لهذا التكامل نهائي."
         },
         "noActions": "لا يحتوي هذا التكامل على إجراءات بعد.",
@@ -11423,6 +11532,8 @@
         "invalidScope": "الأذونات المطلوبة غير متاحة.",
         "loginBadCredentials": "لا يمكن لهذا الحساب تسجيل الدخول. قد يكون معطّلًا. تواصل مع مسؤول مساحة العمل.",
         "loginRequired": "يجب تسجيل الدخول عبر موفر الهوية أولًا.",
+        "magicLinkInvalid": "انتهت صلاحية رابط تسجيل الدخول هذا أو استُخدم من قبل. اطلب رابطًا جديدًا.",
+        "magicLinkWrongEmail": "أُرسل هذا الرابط إلى عنوان بريد إلكتروني آخر. اطلب رابطًا جديدًا.",
         "oauthUserAlreadyExists": "يوجد حساب بهذا البريد الإلكتروني بطريقة تسجيل دخول مختلفة. سجّل الدخول بالطريقة التي استخدمتها أول مرة، أو اطلب من المسؤول ربط هذا الموفر.",
         "playgroundActiveTenant": "فريق من شركتك يجرّب Onyx بالفعل. هل تريد الانضمام إلى فريقك أم بدء فريق جديد؟",
         "playgroundAskAdmin": "اطلب من مسؤولك دعوتك.",
@@ -11446,6 +11557,9 @@
       },
       "joinTeamButton": {
         "label": "الانضمام إلى فريقي"
+      },
+      "newLinkButton": {
+        "label": "احصل على رابط جديد"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11598,6 +11712,34 @@
       },
       "workEmailField": {
         "label": "البريد الإلكتروني للعمل"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "فُتح هذا الرابط في متصفح غير المتصفح الذي طلبه. أدخل عنوان البريد الإلكتروني الذي أُرسل إليه.",
+        "title": "أكّد بريدك الإلكتروني"
+      },
+      "differentEmailButton": {
+        "label": "استخدم بريدًا إلكترونيًا آخر"
+      },
+      "redeeming": {
+        "text": "جارٍ تسجيل دخولك…"
+      },
+      "requestButton": {
+        "label": "احصل على رابط عبر البريد الإلكتروني"
+      },
+      "resendWait": {
+        "error": "أُرسل رابط تسجيل الدخول إلى هذا العنوان قبل لحظات. تحقق من صندوق الوارد، أو انتظر دقيقة واطلبه مرة أخرى."
+      },
+      "sendFailed": {
+        "error": "تعذّر إرسال بريد تسجيل الدخول. حاول مرة أخرى بعد قليل."
+      },
+      "sent": {
+        "description": "أرسلنا رابط تسجيل الدخول إلى {email}. يعمل الرابط مرة واحدة وتنتهي صلاحيته خلال 15 دقيقة.",
+        "title": "تحقق من بريدك الإلكتروني"
+      },
+      "useSso": {
+        "error": "سجّل الدخول عبر مزود SSO الخاص بك. روابط البريد الإلكتروني معطّلة في مساحة العمل هذه."
       }
     },
     "passwordRequirements": {
@@ -11815,7 +11957,12 @@
         "toast": "تمت المصادقة بنجاح"
       },
       "scrollToBottomButton": {
-        "label": "التمرير إلى الأسفل"
+        "label": "التمرير إلى الأسفل",
+        "reason": {
+          "approval": "مطلوب الموافقة",
+          "newAnswer": "إجابة جديدة",
+          "question": "سؤال بانتظار الإجابة"
+        }
       },
       "sessionAccessDenied": {
         "description": "ليس لديك إذن لعرض جلسة المحادثة هذه.",
@@ -11968,7 +12115,10 @@
       "fullImageModal": {
         "image": {
           "alt": "مرفق تم رفعه"
-        }
+        },
+        "next": "الصورة التالية",
+        "position": "{current} / {total}",
+        "previous": "الصورة السابقة"
       },
       "inMessageImage": {
         "downloadButton": {
@@ -11992,7 +12142,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "الوكلاء الفرعيون يعملون",
         "attachFilesButton": {
           "tooltip": "إرفاق ملفات"
         },
@@ -12045,9 +12194,6 @@
           "interruptLabel": "مقاطعة",
           "waitHint": "انتظر حتى ينتهي الرد.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "إيقاف الوكلاء الفرعيين"
         },
         "questionAttachmentsHint": "لا يمكن أن تتضمن الإجابات عن أسئلة الوكيل ملفات. أزل الملفات للإجابة."
       },
@@ -12195,8 +12341,7 @@
         "withdrawFailed": "تعذر إزالة الرسالة المعلقة.",
         "loadFailed": "تعذر تحميل الرسائل المعلقة.",
         "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
-        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار.",
-        "stopSubagentsFailed": "تعذّر إيقاف الوكلاء الفرعيين."
+        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار."
       },
       "pendingToolApproval": {
         "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
@@ -12206,6 +12351,16 @@
       },
       "pendingUserInput": {
         "toast": "تعامل مع طلبات الموافقة أو الأسئلة المعلقة أولًا."
+      },
+      "fileDropOverlay": {
+        "label": "أفلت الملفات لإرفاقها"
+      },
+      "editMessageBanner": {
+        "label": "جارٍ التعديل في محرر الرسائل",
+        "cancelButton": {
+          "label": "إلغاء",
+          "ariaLabel": "إلغاء تعديل الرسالة"
+        }
       }
     },
     "messages": {
@@ -12215,15 +12370,32 @@
         },
         "timedOut": {
           "text": "توقف الرد لأنه بلغ الحد الزمني."
+        },
+        "approvalExpired": {
+          "text": "توقف التشغيل المجدول لأن أحدًا لم يرد على طلب الموافقة في الوقت المحدد."
         }
       },
-      "agentResults": {
-        "received": "تم استلام نتائج الوكيل الفرعي"
+      "callout": {
+        "note": {
+          "title": "ملاحظة"
+        },
+        "tip": {
+          "title": "نصيحة"
+        },
+        "important": {
+          "title": "مهم"
+        },
+        "warning": {
+          "title": "تحذير"
+        },
+        "caution": {
+          "title": "تنبيه"
+        }
       },
       "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "تم النسخ!",
-          "label": "نسخ"
+        "wrapButton": {
+          "unwrapLabel": "إلغاء الالتفاف",
+          "wrapLabel": "التفاف"
         }
       },
       "customTool": {
@@ -12268,6 +12440,9 @@
         },
         "unreachableStatus": {
           "text": "تعذّر على {toolName} الوصول إلى الخادم الخاص به"
+        },
+        "callFailedStatus": {
+          "text": "فشل {toolName}"
         }
       },
       "customToolAuth": {
@@ -12347,6 +12522,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "تعديل"
+        },
+        "foldButton": {
+          "collapseLabel": "عرض أقل",
+          "expandLabel": "إظهار الرسالة كاملة"
         }
       },
       "imageTool": {
@@ -12363,6 +12542,12 @@
           "text": "تم إيقاف توليد الصورة"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "الصورة غير متاحة",
+          "withAlt": "{alt} · الصورة غير متاحة"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "نسخ الجدول"
@@ -12371,14 +12556,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "سؤال"
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "إلغاء"
         },
-        "submitButton": {
-          "label": "إرسال"
+        "artifactError": {
+          "message": "هذا الملف غير متاح."
         }
       },
       "messageSwitcher": {
@@ -12391,6 +12571,9 @@
         "previousButton": {
           "tooltip": "السابق"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "أمس في {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -12528,8 +12711,17 @@
           "waitingForAnswer": {
             "label": "في انتظار إجابتك..."
           },
+          "waitingForOwnerApproval": {
+            "label": "في انتظار موافقة المالك..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "في انتظار إجابة المالك..."
+          },
           "runningCommand": {
             "label": "جارٍ تشغيل الأمر..."
+          },
+          "runningProgram": {
+            "label": "جارٍ تشغيل {program}..."
           },
           "editingFiles": {
             "label": "جارٍ تعديل الملفات..."
@@ -12539,48 +12731,6 @@
           },
           "browsing": {
             "label": "جارٍ تصفح صفحات الويب..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "جارٍ العمل...",
-              "done": "تم إنجاز العمل"
-            },
-            "crunchingDetails": {
-              "working": "جارٍ تدقيق التفاصيل...",
-              "done": "تم تدقيق التفاصيل"
-            },
-            "connectingDots": {
-              "working": "جارٍ ربط النقاط...",
-              "done": "تم ربط النقاط"
-            },
-            "runningNumbers": {
-              "working": "جارٍ حساب الأرقام...",
-              "done": "تم حساب الأرقام"
-            },
-            "fillingGaps": {
-              "working": "جارٍ سد الثغرات...",
-              "done": "تم سد الثغرات"
-            },
-            "sortingThingsOut": {
-              "working": "جارٍ ترتيب الأمور...",
-              "done": "تم ترتيب الأمور"
-            },
-            "gatheringPieces": {
-              "working": "جارٍ جمع القطع...",
-              "done": "تم جمع القطع"
-            },
-            "workingThroughIt": {
-              "working": "جارٍ العمل على ذلك...",
-              "done": "تم العمل على ذلك"
-            },
-            "ironingOutDetails": {
-              "working": "جارٍ ضبط التفاصيل...",
-              "done": "تم ضبط التفاصيل"
-            },
-            "roundingThingsOut": {
-              "working": "جارٍ استكمال الصورة...",
-              "done": "تم استكمال الصورة"
-            }
           }
         },
         "internalSearch": {
@@ -12607,9 +12757,6 @@
             "before": "قبل {date}",
             "between": "من {start} إلى {end}"
           }
-        },
-        "interruptedThinking": {
-          "label": "تفكير متقطع"
         },
         "memory": {
           "default": {
@@ -12732,10 +12879,10 @@
           "label": "{count, plural, one {خطوة واحدة} other {# خطوات}}"
         },
         "thoughtDuration": {
-          "label": "فكّر لمدة {duration}"
+          "label": "عمل لمدة {duration}"
         },
         "thoughtUnknownDuration": {
-          "label": "فكّر لبعض الوقت"
+          "label": "عمل"
         },
         "toggleRow": {
           "ariaLabel": "تبديل الخط الزمني"
@@ -12794,6 +12941,12 @@
               "patching": {
                 "status": "{count, plural, =0 {جارٍ تصحيح الملفات…} one {جارٍ تصحيح ملف واحد…} two {جارٍ تصحيح ملفين…} few {جارٍ تصحيح # ملفات…} many {جارٍ تصحيح # ملفًا…} other {جارٍ تصحيح # ملف…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {حذف الملف} other {ملف فارغ}}"
+            },
+            "movedFrom": {
+              "label": "نُقل من {path}"
             }
           },
           "stopped": {
@@ -12806,7 +12959,110 @@
             "failed": {
               "status": "فشل النشر"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {جارٍ فتح {target}} failed {تعذّر فتح {target}} canceled {أُلغي} other {فُتح {target}}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {جارٍ فتح علامة تبويب جديدة} failed {تعذّر فتح علامة تبويب جديدة} canceled {أُلغي} other {فُتحت علامة تبويب جديدة}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {جارٍ الانتقال إلى {target}} failed {تعذّر الانتقال إلى {target}} canceled {أُلغي} other {تم الانتقال إلى {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {جارٍ قراءة الصفحة} failed {تعذّرت قراءة الصفحة} canceled {أُلغي} other {قُرئت الصفحة}}"
+            },
+            "act": {
+              "status": "{phase, select, running {جارٍ استخدام الصفحة} failed {تعذّر استخدام الصفحة} canceled {أُلغي} other {استُخدمت الصفحة}}",
+              "click": {
+                "status": "{phase, select, running {جارٍ النقر على عنصر} failed {تعذّر النقر على العنصر} canceled {أُلغي} other {تم النقر على عنصر}}"
+              },
+              "type": {
+                "status": "{phase, select, running {جارٍ كتابة “{text}”} failed {تعذّرت كتابة “{text}”} canceled {أُلغي} other {تمت كتابة “{text}”}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {جارٍ التمرير فوق عنصر} failed {تعذّر التمرير فوق العنصر} canceled {أُلغي} other {تم التمرير فوق عنصر}}"
+              },
+              "select": {
+                "status": "{phase, select, running {جارٍ تحديد خيار} failed {تعذّر تحديد الخيار} canceled {أُلغي} other {تم تحديد خيار}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {جارٍ سحب عنصر} failed {تعذّر سحب العنصر} canceled {أُلغي} other {تم سحب عنصر}}"
+              },
+              "press": {
+                "status": "{phase, select, running {جارٍ الضغط على {key}} failed {تعذّر الضغط على {key}} canceled {أُلغي} other {تم الضغط على {key}}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {جارٍ تمرير الصفحة} failed {تعذّر تمرير الصفحة} canceled {أُلغي} other {تم تمرير الصفحة}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {جارٍ رفع الملفات} failed {تعذّر رفع الملفات} canceled {أُلغي} other {تم رفع الملفات}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {جارٍ انتظار الصفحة} failed {لم تصبح الصفحة جاهزة} canceled {أُلغي} other {تم انتظار الصفحة}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {جارٍ تشغيل نص برمجي للصفحة} failed {فشل النص البرمجي للصفحة} canceled {أُلغي} other {شُغّل نص برمجي للصفحة}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {جارٍ الرد على مربع حوار الصفحة} failed {تعذّر الرد على مربع حوار الصفحة} canceled {أُلغي} other {تم الرد على مربع حوار الصفحة}}"
+            },
+            "check": {
+              "status": "{phase, select, running {جارٍ فحص المتصفح} failed {تعذّر فحص المتصفح} canceled {أُلغي} other {فُحص المتصفح}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {جارٍ الرجوع} forward {جارٍ التقدم} other {جارٍ إعادة تحميل الصفحة}}} failed {تعذّر تغيير الصفحة} canceled {أُلغي} other {{history, select, back {تم الرجوع} forward {تم التقدم} other {أُعيد تحميل الصفحة}}}}"
+            }
           }
+        },
+        "skill": {
+          "read": {
+            "running": "جارٍ قراءة المهارة {name}",
+            "done": "تمت قراءة المهارة {name}",
+            "failed": "تعذّرت قراءة المهارة {name}",
+            "runningUnnamed": "جارٍ قراءة المهارة",
+            "doneUnnamed": "تمت قراءة المهارة",
+            "failedUnnamed": "تعذّرت قراءة المهارة"
+          },
+          "load": {
+            "running": "جارٍ تحميل المهارة {name}",
+            "done": "تم تحميل المهارة {name}",
+            "failed": "تعذّر تحميل المهارة {name}",
+            "runningUnnamed": "جارٍ تحميل المهارة",
+            "doneUnnamed": "تم تحميل المهارة",
+            "failedUnnamed": "تعذّر تحميل المهارة"
+          }
+        },
+        "agentTool": {
+          "send": {
+            "running": "جارٍ إرسال رسالة إلى {name}",
+            "done": "تم إرسال رسالة إلى {name}",
+            "failed": "تعذّر إرسال رسالة إلى {name}",
+            "runningUnnamed": "جارٍ إرسال رسالة إلى الوكيل الفرعي",
+            "doneUnnamed": "تم إرسال رسالة إلى الوكيل الفرعي",
+            "failedUnnamed": "تعذّر إرسال رسالة إلى الوكيل الفرعي"
+          },
+          "interrupt": {
+            "running": "جارٍ إيقاف {name}",
+            "done": "تم إيقاف {name}",
+            "failed": "تعذّر إيقاف {name}",
+            "runningUnnamed": "جارٍ إيقاف الوكيل الفرعي",
+            "doneUnnamed": "تم إيقاف الوكيل الفرعي",
+            "failedUnnamed": "تعذّر إيقاف الوكيل الفرعي"
+          }
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {وكيل فرعي واحد} other {# وكلاء فرعيون}}",
+          "summary": {
+            "working": "{count, number} قيد العمل",
+            "done": "{count, number} مكتمل",
+            "failed": "{count, number} فشل",
+            "stopped": "{count, number} متوقف"
+          },
+          "activity": "يستخدم {tool}",
+          "open": "فتح {name}"
         }
       },
       "toolApproval": {
@@ -12818,6 +13074,9 @@
           "placeholder": "أخرى: اكتب إجابتك الخاصة",
           "ariaLabel": "إجابة أخرى عن {header}"
         },
+        "multiSelect": {
+          "hint": "اختر كل ما ينطبق."
+        },
         "submit": "إرسال",
         "page": {
           "progress": "السؤال {current} من {total}",
@@ -12826,11 +13085,10 @@
         },
         "submitError": "تعذر إرسال إجاباتك. حاول مرة أخرى.",
         "record": {
-          "answered": "تمت الإجابة",
+          "answeredCount": "{count, plural, zero {لم تتم الإجابة عن أي سؤال} one {تمت الإجابة عن سؤال واحد} two {تمت الإجابة عن سؤالين} few {تمت الإجابة عن # أسئلة} many {تمت الإجابة عن # سؤالًا} other {تمت الإجابة عن # سؤال}}",
           "answeredInChat": "تمت الإجابة في الدردشة",
           "cancelled": "لم تتم الإجابة",
           "closed": "لم يعد في الانتظار",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
@@ -13073,9 +13331,6 @@
       "lineCount": {
         "label": "{count, plural, one {# سطر} other {# أسطر}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# كلمة} other {# كلمات}}"
-      },
       "copyButton": {
         "tooltip": "نسخ المحتوى"
       },
@@ -13099,6 +13354,13 @@
       "renderError": {
         "title": "تعذّرت معاينة هذا الملف",
         "description": "تعذّر عرض الملف هنا. نزّل الملف لفتحه."
+      },
+      "unavailable": {
+        "title": "لا تتوفر معاينة لهذا الملف",
+        "description": "تعذّر إنشاء معاينة لهذا الملف. نزّل الملف لفتحه."
+      },
+      "preparing": {
+        "status": "جارٍ تجهيز المعاينة. قد يستغرق ذلك بعض الوقت."
       },
       "unsupported": {
         "title": "معاينة هذا النوع من الملفات غير مدعومة حاليًا",
@@ -13147,30 +13409,6 @@
         },
         "error": {
           "description": "تعذّر تحميل ملف PDF."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "عناصر التحكم في العرض التقديمي"
-        },
-        "thumbnails": {
-          "toggle": "إظهار الصور المصغّرة للشرائح أو إخفاؤها",
-          "resize": "تغيير حجم الصور المصغّرة للشرائح"
-        },
-        "slides": {
-          "label": "الشرائح"
-        },
-        "previous": {
-          "label": "الشريحة السابقة"
-        },
-        "next": {
-          "label": "الشريحة التالية"
-        },
-        "slide": {
-          "counter": "الشريحة {current} من {total}"
-        },
-        "empty": {
-          "label": "لا توجد شرائح في هذا العرض التقديمي"
         }
       }
     },
@@ -13522,6 +13760,10 @@
       },
       "viewAllButton": {
         "label": "عرض كل الملفات ({count})"
+      },
+      "unavailable": {
+        "title": "هذا الملف غير متاح",
+        "description": "تم حذفه، أو ليس لديك صلاحية الوصول إليه."
       }
     },
     "rightPanel": {
@@ -13558,6 +13800,9 @@
       },
       "resizeHandle": {
         "label": "تغيير حجم اللوحة"
+      },
+      "browserTab": {
+        "label": "المتصفح"
       }
     },
     "export": {
@@ -13591,22 +13836,153 @@
       },
       "agents": {
         "title": "الوكلاء",
+        "titleRunning": "الوكلاء · {count} قيد التشغيل",
         "status": {
-          "starting": "قيد البدء",
-          "running": "قيد التشغيل",
-          "suspended": "في الانتظار",
           "complete": "تم",
           "limit": "بلغ حد الخطوات",
           "cancelled": "أُلغي",
           "stopped": "أُوقف",
           "error": "فشل"
         },
-        "finished": "الوكلاء السابقون"
+        "finished": "الوكلاء السابقون",
+        "stop": "إيقاف {name}",
+        "stopTooltip": "إيقاف الوكيل",
+        "stopFailed": "تعذّر إيقاف الوكيل."
       },
       "files": {
         "title": "الملفات",
         "viewAll": "{count, plural, one {عرض # ملف} other {عرض كل الملفات (#)}}"
       }
+    },
+    "find": {
+      "capped": "تم البحث في {count, plural, zero {# رسالة} one {آخر رسالة} two {آخر رسالتين} few {آخر # رسائل} many {آخر # رسالة} other {آخر # رسالة}}",
+      "close": "إغلاق البحث",
+      "count": "{current} من {total}",
+      "label": "البحث في الجلسة",
+      "loadingOlder": "جارٍ تحميل الرسائل الأقدم…",
+      "next": "التطابق التالي",
+      "placeholder": "البحث في الجلسة",
+      "previous": "التطابق السابق"
+    },
+    "subagents": {
+      "status": {
+        "starting": "قيد البدء",
+        "running": "قيد التشغيل",
+        "waiting": "في الانتظار",
+        "completed": "اكتمل",
+        "stopped": "أُوقف",
+        "failed": "فشل",
+        "limit": "بلغ حد الخطوات"
+      },
+      "timedStatus": {
+        "running": "قيد التشغيل {elapsed}",
+        "waiting": "في الانتظار {elapsed}",
+        "completed": "اكتمل في {elapsed}"
+      },
+      "view": {
+        "parent": "وكيل فرعي من",
+        "parentOf": "وكيل فرعي من · {title}",
+        "openParentChat": "فتح المحادثة الأصلية",
+        "empty": "لا توجد رسائل لهذا الوكيل بعد.",
+        "failed": "تعذّر تحميل محادثة هذا الوكيل."
+      },
+      "bar": {
+        "runsOnItsOwn": "يعمل بمفرده",
+        "openParent": "فتح الأصل",
+        "announcement": "الوكيل الفرعي {model}: {status}",
+        "announcementUnnamed": "وكيل فرعي: {status}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "صفحة المتصفح",
+        "inputDescription": "اضغط Shift+Escape لمغادرة صفحة المتصفح."
+      },
+      "download": {
+        "action": "تنزيل",
+        "saved": "نزّل المتصفح {fileName}"
+      },
+      "error": "تعذّر على المتصفح تنفيذ ذلك. حاول مرة أخرى.",
+      "clearData": {
+        "action": "مسح بيانات المتصفح",
+        "title": "مسح بيانات المتصفح؟",
+        "description": "سيؤدي هذا إلى تسجيل خروجك من كل موقع في المتصفح وحذف ملفات تعريف الارتباط والسجل والبيانات المحفوظة، في جميع محادثاتك.",
+        "confirm": "مسح البيانات",
+        "done": "تم مسح بيانات المتصفح",
+        "error": "تعذّر مسح بيانات المتصفح. حاول مرة أخرى."
+      },
+      "urlBar": {
+        "back": "رجوع",
+        "forward": "تقدّم",
+        "reload": "إعادة التحميل",
+        "label": "العنوان",
+        "placeholder": "أدخل عنوان URL"
+      },
+      "moreMenu": {
+        "label": "مزيد من إجراءات المتصفح"
+      },
+      "tabs": {
+        "new": "علامة تبويب جديدة"
+      },
+      "control": {
+        "you": "أنت تتحكم في علامة التبويب هذه",
+        "agent": "الوكيل يتحكم في علامة التبويب هذه",
+        "anotherViewer": "نافذة أخرى تتحكم في علامة التبويب هذه",
+        "none": "لا أحد يتحكم في علامة التبويب هذه",
+        "take": "تولَّ التحكم",
+        "release": "تخلَّ عن التحكم"
+      },
+      "status": {
+        "connecting": "جارٍ الاتصال بالمتصفح",
+        "starting": "جارٍ بدء تشغيل المتصفح",
+        "blank": {
+          "title": "لا توجد صفحة بعد",
+          "description": "اكتب عنوان URL أعلاه لفتح صفحة."
+        },
+        "noTabs": {
+          "title": "لا توجد صفحة مفتوحة",
+          "description": "تظهر هنا الصفحات التي يفتحها الوكيل. يمكنك أيضًا فتح علامة تبويب جديدة."
+        },
+        "disconnected": {
+          "title": "انقطع اتصال المتصفح",
+          "description": "جارٍ محاولة الاتصال مرة أخرى."
+        },
+        "disabled": {
+          "title": "المتصفح متوقف",
+          "description": "أوقف أحد المسؤولين المتصفح، أو لا يمكنك عرض متصفح هذه المحادثة."
+        },
+        "unreachable": {
+          "title": "تعذّر الوصول إلى المتصفح",
+          "description": "تأكد من أنك سجّلت الدخول ومتصل بالإنترنت، ثم حاول مرة أخرى."
+        },
+        "error": {
+          "title": "المتصفح غير متاح",
+          "description": "تعذّر بدء بيئة الحماية الخاصة بالمحادثة. حاول مرة أخرى لاحقًا."
+        },
+        "retry": "إعادة المحاولة"
+      },
+      "dialog": {
+        "label": "مربع حوار الصفحة",
+        "from": "رسالة من {origin}",
+        "response": "رد مربع الحوار",
+        "responsePlaceholder": "اكتب ردًا",
+        "dismiss": "تجاهل",
+        "accept": "قبول",
+        "takeControl": "تولَّ التحكم للرد."
+      },
+      "fileChooser": {
+        "label": "اختر ملفات للصفحة",
+        "askOne": "تطلب الصفحة ملفًا.",
+        "askMany": "تطلب الصفحة ملفات.",
+        "askOneFrom": "يطلب {origin} ملفًا.",
+        "askManyFrom": "يطلب {origin} ملفات.",
+        "cancel": "إلغاء",
+        "chooseOne": "اختر ملفًا",
+        "chooseMany": "اختر ملفات",
+        "inputLabel": "ملفات للصفحة",
+        "error": "تعذّر رفع الملفات. حاول مرة أخرى."
+      },
+      "answerError": "تعذّر الرد على الصفحة. حاول مرة أخرى."
     }
   },
   "common": {
@@ -14234,6 +14610,10 @@
         "button": "موافقة لهذه المحادثة",
         "tooltip": "وافق الآن وشغّل هذه الأداة دون السؤال مرة أخرى لبقية هذه المحادثة"
       },
+      "approveCommand": {
+        "button": "الموافقة لهذا الأمر",
+        "tooltip": "وافق الآن واسمح بهذا الإجراء دون السؤال مرة أخرى حتى ينتهي الأمر"
+      },
       "approveOnce": {
         "ariaLabel": "الموافقة على هذا الإجراء مرة واحدة",
         "button": "الموافقة مرة واحدة"
@@ -14244,7 +14624,8 @@
       },
       "deadline": "الموافقة قبل {time}",
       "header": {
-        "required": "تم طلب الموافقة: {headline}"
+        "required": "تم طلب الموافقة: {headline}",
+        "requiredBy": "تم طلب الموافقة: {headline}. الموافقة قبل {time}"
       },
       "headline": {
         "multiAction": "{count, plural, one {# إجراء} other {# إجراءات}} في {app}",
@@ -14261,6 +14642,7 @@
         "expired": "انتهت المهلة: {headline}",
         "rejected": "لم تتم الموافقة: {headline}",
         "approvedForChat": "تمت الموافقة لهذه المحادثة: {headline}",
+        "approvedForCommand": "تمت الموافقة لهذا الأمر: {headline}",
         "approvedForSession": "تمت الموافقة لهذه الجلسة: {headline}"
       },
       "submitError": "تعذر إرسال قرارك. حاول مرة أخرى.",
@@ -14444,9 +14826,6 @@
       },
       "unsupported": {
         "description": "نزّل الملف لعرض محتوياته."
-      },
-      "retry": {
-        "label": "حاول مجددًا"
       },
       "download": {
         "label": "تنزيل الملف"
@@ -15094,6 +15473,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, one {# إضافة} other {# إضافات}}، {removed, plural, one {# حذف} other {# عمليات حذف}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {# سطر دون تغيير} other {# أسطر دون تغيير}}"
         },
@@ -16580,6 +16962,9 @@
         "integrations": {
           "label": "التكاملات"
         },
+        "plugins": {
+          "label": "الإضافات"
+        },
         "slackBot": {
           "label": "بوت Slack"
         },
@@ -16690,6 +17075,12 @@
       "deleteError": {
         "message": "فشل حذف المحادثة. يرجى المحاولة مرة أخرى."
       },
+      "markRead": {
+        "label": "وضع علامة كمقروءة"
+      },
+      "markUnread": {
+        "label": "وضع علامة كغير مقروءة"
+      },
       "moveToProject": {
         "label": "نقل إلى مشروع"
       },
@@ -16699,20 +17090,43 @@
       "projectSearchInput": {
         "placeholder": "البحث في المشاريع"
       },
+      "regenerateTitle": {
+        "label": "إعادة إنشاء العنوان"
+      },
+      "regenerateTitleError": {
+        "message": "فشلت إعادة إنشاء العنوان. يرجى المحاولة مرة أخرى."
+      },
       "removeFromProject": {
         "label": "إزالة من {projectName}"
       },
       "rename": {
         "label": "إعادة تسمية"
       },
+      "runStatus": {
+        "approval": {
+          "label": "بحاجة إلى موافقة"
+        },
+        "done": {
+          "label": "تم"
+        },
+        "failed": {
+          "label": "فشل"
+        },
+        "question": {
+          "label": "سؤال بانتظار الرد"
+        },
+        "working": {
+          "label": "قيد العمل"
+        }
+      },
       "share": {
         "label": "مشاركة"
+      },
+      "updatedNow": {
+        "label": "الآن"
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "إنشاء مشروع جديد \"<name>{projectName}</name>\""
-      },
       "footer": {
         "openAction": {
           "label": "فتح"
@@ -16724,25 +17138,21 @@
           "label": "عرض الكل"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "لا توجد محادثات أو مشاريع بعد"
+          "text": "لا توجد محادثات بعد"
         },
         "noResults": {
           "text": "لم يتم العثور على نتائج"
         }
       },
-      "newProject": {
-        "label": "مشروع جديد"
-      },
       "newSession": {
         "label": "جلسة جديدة"
-      },
-      "noMoreResults": {
-        "text": "لا توجد نتائج أخرى"
-      },
-      "projectsFilter": {
-        "label": "المشاريع"
       },
       "recentFilter": {
         "label": "الأحدث"
@@ -16751,10 +17161,28 @@
         "label": "الجلسات الأخيرة"
       },
       "searchInput": {
-        "placeholder": "البحث في جلسات المحادثة والمشاريع..."
+        "placeholder": "البحث في جلسات المحادثة..."
       },
       "sessionsFilter": {
         "label": "الجلسات"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "تغيير النموذج"
+        },
+        "findInChat": {
+          "label": "البحث في الجلسة"
+        },
+        "nextChat": {
+          "label": "الجلسة التالية"
+        },
+        "previousChat": {
+          "label": "الجلسة السابقة"
+        },
+        "title": "الاختصارات",
+        "toggleSidebar": {
+          "label": "إظهار الشريط الجانبي أو إخفاؤه"
+        }
       }
     },
     "notifications": {
@@ -17037,7 +17465,10 @@
           "publishOff": {
             "description": "أوقف المسؤول النشر إلى المؤسسة. اطلب من المسؤول نشر هذا المكوّن الإضافي."
           }
-        }
+        },
+        "groupsLoadFailed": "تعذّر على Onyx تحميل مجموعاتك، لذا لا يمكن تغيير مشاركات المجموعات.",
+        "groupsRetry": "حاول مرة أخرى",
+        "groupSharesLocked": "هذه المهارة مشتركة مع مجموعة لا تديرها، لذا لا يمكنك تغيير مشاركات المجموعات الخاصة بها. اطلب ذلك من مدير مهارات على مستوى المؤسسة."
       },
       "tabs": {
         "details": "التفاصيل",
@@ -17100,15 +17531,11 @@
           "title": "البدء من الصفر"
         },
         "trigger": {
-          "label": "إنشاء مهارة"
+          "label": "أنشئ مهارة"
         },
         "upload": {
           "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة.",
           "title": "رفع مهارة"
-        },
-        "marketplace": {
-          "title": "إضافة سوق",
-          "description": "أضف من مستودع وزامن إضافاته."
         }
       },
       "empty": {
@@ -17150,7 +17577,8 @@
         "disableFailed": "فشل تعطيل {name}",
         "enableFailed": "فشل تفعيل {name}",
         "refreshFailed": "تم تحديث {name}، لكن تعذّر تحديث قائمة المهارات.",
-        "listRefreshFailed": "تعذّر تحديث قائمة المهارات. أعد تحميل الصفحة لرؤية التغيير."
+        "listRefreshFailed": "تعذّر تحديث قائمة المهارات. أعد تحميل الصفحة لرؤية التغيير.",
+        "requiredHolder": "لا يمكن تشغيل {name}. توجد مهارة مطلوبة بهذا الاسم بالفعل."
       }
     },
     "sections": {
@@ -17193,7 +17621,8 @@
       "upload": {
         "error": {
           "readFailed": "تعذّرت قراءة الملف المرفوع.",
-          "folderRoot": "{upload, select, plugin {يجب أن يحتوي المجلد المحدد على SKILL.md أو ملف بيان plugin.json في المستوى الأعلى.} other {يجب أن يحتوي المجلد المحدد على SKILL.md في المستوى الأعلى.}}"
+          "folderRoot": "{upload, select, plugin {يجب أن يحتوي المجلد المحدد على SKILL.md أو ملف بيان plugin.json في المستوى الأعلى.} other {يجب أن يحتوي المجلد المحدد على SKILL.md في المستوى الأعلى.}}",
+          "unsupportedFile": "{name} ليس ملف ZIP أو SKILL.md. ارفع ملف ZIP أو ملف SKILL.md أو مجلد مهارة."
         }
       }
     },
@@ -17212,6 +17641,8 @@
       "updated": "{count, plural, zero {لم يتم تحديث أي مهارة} one {تم تحديث مهارة واحدة} two {تم تحديث مهارتين} few {تم تحديث # مهارات} many {تم تحديث # مهارة} other {تم تحديث # مهارة}}",
       "failed": "تعذر تحديث المهارات. حاول مرة أخرى.",
       "partialFailure": "{count, plural, zero {لم يتعذر تحديث أي مهارة} one {تعذر تحديث مهارة واحدة} two {تعذر تحديث مهارتين} few {تعذر تحديث # مهارات} many {تعذر تحديث # مهارة} other {تعذر تحديث # مهارة}}",
+      "deleted": "{count, plural, zero {لم يتم حذف أي مهارة} one {تم حذف مهارة واحدة} two {تم حذف مهارتين} few {تم حذف # مهارات} many {تم حذف # مهارة} other {تم حذف # مهارة}}",
+      "deleteFailure": "{count, plural, zero {لم يتعذر حذف أي مهارة} one {تعذر حذف مهارة واحدة} two {تعذر حذف مهارتين} few {تعذر حذف # مهارات} many {تعذر حذف # مهارة} other {تعذر حذف # مهارة}}",
       "deleteTitle": "{count, plural, zero {حذف المهارات؟} one {حذف مهارة واحدة؟} two {حذف مهارتين؟} few {حذف # مهارات؟} many {حذف # مهارة؟} other {حذف # مهارة؟}}",
       "deleteDescription": "{count, plural, zero {لن يتم حذف أي مهارة.} one {سيؤدي هذا إلى حذف المهارة المحددة لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.} two {سيؤدي هذا إلى حذف المهارتين المحددتين لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.} few {سيؤدي هذا إلى حذف جميع المهارات المحددة وعددها # لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.} many {سيؤدي هذا إلى حذف جميع المهارات المحددة وعددها # لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.} other {سيؤدي هذا إلى حذف جميع المهارات المحددة وعددها # لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.}}",
       "shareTitle": "{count, plural, zero {تحديث الوصول} one {تحديث الوصول إلى مهارة واحدة} two {تحديث الوصول إلى مهارتين} few {تحديث الوصول إلى # مهارات} many {تحديث الوصول إلى # مهارة} other {تحديث الوصول إلى # مهارة}}",
@@ -17224,7 +17655,8 @@
       "publishWarning": {
         "title": "لا يمكن التراجع عن النشر",
         "description": "بعد التطبيق، يمكن لكل شخص في المؤسسة استخدام المهارات المحددة. لا يمكن جعل المهارات المنشورة خاصة مرة أخرى. يمكن للمسؤول فقط حذفها."
-      }
+      },
+      "skipped": "{count, plural, one {تم تخطي # مهارة لا يمكنك تشغيلها أو إيقافها} other {تم تخطي # مهارات لا يمكنك تشغيلها أو إيقافها}}"
     },
     "reviewRequests": {
       "title": "طلبات النشر",
@@ -17316,6 +17748,12 @@
       "share": "مشاركة",
       "delete": "حذف",
       "select": "تحديد {name}"
+    },
+    "takenName": {
+      "title": "الاسم",
+      "description": "أدخل اسمًا غير مستخدم بعد.",
+      "taken": "{name} مستخدم بالفعل. اختر اسمًا مختلفًا.",
+      "invalid": "استخدم أحرفًا صغيرة وأرقامًا وشرطات مفردة، بحد أقصى {max} حرفًا."
     }
   },
   "plugins": {
@@ -17337,17 +17775,13 @@
           "versions": "الإصدارات"
         },
         "overview": {
-          "noDescription": "لا يوجد وصف.",
           "location": "الموقع",
           "owner": "المالك",
-          "skills": "المهارات",
-          "description": "الوصف",
           "version": "الإصدار في plugin.json",
           "author": "المؤلف",
           "homepage": "الصفحة الرئيسية",
           "license": "الترخيص",
-          "notUsed": "غير مستخدم في Onyx",
-          "marketplace": "سوق {name}، {scope, select, personal {شخصي} other {الشركة}} ({repository})"
+          "notUsed": "غير مستخدم في Onyx"
         },
         "skills": {
           "off": "متوقفة",
@@ -17361,11 +17795,7 @@
           "title": "استخدام هذا المكوّن الإضافي",
           "label": "استخدام {name}",
           "required": "جعل المسؤول هذا المكوّن الإضافي مطلوبًا. لا يمكنك إيقافه.",
-          "unavailable": "لا يمكنك تشغيل هذا المكوّن الإضافي أو إيقافه.",
-          "failed": "تعذّر تغيير المكوّن الإضافي.",
-          "on": "قيد التشغيل. يمكن للوكيل الافتراضي استخدام هذا المكوّن الإضافي.",
-          "off": "متوقف. شغّله ليتمكن الوكيل الافتراضي من استخدام هذا المكوّن الإضافي.",
-          "nameHeld": "متوقف لأن {names} يستخدم اسم المهارة نفسه. شغّل هذا المكوّن الإضافي لاستخدامه بدلًا منه."
+          "unavailable": "لا يمكنك تشغيل هذا المكوّن الإضافي أو إيقافه."
         },
         "actions": {
           "share": "مشاركة",
@@ -17381,7 +17811,6 @@
           "done": "تم حذف {name}.",
           "failed": "تعذّر حذف المكوّن الإضافي."
         },
-        "syncedFrom": "تمت المزامنة من {repository}",
         "managed": {
           "title": "يديره سوق {name}",
           "description": "يزامن Onyx هذه الإضافة من {repository}. غيّرها في GitHub، ثم زامن السوق.",
@@ -17421,18 +17850,17 @@
         }
       },
       "alwaysAllow": {
-        "title": "السماح دائمًا",
-        "description": "تشغيل إجراء يطلب الموافقة دون مطالبة.",
+        "description": "يحدد المسؤول طريقة تشغيل كل إجراء. فعّل «لا تسألني» لتشغيل إجراء يطلب الموافقة دون مطالبة.",
         "loadFailed": "تعذر تحميل الإجراءات.",
         "saveFailed": "تعذر الحفظ. حاول مرة أخرى.",
-        "alwaysAsks": "يطلب Craft الموافقة على كل طلب من هذه الطلبات.",
+        "alwaysAsks": "يطلب Onyx الموافقة على كل طلب من هذه الطلبات.",
         "switch": {
-          "label": "السماح دائمًا بـ {name}"
+          "label": "لا تسألني عن {name}",
+          "visibleLabel": "لا تسألني"
         },
         "retry": {
           "label": "حاول مرة أخرى"
         },
-        "readOnlyTitle": "الإجراءات",
         "readOnlyDescription": "يحدد المسؤول طريقة تشغيل كل إجراء."
       },
       "oauthCallback": {
@@ -17496,10 +17924,7 @@
         "not_supported": "غير مدعوم"
       },
       "note": {
-        "askAdmin": "اسأل مسؤولًا",
-        "turnedOff": "أوقفه المسؤول لديك",
-        "moreThanOne": "يتطابق أكثر من تكامل واحد",
-        "notSupported": "غير مدعوم في Onyx"
+        "askAdmin": "اسأل مسؤولًا"
       },
       "localServer": "خادم محلي",
       "noUrl": "لا يوجد عنوان URL للخادم",
@@ -17539,6 +17964,7 @@
         "newPlugin": "إضافة جديدة: {name}"
       },
       "willBeOff": "يُحفظ المكون الإضافي متوقفًا. لدى {names} مهارة بالاسم نفسه.",
+      "willClash": "يحتوي {names} بالفعل على مهارة بالاسم نفسه. يمكن تشغيل واحدة منها فقط.",
       "saveAsNew": {
         "label": "حفظ كإضافة جديدة",
         "description": "أبقِ الإضافة التي تحمل هذا الاسم كما هي."
@@ -17570,7 +17996,8 @@
         "newPlugin": "تمت إضافة {name}.",
         "newVersion": "تم تحديث {name} إلى إصدار Onyx {version}.",
         "unchanged": "لا توجد تغييرات. {name} بالفعل على إصدار Onyx {version}.",
-        "off": "تمت إضافة {name}. إنه متوقف لأن لدى {names} مهارة بالاسم نفسه."
+        "off": "تمت إضافة {name}. إنه متوقف لأن لدى {names} مهارة بالاسم نفسه.",
+        "clash": "تم تحديث {name} إلى إصدار Onyx {version}. يحتوي {names} بالفعل على مهارة بالاسم نفسه، لذا تعمل واحدة منها فقط."
       }
     },
     "turnOn": {
@@ -17651,7 +18078,8 @@
         "duplicate": {
           "personal": "لقد أضفت هذا السوق بالفعل.",
           "company": "مؤسستك تحصل على هذا السوق بالفعل."
-        }
+        },
+        "advanced": "متقدم"
       },
       "sync": {
         "now": "مزامنة الآن",
@@ -17676,10 +18104,6 @@
       "open": "فتح {name}",
       "menu": "إجراءات {name}",
       "loadFailed": "تعذر تحميل الأسواق.",
-      "empty": {
-        "title": "لا توجد أسواق بعد",
-        "description": "أضف مستودع GitHub للحصول على إضافاته."
-      },
       "page": {
         "title": "الأسواق",
         "description": "مستودعات GitHub التي تحصل منها على الإضافات، مع مصدرها. زامن سوقًا للحصول على التغييرات من GitHub."
@@ -17739,6 +18163,23 @@
         "rateLimited": "تم بلوغ حد واجهة GitHub البرمجية. حاول مرة أخرى بعد بضع دقائق. اربط GitHub لرفع الحد.",
         "rateLimitedUntil": "تم بلوغ حد واجهة GitHub البرمجية. تتم إعادة التعيين في {time}. اربط GitHub لرفع الحد."
       }
+    },
+    "bulk": {
+      "updated": "{count, plural, zero {لم يتم تحديث أي إضافة} one {تم تحديث إضافة واحدة} two {تم تحديث إضافتين} few {تم تحديث # إضافات} many {تم تحديث # إضافة} other {تم تحديث # إضافة}}",
+      "failed": "تعذر تحديث الإضافات. حاول مرة أخرى.",
+      "partialFailure": "{count, plural, zero {لم يتعذر تحديث أي إضافة} one {تعذر تحديث إضافة واحدة} two {تعذر تحديث إضافتين} few {تعذر تحديث # إضافات} many {تعذر تحديث # إضافة} other {تعذر تحديث # إضافة}}",
+      "deleted": "{count, plural, zero {لم يتم حذف أي إضافة} one {تم حذف إضافة واحدة} two {تم حذف إضافتين} few {تم حذف # إضافات} many {تم حذف # إضافة} other {تم حذف # إضافة}}",
+      "deleteFailure": "{count, plural, zero {لم يتعذر حذف أي إضافة} one {تعذر حذف إضافة واحدة} two {تعذر حذف إضافتين} few {تعذر حذف # إضافات} many {تعذر حذف # إضافة} other {تعذر حذف # إضافة}}",
+      "deleteTitle": "{count, plural, zero {حذف الإضافات؟} one {حذف إضافة واحدة؟} two {حذف إضافتين؟} few {حذف # إضافات؟} many {حذف # إضافة؟} other {حذف # إضافة؟}}",
+      "deleteDescription": "{count, plural, zero {لن يتم حذف أي إضافة.} one {سيؤدي هذا إلى حذف الإضافة المحددة لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.} two {سيؤدي هذا إلى حذف الإضافتين المحددتين لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.} few {سيؤدي هذا إلى حذف جميع الإضافات المحددة وعددها # لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.} many {سيؤدي هذا إلى حذف جميع الإضافات المحددة وعددها # لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.} other {سيؤدي هذا إلى حذف جميع الإضافات المحددة وعددها # لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.}}",
+      "shareTitle": "{count, plural, zero {تحديث الوصول} one {تحديث الوصول إلى إضافة واحدة} two {تحديث الوصول إلى إضافتين} few {تحديث الوصول إلى # إضافات} many {تحديث الوصول إلى # إضافة} other {تحديث الوصول إلى # إضافة}}",
+      "shareDescription": "طبّق هذه التغييرات على كل إضافة محددة. تحتفظ الإعدادات التي لم تتغير بقيمها الحالية.",
+      "addAccessDescription": "أضف هؤلاء الأشخاص والمجموعات إلى كل إضافة محددة. يحصل الأشخاص والمجموعات المدرجون على الصلاحية المختارة. ويحتفظ الآخرون بصلاحيات الوصول الحالية.",
+      "apply": "{count, plural, zero {تطبيق} one {تطبيق على إضافة واحدة} two {تطبيق على إضافتين} few {تطبيق على # إضافات} many {تطبيق على # إضافة} other {تطبيق على # إضافة}}",
+      "publishWarning": {
+        "description": "بعد التطبيق، يمكن لكل شخص في المؤسسة استخدام الإضافات المحددة. لا يمكن جعل الإضافات المنشورة خاصة مرة أخرى. يمكن للمسؤول فقط حذفها."
+      },
+      "skipped": "{count, plural, one {تم تخطي # إضافة لا يمكنك تشغيلها أو إيقافها} other {تم تخطي # إضافات لا يمكنك تشغيلها أو إيقافها}}"
     }
   },
   "integrations": {
@@ -17828,18 +18269,12 @@
         "on": "مفعّلة",
         "off": "معطّلة"
       },
-      "sort": {
-        "label": "ترتيب",
-        "updated": "المحدّثة مؤخرًا",
-        "name": "الاسم"
-      },
       "add": {
         "label": "إضافة",
         "upload": "رفع مهارة",
         "create": "إنشاء مهارة",
         "uploadPlugin": "رفع إضافة",
-        "marketplace": "إضافة سوق",
-        "manageMarketplaces": "إدارة الأسواق"
+        "marketplace": "إضافة سوق"
       },
       "groups": {
         "mine": "أنشأتها أنت",
@@ -17860,7 +18295,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "معطّلة",
+        "off": "متوقف",
         "required": "مطلوبة",
         "pending": "بانتظار المراجعة",
         "invalid": "غير صالحة"
@@ -17895,15 +18330,11 @@
       "status": {
         "connected": "متصل"
       },
-      "add": {
-        "label": "إضافة",
-        "integration": "إضافة تكامل",
-        "manage": "إدارة عمليات التكامل"
-      },
       "open": "فتح {name}",
       "empty": {
         "title": "لا توجد عمليات تكامل بعد",
-        "description": "اطلب من المسؤول إضافة تكامل."
+        "description": "اطلب من المسؤول إضافة تكامل.",
+        "descriptionCanAdd": "أضف تكاملًا، أو تصفح الكتالوج."
       },
       "noMatches": {
         "title": "لا توجد عمليات تكامل مطابقة",
@@ -17917,14 +18348,13 @@
       },
       "empty": {
         "title": "لا توجد إضافات بعد",
-        "description": "ارفع إضافة، أو أضف سوقًا من GitHub، أو أنشئ مهارة. كل مهارة هي إضافة.",
+        "description": "ارفع إضافة أو أضف سوقًا من GitHub.",
         "upload": "تحميل مكوّن إضافي"
       },
       "noMatches": {
         "title": "لا توجد إضافات مطابقة",
         "clear": "عرض كل الإضافات"
       },
-      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تظهر الإضافة التي تحتوي فقط على ملف SKILL.md في جذرها في علامة تبويب المهارات.",
       "integrations": "{available} من {needed} من التكاملات متاحة",
       "nameHeld": "متوقف: يستخدم {names} اسم المهارة نفسه"
     },
@@ -17992,26 +18422,19 @@
       "loadFailed": "هذا التكامل غير متاح لك.",
       "tabs": {
         "overview": "نظرة عامة",
-        "configuration": "الإعداد",
         "actions": "الإجراءات"
       },
       "overview": {
-        "description": "الوصف",
-        "noDescription": "لا يوجد وصف.",
         "type": "النوع",
         "signIn": "تسجيل الدخول",
         "url": "عنوان URL للخادم",
         "owner": "المالك",
         "organization": "المؤسسة",
-        "status": "الحالة",
         "switch": {
           "title": "استخدام هذا التكامل",
           "description": "عند تفعيل هذا، يمكنك استخدامه في المحادثات وفي Craft.",
           "required": "جعل المسؤول هذا التكامل مطلوبًا. لا يمكنك إيقاف تشغيله."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {اتصالك بهذا التكامل. أنت فقط من يستخدمه.} shared {حساب هذا التكامل. يستخدمه كل من لديه صلاحية الوصول.} other {لا يحتاج هذا التكامل إلى تسجيل الدخول.}}"
       }
     },
     "pluginPage": {
@@ -18082,7 +18505,7 @@
       },
       "confirmDelete": {
         "title": "حذف «{name}»؟",
-        "description": "تتوقف المهمة عن التشغيل ويُحذف سجل تشغيلها.",
+        "description": "تتوقف المهمة عن التشغيل. يتم الاحتفاظ بمحادثات عمليات التشغيل السابقة.",
         "submit": "حذف"
       }
     },
@@ -18095,7 +18518,8 @@
       "markAllViewed": "وضع علامة مقروء على الكل",
       "markAllViewedFailed": "تعذّر وضع علامة مقروء على عمليات التشغيل. حاول مرة أخرى.",
       "trigger": "{source, select, MANUAL_RUN_NOW {تشغيل مرة واحدة} other {الجدول الزمني}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {أُلغي: بدأ التشغيل التالي قبل أن يرد أحد على طلب الموافقة.} approval_timeout {أُلغي: لم يرد أحد على طلب الموافقة خلال 24 ساعة.} user_cancelled {أوقفته أنت.} agent_permission_required {احتاج إجراء إلى موافقة.} agent_exception {فشل: حدث خطأ أثناء التشغيل.} stuck {فشل: لم يبدأ التشغيل في الوقت المحدد.} timeout {فشل: وصل التشغيل إلى حد الساعة الواحدة.} other {فشل: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {أُلغي: بدأ التشغيل التالي قبل أن يرد أحد على طلب الموافقة.} approval_timeout {أُلغي: لم يرد أحد على طلب الموافقة خلال 24 ساعة.} user_cancelled {أوقفته أنت.} agent_permission_required {احتاج إجراء إلى موافقة.} agent_exception {فشل: حدث خطأ أثناء التشغيل.} stuck {فشل: لم يبدأ التشغيل في الوقت المحدد.} timeout {فشل: وصل التشغيل إلى حد الساعة الواحدة.} chat_deleted {أُلغيت: تم حذف محادثة هذا التشغيل.} owner_cannot_chat {فشل: لم يعد بإمكانك الدردشة، لذا تم إيقاف المهمة مؤقتًا.} rate_limited {فشل: تم بلوغ حد الاستخدام.} other {فشل: {errorClass}}}",
+      "errorDetail": "فشل: {detail}",
       "columns": {
         "started": "البدء",
         "status": "الحالة",
@@ -18133,7 +18557,8 @@
         "title": "التشغيل وفق الجدول",
         "label": "تشغيل {name} وفق الجدول"
       },
-      "menu": "إجراءات أخرى"
+      "menu": "إجراءات أخرى",
+      "notFound": "تم حذف هذه المهمة المجدولة أو أنها تخص مستخدمًا آخر."
     },
     "editor": {
       "newTitle": "مهمة مجدولة جديدة",
@@ -18145,7 +18570,8 @@
       "saveAndRun": "حفظ وتشغيل الآن",
       "errors": {
         "nameRequired": "أدخل اسمًا.",
-        "promptRequired": "أدخل موجّهًا."
+        "promptRequired": "أدخل موجّهًا.",
+        "tooLong": "استخدم {max, number} حرفًا أو أقل."
       },
       "toasts": {
         "created": "تم إنشاء المهمة المجدولة.",

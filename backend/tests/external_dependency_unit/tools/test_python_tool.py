@@ -21,11 +21,7 @@ from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.models import Persona
 from onyx.db.tools import get_builtin_tool
 from onyx.file_store.models import ChatFileType, FileDescriptor
-from onyx.llm.model_response import (
-    ChatCompletionDeltaToolCall,
-    Delta,
-    ResponseFunctionCall,
-)
+from onyx.llm.model_response import Delta
 from onyx.server.features.projects.api import upload_user_files
 from onyx.server.query_and_chat.chat_backend import get_chat_session
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -34,11 +30,13 @@ from onyx.server.query_and_chat.streaming_models import (
     PythonToolDelta,
     PythonToolStart,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
     final_answer,
 )
+from tests.external_dependency_unit.code_mode_helpers import code_step, tool_step
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -197,11 +195,28 @@ def mock_ci_server() -> Generator[MockCodeInterpreterServer, None, None]:
 
 
 @pytest.fixture(autouse=True)
-def _clear_health_cache() -> None:
-    """Reset the health check cache before every test."""
-    import onyx.tools.tool_implementations.python.code_interpreter_client as mod
+def _configure_interpreter(
+    monkeypatch: pytest.MonkeyPatch, mock_ci_server: MockCodeInterpreterServer
+) -> None:
+    from onyx.tools.tool_implementations.python import python_tool
 
-    mod._health_cache = {}
+    monkeypatch.setattr(ci_mod, "_health_cache", {})
+    monkeypatch.setattr(python_tool, "CODE_INTERPRETER_BASE_URL", mock_ci_server.url)
+    monkeypatch.setattr(
+        python_tool,
+        "CodeInterpreterClient",
+        lambda: ci_mod.CodeInterpreterClient(mock_ci_server.url),
+    )
+
+
+def _python_step(code: str, code_mode: bool) -> Delta:
+    if code_mode:
+        return code_step(
+            OPENAI_CODE_MODE,
+            "python",
+            f"print(await tools.run_python(code={code!r}))",
+        )
+    return tool_step("run_python", "python", {"code": code})
 
 
 @pytest.fixture()
@@ -226,12 +241,12 @@ def test_code_interpreter_receives_chat_files(
     db_session: Session,
     mock_ci_server: MockCodeInterpreterServer,
     _attach_python_tool_to_default_persona: None,
+    code_mode: bool,
     initialize_file_store: None,  # noqa: ARG001
     additional_context: str | None,
 ) -> None:
     mock_ci_server.captured_requests.clear()
     mock_ci_server._file_counter = 0
-    mock_url = mock_ci_server.url
 
     user = create_test_user(db_session, "ci_test_admin")
     chat_session = create_chat_session(db_session=db_session, user=user)
@@ -276,44 +291,18 @@ def test_code_interpreter_receives_chat_files(
         stream=True,
     )
 
-    original_defaults = ci_mod.CodeInterpreterClient.__init__.__defaults__
-    with (
-        patch(
-            "onyx.chat.process_message.get_llm_for_persona",
-            return_value=ScriptedLLM(
-                [
-                    Delta(
-                        tool_calls=[
-                            ChatCompletionDeltaToolCall(
-                                id="python",
-                                index=0,
-                                function=ResponseFunctionCall(
-                                    name="run_python",
-                                    arguments=json.dumps({"code": code}),
-                                ),
-                            )
-                        ]
-                    ),
-                    Delta(content="The result is 4."),
-                ],
-                max_input_tokens=128000,
-            ),
-        ),
-        patch(
-            "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
-            mock_url,
-        ),
-        patch(
-            "onyx.tools.tool_implementations.python.code_interpreter_client.CODE_INTERPRETER_BASE_URL",
-            mock_url,
+    with patch(
+        "onyx.chat.process_message.get_llm_for_persona",
+        return_value=ScriptedLLM(
+            [
+                _python_step(code, code_mode),
+                Delta(content="The result is 4."),
+            ],
+            max_input_tokens=128000,
         ),
     ):
-        ci_mod.CodeInterpreterClient.__init__.__defaults__ = (mock_url,)
-        try:
-            parts = list(handle_stream_message_objects(new_msg_req=msg_req, user=user))
-            assert final_answer(parts) == "The result is 4."
-        finally:
-            ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults
+        parts = list(handle_stream_message_objects(new_msg_req=msg_req, user=user))
+        assert final_answer(parts) == "The result is 4."
 
     # Verify: file uploaded and code executed via streaming.
     assert len(mock_ci_server.get_requests(method="POST", path="/v1/files")) == 1
@@ -338,12 +327,12 @@ def test_code_interpreter_replay_packets_include_code_and_output(
     db_session: Session,
     mock_ci_server: MockCodeInterpreterServer,
     _attach_python_tool_to_default_persona: None,
+    code_mode: bool,
     initialize_file_store: None,  # noqa: ARG001
 ) -> None:
     """Saved Python tool items preserve the executed code and output."""
     mock_ci_server.captured_requests.clear()
     mock_ci_server._file_counter = 0
-    mock_url = mock_ci_server.url
 
     user = create_test_user(db_session, "ci_replay_test")
     chat_session = create_chat_session(db_session=db_session, user=user)
@@ -355,43 +344,17 @@ def test_code_interpreter_replay_packets_include_code_and_output(
         stream=True,
     )
 
-    original_defaults = ci_mod.CodeInterpreterClient.__init__.__defaults__
-    with (
-        patch(
-            "onyx.chat.process_message.get_llm_for_persona",
-            return_value=ScriptedLLM(
-                [
-                    Delta(
-                        tool_calls=[
-                            ChatCompletionDeltaToolCall(
-                                id="python",
-                                index=0,
-                                function=ResponseFunctionCall(
-                                    name="run_python",
-                                    arguments=json.dumps({"code": code}),
-                                ),
-                            )
-                        ]
-                    ),
-                    Delta(content="The result is 4."),
-                ],
-                max_input_tokens=128000,
-            ),
-        ),
-        patch(
-            "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
-            mock_url,
-        ),
-        patch(
-            "onyx.tools.tool_implementations.python.code_interpreter_client.CODE_INTERPRETER_BASE_URL",
-            mock_url,
+    with patch(
+        "onyx.chat.process_message.get_llm_for_persona",
+        return_value=ScriptedLLM(
+            [
+                _python_step(code, code_mode),
+                Delta(content="The result is 4."),
+            ],
+            max_input_tokens=128000,
         ),
     ):
-        ci_mod.CodeInterpreterClient.__init__.__defaults__ = (mock_url,)
-        try:
-            list(handle_stream_message_objects(new_msg_req=msg_req, user=user))
-        finally:
-            ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults
+        list(handle_stream_message_objects(new_msg_req=msg_req, user=user))
 
     # Retrieve the chat session through the same endpoint the frontend uses
     chat_detail = get_chat_session(
@@ -428,6 +391,7 @@ def test_code_interpreter_streaming_fallback_to_batch(
     db_session: Session,
     mock_ci_server: MockCodeInterpreterServer,
     _attach_python_tool_to_default_persona: None,
+    code_mode: bool,
     initialize_file_store: None,  # noqa: ARG001
 ) -> None:
     """When the streaming endpoint is not available (older code-interpreter),
@@ -435,7 +399,6 @@ def test_code_interpreter_streaming_fallback_to_batch(
     mock_ci_server.captured_requests.clear()
     mock_ci_server._file_counter = 0
     mock_ci_server.streaming_enabled = False
-    mock_url = mock_ci_server.url
 
     user = create_test_user(db_session, "ci_fallback_test")
     chat_session = create_chat_session(db_session=db_session, user=user)
@@ -447,45 +410,21 @@ def test_code_interpreter_streaming_fallback_to_batch(
         stream=True,
     )
 
-    original_defaults = ci_mod.CodeInterpreterClient.__init__.__defaults__
-    with (
-        patch(
-            "onyx.chat.process_message.get_llm_for_persona",
-            return_value=ScriptedLLM(
-                [
-                    Delta(
-                        tool_calls=[
-                            ChatCompletionDeltaToolCall(
-                                id="python",
-                                index=0,
-                                function=ResponseFunctionCall(
-                                    name="run_python",
-                                    arguments=json.dumps({"code": code}),
-                                ),
-                            )
-                        ]
-                    ),
-                    Delta(content="The result is 4."),
-                ],
-                max_input_tokens=128000,
-            ),
-        ),
-        patch(
-            "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
-            mock_url,
-        ),
-        patch(
-            "onyx.tools.tool_implementations.python.code_interpreter_client.CODE_INTERPRETER_BASE_URL",
-            mock_url,
+    with patch(
+        "onyx.chat.process_message.get_llm_for_persona",
+        return_value=ScriptedLLM(
+            [
+                _python_step(code, code_mode),
+                Delta(content="The result is 4."),
+            ],
+            max_input_tokens=128000,
         ),
     ):
-        ci_mod.CodeInterpreterClient.__init__.__defaults__ = (mock_url,)
         try:
             packets = list(
                 handle_stream_message_objects(new_msg_req=msg_req, user=user)
             )
         finally:
-            ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults
             mock_ci_server.streaming_enabled = True
 
     # Streaming was attempted first (returned 404), then fell back to batch
