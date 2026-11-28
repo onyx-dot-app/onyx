@@ -109,6 +109,8 @@ from onyx.tools.tool_implementations.question.shapes import (
     QUESTION_TOOL_NAMES,
     QuestionShape,
 )
+from onyx.tools.tool_implementations.sandbox.browser_tools import BrowserTool
+from onyx.tools.tool_implementations.sandbox.models import BrowserTarget
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.tools.tool_implementations.sandbox.shapes import (
     SHELL_TOOL_NAMES,
@@ -379,14 +381,18 @@ class ChatFeature(AgentFeature):
         # The model reads the tools in tool order, whatever order the
         # configuration, code mode and the agent tools add them in.
         self.application_tools = sorted(self.application_tools, key=tool_order)
-        # The root agent's sandbox and code mode results end with the file
-        # copy status line when it changed. Subagents and the calls inside a
-        # code mode program never read it, so they cannot use it up.
+        # The root agent's sandbox, VM browser and code mode results end with
+        # the file copy status line when it changed. Subagents and the calls
+        # inside a code mode program never read it, so they cannot use it up.
         self._file_status_tools = (
             frozenset(
                 tool.name
                 for tool in self.application_tools
                 if isinstance(tool, (SandboxTool, CodeModeTool, WaitCodeTool))
+                or (
+                    isinstance(tool, BrowserTool)
+                    and tool.target is BrowserTarget.SANDBOX
+                )
             )
             if self._sandbox_turn is not None and not is_subagent
             else frozenset()

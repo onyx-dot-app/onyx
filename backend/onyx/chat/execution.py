@@ -102,7 +102,11 @@ from onyx.tools.tool_constructor import (
     construct_tools,
 )
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
-from onyx.tools.tool_implementations.sandbox.browser_tools import with_browser_tools
+from onyx.tools.tool_implementations.sandbox.browser_tools import (
+    SandboxBrowser,
+    build_browser_tools,
+)
+from onyx.tools.tool_implementations.sandbox.models import BrowserTarget
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     SANDBOX_TOOLS,
     LoadSkillTool,
@@ -1162,28 +1166,28 @@ def construct_chat_tools(
             ]
         # The chat agent and its subagents share one sandbox turn. Deep
         # research turns never offer the sandbox tools.
-        if not setup.sandbox_tools:
-            return tools, None
-        sandbox = SANDBOX_TOOLS[llm.config.tool_family]
-        turn = SandboxTurn(
-            tenant_id=get_current_tenant_id(),
-            user_id=user.id,
-            chat_session_id=setup.chat_session_id,
-            vm_chat_files=setup.vm_chat_files,
-            copy_vm_chat_files=setup.copy_vm_chat_files,
-            shell=sandbox.shell,
-        )
-        sandbox_tools = [
-            tool(turn)
-            for tool in with_browser_tools(sandbox.tools, browser=setup.browser_tools)
-        ]
+        turn: SandboxTurn | None = None
+        sandbox_tools: list[Tool] = []
+        if setup.sandbox_tools:
+            sandbox = SANDBOX_TOOLS[llm.config.tool_family]
+            turn = SandboxTurn(
+                tenant_id=get_current_tenant_id(),
+                user_id=user.id,
+                chat_session_id=setup.chat_session_id,
+                vm_chat_files=setup.vm_chat_files,
+                copy_vm_chat_files=setup.copy_vm_chat_files,
+                shell=sandbox.shell,
+            )
+            sandbox_tools = [tool(turn) for tool in sandbox.tools]
+        if setup.browser_target is BrowserTarget.SANDBOX and turn is not None:
+            sandbox_tools += build_browser_tools(SandboxBrowser(turn))
         # A turn that runs without asking (evals) gates no built-in action,
         # as integration policies allow its Ask actions.
         if setup.approval_mode is ApprovalMode.RUN_WITHOUT_ASKING:
             for tool in sandbox_tools:
                 tool.approval = None
         tools += sandbox_tools
-        if setup.has_chat_skills:
+        if setup.has_chat_skills and turn is not None:
             tools.append(LoadSkillTool(turn))
         return tools, turn
 

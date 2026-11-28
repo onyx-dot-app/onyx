@@ -195,6 +195,7 @@ def _tool_kind_classes() -> tuple[tuple[type["Tool"], ToolKind], ...]:
     from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
     from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
     from onyx.tools.tool_implementations.python.python_tool import PythonTool
+    from onyx.tools.tool_implementations.sandbox.browser_tools import BrowserTool
     from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
     from onyx.tools.tool_implementations.search.search_tool import SearchTool
     from onyx.tools.tool_implementations.web_search.web_search_tool import (
@@ -212,6 +213,7 @@ def _tool_kind_classes() -> tuple[tuple[type["Tool"], ToolKind], ...]:
         (CodeModeTool, ToolKind.CODE_MODE),
         (WaitCodeTool, ToolKind.CODE_MODE),
         (SandboxTool, ToolKind.SANDBOX),
+        (BrowserTool, ToolKind.SANDBOX),
     )
 
 

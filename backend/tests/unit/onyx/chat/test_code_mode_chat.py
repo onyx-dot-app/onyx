@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from onyx.agents.models import (
     AgentState,
@@ -104,8 +104,12 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import (
 )
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
-from onyx.tools.tool_implementations.sandbox.browser_tools import with_browser_tools
-from onyx.tools.tool_implementations.sandbox.models import VmChatFile
+from onyx.tools.tool_implementations.sandbox.browser_tools import (
+    BrowserBackend,
+    SandboxBrowser,
+    build_browser_tools,
+)
+from onyx.tools.tool_implementations.sandbox.models import BrowserTarget, VmChatFile
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     SANDBOX_TOOLS,
     ApplyPatchTool,
@@ -672,6 +676,45 @@ def _sandbox_turn(family: ToolFamily, *, chat_files: bool = False) -> SandboxTur
     )
 
 
+class _ChromeStub(BrowserBackend):
+    target = BrowserTarget.CHROME
+
+    def call(
+        self, method: str, params: dict[str, JsonValue], *, timeout_seconds: float
+    ) -> dict[str, JsonValue]:
+        raise NotImplementedError
+
+
+@pytest.mark.parametrize("target", list(BrowserTarget))
+def test_only_vm_browser_results_carry_the_file_status(target: BrowserTarget) -> None:
+    """The VM browser starts the chat's file copies, so its direct results
+    end with the copy status line, as the sandbox tools' do. The user's
+    Chrome copies no files."""
+    turn = _sandbox_turn(ToolFamily.OPENAI, chat_files=True)
+    backend = SandboxBrowser(turn) if target is BrowserTarget.SANDBOX else _ChromeStub()
+    browser_tools = build_browser_tools(backend)
+    feature = ChatFeature(
+        messages=[],
+        tools=[
+            *(tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI].tools),
+            *browser_tools,
+        ],
+        code_mode=False,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=_context_files(),
+        persona=None,
+        user_memory_context=None,
+        llm=ScriptedLLM([]),
+    )
+
+    browser_names = {tool.name for tool in browser_tools}
+    if target is BrowserTarget.SANDBOX:
+        assert browser_names <= feature._file_status_tools
+    else:
+        assert not browser_names & feature._file_status_tools
+
+
 @pytest.mark.parametrize("family", list(ToolFamily))
 @pytest.mark.parametrize("code_mode", [False, True])
 def test_sandbox_tool_definitions_are_the_same_in_every_chat(
@@ -702,10 +745,8 @@ def test_the_token_estimate_covers_a_sandbox_turn(
     turn = _sandbox_turn(family, chat_files=True)
     tools: list[Tool] = [
         *(tool for tool, _ in _guided_tools(family)),
-        *(
-            tool(turn)
-            for tool in with_browser_tools(SANDBOX_TOOLS[family].tools, browser=browser)
-        ),
+        *(tool(turn) for tool in SANDBOX_TOOLS[family].tools),
+        *(build_browser_tools(SandboxBrowser(turn)) if browser else []),
     ]
     actual = len(
         build_system_prompt(
@@ -722,7 +763,7 @@ def test_the_token_estimate_covers_a_sandbox_turn(
         token_counter=len,
         tool_family=family,
         sandbox_tools=True,
-        browser_tools=browser,
+        browser_target=BrowserTarget.SANDBOX if browser else None,
     )
     assert estimate >= actual
 
@@ -1186,7 +1227,7 @@ def test_the_token_estimate_names_the_model_s_tools(
         token_counter=count,
         tool_family=family,
         sandbox_tools=True,
-        browser_tools=False,
+        browser_target=None,
     )
     [estimate] = prompts
     assert [name for name in named if name not in estimate] == []

@@ -105,7 +105,8 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import (
 )
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
-from onyx.tools.tool_implementations.sandbox.browser_tools import with_browser_tools
+from onyx.tools.tool_implementations.sandbox.browser_tools import browser_tools_for
+from onyx.tools.tool_implementations.sandbox.models import BrowserTarget
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     SANDBOX_TOOLS,
     ExecCommandTool,
@@ -310,7 +311,7 @@ def calculate_reserved_tokens(
     token_counter: Callable[[str], int],
     tool_family: ToolFamily,
     sandbox_tools: bool,
-    browser_tools: bool,
+    browser_target: BrowserTarget | None,
     files: list[FileDescriptor] | None = None,
     user_memory_context: UserMemoryContext | None = None,
 ) -> int:
@@ -320,7 +321,7 @@ def calculate_reserved_tokens(
     This is used for token estimation purposes to reserve space for:
     - The system prompt (base + custom agent prompt + all guidance)
     - The descriptions of the built-in tools and, with `sandbox_tools`, the
-      family's sandbox tools and, with `browser_tools`, the browser tools,
+      family's sandbox tools and, with `browser_target`, the browser tools,
       which carry their usage guidance
     - User files attached to the message
 
@@ -330,7 +331,7 @@ def calculate_reserved_tokens(
         token_counter: Function that counts tokens in text
         tool_family: The tool family whose tool names the estimate uses
         sandbox_tools: Whether the turn gets the family's sandbox tools
-        browser_tools: Whether the turn also gets the browser tools
+        browser_target: The browser that the turn's browser tools drive, if any
         files: List of file descriptors from the chat message (optional)
         user_memory_context: User memory context (optional)
 
@@ -363,8 +364,16 @@ def calculate_reserved_tokens(
         MemoryTool.DESCRIPTION,
         *(
             tool.describe_in(sandbox.shell, str)
-            for tool in with_browser_tools(sandbox.tools, browser=browser_tools)
+            for tool in sandbox.tools
             if sandbox_tools
+        ),
+        *(
+            ()
+            if browser_target is None
+            else (
+                tool.describe_for(browser_target)
+                for tool in browser_tools_for(browser_target)
+            )
         ),
     )
     reserved_token_count = token_counter(

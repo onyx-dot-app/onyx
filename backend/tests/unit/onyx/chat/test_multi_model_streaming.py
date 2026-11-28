@@ -533,7 +533,7 @@ class TestRunModels:
 
         with (
             patch("onyx.chat.agent.ChatFeature") as answer,
-            patch("onyx.chat.execution.construct_tools", return_value={}) as tools,
+            patch("onyx.chat.execution.construct_tools", return_value=[]) as tools,
             patch(
                 "onyx.chat.execution.get_llm_token_counter", return_value=lambda _: 0
             ),
@@ -585,7 +585,7 @@ class TestRunModels:
 
         with (
             patch_execution(side_effect=emit_stop),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -619,7 +619,7 @@ class TestRunModels:
 
         with (
             patch_execution(),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -671,7 +671,7 @@ class TestRunModels:
 
         with (
             patch_execution(),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
                 return_value=lambda _: 0,
@@ -829,7 +829,7 @@ class TestRunModels:
             patch_execution(
                 side_effect=sleep_then_return,
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -858,7 +858,7 @@ class TestRunModels:
 
         with (
             patch_execution(side_effect=emit_one),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -890,7 +890,7 @@ class TestRunModels:
 
         with (
             patch_execution(side_effect=emit_one),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -916,7 +916,7 @@ class TestRunModels:
                 "onyx.chat.execution.create_chat_agent",
                 side_effect=RuntimeError("intentional test failure"),
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -944,7 +944,7 @@ class TestRunModels:
 
         with (
             patch_execution(side_effect=overflow),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -975,7 +975,7 @@ class TestRunModels:
 
         with (
             patch("onyx.chat.execution.create_chat_agent", side_effect=refusal),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -1010,7 +1010,7 @@ class TestRunModels:
             patch_execution(
                 side_effect=fail_model_0_succeed_model_1,
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -1042,7 +1042,7 @@ class TestRunModels:
 
         with (
             patch_execution(side_effect=slow_llm),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch(
                 "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda *_, **__: completion_called.set(),
@@ -1103,7 +1103,7 @@ class TestRunModels:
             patch_execution(
                 side_effect=emit_until_cancelled,
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db") as persist,
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -1140,7 +1140,7 @@ class TestRunModels:
 
         with (
             patch_execution(side_effect=slow_llm),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch(
                 "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=mark_persisted,
@@ -1177,7 +1177,7 @@ class TestRunModels:
 
         with (
             patch_execution(),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db") as mock_handle,
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -1200,7 +1200,7 @@ class TestRunModels:
                 "onyx.chat.execution.create_chat_agent",
                 side_effect=RuntimeError("fail"),
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db") as mock_handle,
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -1239,7 +1239,7 @@ class TestRunModels:
             patch_execution(
                 side_effect=emit_then_block_until_drain,
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch(
                 "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda *_, **__: completion_called.set(),
@@ -1290,7 +1290,7 @@ class TestRunModels:
             patch_execution(
                 side_effect=emit_then_raise_after_drain,
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch(
                 "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda **_kwargs: commit_called.set(),
@@ -1341,7 +1341,7 @@ class TestRunModels:
             patch_execution(
                 side_effect=emit_and_return_immediately,
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch(
                 "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda *_, **__: completion_called.set(),
@@ -1397,7 +1397,7 @@ class TestRunModels:
             patch_execution(
                 side_effect=emit_and_maybe_block,
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch(
                 "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=mark_persisted,
@@ -1455,7 +1455,7 @@ class TestRunModels:
             patch_execution(
                 side_effect=emit_then_block,
             ),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -1502,7 +1502,7 @@ class TestRunModels:
 
         with (
             patch_execution(side_effect=fail_model_0),
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch(
                 "onyx.chat.history_store.save_chat_response_to_db",
                 side_effect=lambda *_, **__: failed_model_persisted.set(),
@@ -1534,7 +1534,7 @@ class TestRunModels:
 
         with (
             patch_execution() as mock_llm,
-            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.execution.construct_tools", return_value=[]),
             patch("onyx.chat.history_store.save_chat_response_to_db"),
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -3712,7 +3712,7 @@ def test_invalid_preferred_tool_returns_an_actionable_error() -> None:
     setup = _make_setup(n_models=1)
     setup.preferred_tool = CapabilityEntry(tool_id=1)
     setup.preferred_tool_saved = False
-    with patch("onyx.chat.execution.construct_tools", return_value={}):
+    with patch("onyx.chat.execution.construct_tools", return_value=[]):
         with pytest.raises(OnyxError) as raised:
             create_chat_agent(
                 setup, MagicMock(), 0, CancellationSignal(), True, with_subagents=True

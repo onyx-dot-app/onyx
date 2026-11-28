@@ -160,6 +160,7 @@ from onyx.tools.constants import (
     SEARCH_TOOL_ID,
 )
 from onyx.tools.models import CapabilityEntry, SearchToolUsage
+from onyx.tools.tool_implementations.sandbox.models import BrowserTarget
 from onyx.tools.tool_implementations.skills.skill_tools import SKILL_READ_SHAPES
 from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
@@ -555,9 +556,8 @@ def prepare_chat_turn(
             # Only the chat's owner gets it: the session directory and the
             # published files belong to the owner's chat (a chat without an
             # owner, which any user can open, gets none).
-            sandbox_tools = (
-                HARNESS_SANDBOX_ENABLED
-                and not user.is_anonymous
+            owned_turn = (
+                not user.is_anonymous
                 and chat_session.user_id == user.id
                 and new_msg_req.origin
                 not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
@@ -565,7 +565,10 @@ def prepare_chat_turn(
                 and len(selected_models) == 1
                 and not new_msg_req.deep_research
             )
-            browser_tools = sandbox_tools and load_browser_enabled()
+            sandbox_tools = HARNESS_SANDBOX_ENABLED and owned_turn
+            browser_target: BrowserTarget | None = None
+            if sandbox_tools and load_browser_enabled():
+                browser_target = BrowserTarget.SANDBOX
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn
             # that is not deep research. Its run parks while it waits. An
@@ -769,7 +772,7 @@ def prepare_chat_turn(
                 token_counter=token_counter,
                 tool_family=tool_family,
                 sandbox_tools=sandbox_tools,
-                browser_tools=browser_tools,
+                browser_target=browser_target,
                 files=new_msg_req.file_descriptors,
                 user_memory_context=memory
                 if preferences.use_memories
@@ -964,7 +967,7 @@ def prepare_chat_turn(
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
             sandbox_tools=sandbox_tools,
-            browser_tools=browser_tools,
+            browser_target=browser_target,
             vm_chat_files=[] if placed_chat_files is None else placed_chat_files.files,
             copy_vm_chat_files=placed_chat_files is not None,
             question_tool=question_tool,

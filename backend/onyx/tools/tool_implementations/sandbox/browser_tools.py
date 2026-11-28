@@ -1,28 +1,32 @@
-"""Tools that drive the chat's tabs in the sandbox's browser
-(`HarnessSandbox.browser_call`). The browser service in the VM owns Chrome;
-each chat sees and acts on its own tabs only. The user can watch the tabs
-live and take control of one: agent writes on that tab then fail at once
-with the service's message, which tells the model what to do.
+"""Tools that drive the chat's browser tabs through a `BrowserBackend`: the
+browser service in the sandbox VM (`SandboxBrowser`), or the user's own
+Chrome through the Onyx extension (`onyx/browser_extension/relay.py:ChromeBrowser`).
+Both take the same methods and params and give the same result shapes, so the
+tools do not know which browser answers. Each chat sees and acts on its own
+tabs only. A tab that the user controls refuses agent writes with a message
+that tells the model what to do.
 
-The turn offers them after its family's sandbox tools when the admin setting
-`browser_enabled` is on (`with_browser_tools`). The web panel opens itself
-on the start packet of a `browser_open` call, so that name must stay.
+A turn offers them when the admin setting `browser_enabled` is on
+(`ChatTurnSetup.browser_target`). The web panel opens itself on the start
+packet of a `browser_open` call, so that name must stay.
 """
 
+import abc
 import json
-from collections.abc import Sequence
 
-from pydantic import BaseModel, JsonValue
+from pydantic import JsonValue
 
 from onyx.agents.tools import ToolExecutionMode, ToolInvocation
-from onyx.llm.models import ToolResult
+from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.browser_tools import (
     BROWSER_ACT_DESCRIPTION,
     BROWSER_DIALOG_DESCRIPTION,
     BROWSER_EVALUATE_DESCRIPTION,
     BROWSER_NAVIGATE_DESCRIPTION,
     BROWSER_OPEN_DESCRIPTION,
+    BROWSER_OPEN_DESCRIPTION_CHROME,
     BROWSER_SNAPSHOT_DESCRIPTION,
+    BROWSER_SNAPSHOT_DESCRIPTION_CHROME,
     BROWSER_STATUS_DESCRIPTION,
     BROWSER_WAIT_FOR_DESCRIPTION,
 )
@@ -31,8 +35,12 @@ from onyx.server.features.build.sandbox.harness_base import (
     session_relative_path,
 )
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
-from onyx.tools.interface import parse_tool_arguments
-from onyx.tools.models import ToolContext
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
+from onyx.tools.models import CodeModeExposure, ToolContext
 from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.sandbox.errors import (
     sandbox_errors_as_tool_errors,
@@ -47,14 +55,14 @@ from onyx.tools.tool_implementations.sandbox.models import (
     BrowserOpenArguments,
     BrowserSnapshotArguments,
     BrowserStatusArguments,
+    BrowserTarget,
     BrowserTimeoutArguments,
     BrowserWaitForArguments,
 )
-from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.utils import truncate_output
 
-# Time that a call gets beyond the service's own wait: the hop to the VM.
+# Time that a call gets beyond the browser's own wait: the hop to it.
 _CALL_MARGIN_SECONDS = 15.0
 # Largest result text that the model gets.
 BROWSER_RESULT_MAX_CHARS = 80_000
@@ -65,6 +73,41 @@ _INTERRUPTED_BROWSER_MESSAGE = (
 )
 
 
+class BrowserBackend(abc.ABC):
+    """One browser that answers the browser tools' calls."""
+
+    target: BrowserTarget
+
+    @abc.abstractmethod
+    def call(
+        self, method: str, params: dict[str, JsonValue], *, timeout_seconds: float
+    ) -> dict[str, JsonValue]:
+        """The result of one call. Raises ToolCallException with a message
+        for the model when the browser refuses or does not answer."""
+        raise NotImplementedError
+
+
+class SandboxBrowser(BrowserBackend):
+    """The browser service in the user's sandbox VM."""
+
+    target = BrowserTarget.SANDBOX
+
+    def __init__(self, turn: SandboxTurn) -> None:
+        self._turn = turn
+
+    def call(
+        self, method: str, params: dict[str, JsonValue], *, timeout_seconds: float
+    ) -> dict[str, JsonValue]:
+        with sandbox_errors_as_tool_errors():
+            ref = self._turn.start_call()
+            return self._turn.sandbox.browser_call(
+                ref,
+                method,
+                _with_session_paths(ref, params),
+                timeout_seconds=timeout_seconds,
+            )
+
+
 def _session_path(ref: HarnessSandboxRef, path: str) -> str:
     """A path in the chat session directory, as the service takes it."""
     relative = session_relative_path(ref.session_id, path)
@@ -73,55 +116,89 @@ def _session_path(ref: HarnessSandboxRef, path: str) -> str:
     return relative
 
 
-class _BrowserTool[ArgumentsT: BrowserArguments](SandboxTool):
-    """What the browser tools share: one service call per tool call, taken
+def _with_session_paths(
+    ref: HarnessSandboxRef, params: dict[str, JsonValue]
+) -> dict[str, JsonValue]:
+    """The params with their working-directory paths made session-relative."""
+    update: dict[str, JsonValue] = {}
+    paths = params.get("paths")
+    if isinstance(paths, list):
+        update["paths"] = [_session_path(ref, str(path)) for path in paths]
+    screenshot_path = params.get("screenshotPath")
+    if isinstance(screenshot_path, str):
+        update["screenshotPath"] = _session_path(ref, screenshot_path)
+    return {**params, **update}
+
+
+class BrowserTool[ArgumentsT: BrowserArguments](Tool):
+    """What the browser tools share: one browser call per tool call, taken
     in turns, since the calls of one step act on the same tabs. A read runs
     again after a lost server (RUNS_AGAIN); a call that changes a tab does
     not."""
 
+    id = None
     rank = ToolRank.BROWSER
     sequence_group = "sandbox_browser"
+    NAME: str
+    DESCRIPTION: str
+    # The description for the user's Chrome, when it differs.
+    CHROME_DESCRIPTION: str | None = None
     ARGUMENTS: type[ArgumentsT]
     METHOD: str
     DISPLAY_NAME: str
+    RUNS_AGAIN = False
 
-    def __init__(self, turn: SandboxTurn) -> None:
-        super().__init__(turn)
+    def __init__(self, backend: BrowserBackend) -> None:
+        self._backend = backend
         if not self.RUNS_AGAIN:
             self.interrupted_result = ToolResult(
                 content=_INTERRUPTED_BROWSER_MESSAGE, is_error=True
             )
 
     @property
-    def arguments(self) -> type[BaseModel]:
-        return self.ARGUMENTS
+    def target(self) -> BrowserTarget:
+        return self._backend.target
 
     @property
-    def execution_mode(self) -> ToolExecutionMode:
-        return ToolExecutionMode.SEQUENTIAL
+    def name(self) -> str:
+        return self.NAME
+
+    @property
+    def description(self) -> str:
+        return self.describe_for(self._backend.target)
+
+    @classmethod
+    def describe_for(cls, target: BrowserTarget) -> str:
+        if target is BrowserTarget.CHROME and cls.CHROME_DESCRIPTION is not None:
+            return cls.CHROME_DESCRIPTION
+        return cls.DESCRIPTION
 
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
 
-    def _params(
-        self, ref: HarnessSandboxRef, arguments: ArgumentsT
-    ) -> tuple[dict[str, JsonValue], int]:
-        """The service params of a call (the set arguments, in camelCase, with
-        session-relative paths), and the service's wait in ms."""
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
+    def execution_mode(self) -> ToolExecutionMode:
+        return ToolExecutionMode.SEQUENTIAL
+
+    def tool_definition(self) -> ToolDefinition:
+        return tool_definition_from_arguments(
+            self.name, self.description, self.ARGUMENTS, strict=True
+        )
+
+    def _params(self, arguments: ArgumentsT) -> tuple[dict[str, JsonValue], int]:
+        """The browser params of a call (the set arguments, in camelCase),
+        and the browser's wait in ms."""
         wait_ms = BROWSER_DEFAULT_TIMEOUT_MS
         update: dict[str, object] = {}
         if isinstance(arguments, BrowserTimeoutArguments):
             if arguments.timeout_ms is not None:
                 wait_ms = arguments.timeout_ms
             update["timeout_ms"] = wait_ms
-        if isinstance(arguments, BrowserActArguments) and arguments.paths is not None:
-            update["paths"] = [_session_path(ref, path) for path in arguments.paths]
-        if (
-            isinstance(arguments, BrowserSnapshotArguments)
-            and arguments.screenshot_path is not None
-        ):
-            update["screenshot_path"] = _session_path(ref, arguments.screenshot_path)
         params = arguments.model_copy(update=update).model_dump(
             mode="json", by_alias=True, exclude_none=True
         )
@@ -132,24 +209,21 @@ class _BrowserTool[ArgumentsT: BrowserArguments](SandboxTool):
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         arguments = parse_tool_arguments(self.ARGUMENTS, invocation.arguments)
-        with sandbox_errors_as_tool_errors():
-            ref = self._turn.start_call()
-            params, wait_ms = self._params(ref, arguments)
-            result = self._turn.sandbox.browser_call(
-                ref,
-                self.METHOD,
-                params,
-                timeout_seconds=wait_ms / 1000 + _CALL_MARGIN_SECONDS,
-            )
+        params, wait_ms = self._params(arguments)
+        result = self._backend.call(
+            self.METHOD,
+            params,
+            timeout_seconds=wait_ms / 1000 + _CALL_MARGIN_SECONDS,
+        )
         content = self._content(result)
         return ToolResult(
             content=truncate_output(content, BROWSER_RESULT_MAX_CHARS, self.NAME),
-            # The sandbox spill keeps what the cut left out.
+            # The spill keeps what the cut left out.
             full_value=content if len(content) > BROWSER_RESULT_MAX_CHARS else None,
         )
 
 
-class BrowserStatusTool(_BrowserTool[BrowserStatusArguments]):
+class BrowserStatusTool(BrowserTool[BrowserStatusArguments]):
     NAME = "browser_status"
     DISPLAY_NAME = "Browser Status"
     DESCRIPTION = BROWSER_STATUS_DESCRIPTION
@@ -158,16 +232,17 @@ class BrowserStatusTool(_BrowserTool[BrowserStatusArguments]):
     RUNS_AGAIN = True
 
 
-class BrowserOpenTool(_BrowserTool[BrowserOpenArguments]):
+class BrowserOpenTool(BrowserTool[BrowserOpenArguments]):
     # The web panel opens itself on a call of this name.
     NAME = "browser_open"
     DISPLAY_NAME = "Open Page"
     DESCRIPTION = BROWSER_OPEN_DESCRIPTION
+    CHROME_DESCRIPTION = BROWSER_OPEN_DESCRIPTION_CHROME
     ARGUMENTS = BrowserOpenArguments
     METHOD = "open"
 
 
-class BrowserNavigateTool(_BrowserTool[BrowserNavigateArguments]):
+class BrowserNavigateTool(BrowserTool[BrowserNavigateArguments]):
     NAME = "browser_navigate"
     DISPLAY_NAME = "Navigate Page"
     DESCRIPTION = BROWSER_NAVIGATE_DESCRIPTION
@@ -175,10 +250,11 @@ class BrowserNavigateTool(_BrowserTool[BrowserNavigateArguments]):
     METHOD = "navigate"
 
 
-class BrowserSnapshotTool(_BrowserTool[BrowserSnapshotArguments]):
+class BrowserSnapshotTool(BrowserTool[BrowserSnapshotArguments]):
     NAME = "browser_snapshot"
     DISPLAY_NAME = "Read Page"
     DESCRIPTION = BROWSER_SNAPSHOT_DESCRIPTION
+    CHROME_DESCRIPTION = BROWSER_SNAPSHOT_DESCRIPTION_CHROME
     ARGUMENTS = BrowserSnapshotArguments
     METHOD = "snapshot"
     RUNS_AGAIN = True
@@ -192,7 +268,7 @@ class BrowserSnapshotTool(_BrowserTool[BrowserSnapshotArguments]):
         return f"{super()._content(rest)}\n{text}"
 
 
-class BrowserActTool(_BrowserTool[BrowserActArguments]):
+class BrowserActTool(BrowserTool[BrowserActArguments]):
     NAME = "browser_act"
     DISPLAY_NAME = "Use Page"
     DESCRIPTION = BROWSER_ACT_DESCRIPTION
@@ -200,7 +276,7 @@ class BrowserActTool(_BrowserTool[BrowserActArguments]):
     METHOD = "act"
 
 
-class BrowserWaitForTool(_BrowserTool[BrowserWaitForArguments]):
+class BrowserWaitForTool(BrowserTool[BrowserWaitForArguments]):
     NAME = "browser_wait_for"
     DISPLAY_NAME = "Wait For Page"
     DESCRIPTION = BROWSER_WAIT_FOR_DESCRIPTION
@@ -209,7 +285,7 @@ class BrowserWaitForTool(_BrowserTool[BrowserWaitForArguments]):
     RUNS_AGAIN = True
 
 
-class BrowserEvaluateTool(_BrowserTool[BrowserEvaluateArguments]):
+class BrowserEvaluateTool(BrowserTool[BrowserEvaluateArguments]):
     NAME = "browser_evaluate"
     DISPLAY_NAME = "Run Page Script"
     DESCRIPTION = BROWSER_EVALUATE_DESCRIPTION
@@ -217,7 +293,7 @@ class BrowserEvaluateTool(_BrowserTool[BrowserEvaluateArguments]):
     METHOD = "evaluate"
 
 
-class BrowserDialogTool(_BrowserTool[BrowserDialogArguments]):
+class BrowserDialogTool(BrowserTool[BrowserDialogArguments]):
     NAME = "browser_dialog"
     DISPLAY_NAME = "Answer Page Dialog"
     DESCRIPTION = BROWSER_DIALOG_DESCRIPTION
@@ -227,7 +303,7 @@ class BrowserDialogTool(_BrowserTool[BrowserDialogArguments]):
 
 # The browser tools; browser_open carries the use. Within their rank the
 # turn orders them by name (onyx/tools/ordering.py).
-BROWSER_TOOLS: tuple[type[SandboxTool], ...] = (
+BROWSER_TOOLS: tuple[type[BrowserTool], ...] = (
     BrowserOpenTool,
     BrowserNavigateTool,
     BrowserSnapshotTool,
@@ -239,11 +315,13 @@ BROWSER_TOOLS: tuple[type[SandboxTool], ...] = (
 )
 
 
-def with_browser_tools(
-    tools: Sequence[type[SandboxTool]], *, browser: bool
-) -> tuple[type[SandboxTool], ...]:
-    """A turn's sandbox tools (`sandbox_tools.py:SANDBOX_TOOLS`), with the
-    browser tools after them when `browser` (the `browser_enabled` setting
-    when the turn began). The turn builds them, and the token estimate
-    counts their descriptions."""
-    return (*tools, *BROWSER_TOOLS) if browser else tuple(tools)
+def browser_tools_for(target: BrowserTarget) -> tuple[type[BrowserTool], ...]:
+    """The tools that a browser offers. The user's Chrome runs no page
+    scripts: the extension refuses them, so the model does not get the tool."""
+    if target is BrowserTarget.CHROME:
+        return tuple(tool for tool in BROWSER_TOOLS if tool is not BrowserEvaluateTool)
+    return BROWSER_TOOLS
+
+
+def build_browser_tools(backend: BrowserBackend) -> list[Tool]:
+    return [tool(backend) for tool in browser_tools_for(backend.target)]

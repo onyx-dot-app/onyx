@@ -137,7 +137,7 @@ class QuestionTurns:
         approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
     ) -> list[PacketObj]:
         """Send a message; returns the turn's packets."""
-        monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+        monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
         model = ScriptedLLM(asker.generate)
         monkeypatch.setattr(
             "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
@@ -281,7 +281,7 @@ def test_a_complete_response_lists_the_questions_that_wait(
 ) -> None:
     """A non-streaming caller gets the waiting questions, as it gets the
     approval requests that wait."""
-    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
     model = ScriptedLLM(Asker().generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
