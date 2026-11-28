@@ -434,6 +434,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jiraServiceManagement": {
+          "description": "서비스 데스크 요청"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -3281,6 +3284,25 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 프로젝트 하나의 요청을 인덱싱합니다",
+          "fields": {
+            "jira_base_url": {
+              "label": "사이트 URL",
+              "placeholder": "https://example.atlassian.net",
+              "description": "Jira 사이트입니다. Data Center에서는 컨텍스트 경로를 포함하세요."
+            },
+            "project_key": {
+              "label": "프로젝트 키",
+              "placeholder": "IT",
+              "description": "서비스 프로젝트 키입니다. 계정은 해당 서비스 데스크의 에이전트여야 합니다."
+            },
+            "include_internal_comments": {
+              "label": "내부 댓글 포함",
+              "description": "에이전트 전용 댓글을 인덱싱합니다. 끄면 고객에게 보이는 댓글만 남깁니다. 변경하면 프로젝트를 다시 인덱싱합니다."
             }
           }
         },

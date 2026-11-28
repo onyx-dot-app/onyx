@@ -434,6 +434,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Solicitudes del centro de ayuda"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },
@@ -3281,6 +3284,25 @@
             "comment_email_blacklist": {
               "label": "Lista negra de correos de comentarios",
               "description": "Suele ser útil para ignorar ciertos bots. Añade los correos de los usuarios cuyos comentarios NO deben indexarse."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Indexa las solicitudes de un proyecto de Jira Service Management",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL del sitio",
+              "placeholder": "https://example.atlassian.net",
+              "description": "Su sitio de Jira. En Data Center, incluya la ruta de contexto."
+            },
+            "project_key": {
+              "label": "Clave del proyecto",
+              "placeholder": "IT",
+              "description": "La clave del proyecto de servicio. La cuenta debe ser agente en ese centro de ayuda."
+            },
+            "include_internal_comments": {
+              "label": "Incluir comentarios internos",
+              "description": "Indexa los comentarios solo para agentes. Desactívelo para conservar solo los comentarios visibles para el cliente. Un cambio reindexa el proyecto."
             }
           }
         },

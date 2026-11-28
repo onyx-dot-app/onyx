@@ -1,4 +1,9 @@
-"""The Atlassian credential family: Confluence and Jira share one account."""
+"""The Atlassian credential family.
+
+Confluence, Jira, and Jira Service Management share one account. Jira and
+Jira Service Management use the same keys. A Confluence Cloud OAuth token
+stays on Confluence.
+"""
 
 from typing import Any
 

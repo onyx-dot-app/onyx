@@ -464,6 +464,43 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  jira_service_management: {
+    description: "connectors.jiraServiceManagement.description",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jiraServiceManagement.fields.jira_base_url.label",
+        name: "jira_base_url",
+        optional: false,
+        placeholder:
+          "connectors.jiraServiceManagement.fields.jira_base_url.placeholder",
+        description:
+          "connectors.jiraServiceManagement.fields.jira_base_url.description",
+        subDescription: "siteUrl",
+      },
+      {
+        type: "text",
+        label: "connectors.jiraServiceManagement.fields.project_key.label",
+        name: "project_key",
+        optional: false,
+        placeholder:
+          "connectors.jiraServiceManagement.fields.project_key.placeholder",
+        description:
+          "connectors.jiraServiceManagement.fields.project_key.description",
+      },
+      {
+        type: "checkbox",
+        label:
+          "connectors.jiraServiceManagement.fields.include_internal_comments.label",
+        name: "include_internal_comments",
+        optional: true,
+        default: true,
+        description:
+          "connectors.jiraServiceManagement.fields.include_internal_comments.description",
+      },
+    ],
+    advanced_values: [],
+  },
   youtrack: {
     description: "connectors.youtrack.description",
     values: [

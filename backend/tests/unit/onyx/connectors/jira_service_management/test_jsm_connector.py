@@ -1,0 +1,392 @@
+"""Jira Service Management indexing without a live site.
+
+The service desk list is the full set. A poll uses Jira search. Internal
+comments follow the connector flag. Slim ids match the indexed ids.
+"""
+
+from datetime import datetime, timezone
+from typing import Any
+from unittest.mock import MagicMock
+
+import pytest
+
+from onyx.connectors.connector_runner import CheckpointOutputWrapper
+from onyx.connectors.jira_service_management.config import (
+    JiraServiceManagementConnectorConfig,
+)
+from onyx.connectors.jira_service_management.connector import (
+    JiraServiceManagementCheckpoint,
+    JiraServiceManagementConnector,
+    project_jql,
+)
+from onyx.connectors.jira_service_management.models import (
+    CommentPage,
+    CustomerRequest,
+    IssueRef,
+    IssueSearchPage,
+    IssueTimestamps,
+    ServiceDesk,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    HierarchyNode,
+    SlimDocument,
+)
+
+_BASE = "https://example.atlassian.net"
+_UPDATED = "2024-06-01T12:00:00.000+0000"
+_DESK = ServiceDesk.model_validate(
+    {
+        "id": "10",
+        "projectId": "100",
+        "projectKey": "IT",
+        "projectName": "IT Help",
+    }
+)
+
+
+def _request(issue_id: str, key: str, **overrides: Any) -> CustomerRequest:
+    raw: dict[str, Any] = {
+        "issueId": issue_id,
+        "issueKey": key,
+        "createdDate": {"epochMillis": 1_700_000_000_000},
+        "reporter": {"displayName": "Ada", "emailAddress": "ada@example.com"},
+        "requestType": {"id": "25", "name": "Get IT help"},
+        "currentStatus": {
+            "status": "Waiting for support",
+            "statusDate": {"epochMillis": 1_700_000_100_000},
+        },
+        "requestFieldValues": [
+            {"fieldId": "summary", "value": "VPN is down"},
+            {
+                "fieldId": "description",
+                "value": {
+                    "type": "doc",
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [{"type": "text", "text": "Since Monday"}],
+                        }
+                    ],
+                },
+            },
+        ],
+    }
+    raw.update(overrides)
+    return CustomerRequest.model_validate(raw)
+
+
+def _comments(*bodies: tuple[str, bool]) -> CommentPage:
+    return CommentPage.model_validate(
+        {
+            "isLastPage": True,
+            "values": [
+                {
+                    "id": str(index),
+                    "body": body,
+                    "public": public,
+                    "created": {"epochMillis": 1_700_000_200_000 + index},
+                }
+                for index, (body, public) in enumerate(bodies, start=1)
+            ],
+        }
+    )
+
+
+def _connector(**kwargs: Any) -> tuple[JiraServiceManagementConnector, MagicMock]:
+    connector = JiraServiceManagementConnector(
+        jira_base_url=f"{_BASE}/",
+        project_key="it",
+        **kwargs,
+    )
+    ops = MagicMock()
+    ops.find_service_desk.return_value = _DESK
+    ops.list_comments.return_value = _comments(
+        ("public note", True), ("agent note", False)
+    )
+    ops.get_issue_timestamps.return_value = IssueTimestamps(
+        updated=_UPDATED, created="2023-11-14T22:13:20.000+0000"
+    )
+    connector._ops = ops
+    return connector, ops
+
+
+def _run(
+    connector: JiraServiceManagementConnector,
+    start: float = 0,
+    end: float = 1_800_000_000,
+) -> tuple[list[Document | HierarchyNode], JiraServiceManagementCheckpoint]:
+    items: list[Document | HierarchyNode] = []
+    checkpoint = connector.build_dummy_checkpoint()
+    wrapper = CheckpointOutputWrapper[JiraServiceManagementCheckpoint]()
+    while True:
+        finished = False
+        for document, node, failure, nxt in wrapper(
+            connector.load_from_checkpoint(start, end, checkpoint)
+        ):
+            assert failure is None
+            if document is not None:
+                items.append(document)
+            if node is not None:
+                items.append(node)
+            if nxt is not None:
+                checkpoint = nxt
+                finished = True
+        if not checkpoint.has_more:
+            break
+        if not finished:
+            break
+    return items, checkpoint
+
+
+def test_project_jql_uses_epoch_milliseconds() -> None:
+    assert project_jql("IT") == 'project = "IT"'
+    assert (
+        project_jql("IT", 1_700_000_000.5, 1_700_000_100)
+        == 'project = "IT" AND updated >= 1700000000500 AND updated <= 1700000100000'
+    )
+
+
+def test_full_run_indexes_request_text_and_both_comments() -> None:
+    connector, ops = _connector()
+    ops.search_issues.return_value = IssueSearchPage(
+        issues=[IssueRef(key="IT-1")],
+        is_last=True,
+        uses_token=True,
+    )
+    ops.get_request.return_value = _request("100", "IT-1")
+
+    items, checkpoint = _run(connector)
+
+    documents = [item for item in items if isinstance(item, Document)]
+    nodes = [item for item in items if isinstance(item, HierarchyNode)]
+    assert checkpoint.has_more is False
+    assert len(nodes) == 1
+    assert nodes[0].display_name == "IT Help"
+    assert len(documents) == 1
+    document = documents[0]
+    assert document.id == f"{_BASE}/servicedesk/request/100"
+    assert document.semantic_identifier == "[IT-1] VPN is down"
+    assert document.metadata["request_type"] == "Get IT help"
+    assert document.metadata["status"] == "Waiting for support"
+    texts = [section.text for section in document.sections]
+    assert texts == ["Since Monday", "public note", "agent note"]
+    assert document.primary_owners is not None
+    assert document.primary_owners[0].email == "ada@example.com"
+    # The comment and status times are older. The issue updated time wins.
+    assert document.doc_updated_at == datetime(2024, 6, 1, 12, tzinfo=timezone.utc)
+    ops.get_issue_timestamps.assert_called_once_with(issue_key="IT-1")
+    assert "ORDER BY key ASC" in ops.search_issues.call_args.kwargs["jql"]
+    ops.list_requests.assert_not_called()
+
+
+def test_internal_comments_can_be_left_out() -> None:
+    connector, ops = _connector(include_internal_comments=False)
+    ops.search_issues.return_value = IssueSearchPage(
+        issues=[IssueRef(key="IT-1")], is_last=True
+    )
+    ops.get_request.return_value = _request("100", "IT-1")
+
+    items, _checkpoint = _run(connector)
+
+    document = next(item for item in items if isinstance(item, Document))
+    texts = [section.text for section in document.sections]
+    assert texts == ["Since Monday", "public note"]
+
+
+def test_poll_uses_search_and_skips_issues_that_are_not_requests() -> None:
+    connector, ops = _connector()
+    ops.search_issues.return_value = IssueSearchPage(
+        issues=[IssueRef(key="IT-1"), IssueRef(key="IT-2")],
+        is_last=True,
+        uses_token=True,
+    )
+    ops.get_request.side_effect = lambda *, issue_key: (
+        _request("100", "IT-1") if issue_key == "IT-1" else None
+    )
+
+    items, checkpoint = _run(connector, start=1_700_000_000, end=1_700_000_100)
+
+    documents = [item for item in items if isinstance(item, Document)]
+    assert [document.id for document in documents] == [
+        f"{_BASE}/servicedesk/request/100"
+    ]
+    assert checkpoint.has_more is False
+    jql = ops.search_issues.call_args.kwargs["jql"]
+    assert "updated >= 1700000000000" in jql
+    assert "updated <= 1700000100000" in jql
+    ops.list_requests.assert_not_called()
+
+
+def test_a_second_page_keeps_each_request_once() -> None:
+    connector, ops = _connector()
+    first = [IssueRef(key=f"IT-{index}") for index in range(1, 51)]
+    # The five keys that end the first page, plus the new request. A connector
+    # that stops dropping keys it already saw indexes those five twice.
+    second = [IssueRef(key=f"IT-{index}") for index in range(46, 52)]
+    ops.search_issues.side_effect = [
+        IssueSearchPage(issues=first, is_last=False, uses_token=True),
+        IssueSearchPage(issues=second, is_last=True, uses_token=True),
+    ]
+
+    def _by_key(*, issue_key: str) -> CustomerRequest:
+        number = int(issue_key.split("-", 1)[1])
+        return _request(str(1000 + number), issue_key)
+
+    ops.get_request.side_effect = _by_key
+
+    items, checkpoint = _run(connector)
+
+    documents = [item for item in items if isinstance(item, Document)]
+    ids = [document.id for document in documents]
+    assert len(ids) == len(set(ids)) == 51
+    assert checkpoint.has_more is False
+    assert 'key > "IT-50"' in ops.search_issues.call_args_list[1].kwargs["jql"]
+
+
+def test_slim_ids_match_a_full_index() -> None:
+    connector, ops = _connector()
+    request = _request("100", "IT-1")
+    ops.search_issues.return_value = IssueSearchPage(
+        issues=[IssueRef(key="IT-1")], is_last=True
+    )
+    ops.get_request.return_value = request
+
+    items, _checkpoint = _run(connector)
+    indexed = [item.id for item in items if isinstance(item, Document)]
+    slim = [
+        doc.id
+        for batch in connector.retrieve_all_slim_docs()
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+
+    assert slim == indexed == [f"{_BASE}/servicedesk/request/100"]
+
+
+def test_a_short_cloud_search_page_is_not_the_end() -> None:
+    connector, ops = _connector()
+    ops.search_issues.side_effect = [
+        IssueSearchPage(
+            issues=[IssueRef(key="IT-1")],
+            is_last=False,
+            next_page_token="next",
+            uses_token=True,
+        ),
+        IssueSearchPage(
+            issues=[IssueRef(key="IT-2")],
+            is_last=True,
+            uses_token=True,
+        ),
+    ]
+    ops.get_request.side_effect = lambda *, issue_key: _request(
+        "100" if issue_key == "IT-1" else "101", issue_key
+    )
+
+    slim = [
+        doc.id
+        for batch in connector.retrieve_all_slim_docs(start=1_700_000_000)
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+
+    assert slim == [
+        f"{_BASE}/servicedesk/request/100",
+        f"{_BASE}/servicedesk/request/101",
+    ]
+    assert ops.search_issues.call_args_list[1].kwargs["next_page_token"] == "next"
+
+
+def test_an_underscore_project_key_and_its_issue_are_indexed() -> None:
+    JiraServiceManagementConnectorConfig(
+        jira_base_url=_BASE,
+        project_key="it_help",
+    )
+    long_key = "A" + "B" * 20
+    JiraServiceManagementConnectorConfig(jira_base_url=_BASE, project_key=long_key)
+    with pytest.raises(ValueError):
+        JiraServiceManagementConnectorConfig(jira_base_url=_BASE, project_key='IT"')
+
+    connector, ops = _connector()
+    connector.project_key = "IT_HELP"
+    ops.search_issues.return_value = IssueSearchPage(
+        issues=[IssueRef(key="IT_HELP-1")], is_last=True
+    )
+    ops.get_request.return_value = _request("300", "IT_HELP-1")
+
+    items, _checkpoint = _run(connector)
+
+    documents = [item for item in items if isinstance(item, Document)]
+    assert [document.id for document in documents] == [
+        f"{_BASE}/servicedesk/request/300"
+    ]
+    assert documents[0].semantic_identifier.startswith("[IT_HELP-1]")
+
+
+def test_a_repeated_cloud_token_does_not_finish_the_listing() -> None:
+    connector, ops = _connector()
+    ops.search_issues.return_value = IssueSearchPage(
+        issues=[IssueRef(key="IT-1")],
+        is_last=False,
+        next_page_token="same",
+        uses_token=True,
+    )
+    ops.get_request.return_value = _request("100", "IT-1")
+
+    with pytest.raises(RuntimeError, match="page token"):
+        _run(connector, start=1_700_000_000, end=1_700_000_100)
+
+
+def test_unfinished_comments_are_not_indexed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector._MAX_COMMENT_PAGES",
+        1,
+    )
+    connector, ops = _connector()
+    ops.search_issues.return_value = IssueSearchPage(
+        issues=[IssueRef(key="IT-1")], is_last=True
+    )
+    ops.get_request.return_value = _request("100", "IT-1")
+    ops.list_comments.return_value = CommentPage(
+        values=[
+            {
+                "id": "1",
+                "body": "still going",
+                "public": True,
+            }
+        ],
+        isLastPage=False,
+    )
+
+    items, _checkpoint = _run_allowing_failures(connector)
+
+    assert not any(isinstance(item, Document) for item in items)
+    assert any(
+        isinstance(item, ConnectorFailure)
+        and item.failure_message.startswith("Jira did not finish")
+        for item in items
+    )
+
+
+def _run_allowing_failures(
+    connector: JiraServiceManagementConnector,
+) -> tuple[list[Any], JiraServiceManagementCheckpoint]:
+    items: list[Any] = []
+    checkpoint = connector.build_dummy_checkpoint()
+    wrapper = CheckpointOutputWrapper[JiraServiceManagementCheckpoint]()
+    while True:
+        finished = False
+        for document, _node, failure, nxt in wrapper(
+            connector.load_from_checkpoint(0, 1_800_000_000, checkpoint)
+        ):
+            if document is not None:
+                items.append(document)
+            if failure is not None:
+                items.append(failure)
+            if nxt is not None:
+                checkpoint = nxt
+                finished = True
+        if not checkpoint.has_more or not finished:
+            break
+    return items, checkpoint

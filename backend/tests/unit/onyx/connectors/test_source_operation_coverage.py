@@ -57,6 +57,14 @@ from onyx.connectors.google_drive.models import (
 )
 from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
 from onyx.connectors.jira.models import JiraGroupPage
+from onyx.connectors.jira_service_management.models import (
+    CommentPage,
+    CustomerRequest,
+    IssueSearchPage,
+    JsmUser,
+    RequestPage,
+    ServiceDesk,
+)
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
     DriveDeltaPage,
@@ -326,6 +334,31 @@ def _configure_github_user_owner_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_jsm_spy(spy: MagicMock) -> None:
+    """One service desk with one request, so the request check reads comments."""
+    desk = ServiceDesk(
+        id="1",
+        projectId="10001",
+        projectKey="IT",
+        projectName="IT Help",
+    )
+    request = CustomerRequest.model_validate(
+        {
+            "issueId": "100",
+            "issueKey": "IT-1",
+            "requestFieldValues": [],
+        }
+    )
+    spy.get_myself.return_value = JsmUser(displayName="Ada")
+    spy.find_service_desk.return_value = desk
+    spy.list_requests.return_value = RequestPage(
+        values=[request], isLastPage=True, size=1
+    )
+    spy.get_request.return_value = request
+    spy.list_comments.return_value = CommentPage(values=[], isLastPage=True, size=0)
+    spy.search_issues.return_value = IssueSearchPage(issues=[], is_last=True)
+
+
 def _configure_youtrack_spy(spy: MagicMock) -> None:
     """One project whose readers come through a group, holding one issue, so
     the checks reach the group listing and the comment read."""
@@ -453,6 +486,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     ],
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: [_configure_jsm_spy],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
     DocumentSource.SLACK: [_configure_slack_spy],
@@ -481,6 +515,12 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
     ],
     DocumentSource.YOUTRACK: [
         {"base_url": "https://example.youtrack.cloud", "projects": ["ABC"]}
+    ],
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: [
+        {
+            "jira_base_url": "https://example.atlassian.net",
+            "project_key": "IT",
+        }
     ],
     # The root page check reads a page only when a root page is set.
     DocumentSource.NOTION: [{"root_page_id": "17ab3186873d418fb899c3f6a43f68de"}],

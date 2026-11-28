@@ -434,6 +434,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jiraServiceManagement": {
+          "description": "サービスデスクのリクエスト"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -3281,6 +3284,25 @@
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",
               "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "1 つの Jira Service Management プロジェクトのリクエストをインデックスします",
+          "fields": {
+            "jira_base_url": {
+              "label": "サイト URL",
+              "placeholder": "https://example.atlassian.net",
+              "description": "Jira サイトです。Data Center ではコンテキストパスを含めます。"
+            },
+            "project_key": {
+              "label": "プロジェクトキー",
+              "placeholder": "IT",
+              "description": "サービスプロジェクトのキーです。アカウントはそのサービスデスクのエージェントである必要があります。"
+            },
+            "include_internal_comments": {
+              "label": "内部コメントを含める",
+              "description": "エージェント専用のコメントをインデックスします。オフにすると顧客に見えるコメントだけを残します。変更するとプロジェクトを再インデックスします。"
             }
           }
         },

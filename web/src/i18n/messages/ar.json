@@ -434,6 +434,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "طلبات مكتب الخدمة"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -3281,6 +3284,25 @@
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
               "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "فهرسة الطلبات من مشروع Jira Service Management واحد",
+          "fields": {
+            "jira_base_url": {
+              "label": "عنوان الموقع",
+              "placeholder": "https://example.atlassian.net",
+              "description": "موقع Jira. في Data Center، أدرج مسار السياق."
+            },
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "placeholder": "IT",
+              "description": "مفتاح مشروع الخدمة. يجب أن يكون الحساب وكيلاً في مكتب الخدمة هذا."
+            },
+            "include_internal_comments": {
+              "label": "تضمين التعليقات الداخلية",
+              "description": "فهرسة التعليقات الخاصة بالوكلاء. أوقف هذا للإبقاء على التعليقات الظاهرة للعميل فقط. التغيير يعيد فهرسة المشروع."
             }
           }
         },

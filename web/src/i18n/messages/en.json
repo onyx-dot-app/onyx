@@ -434,6 +434,9 @@
         "jira": {
           "description": "Atlassian issue tracker"
         },
+        "jiraServiceManagement": {
+          "description": "Service desk requests"
+        },
         "productboard": {
           "description": "Product management"
         },
@@ -3281,6 +3284,25 @@
             "comment_email_blacklist": {
               "label": "Comment Email Blacklist",
               "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Index requests from one Jira Service Management project",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site URL",
+              "placeholder": "https://example.atlassian.net",
+              "description": "Your Jira site. For Data Center, include the context path."
+            },
+            "project_key": {
+              "label": "Project Key",
+              "placeholder": "IT",
+              "description": "The service project key. The account must be an agent on that service desk."
+            },
+            "include_internal_comments": {
+              "label": "Include Internal Comments",
+              "description": "Index agent-only comments. Turn this off to keep customer-visible comments only. Changing it reindexes the project."
             }
           }
         },
