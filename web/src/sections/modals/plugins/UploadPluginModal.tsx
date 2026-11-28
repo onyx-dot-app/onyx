@@ -28,6 +28,7 @@ import type { SkillCreationDraft } from "@/lib/skills/creationDraft";
 import PluginNeedList from "@/sections/plugins/PluginNeedList";
 import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
 import TakenNameField, { canUseName } from "@/sections/skills/TakenNameField";
+import { FetchError, fetchErrorDetail } from "@/lib/fetcher";
 
 type UploadStep =
   | { step: "pick"; bundle: PreparedSkillBundle | null }
@@ -246,6 +247,8 @@ function UploadPluginModalContent({
   }
 
   function failure(caught: Error | null, fallback: string): string {
+    if (caught instanceof FetchError)
+      return fetchErrorDetail(caught) ?? fallback;
     return caught?.message || fallback;
   }
 
