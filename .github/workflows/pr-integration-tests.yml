@@ -254,8 +254,9 @@ jobs:
             tests_dirs="$tests_dirs reindex_port"
           fi
           # The Drive suite creates and deletes a shared drive in the live test
-          # Workspace, so it runs once a day, not on every PR and merge.
-          daily_connector_dirs="google"
+          # Workspace, and the Zendesk suite indexes the live test account, so
+          # they run once a day, not on every PR and merge.
+          daily_connector_dirs="google zendesk"
           connector_dirs=""
           for dir in $(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort); do
             if [[ " $SKIPPED_CONNECTOR_SUITES $daily_connector_dirs " != *" $dir "* ]]; then
