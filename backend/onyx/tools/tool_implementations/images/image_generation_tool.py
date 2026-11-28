@@ -263,7 +263,15 @@ class ImageGenerationTool(Tool):
     def _check_image_limit(self) -> None:
         """On the playground, refuse once the user has used their trial images.
         The refusal goes back to the model as the tool's answer, so it tells
-        the user instead of the turn failing."""
+        the user instead of the turn failing.
+
+        The limit is soft on purpose. Nothing is reserved: image calls in one
+        model step run in parallel, and a user can run two turns at once, so
+        calls that start together all pass at four images and a user can end
+        a few images over the limit. That is accepted: a trial user should see
+        the tool make several images at once, and a few extra images cost
+        cents. Do not make the calls sequential or add a reservation to make
+        the count exact."""
         if self._user_id is None or not is_usage_type_limited(
             UsageType.IMAGE_GENERATIONS
         ):

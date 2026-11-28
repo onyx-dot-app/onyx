@@ -8,7 +8,11 @@ import requests
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS, WEB_DOMAIN
-from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
+from onyx.configs.constants import (
+    CHAT_SESSION_ID_FILE_METADATA_KEY,
+    GENERATED_IMAGE_DISPLAY_NAME,
+    FileOrigin,
+)
 from onyx.db.models import UserFile
 from onyx.db.projects import get_project_user_files_by_file_ids
 from onyx.db.user_file import get_user_file_by_id
@@ -357,7 +361,7 @@ def save_file_from_url(url: str, chat_session_id: UUID) -> str:
     response.raise_for_status()
     return save_chat_output_file(
         response.content,
-        display_name="GeneratedImage",
+        display_name=GENERATED_IMAGE_DISPLAY_NAME,
         file_type="image/png;base64",
         chat_session_id=chat_session_id,
     )
@@ -366,7 +370,7 @@ def save_file_from_url(url: str, chat_session_id: UUID) -> str:
 def save_file_from_base64(base64_string: str, chat_session_id: UUID) -> str:
     return save_chat_output_file(
         base64.b64decode(base64_string),
-        display_name="GeneratedImage",
+        display_name=GENERATED_IMAGE_DISPLAY_NAME,
         file_type=get_image_type(base64_string),
         chat_session_id=chat_session_id,
     )

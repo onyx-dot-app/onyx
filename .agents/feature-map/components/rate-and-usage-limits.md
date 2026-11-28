@@ -184,10 +184,13 @@ is no longer read or written ([TECH-DEBT](../TECH-DEBT.md)).
   instead of a counter, and a `USER` scope counts one user; the check then needs
   `user_id`. The playground allows each user
   `USAGE_LIMIT_IMAGE_GENERATIONS_PER_USER_PLAYGROUND` chat images for the whole
-  trial, counted from the `generated_images` of their tool calls
-  (`backend/onyx/db/usage.py:count_generated_images`). A usage type no plan in
-  force limits returns before any lookup (`is_usage_type_limited`), so cloud does
-  no work for it.
+  trial, counted from the image files the chat image tool saved in the user's
+  chat sessions (`backend/onyx/db/usage.py:count_generated_images`). The tool
+  saves them during the call, only once the images are made, so a later check
+  sees them. The limit is soft on purpose: parallel image calls and two turns
+  at once reserve nothing, so a user can end a few images over it. A usage
+  type no plan in force limits returns before any lookup
+  (`is_usage_type_limited`), so cloud does no work for it.
 - **Playground cache.** `backend/ee/onyx/server/tenants/usage_limit_cache.py`
   keeps each playground tenant's trial start and overrides. The control plane
   owns them; the data plane only caches them, like the billing cache: a miss
@@ -326,6 +329,12 @@ rejected signup attempt still counts.
   agent makes hundreds of gateway calls in one session. Whether those count
   toward the cloud cap is an open product decision. Both surfaces still check
   token budgets, and the gateway also checks the managed-key cost cap.
+- **The playground's per-user image limit is soft.** The check reserves
+  nothing, image calls in one model step keep running in parallel, and a user
+  can run two turns at once, so calls that start together all pass and a user
+  can end a few images over the limit. That is accepted: a trial user should
+  see the tool make several images at once, and the extra images cost cents.
+  Making the calls sequential or reserving images first is not wanted.
 - **Only EE can create a budget.** The admin router lives in the EE server code
   and mounts only in the EE app. CE enforcement can read a GLOBAL budget, but CE
   has no supported way to create one. The Community downgrade deletes every
@@ -388,8 +397,12 @@ rejected signup attempt still counts.
   `backend/onyx/db/enums.py:UsageType` (the counter table needs no new column), the env
   defaults in `shared_configs/configs.py`, the override model
   `TenantUsageLimitOverrides`, and one `Allowance` line on each policy in
-  `backend/onyx/server/usage_limits.py` that limits it. The policy test fails
-  until each cloud policy covers every `UsageType`.
+  `backend/onyx/server/usage_limits.py` that limits it. A type a cloud policy
+  limits also goes in `_CLOUD_TYPES` in
+  `backend/tests/unit/onyx/server/test_usage_limits.py`: the policy test fails
+  until both cloud policies list exactly those types. A per-user type is a
+  `DERIVED` allowance with `scope=LimitScope.USER`, its count under
+  `backend/onyx/db/`, and its check passes `user_id`.
 - `trip-budget-by-hand` **Trip a budget by hand.** Do this only on a
   disposable test workspace: the PUT replaces every limit on the workspace
   pool. On an EE build, `PUT
