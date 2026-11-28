@@ -1,0 +1,103 @@
+---
+title: "Jira Service Management"
+description: "Access customer requests from Jira Service Management"
+---
+
+## How it works
+
+The Jira Service Management connector indexes the customer requests from the service desks you select.
+Onyx checks Jira Service Management for new and changed requests on the connector's refresh schedule.
+The default is every **30** minutes.
+
+For every request, this connector pulls:
+
+- Title
+- Description
+- [Common fields](#indexed-metadata)
+- Comments
+
+The connector can index only the content that its Jira Service Management account can access.
+An API token does not give its owner additional permissions.
+
+## Jira Service Management Cloud setup
+
+Jira Service Management Cloud is hosted and updated by Atlassian. Its site URL usually ends in `atlassian.net`.
+
+### 1. Choose a connector account
+
+Use a dedicated Jira account for the connector.
+This makes its access easier to review and prevents a personal account change from stopping the connector.
+
+### 2. Grant indexing access
+
+For indexing, the Jira account needs:
+
+- Jira Service Management product access.
+- Access to every service desk that you want to index. A service desk agent can read the requests in that desk.
+- Access to each restricted comment that you want to index.
+
+A standard Jira user can run the connector if the user has all required access.
+
+### 3. Create the API token
+
+Create an API token from the connector account.
+Follow Atlassian's [API token
+instructions](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
+
+If you create a token with scopes, enable **Scoped API Token** when you configure the connector in Onyx.
+
+For indexing, grant the token the `read:jira-work` scope. Alternatively,
+grant the complete granular read scopes listed for these Jira APIs:
+
+- [Service desk and request](https://developer.atlassian.com/cloud/jira/service-desk/rest/intro/)
+- [Issue search and fetch](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/)
+
+Token scopes limit the token. They do not replace the connector account access from the previous steps.
+
+## Configure the connector
+
+<Steps>
+  <Step title="Provide credentials">
+    Go to **Admin Panel → Connectors** and select **Jira Service Management**.
+    Select **New Jira Service Management Account**. Enter the connector account's email address and API token.
+
+    Select **Create**.
+  </Step>
+
+  <Step title="Configure the Jira Service Management source">
+    Enter the Jira site in **Site URL**. The URL is usually `https://your-domain.atlassian.net`.
+    Enable **Scoped API Token** if you created a Jira Cloud token with scopes.
+  </Step>
+
+  <Step title="Choose what to index">
+    Select one indexing mode:
+
+    - **Everything** indexes all requests that the connector account can access.
+    - **Service Desk** indexes one service desk. Enter its numeric service desk ID, such as `3`.
+    - **Project** indexes the requests of one project. Enter its project key, such as `SD`.
+    The connector lists requests from the service desk linked to that project.
+
+    If you set both a service desk and a project, the service desk wins and the project is ignored.
+
+    To index only public comments, keep **Public Comments Only** on. Turn it off to index internal comments too.
+
+    To exclude comments from specified accounts, add their email addresses to **Comment Email Blacklist**.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. It is enabled when the required checks pass.
+  </Step>
+</Steps>
+
+### Indexed metadata
+
+```
+- Issue Key
+- Request Type
+- Service Desk ID
+- Status
+- Reporter
+- Reporter Email
+- Created
+- Updated
+```

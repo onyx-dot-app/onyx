@@ -1122,6 +1122,95 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "connectors.jira_service_management.description",
+    subtext: "connectors.jira_service_management.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jira_service_management.fields.jira_base_url.label",
+        name: "jira_base_url",
+        optional: false,
+        placeholder:
+          "connectors.jira_service_management.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
+      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
+      {
+        type: "tab",
+        name: "indexing_scope",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label:
+              "connectors.jira_service_management.fields.indexing_scope.tabs.everything.label",
+            fields: [
+              {
+                type: "string_tab",
+                label:
+                  "connectors.jira_service_management.fields.everything.label",
+                name: "everything",
+                description:
+                  "connectors.jira_service_management.fields.everything.description",
+              },
+            ],
+          },
+          {
+            value: "service_desk",
+            label:
+              "connectors.jira_service_management.fields.indexing_scope.tabs.service_desk.label",
+            fields: [
+              {
+                type: "text",
+                label:
+                  "connectors.jira_service_management.fields.service_desk_id.label",
+                name: "service_desk_id",
+                description:
+                  "connectors.jira_service_management.fields.service_desk_id.description",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label:
+              "connectors.jira_service_management.fields.indexing_scope.tabs.project.label",
+            fields: [
+              {
+                type: "text",
+                label:
+                  "connectors.jira_service_management.fields.project_key.label",
+                name: "project_key",
+                description:
+                  "connectors.jira_service_management.fields.project_key.description",
+              },
+            ],
+          },
+        ],
+        defaultTab: "everything",
+      },
+      {
+        type: "checkbox",
+        label:
+          "connectors.jira_service_management.fields.public_comments_only.label",
+        name: "public_comments_only",
+        description:
+          "connectors.jira_service_management.fields.public_comments_only.description",
+        optional: true,
+        default: true,
+      },
+      {
+        type: "list",
+        label:
+          "connectors.jira_service_management.fields.comment_email_blacklist.label",
+        name: "comment_email_blacklist",
+        description:
+          "connectors.jira_service_management.fields.comment_email_blacklist.description",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "connectors.salesforce.description",
     values: [
