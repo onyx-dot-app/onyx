@@ -837,3 +837,37 @@ def test_client_captures_nested_deployment_settings_after_merging() -> None:
         "metadata": {"deployment": ["original"], "source": "request"},
         "default_only": {"enabled": True},
     }
+
+
+@pytest.mark.parametrize(
+    ("playground", "managed_key", "offered", "refused"),
+    [
+        (True, True, False, True),
+        (True, True, True, False),
+        (True, False, False, False),  # the tenant's own key is not limited
+        (False, True, False, False),  # cloud is unchanged
+    ],
+)
+def test_playground_refuses_models_its_price_rule_does_not_offer(
+    playground: bool, managed_key: bool, offered: bool, refused: bool
+) -> None:
+    """A hidden model is not shown, but a request can name it directly. On the
+    playground, a model on Onyx's keys that the rule does not offer is refused."""
+    provider = _build_provider_view(
+        provider=LlmProviderNames.ANTHROPIC, max_input_tokens=None
+    )
+    with (
+        patch("onyx.llm.factory.IS_PLAYGROUND", playground),
+        patch("onyx.llm.factory.is_onyx_managed_api_key", return_value=managed_key),
+        patch("onyx.llm.factory.is_offered_on_playground", return_value=offered),
+        patch("onyx.llm.factory.get_recommendations"),
+        patch("onyx.llm.factory.get_llm") as build,
+    ):
+        if refused:
+            with pytest.raises(OnyxError) as exc_info:
+                llm_from_provider(model_name="test-model", llm_provider=provider)
+            assert exc_info.value.error_code == OnyxErrorCode.PLAYGROUND_RESTRICTED
+            build.assert_not_called()
+        else:
+            llm_from_provider(model_name="test-model", llm_provider=provider)
+            build.assert_called_once()

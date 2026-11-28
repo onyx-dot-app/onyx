@@ -1014,3 +1014,52 @@ def test_stuck_dispose_fails_fast_after_bounded_attempts() -> None:
 
     assert sandbox_manager.dispose_opencode_instance.call_count == max_attempts + 1
     assert store == {}
+
+
+def test_playground_falls_back_to_the_default_its_price_rule_picks() -> None:
+    """With no configured default, Craft uses the provider's default. On the
+    playground that is the price rule's default, not the recommended one."""
+    provider = _provider(
+        1, "anthropic", [_model("claude-opus-5"), _model("claude-sonnet-5")]
+    )
+    with (
+        patch.object(llm_config, "IS_PLAYGROUND", True),
+        patch.object(
+            llm_config, "playground_default_model", return_value="claude-sonnet-5"
+        ),
+    ):
+        assert llm_config._select_gateway_default([provider], None) == (
+            1,
+            "claude-sonnet-5",
+        )
+    assert llm_config._select_gateway_default([provider], None) == (1, "claude-opus-5")
+
+
+def test_playground_fallback_chooses_among_the_visible_models() -> None:
+    """The rule's pick across the whole list, c-preferred, is not visible here.
+    The fallback must then pick the cheap visible model, not the first one in
+    name order, which costs more than the default budget."""
+    recommendations = LLMRecommendations(
+        version="test",
+        updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        providers={
+            "openai": LLMProviderRecommendation(
+                default_model=SimpleKnownModel(name="c-preferred"),
+                additional_visible_models=[
+                    SimpleKnownModel(name="a-expensive"),
+                    SimpleKnownModel(name="b-cheap"),
+                ],
+            )
+        },
+    )
+    output_cost = {"c-preferred": 10.0, "a-expensive": 20.0, "b-cheap": 5.0}
+    provider = _provider(1, "openai", [_model("a-expensive"), _model("b-cheap")])
+    with (
+        patch.object(llm_config, "IS_PLAYGROUND", True),
+        patch.object(llm_config, "get_recommendations", return_value=recommendations),
+        patch(
+            "onyx.llm.playground_models.find_model_cost",
+            side_effect=lambda _provider, name: {"output": output_cost[name]},
+        ),
+    ):
+        assert llm_config._select_gateway_default([provider], None) == (1, "b-cheap")

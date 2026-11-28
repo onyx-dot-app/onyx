@@ -1747,6 +1747,38 @@ def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
     return list(db_session.scalars(query).all())
 
 
+def set_model_visibility(
+    db_session: Session, provider: LLMProviderModel, visible_names: set[str]
+) -> int:
+    """Make exactly ``visible_names`` visible among the provider's models, and
+    hide the rest. Returns the number of models changed."""
+    shown = db_session.execute(
+        update(ModelConfiguration)
+        .where(
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name.in_(visible_names),
+            ModelConfiguration.is_visible == False,  # noqa: E712
+        )
+        .values(is_visible=True)
+        .execution_options(synchronize_session="fetch")
+    )
+    hidden = db_session.execute(
+        update(ModelConfiguration)
+        .where(
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name.not_in(visible_names),
+            ModelConfiguration.is_visible == True,  # noqa: E712
+        )
+        .values(is_visible=False)
+        .execution_options(synchronize_session="fetch")
+    )
+    changes = int(shown.rowcount) + int(hidden.rowcount)  # ty: ignore[unresolved-attribute]
+    db_session.commit()
+    if changes:
+        db_session.refresh(provider)
+    return changes
+
+
 def sync_auto_mode_models(
     db_session: Session,
     provider: LLMProviderModel,

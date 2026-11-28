@@ -164,6 +164,25 @@ capabilities. It fetches each provider's `price_table/<provider>.json` from the
 `main` branch on GitHub, with a TTL and a negative cache. The vendored copy is
 the floor when the fetch fails or `ONYX_AIRGAPPED` is set.
 
+**Playground models.** On the playground (`IS_PLAYGROUND`), every tenant runs on
+Onyx's keys, so `llm/playground_models.py` bounds the models by price, not by
+name. A model is offered when it is recommended, has a catalog price, and costs
+at most `PLAYGROUND_MAX_OUTPUT_COST_PER_MTOK` per million output tokens. A
+provider's default is its recommended default if that costs at most
+`PLAYGROUND_DEFAULT_MAX_OUTPUT_COST_PER_MTOK`, else the most expensive offered
+model under it. Both limits are env settings in `shared_configs/configs.py`,
+read at startup. Tenant provisioning
+(`ee/onyx/server/tenants/provisioning.py:configure_default_api_keys`) shows only
+offered models, picks that default, and skips Vertex, whose cost is not counted
+toward the spend limit. On every auto-update sync, the playground re-applies
+the rule to each provider's models
+(`backend/onyx/llm/well_known_providers/auto_update_service.py:_offered_on_playground`):
+a model hidden on release appears once it qualifies, and a retired one stays
+hidden. A chat default that stops qualifying is then replaced by the first
+provider's playground default (`_replace_unoffered_chat_default`). Craft's fallback
+uses the same default, and `llm/factory.py:llm_from_provider` refuses a model on Onyx's
+keys the rule does not offer. Cloud is unchanged.
+
 **Router models.** A `ModelConfiguration` with `is_router` (for example
 `openrouter/auto`) has no price. `LitellmLLM._routed_model` reads the model the
 router served, and `_track_llm_cost` prices that model. An admin cost override

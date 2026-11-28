@@ -21,6 +21,7 @@ from onyx.db.llm import (
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.well_known_providers import auto_update_service
 from onyx.llm.well_known_providers.auto_update_service import (
     reset_seen_catalog,
     sync_auto_update_providers,
@@ -39,6 +40,30 @@ def _cleanup_provider(db_session: Session, name: str) -> None:
         remove_llm_provider(db_session, provider.id)
 
 
+# The providers the running test created. The sync below is limited to them.
+_created_provider_names: set[str] = set()
+
+
+@pytest.fixture(autouse=True)
+def _sync_only_this_tests_providers() -> Generator[None, None, None]:
+    """sync_auto_update_providers processes every auto-mode provider in the
+    database. Limit it to the providers this test creates, so a sync never
+    changes another test's providers."""
+    original = auto_update_service.fetch_auto_mode_providers
+    _created_provider_names.clear()
+    with patch.object(
+        auto_update_service,
+        "fetch_auto_mode_providers",
+        side_effect=lambda db_session: [
+            provider
+            for provider in original(db_session)
+            if provider.name in _created_provider_names
+        ],
+    ):
+        yield
+    _created_provider_names.clear()
+
+
 def _create_provider(
     db_session: Session,
     name: str,
@@ -46,6 +71,7 @@ def _create_provider(
     is_auto_mode: bool,
     models: dict[str, bool],
 ) -> LLMProviderModel:
+    _created_provider_names.add(name)
     put_llm_provider(
         llm_provider_upsert_request=LLMProviderUpsertRequest(
             name=name,
@@ -124,6 +150,7 @@ def test_sync_applies_releases_and_retirements_after_setup(
     assert str(provider.id) not in _sync_with_catalog(db_session, catalog)
 
 
+@pytest.mark.usefixtures("restore_chat_default")
 def test_sync_does_not_change_the_global_default(
     db_session: Session, provider_name: str
 ) -> None:
@@ -279,3 +306,313 @@ def test_aggregators_do_not_get_auto_update(
 
     assert str(provider.id) not in results
     assert _visibility(db_session, provider_name) == {"z-ai/glm-5.3": True}
+
+
+_SERVICE = "onyx.llm.well_known_providers.auto_update_service"
+
+
+@pytest.fixture
+def restore_chat_default(db_session: Session) -> Generator[None, None, None]:
+    """Put the tenant's chat default back after a test that changes it:
+    update_default_model clears every other provider's chat default."""
+    previous = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    previous_default = (
+        (previous.llm_provider_id, previous.name) if previous is not None else None
+    )
+    yield
+    db_session.rollback()
+    if previous_default is not None:
+        update_default_model(
+            db_session=db_session,
+            provider_id=previous_default[0],
+            model=previous_default[1],
+            flow_type=LLMModelFlowType.CHAT,
+        )
+
+
+def _sync_on_playground(
+    db_session: Session,
+    catalog: list[str],
+    offered: set[str],
+    default: str | None,
+    onyx_key: bool = True,
+) -> None:
+    with (
+        patch(f"{_SERVICE}.IS_PLAYGROUND", True),
+        patch(f"{_SERVICE}.is_onyx_managed_api_key", return_value=onyx_key),
+        patch(
+            f"{_SERVICE}.is_offered_on_playground",
+            side_effect=lambda _provider, name, _rec: name in offered,
+        ),
+        patch(f"{_SERVICE}.playground_default_model", return_value=default),
+    ):
+        _sync_with_catalog(db_session, catalog)
+
+
+def test_playground_sync_shows_exactly_the_models_its_price_rule_offers(
+    db_session: Session, provider_name: str
+) -> None:
+    """A model hidden on release appears once the rule offers it, and a model
+    that stops qualifying is hidden. The rule is rechecked on every sync."""
+    _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-a": True, "gpt-b": True},
+    )
+    _sync_with_catalog(db_session, ["gpt-a", "gpt-b"])
+    catalog = ["gpt-a", "gpt-b", "gpt-new"]
+
+    # Released before the recommended list includes it: hidden.
+    _sync_on_playground(db_session, catalog, {"gpt-a", "gpt-b"}, None)
+    assert _visibility(db_session, provider_name) == {
+        "gpt-a": True,
+        "gpt-b": True,
+        "gpt-new": False,
+    }
+
+    # The list now includes it, and gpt-b stops qualifying.
+    _sync_on_playground(db_session, catalog, {"gpt-a", "gpt-new"}, None)
+    assert _visibility(db_session, provider_name) == {
+        "gpt-a": True,
+        "gpt-b": False,
+        "gpt-new": True,
+    }
+
+
+@pytest.mark.usefixtures("restore_chat_default")
+def test_playground_sync_replaces_a_chat_default_the_rule_no_longer_offers(
+    db_session: Session, provider_name: str
+) -> None:
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-pricey": True, "gpt-cheap": True},
+    )
+    update_default_model(
+        db_session=db_session,
+        provider_id=provider.id,
+        model="gpt-pricey",
+        flow_type=LLMModelFlowType.CHAT,
+    )
+    _sync_with_catalog(db_session, ["gpt-pricey", "gpt-cheap"])
+
+    _sync_on_playground(
+        db_session, ["gpt-pricey", "gpt-cheap"], {"gpt-cheap"}, "gpt-cheap"
+    )
+
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    assert default_model is not None
+    assert default_model.llm_provider_id == provider.id
+    assert default_model.name == "gpt-cheap"
+    assert _visibility(db_session, provider_name) == {
+        "gpt-pricey": False,
+        "gpt-cheap": True,
+    }
+
+
+def test_cloud_sync_does_not_apply_the_playground_rule(
+    db_session: Session, provider_name: str
+) -> None:
+    _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-a": True},
+    )
+    _sync_with_catalog(db_session, ["gpt-a"])
+    with patch(f"{_SERVICE}.is_offered_on_playground", return_value=False) as offered:
+        _sync_with_catalog(db_session, ["gpt-a", "gpt-new"])
+
+    offered.assert_not_called()
+    assert _visibility(db_session, provider_name) == {"gpt-a": True, "gpt-new": True}
+
+
+@pytest.mark.usefixtures("restore_chat_default")
+def test_playground_sync_keeps_a_retired_model_hidden(
+    db_session: Session, provider_name: str
+) -> None:
+    """A retired model the catalog sync keeps, here because it holds the chat
+    default, is not shown again by the playground rule, even though the
+    recommendations still offer it. The default is replaced first."""
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-a": True, "gpt-retired": True},
+    )
+    update_default_model(
+        db_session=db_session,
+        provider_id=provider.id,
+        model="gpt-retired",
+        flow_type=LLMModelFlowType.CHAT,
+    )
+    _sync_with_catalog(db_session, ["gpt-a", "gpt-retired"])
+
+    _sync_on_playground(db_session, ["gpt-a"], {"gpt-a", "gpt-retired"}, "gpt-a")
+
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    assert default_model is not None
+    assert default_model.name == "gpt-a"
+    assert _visibility(db_session, provider_name) == {
+        "gpt-a": True,
+        "gpt-retired": False,
+    }
+
+
+@pytest.mark.usefixtures("restore_chat_default")
+def test_playground_sync_takes_a_replacement_default_from_another_provider(
+    db_session: Session, provider_name: str
+) -> None:
+    """The default's own provider offers nothing any more, so the replacement
+    comes from another provider the rule manages."""
+    other_name = f"{provider_name}-other"
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-pricey": True},
+    )
+    other = _create_provider(
+        db_session,
+        other_name,
+        LlmProviderNames.ANTHROPIC,
+        is_auto_mode=True,
+        models={"claude-cheap": True},
+    )
+    try:
+        update_default_model(
+            db_session=db_session,
+            provider_id=provider.id,
+            model="gpt-pricey",
+            flow_type=LLMModelFlowType.CHAT,
+        )
+        catalogs = {
+            LlmProviderNames.OPENAI: ["gpt-pricey"],
+            LlmProviderNames.ANTHROPIC: ["claude-cheap"],
+        }
+        with patch(_CATALOG_PATH, side_effect=lambda name: catalogs[name]):
+            sync_auto_update_providers(db_session)
+        with (
+            patch(_CATALOG_PATH, side_effect=lambda name: catalogs[name]),
+            patch(f"{_SERVICE}.IS_PLAYGROUND", True),
+            patch(f"{_SERVICE}.is_onyx_managed_api_key", return_value=True),
+            patch(
+                f"{_SERVICE}.is_offered_on_playground",
+                side_effect=lambda _provider, name, _rec: name == "claude-cheap",
+            ),
+            patch(
+                f"{_SERVICE}.playground_default_model",
+                side_effect=lambda _provider, _rec, candidates: (
+                    next(iter(candidates)) if candidates else None
+                ),
+            ),
+        ):
+            sync_auto_update_providers(db_session)
+
+        default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        assert default_model is not None
+        assert default_model.llm_provider_id == other.id
+        assert default_model.name == "claude-cheap"
+        assert _visibility(db_session, provider_name) == {"gpt-pricey": False}
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, other_name)
+
+
+def test_playground_sync_leaves_a_provider_on_the_tenants_own_key_alone(
+    db_session: Session, provider_name: str
+) -> None:
+    _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-a": True, "gpt-pricey": True},
+    )
+    _sync_with_catalog(db_session, ["gpt-a", "gpt-pricey"])
+
+    _sync_on_playground(
+        db_session, ["gpt-a", "gpt-pricey"], {"gpt-a"}, "gpt-a", onyx_key=False
+    )
+
+    assert _visibility(db_session, provider_name) == {
+        "gpt-a": True,
+        "gpt-pricey": True,
+    }
+
+
+@pytest.mark.usefixtures("restore_chat_default")
+def test_playground_sync_replaces_a_chat_default_only_with_a_chat_model(
+    db_session: Session, provider_name: str
+) -> None:
+    """The other provider offers an image model and a chat model. The image
+    model cannot be a chat default, so the chat model is chosen and the sync
+    does not fail."""
+    other_name = f"{provider_name}-other"
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-pricey": True},
+    )
+    other = _create_provider(
+        db_session,
+        other_name,
+        LlmProviderNames.ANTHROPIC,
+        is_auto_mode=True,
+        models={"a-image-model": True, "claude-cheap": True},
+    )
+    try:
+        image_model = next(
+            mc for mc in other.model_configurations if mc.name == "a-image-model"
+        )
+        for flow in list(image_model.llm_model_flows):
+            db_session.delete(flow)
+        db_session.commit()
+        db_session.expire_all()
+        update_default_model(
+            db_session=db_session,
+            provider_id=provider.id,
+            model="gpt-pricey",
+            flow_type=LLMModelFlowType.CHAT,
+        )
+        catalogs = {
+            LlmProviderNames.OPENAI: ["gpt-pricey"],
+            LlmProviderNames.ANTHROPIC: ["a-image-model", "claude-cheap"],
+        }
+        with patch(_CATALOG_PATH, side_effect=lambda name: catalogs[name]):
+            sync_auto_update_providers(db_session)
+        with (
+            patch(_CATALOG_PATH, side_effect=lambda name: catalogs[name]),
+            patch(f"{_SERVICE}.IS_PLAYGROUND", True),
+            patch(f"{_SERVICE}.is_onyx_managed_api_key", return_value=True),
+            patch(
+                f"{_SERVICE}.is_offered_on_playground",
+                side_effect=lambda _provider, name, _rec: name != "gpt-pricey",
+            ),
+            patch(
+                f"{_SERVICE}.playground_default_model",
+                side_effect=lambda _provider, _rec, candidates: (
+                    min(candidates) if candidates else None
+                ),
+            ),
+        ):
+            sync_auto_update_providers(db_session)
+
+        default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        assert default_model is not None
+        assert (default_model.llm_provider_id, default_model.name) == (
+            other.id,
+            "claude-cheap",
+        )
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, other_name)

@@ -333,3 +333,14 @@ USAGE_LIMIT_LLM_COST_CENTS_PLAYGROUND = int(
 USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND = int(
     os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND", "400000")
 )
+
+# Playground model price limits, in USD per million output tokens (used only
+# when IS_PLAYGROUND). The playground offers a recommended model only if it costs
+# at most the first; a provider's default may cost at most the second. Read at
+# startup, so a change takes effect after the pods restart.
+PLAYGROUND_MAX_OUTPUT_COST_PER_MTOK = float(
+    os.environ.get("PLAYGROUND_MAX_OUTPUT_COST_PER_MTOK", "20")
+)
+PLAYGROUND_DEFAULT_MAX_OUTPUT_COST_PER_MTOK = float(
+    os.environ.get("PLAYGROUND_DEFAULT_MAX_OUTPUT_COST_PER_MTOK", "10")
+)

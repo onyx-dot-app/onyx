@@ -30,6 +30,7 @@ from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
+from onyx.llm.playground_models import is_offered_on_playground
 from onyx.llm.token_budget import TOKEN_COUNT_CACHE_SIZE
 from onyx.llm.utils import (
     get_max_input_tokens_from_llm_provider,
@@ -38,11 +39,16 @@ from onyx.llm.utils import (
 from onyx.llm.well_known_providers.constants import (
     PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING,
 )
+from onyx.llm.well_known_providers.llm_provider_options import get_recommendations
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
-from onyx.server.usage_limits import check_llm_cost_limit_for_provider
+from onyx.server.usage_limits import (
+    check_llm_cost_limit_for_provider,
+    is_onyx_managed_api_key,
+)
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import IS_PLAYGROUND
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -319,6 +325,23 @@ def get_default_llm_with_vision(
         )
 
 
+def _refuse_models_the_playground_does_not_offer(
+    llm_provider: LLMProviderView, model_name: str
+) -> None:
+    """On the playground, refuse a model on Onyx's keys that its price rule
+    does not offer. Hidden models are not shown, but a request can still name
+    one directly."""
+    if not IS_PLAYGROUND or not is_onyx_managed_api_key(llm_provider.api_key):
+        return
+    if not is_offered_on_playground(
+        llm_provider.provider, model_name, get_recommendations()
+    ):
+        raise OnyxError(
+            OnyxErrorCode.PLAYGROUND_RESTRICTED,
+            "This model is not available on the playground.",
+        )
+
+
 def llm_from_provider(
     model_name: str,
     llm_provider: LLMProviderView,
@@ -332,6 +355,7 @@ def llm_from_provider(
     )
     if model_configuration is not None and not model_configuration.supports_chat:
         raise ValueError("This model does not support chat requests")
+    _refuse_models_the_playground_does_not_offer(llm_provider, model_name)
     configured_max_input_tokens = (
         model_configuration.max_input_tokens if model_configuration else None
     )
