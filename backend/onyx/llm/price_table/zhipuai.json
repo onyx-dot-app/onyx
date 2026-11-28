@@ -117,7 +117,7 @@
           }
         ]
       },
-      "family": "glm",
+      "family": "glmv",
       "limit": {
         "context": 64000,
         "output": 16384
@@ -187,7 +187,7 @@
           }
         ]
       },
-      "family": "glm",
+      "family": "glmv",
       "limit": {
         "context": 128000,
         "output": 32768
@@ -217,7 +217,7 @@
         "input": 0,
         "output": 0
       },
-      "family": "glm-flash",
+      "family": "glmv-flash",
       "limit": {
         "context": 128000,
         "output": 32768
@@ -538,6 +538,38 @@
       "temperature": true,
       "tool_call": true
     },
+    "glm-5.3-flashx-legal": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.08534,
+        "cache_write": 0,
+        "input": 0.29943,
+        "output": 1.04801
+      },
+      "family": "glm-flash-legal",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3-FlashX-Legal",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "glm-5v-turbo": {
       "attachment": true,
       "cost": {
@@ -558,7 +590,7 @@
           }
         ]
       },
-      "family": "glm",
+      "family": "glmv-turbo",
       "limit": {
         "context": 200000,
         "output": 131072
