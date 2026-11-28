@@ -236,7 +236,8 @@ def _resolve_urls_to_document_ids(
     """
     matches: list[IndexedDocumentRequest] = []
     unresolved: list[str] = []
-    # Ordered by connector-defined candidate priority; the first indexed variant wins.
+    # Ordered by connector-defined candidate priority. Every indexed variant is
+    # requested; the caller uses the first one that is readable.
     normalized_map: dict[str, list[str]] = {}
 
     for url in urls:
@@ -279,21 +280,37 @@ def _resolve_urls_to_document_ids(
 
     # Match URLs to documents
     for url, variants in normalized_map.items():
-        matched_doc_id = next(
-            (variant for variant in variants if variant in existing_document_ids),
-            None,
-        )
-        if matched_doc_id:
-            matches.append(
-                IndexedDocumentRequest(
-                    document_id=matched_doc_id,
-                    original_url=url,
-                )
+        matched_doc_ids = [
+            variant for variant in variants if variant in existing_document_ids
+        ]
+        if matched_doc_ids:
+            matches.extend(
+                IndexedDocumentRequest(document_id=doc_id, original_url=url)
+                for doc_id in matched_doc_ids
             )
         else:
             unresolved.append(url)
 
     return matches, unresolved
+
+
+def _pick_readable_document_ids(
+    requests: list[IndexedDocumentRequest], readable_ids: set[str]
+) -> dict[str, str]:
+    """Map each original URL to its first candidate id the caller can read.
+
+    Falls back to the URL's first candidate when none is readable.
+    """
+    picked: dict[str, str] = {}
+    for request in requests:
+        url = request.original_url
+        if url is None:
+            continue
+        if url not in picked or (
+            picked[url] not in readable_ids and request.document_id in readable_ids
+        ):
+            picked[url] = request.document_id
+    return picked
 
 
 def _estimate_result_chars(result: SearchResult) -> int:
@@ -652,7 +669,9 @@ class OpenURLTool(Tool):
 
                 for request in url_requests:
                     if request.original_url:
-                        url_to_doc_id[request.original_url] = request.document_id
+                        url_to_doc_id.setdefault(
+                            request.original_url, request.document_id
+                        )
 
                 # Build filters before parallel execution (session-safe)
                 filters = self._build_index_filters(db_session)
@@ -738,6 +757,26 @@ class OpenURLTool(Tool):
                     fetched_so_far,
                     [],
                 )
+
+                readable_ids = {
+                    s.center_chunk.document_id for s in indexed_result.sections
+                }
+                picked_ids = _pick_readable_document_ids(url_requests, readable_ids)
+                url_to_doc_id.update(picked_ids)
+                # Drop alternates that were only fallback candidates for a readable URL.
+                unused_alternates = {
+                    r.document_id
+                    for r in url_requests
+                    if r.original_url in picked_ids
+                    and picked_ids[r.original_url] in readable_ids
+                    and r.document_id != picked_ids[r.original_url]
+                } - set(picked_ids.values())
+                if unused_alternates:
+                    indexed_result.missing_document_ids = [
+                        doc_id
+                        for doc_id in indexed_result.missing_document_ids
+                        if doc_id not in unused_alternates
+                    ]
 
                 # Before link-based fallback (retries index retrieval with no timeout).
                 if (

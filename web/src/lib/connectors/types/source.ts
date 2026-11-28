@@ -68,6 +68,7 @@ export enum ValidSources {
   TestRail = "testrail",
   Braintrust = "braintrust",
   Lumapps = "lumapps",
+  JiraServiceManagement = "jira_service_management",
   YouTrack = "youtrack",
   AzureDatalake = "azure_datalake",
   Canvas = "canvas",

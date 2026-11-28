@@ -1,0 +1,78 @@
+---
+title: "Jira Service Management"
+description: "Access requests and comments from a Jira Service Management project"
+---
+
+## How it works
+
+The Jira Service Management connector indexes the requests of one service project. A request is a Jira issue,
+so the connector reads the project through the Jira API. Each request carries its comments, its Jira fields and,
+when the portal reports them, its request type, portal status and portal link as metadata.
+
+Onyx checks Jira Service Management for new and changed requests on the connector's refresh schedule.
+The default is every **30** minutes.
+
+Onyx indexes public comments. It does not index internal (agent-only) comments.
+
+**Sync with Jira Service Management** is not offered. Onyx does not copy the permissions of a request.
+The access type can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**.
+
+The Jira connector and this connector index the same issue as two separate documents.
+
+| Content  | Notes                                                                                                                |
+| -------- | -------------------------------------------------------------------------------------------------------------------- |
+| Requests | Summary and description, with the request's comments. Requests with a label to skip are skipped.                     |
+| Scope    | One Jira Service Management project, chosen by its project key. All issues of the project, not only portal requests. |
+
+The connector supports Jira Cloud and Jira Data Center. It rejects a project that is not a service project.
+To index a software or business project, use the [Jira connector](/admins/connectors/official/jira).
+
+## Setting up
+
+### Authorization
+
+The connector uses the same credential as the Jira connector.
+Give the account **Browse Projects** in the service project to index.
+
+<Warning>
+  Onyx indexes every issue in the project that the account can browse.
+  This includes issues that were not created through the portal.
+  It does not keep the restrictions of the service project,
+  such as a request that only its reporter or an agent can
+  see. Anyone who can see the connector's documents in Onyx can see every indexed request.
+</Warning>
+
+<Steps>
+  <Step title="Create an API token">
+    For Jira Cloud, create an API token at `id.atlassian.com`. For Jira Data Center,
+    create a personal access token in your profile.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Enter the Jira URL">
+    In the Admin Panel, go to **Connectors** and select **Jira Service Management**.
+    Enter your Jira address, for example `https://your-company.atlassian.net`.
+  </Step>
+
+  <Step title="Connect a Jira account">
+    Select **New Jira Service Management Account**. For Jira Cloud, enter the account email and the API token.
+    For Jira Data Center, leave the email empty and enter the personal access token.
+  </Step>
+
+  <Step title="Enter the project key">
+    Enter the key of the service project, for example `HELP`. Onyx checks the project before you create
+    the connector. It fails when the project does not exist, the account cannot browse it,
+    or the project is not a Jira Service Management project.
+  </Step>
+
+  <Step title="Choose who can see the requests">
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Only Me**.
+    **Specific Groups** and **Only Me** are available on Onyx Cloud and Enterprise Edition.
+    On the Community Edition, requests are visible to all Onyx users.
+    Use a service project that all Onyx users may read, or use Enterprise Edition and **Specific Groups**.
+    See [Document Access Controls](/admins/connectors/overview#document-access-controls) for what each option means.
+  </Step>
+</Steps>

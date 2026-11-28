@@ -9,14 +9,39 @@ Usage:
     # Returns: "https://docs.google.com/document/d/123"
 """
 
+import re
 from urllib.parse import urlparse, urlunparse
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.slack_configs import is_slack_host
 from onyx.connectors.factory import identify_connector_class
+from onyx.connectors.jira_service_management.connector import (
+    DOCUMENT_ID_PREFIX as JSM_DOCUMENT_ID_PREFIX,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Self-hosted (Data Center) Jira has no fixed host, so match the issue path.
+_JIRA_ISSUE_PATH = re.compile(r"/browse/[a-z][a-z0-9_]*-\d+", re.IGNORECASE)
+# Jira Service Management customer portal request link. The prefix keeps any
+# context path (for example /jira).
+_JSM_PORTAL_PATH = re.compile(
+    r"^(?P<prefix>.*?)/servicedesk/customer/portal/\d+/(?P<key>[a-z][a-z0-9_]*-\d+)",
+    re.IGNORECASE,
+)
+
+
+def _portal_to_browse_url(url: str) -> str | None:
+    """Rewrite a JSM portal request link to the issue's /browse/ URL."""
+    parsed = urlparse(url)
+    match = _JSM_PORTAL_PATH.search(parsed.path)
+    if not parsed.netloc or not match:
+        return None
+    scheme = parsed.scheme or "https"
+    return (
+        f"{scheme}://{parsed.netloc}{match.group('prefix')}/browse/{match.group('key')}"
+    )
 
 
 def _default_url_normalizer(url: str) -> str | None:
@@ -64,6 +89,19 @@ def normalize_url(url: str, source_type: DocumentSource | None = None) -> str | 
     return _default_url_normalizer(url)
 
 
+def _with_service_management_candidate(
+    source_type: DocumentSource | None, candidates: list[str]
+) -> list[str]:
+    """Jira Service Management documents share Jira's URLs but are stored under a
+    namespaced id, so offer that id after the plain one."""
+    if source_type != DocumentSource.JIRA or not candidates:
+        return candidates
+    namespaced = JSM_DOCUMENT_ID_PREFIX + candidates[0]
+    if namespaced in candidates:
+        return candidates
+    return [*candidates, namespaced]
+
+
 def normalize_url_candidates(
     url: str, source_type: DocumentSource | None = None
 ) -> list[str]:
@@ -74,9 +112,17 @@ def normalize_url_candidates(
     candidate exists in the index. Falls back to the default normalizer's single value
     when a connector doesn't provide candidates.
     """
+    url = _portal_to_browse_url(url) or url
     if source_type is None:
         source_type = _detect_source_type(url)
+    return _with_service_management_candidate(
+        source_type, _normalize_url_candidates(url, source_type)
+    )
 
+
+def _normalize_url_candidates(
+    url: str, source_type: DocumentSource | None
+) -> list[str]:
     if source_type:
         try:
             connector_class = identify_connector_class(source_type)
@@ -114,11 +160,15 @@ def _detect_source_type(url: str) -> DocumentSource | None:
         return DocumentSource.GOOGLE_DRIVE
     if "notion.so" in netloc or "notion.site" in netloc or "app.notion.com" in netloc:
         return DocumentSource.NOTION
+    if _JSM_PORTAL_PATH.search(parsed.path):
+        return DocumentSource.JIRA
     if "atlassian.net" in netloc:
         # Check path for Jira indicators (more specific than netloc)
         if "/jira/" in path or "/browse/" in path or "jira" in netloc:
             return DocumentSource.JIRA
         return DocumentSource.CONFLUENCE
+    if _JIRA_ISSUE_PATH.search(path):
+        return DocumentSource.JIRA
     if "github.com" in netloc:
         return DocumentSource.GITHUB
     if "gitlab.com" in netloc:

@@ -54,6 +54,7 @@ _CONFLUENCE_SITE: dict[str, Any] = {
     "is_cloud": True,
 }
 _JIRA_SITE: dict[str, Any] = {"jira_base_url": "https://example.atlassian.net"}
+_JSM_SITE: dict[str, Any] = {**_JIRA_SITE, "project_key": "HELP"}
 
 
 def _current(
@@ -438,6 +439,7 @@ def test_scoped_and_window_backfills_together() -> None:
         (DocumentSource.SLACK, {}, False),
         (DocumentSource.CONFLUENCE, _CONFLUENCE_SITE, True),
         (DocumentSource.JIRA, _JIRA_SITE, True),
+        (DocumentSource.JIRA_SERVICE_MANAGEMENT, _JSM_SITE, True),
     ],
 )
 def test_credential_change_offers_a_choice(

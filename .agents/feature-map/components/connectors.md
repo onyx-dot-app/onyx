@@ -301,7 +301,10 @@ downloaded file with
    should override `normalize_url`**
    (`connectors/interfaces.py:BaseConnector.normalize_url`). The open-URL tool
    (`tools/tool_implementations/open_url/url_normalization.py`) uses it to map
-   a pasted URL to an indexed document ([[web-search]]).
+   a pasted URL to an indexed document ([[web-search]]). A connector that
+   prefixes its ids and shares another source's URLs (Jira Service Management
+   on Jira URLs) cannot be reached that way. The open-URL normalizer adds its
+   prefixed id as an extra candidate.
 10. `gateway-fenced-and-thread-safe` **A gateway is fenced at import time, must
     be thread safe, and returns plain data.** The class shape
     (`connectors/source_operations.py:SourceOperations.__init_subclass__`) fails
@@ -400,7 +403,9 @@ downloaded file with
   source's own package. A config with a `CredentialBinding` also needs
   `backend/scripts/generate_credential_bound_fields.py` run again. For
   permission sync, implement the permission interfaces (Architecture,
-  Permission fetching). Add daily tests and a docs page
+  Permission fetching). A connector that subclasses another (`jira_service_management`
+  extends `jira`) needs a `[[contract.exception]]` in `backend/lint/import_boundaries.toml`.
+  Add daily tests and a docs page
   (`documentation/AGENTS.md`).
 - `source-gateway` **A source gateway.** Copy
   `connectors/youtrack/source_operations.py:YouTrackSourceOperations`; list the gateways with
