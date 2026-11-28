@@ -41,12 +41,17 @@ def is_offered_on_playground(
 
 
 def playground_default_model(
-    provider: str, recommendations: LLMRecommendations
+    provider: str,
+    recommendations: LLMRecommendations,
+    candidates: set[str] | None = None,
 ) -> str | None:
     """The model a provider defaults to on the playground, or None if it offers
-    none cheap enough."""
+    none cheap enough. With ``candidates``, it chooses only among those models,
+    such as the ones a tenant has visible."""
     within_budget: list[tuple[float, str]] = []
     for model in recommendations.get_visible_models(provider):
+        if candidates is not None and model.name not in candidates:
+            continue
         output_cost = _output_cost_per_mtok(provider, model.name)
         if (
             output_cost is not None

@@ -110,12 +110,12 @@ def _matching_visible_model(
 
 
 def _recommended_default_name(
-    provider: str, recommendations: LLMRecommendations
+    provider: str, recommendations: LLMRecommendations, visible: set[str]
 ) -> str | None:
     """A provider's recommended default, or on the playground the default its
-    price rule picks."""
+    price rule picks among the visible models."""
     if IS_PLAYGROUND:
-        return playground_default_model(provider, recommendations)
+        return playground_default_model(provider, recommendations, visible)
     default_model = recommendations.get_default_model(provider)
     return default_model.name if default_model is not None else None
 
@@ -153,7 +153,9 @@ def _select_gateway_default(
         visible = _visible_models_by_name(provider)
         if not visible:
             continue
-        default_name = _recommended_default_name(provider.provider, recommendations)
+        default_name = _recommended_default_name(
+            provider.provider, recommendations, set(visible)
+        )
         if default_name is not None and default_name in visible:
             return provider.id, default_name
         if fallback is None:

@@ -186,7 +186,9 @@ def _apply_playground_rule(
         and chat_default.llm_provider_id == provider.id
         and chat_default.name not in offered
     ):
-        replacement = playground_default_model(provider.provider, recommendations)
+        replacement = playground_default_model(
+            provider.provider, recommendations, offered
+        )
         if replacement is not None and replacement in offered:
             update_default_model(
                 db_session=db_session,

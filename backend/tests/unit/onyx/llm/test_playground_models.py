@@ -116,3 +116,18 @@ def test_the_price_limits_are_settings() -> None:
     ):
         assert is_offered_on_playground("anthropic", "fable", _RECOMMENDATIONS)
         assert playground_default_model("anthropic", _RECOMMENDATIONS) == "opus"
+
+
+def test_chooses_only_among_the_candidates() -> None:
+    """Sonnet is not among the tenant's models, so the default is the most
+    expensive candidate under the budget. Opus is over it."""
+    assert (
+        playground_default_model(
+            "anthropic", _RECOMMENDATIONS, candidates={"opus", "haiku"}
+        )
+        == "haiku"
+    )
+    assert (
+        playground_default_model("anthropic", _RECOMMENDATIONS, candidates={"opus"})
+        is None
+    )
