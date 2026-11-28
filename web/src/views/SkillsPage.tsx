@@ -43,7 +43,7 @@ import SkillPublishingCard from "@/sections/skills/SkillPublishingCard";
 import type { CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
-import { deleteUserSkill } from "@/lib/skills/api";
+import { deletePlugin } from "@/lib/skills/api";
 import { canManageSkill } from "@/lib/skills/sharing";
 import { useSettings } from "@/lib/settings/hooks";
 import { useSkillEnablement } from "@/lib/skills/hooks";
@@ -83,7 +83,7 @@ export default function AdminSkillsPage() {
     if (!deleteTarget || deleting || !canManageSkill(deleteTarget)) return;
     setDeleting(true);
     try {
-      await deleteUserSkill(deleteTarget.id);
+      await deletePlugin(deleteTarget.id);
       await refresh(
         (current) =>
           current && {

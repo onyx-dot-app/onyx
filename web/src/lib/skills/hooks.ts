@@ -40,7 +40,7 @@ import {
   isSkillNameConflict,
   setSkillEnabled,
   skillNameConflictNames,
-  type SkillShareUpdatePayload,
+  type PluginShareUpdatePayload,
 } from "@/lib/skills/api";
 import {
   refreshSkillLists,
@@ -682,7 +682,7 @@ export interface SkillBulkSelection {
   confirmDelete: (items: CustomSkill[]) => void;
   run: (
     action: BulkSkillAction,
-    sharing?: SkillShareUpdatePayload
+    sharing?: PluginShareUpdatePayload
   ) => Promise<void>;
   /** Clears the selection and the failure report, as a filter change must. */
   reset: () => void;
@@ -736,7 +736,7 @@ export function useSkillBulkSelection({
 
   async function run(
     action: BulkSkillAction,
-    sharing?: SkillShareUpdatePayload
+    sharing?: PluginShareUpdatePayload
   ) {
     // Delete acts on exactly the skills its confirm listed.
     const targets =

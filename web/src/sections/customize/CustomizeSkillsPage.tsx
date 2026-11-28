@@ -28,7 +28,7 @@ import {
   type SkillStatusFilter,
 } from "@/lib/customize/skills";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { deleteUserSkill } from "@/lib/skills/api";
+import { deletePlugin } from "@/lib/skills/api";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 import {
   useChatBuiltInSkillIds,
@@ -258,7 +258,7 @@ export default function CustomizeSkillsPage() {
     if (!removeTarget || removing) return;
     setRemoving(true);
     try {
-      await deleteUserSkill(removeTarget.id);
+      await deletePlugin(removeTarget.id);
       revalidate();
       removeModal.toggle(false);
       toast.success(

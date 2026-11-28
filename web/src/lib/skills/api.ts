@@ -56,7 +56,7 @@ async function skillsFetch<T>(url: string, init?: RequestInit): Promise<T> {
 
 export async function uploadSkillBundles(
   bundles: File[],
-  sharing?: SkillShareUpdatePayload
+  sharing?: PluginShareUpdatePayload
 ): Promise<GitHubSkillsImportResult> {
   const form = new FormData();
   for (const bundle of bundles) form.append("bundles", bundle);
@@ -70,7 +70,7 @@ export async function uploadSkillBundles(
 export type BulkSkillRequest = {
   skill_ids: string[];
 } & (
-  | { action: "share"; sharing: SkillShareUpdatePayload }
+  | { action: "share"; sharing: PluginShareUpdatePayload }
   | { action: "enable" | "disable" | "delete" }
 );
 
@@ -122,7 +122,7 @@ export async function inspectPluginUpload(
   saveAsNew: boolean,
   name?: string
 ): Promise<PluginUploadPreview> {
-  return skillsFetch<PluginUploadPreview>("/api/skills/plugins/inspect", {
+  return skillsFetch<PluginUploadPreview>("/api/plugins/upload/inspect", {
     method: "POST",
     body: pluginUploadForm(bundle, saveAsNew, name),
   });
@@ -141,7 +141,7 @@ export async function savePluginUpload(
   saveAsNew: boolean,
   name?: string
 ): Promise<PluginUploadResult> {
-  return skillsFetch<PluginUploadResult>("/api/skills/plugins", {
+  return skillsFetch<PluginUploadResult>("/api/plugins/upload", {
     method: "POST",
     body: pluginUploadForm(bundle, saveAsNew, name),
   });
@@ -152,7 +152,7 @@ export interface CreateCustomSkillInput {
   description: string;
   instructions_markdown: string;
   auto_enable?: boolean;
-  sharing?: SkillShareUpdatePayload;
+  sharing?: PluginShareUpdatePayload;
 }
 
 export async function createCustomSkillFromEditor(
@@ -207,7 +207,7 @@ export function isSkillVersionStale(error: unknown): boolean {
   );
 }
 
-export interface PatchCustomSkillInput {
+export interface PatchPluginInput {
   description?: string;
   instructions_markdown?: string;
   public_permission?: SkillSharePermission | null;
@@ -227,13 +227,13 @@ export async function setSkillEnabled(
   });
 }
 
-export interface SkillGroupSettingPayload {
+export interface PluginGroupSettingPayload {
   group_id: number;
   /** Null: the group uses the organization setting. */
   installation_policy: SkillInstallationPolicy | null;
 }
 
-export interface SkillShareUpdatePayload {
+export interface PluginShareUpdatePayload {
   /** Null: no own setting, so Default access applies. */
   installation_policy?: SkillInstallationPolicy | null;
   user_shares?: {
@@ -245,24 +245,21 @@ export interface SkillShareUpdatePayload {
     permission: SkillSharePermission;
   }[];
   public_permission?: SkillSharePermission | null;
-  group_settings?: SkillGroupSettingPayload[];
+  group_settings?: PluginGroupSettingPayload[];
 }
 
-export async function uploadUserSkillFiles(
-  skillId: string,
+export async function uploadPluginFiles(
+  pluginId: string,
   upload: File,
   baseVersionId?: string | null
 ): Promise<SkillEditableDetail> {
   const form = new FormData();
   form.append("upload", upload);
   if (baseVersionId) form.append("base_version_id", baseVersionId);
-  return skillsFetch<SkillEditableDetail>(
-    `/api/skills/custom/${skillId}/files`,
-    {
-      method: "POST",
-      body: form,
-    }
-  );
+  return skillsFetch<SkillEditableDetail>(`/api/plugins/${pluginId}/files`, {
+    method: "POST",
+    body: form,
+  });
 }
 
 export async function inspectSkillBundle(
@@ -276,47 +273,47 @@ export async function inspectSkillBundle(
   });
 }
 
-export async function removeUserSkillFile(
-  skillId: string,
+export async function removePluginFile(
+  pluginId: string,
   path: string,
   baseVersionId?: string | null
 ): Promise<SkillEditableDetail> {
   const params = new URLSearchParams({ path });
   if (baseVersionId) params.set("base_version_id", baseVersionId);
   return skillsFetch<SkillEditableDetail>(
-    `/api/skills/custom/${skillId}/files?${params.toString()}`,
+    `/api/plugins/${pluginId}/files?${params.toString()}`,
     { method: "DELETE" }
   );
 }
 
-export async function patchUserSkill(
-  skillId: string,
-  patch: PatchCustomSkillInput
+export async function patchPlugin(
+  pluginId: string,
+  patch: PatchPluginInput
 ): Promise<CustomSkill> {
-  return skillsFetch<CustomSkill>(`/api/skills/custom/${skillId}`, {
+  return skillsFetch<CustomSkill>(`/api/plugins/${pluginId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
 }
 
-export async function updateSkillShares(
-  skillId: string,
-  payload: SkillShareUpdatePayload
+export async function updatePluginShares(
+  pluginId: string,
+  payload: PluginShareUpdatePayload
 ): Promise<CustomSkill> {
-  return skillsFetch<CustomSkill>(`/api/skills/custom/${skillId}/share`, {
+  return skillsFetch<CustomSkill>(`/api/plugins/${pluginId}/share`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }
 
-export async function transferSkillOwnership(
-  skillId: string,
+export async function transferPluginOwnership(
+  pluginId: string,
   payload: { new_owner_user_id: string; name?: string }
 ): Promise<CustomSkill> {
   return skillsFetch<CustomSkill>(
-    `/api/skills/custom/${skillId}/transfer-ownership`,
+    `/api/plugins/${pluginId}/transfer-ownership`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -325,13 +322,13 @@ export async function transferSkillOwnership(
   );
 }
 
-export async function restoreSkillVersion(
-  skillId: string,
+export async function restorePluginVersion(
+  pluginId: string,
   versionId: string,
   baseVersionId: string
 ): Promise<SkillEditableDetail> {
   return skillsFetch<SkillEditableDetail>(
-    `/api/skills/custom/${skillId}/versions/${versionId}/restore`,
+    `/api/plugins/${pluginId}/versions/${versionId}/restore`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -342,30 +339,30 @@ export async function restoreSkillVersion(
 
 /** Publish the current version: a first publish, or a publish update. Under
  * the Publishing setting this can make a review request instead. */
-export async function publishSkill(
-  skillId: string,
+export async function publishPlugin(
+  pluginId: string,
   baseVersionId: string
 ): Promise<CustomSkill> {
-  return skillsFetch<CustomSkill>(`/api/skills/custom/${skillId}/publish`, {
+  return skillsFetch<CustomSkill>(`/api/plugins/${pluginId}/publish`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ base_version_id: baseVersionId }),
   });
 }
 
-export async function reviewSkillVersion(
-  skillId: string,
+export async function reviewPluginVersion(
+  pluginId: string,
   versionId: string,
   decision: "approve" | "deny"
 ): Promise<CustomSkill> {
   return skillsFetch<CustomSkill>(
-    `/api/skills/custom/${skillId}/versions/${versionId}/${decision}`,
+    `/api/plugins/${pluginId}/versions/${versionId}/${decision}`,
     { method: "POST" }
   );
 }
 
-export async function deleteUserSkill(skillId: string): Promise<void> {
-  await skillsFetch<void>(`/api/skills/custom/${skillId}`, {
+export async function deletePlugin(pluginId: string): Promise<void> {
+  await skillsFetch<void>(`/api/plugins/${pluginId}`, {
     method: "DELETE",
   });
 }
@@ -375,7 +372,7 @@ export async function setOrganizationLibraryDefaultAccess(
   policy: OrganizationLibraryDefaultPolicy
 ): Promise<OrganizationLibraryDefaultAccess> {
   return skillsFetch<OrganizationLibraryDefaultAccess>(
-    "/api/skills/organization-library/default-access",
+    "/api/plugins/organization-library/default-access",
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

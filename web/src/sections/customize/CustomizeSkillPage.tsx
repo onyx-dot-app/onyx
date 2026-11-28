@@ -26,7 +26,7 @@ import {
 } from "@/lib/customize/paths";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { deleteUserSkill } from "@/lib/skills/api";
+import { deletePlugin } from "@/lib/skills/api";
 import { refreshSkillLists } from "@/lib/skills/cache";
 import { useRefreshSkillLists, useSkillEnablement } from "@/lib/skills/hooks";
 import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
@@ -88,7 +88,7 @@ export default function CustomizeSkillPage({
   const locked = listed?.content_locked === true;
   const canChangeContent = canEdit && !locked;
   const detail = useSWR<SkillEditableDetail>(
-    canEdit ? SWR_KEYS.editableSkill(skillId) : null,
+    canEdit ? SWR_KEYS.editablePlugin(skillId) : null,
     errorHandlingFetcher
   );
   const preview = useSWR<SkillPreview>(
@@ -136,7 +136,7 @@ export default function CustomizeSkillPage({
     }
     try {
       const fresh = await errorHandlingFetcher<SkillEditableDetail>(
-        SWR_KEYS.editableSkill(skillId)
+        SWR_KEYS.editablePlugin(skillId)
       );
       await Promise.all([detail.mutate(fresh, { revalidate: false }), lists]);
       return true;
@@ -163,7 +163,7 @@ export default function CustomizeSkillPage({
     if (!skill || removing) return;
     setRemoving(true);
     try {
-      await deleteUserSkill(skill.id);
+      await deletePlugin(skill.id);
       refreshLists();
       toast.success(skillCopy("editor.toasts.deleted", { name: skill.name }));
       navigation.go(listHref, { replace: true });

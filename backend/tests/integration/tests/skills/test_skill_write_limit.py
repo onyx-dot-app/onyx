@@ -186,7 +186,7 @@ def test_batch_upload_reports_limit_per_skill() -> None:
 def test_publish_on_create_counts_for_the_author(admin_user: DATestUser) -> None:
     """With Default access at Installed by default, a skill published as it is
     created is on for its author at once, so the create check counts it."""
-    default_access = f"{API_SERVER_URL}/skills/organization-library/default-access"
+    default_access = f"{API_SERVER_URL}/plugins/organization-library/default-access"
     previous = client.get(default_access, headers=admin_user.headers).json()[
         "installation_policy"
     ]
@@ -268,7 +268,7 @@ def test_save_counts_for_the_author() -> None:
 
     def save() -> httpx.Response:
         return client.put(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/bundle",
+            f"{API_SERVER_URL}/plugins/{skill.id}/bundle",
             files={
                 "bundle": (
                     "bundle.zip",

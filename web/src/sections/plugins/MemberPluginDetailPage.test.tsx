@@ -293,7 +293,7 @@ test("the owner shares, uploads a new version and deletes the plugin from its pa
   const fetchMock = mockFetch({
     "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
     [`/api/skills/${PLUGIN_ID}`]: plugin,
-    [`DELETE /api/skills/custom/${PLUGIN_ID}`]: new Response(null, {
+    [`DELETE /api/plugins/${PLUGIN_ID}`]: new Response(null, {
       status: 204,
     }),
   });
@@ -317,7 +317,7 @@ test("the owner shares, uploads a new version and deletes the plugin from its pa
   expect(
     fetchMock.mock.calls.some(
       ([url, init]) =>
-        String(url).endsWith(`/api/skills/custom/${PLUGIN_ID}`) &&
+        String(url).endsWith(`/api/plugins/${PLUGIN_ID}`) &&
         init?.method === "DELETE"
     )
   ).toBe(true);
@@ -345,7 +345,7 @@ test("the Skills tab opens the instructions of one skill", async () => {
   mockFetch({
     "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
     [`/api/skills/${PLUGIN_ID}`]: plugin,
-    [`/api/skills/${PLUGIN_ID}/plugin-skill?path=skills%2Fplan`]: {
+    [`/api/plugins/${PLUGIN_ID}/skill?path=skills%2Fplan`]: {
       instructions_markdown: "Write the plan first.",
     },
   });
@@ -386,7 +386,7 @@ test("a synced plugin says it changes in GitHub and hides restore and publish", 
   mockFetch({
     "/api/skills": { builtins: [], customs: [plugin] },
     [`/api/skills/${PLUGIN_ID}`]: plugin,
-    [`/api/skills/custom/${PLUGIN_ID}/versions`]: [
+    [`/api/plugins/${PLUGIN_ID}/versions`]: [
       {
         id: "version-2",
         version_number: 2,
@@ -603,7 +603,7 @@ describe("a plugin deleted in another tab", () => {
   });
 
   test("Share that gets a 404 shows the not-found state", async () => {
-    mockDeletedAfterLoad(`/api/skills/custom/${PLUGIN_ID}/share`);
+    mockDeletedAfterLoad(`/api/plugins/${PLUGIN_ID}/share`);
     const user = setupUser();
     render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 

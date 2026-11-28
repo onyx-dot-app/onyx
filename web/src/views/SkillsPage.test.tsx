@@ -46,7 +46,7 @@ jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
   setSkillEnabled: (...args: unknown[]) => mockSetSkillEnabled(...args),
   bulkUpdateSkills: (...args: unknown[]) => mockBulkUpdateSkills(...args),
-  deleteUserSkill: (...args: unknown[]) => mockDeleteUserSkill(...args),
+  deletePlugin: (...args: unknown[]) => mockDeleteUserSkill(...args),
 }));
 
 jest.mock("@opal/layouts/toast/store", () => ({

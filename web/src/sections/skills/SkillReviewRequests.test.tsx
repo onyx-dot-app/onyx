@@ -19,7 +19,7 @@ jest.mock("@/lib/fetcher", () => ({
 
 jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
-  reviewSkillVersion: (...args: unknown[]) => mockReviewSkillVersion(...args),
+  reviewPluginVersion: (...args: unknown[]) => mockReviewSkillVersion(...args),
 }));
 
 jest.mock("@opal/layouts", () => ({
@@ -56,7 +56,7 @@ function request(
 describe("SkillReviewRequests", () => {
   beforeEach(() => {
     mockFetch.mockReset().mockImplementation(async (url: string) => {
-      if (url === "/api/skills/review-requests") {
+      if (url === "/api/plugins/review-requests") {
         return [
           request(),
           request({
@@ -68,13 +68,13 @@ describe("SkillReviewRequests", () => {
           }),
         ];
       }
-      if (url === "/api/skills/custom/skill-1/versions/version-1") {
+      if (url === "/api/plugins/skill-1/versions/version-1") {
         return {
           description: "Writes reports.",
           instructions_markdown: "Report writer instructions.",
         };
       }
-      if (url === "/api/skills/custom/skill-2/versions/version-9") {
+      if (url === "/api/plugins/skill-2/versions/version-9") {
         return {
           description: "Writes the weekly report.",
           instructions_markdown: "Weekly report instructions.",
@@ -97,7 +97,7 @@ describe("SkillReviewRequests", () => {
     expect(screen.getByText("v1 · First publish")).toBeVisible();
     expect(screen.getByText("v3 · Update from v2")).toBeVisible();
     expect(screen.getAllByText("author@example.com")).toHaveLength(2);
-    expect(mockFetch).toHaveBeenCalledWith("/api/skills/review-requests");
+    expect(mockFetch).toHaveBeenCalledWith("/api/plugins/review-requests");
   });
 
   it("opens a review with the version content before any decision", async () => {
@@ -117,7 +117,7 @@ describe("SkillReviewRequests", () => {
     ).toBeVisible();
     expect(within(dialog).getByText("Writes the weekly report.")).toBeVisible();
     expect(mockFetch).toHaveBeenCalledWith(
-      "/api/skills/custom/skill-2/versions/version-9"
+      "/api/plugins/skill-2/versions/version-9"
     );
     expect(mockReviewSkillVersion).not.toHaveBeenCalled();
   });
@@ -156,7 +156,7 @@ describe("SkillReviewRequests", () => {
   it("keeps Approve off while the version content cannot load", async () => {
     const user = setupUser();
     mockFetch.mockImplementation(async (url: string) => {
-      if (url === "/api/skills/review-requests") return [request()];
+      if (url === "/api/plugins/review-requests") return [request()];
       throw new Error("boom");
     });
     render(<SkillReviewRequests onReviewed={jest.fn()} />);

@@ -48,7 +48,7 @@ import { usePluginDetail } from "@/lib/plugins/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
 import type { PluginDetail, PluginSkillSummary } from "@/lib/plugins/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { deleteUserSkill } from "@/lib/skills/api";
+import { deletePlugin } from "@/lib/skills/api";
 import {
   useRefreshSkillLists,
   useSkillEnablement,
@@ -448,7 +448,7 @@ export default function MemberPluginDetailPage({
     if (!skill || removing) return;
     setRemoving(true);
     try {
-      await deleteUserSkill(skill.id);
+      await deletePlugin(skill.id);
       refreshLists();
       toast.success(removeCopy("done", { name: skill.name }));
       navigation.go(listHref, { replace: true });

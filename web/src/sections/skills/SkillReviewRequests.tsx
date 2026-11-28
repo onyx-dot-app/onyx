@@ -17,7 +17,7 @@ import { Section, toast } from "@opal/layouts";
 import { SvgBlocks, SvgCheck, SvgEye, SvgX } from "@opal/icons";
 import { errorHandlingFetcher, fetchErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { reviewSkillVersion } from "@/lib/skills/api";
+import { reviewPluginVersion } from "@/lib/skills/api";
 import type {
   SkillReviewRequest,
   SkillVersionPreview,
@@ -58,7 +58,7 @@ export default function SkillReviewRequests({
     isLoading,
     mutate: refreshRequests,
   } = useSWR<SkillReviewRequest[], Error>(
-    SWR_KEYS.skillReviewRequests,
+    SWR_KEYS.pluginReviewRequests,
     errorHandlingFetcher
   );
 
@@ -67,7 +67,7 @@ export default function SkillReviewRequests({
     const name = request.name ?? t("unnamedSkill");
     setBusy(true);
     try {
-      await reviewSkillVersion(request.skill_id, request.version_id, decision);
+      await reviewPluginVersion(request.skill_id, request.version_id, decision);
       toast.success(
         decision === "approve"
           ? t("approvedToast", { name, number: request.version_number })
@@ -227,7 +227,7 @@ function SkillReviewModal({
     error,
     isLoading,
   } = useSWR<SkillVersionPreview, Error>(
-    SWR_KEYS.skillVersion(request.skill_id, request.version_id),
+    SWR_KEYS.pluginVersion(request.skill_id, request.version_id),
     errorHandlingFetcher
   );
   const close = busy ? undefined : onClose;

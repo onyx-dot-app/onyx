@@ -46,7 +46,7 @@ export class CustomizePluginPage {
   async setSaveAsNew(checked: boolean): Promise<void> {
     const response = this.page.waitForResponse(
       (candidate) =>
-        new URL(candidate.url()).pathname === "/api/skills/plugins/inspect"
+        new URL(candidate.url()).pathname === "/api/plugins/upload/inspect"
     );
     await this.uploadDialog
       .getByRole("checkbox", { name: "Save as a New Plugin" })
@@ -63,7 +63,7 @@ export class CustomizePluginPage {
   async saveUpload(): Promise<string> {
     const response = this.page.waitForResponse(
       (candidate) =>
-        new URL(candidate.url()).pathname === "/api/skills/plugins" &&
+        new URL(candidate.url()).pathname === "/api/plugins/upload" &&
         candidate.request().method() === "POST"
     );
     await this.uploadDialog

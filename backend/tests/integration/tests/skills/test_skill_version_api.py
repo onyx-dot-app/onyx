@@ -22,7 +22,7 @@ def owner() -> DATestUser:
 def _assert_refused(
     skill_id: UUID, version_id: UUID, user: DATestUser, detail: str
 ) -> None:
-    url = f"{API_SERVER_URL}/skills/custom/{skill_id}"
+    url = f"{API_SERVER_URL}/plugins/{skill_id}"
     for response in (
         client.get(f"{url}/versions", headers=user.headers),
         client.get(f"{url}/versions/{version_id}", headers=user.headers),
@@ -167,7 +167,7 @@ def test_version_of_another_skill_is_not_found(
     own_version = SkillManager.list_versions(own_skill.id, owner)[0]
 
     preview = client.get(
-        f"{API_SERVER_URL}/skills/custom/{own_skill.id}/versions/{other_version.id}",
+        f"{API_SERVER_URL}/plugins/{own_skill.id}/versions/{other_version.id}",
         headers=owner.headers,
     )
     restore = SkillManager.restore_version_response(

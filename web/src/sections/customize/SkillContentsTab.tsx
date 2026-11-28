@@ -11,9 +11,9 @@ import {
 } from "@/lib/customize/skillMarkdown";
 import {
   isSkillVersionStale,
-  patchUserSkill,
-  removeUserSkillFile,
-  uploadUserSkillFiles,
+  patchPlugin,
+  removePluginFile,
+  uploadPluginFiles,
 } from "@/lib/skills/api";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
 import { useSkillLimitCopy } from "@/lib/skills/hooks";
@@ -197,7 +197,7 @@ export default function SkillContentsTab({
         parsed.description !== base.description ||
         parsed.instructions !== base.instructions
       ) {
-        const updated = await patchUserSkill(detail.id, {
+        const updated = await patchPlugin(detail.id, {
           description: parsed.description,
           instructions_markdown: parsed.instructions,
           base_version_id: versionId,
@@ -220,7 +220,7 @@ export default function SkillContentsTab({
         ...uploadedPaths.current,
       ]);
       for (const upload of uploads) {
-        const updated = await uploadUserSkillFiles(
+        const updated = await uploadPluginFiles(
           detail.id,
           upload.file,
           versionId
@@ -235,7 +235,7 @@ export default function SkillContentsTab({
       }
       for (const path of removed) {
         if (!present.has(path)) continue;
-        const updated = await removeUserSkillFile(detail.id, path, versionId);
+        const updated = await removePluginFile(detail.id, path, versionId);
         versionId = updated.current_version_id;
         setRemoved(
           (current) => new Set([...current].filter((item) => item !== path))

@@ -19,8 +19,8 @@ import { errorHandlingFetcher, fetchErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   isSkillVersionStale,
-  publishSkill,
-  restoreSkillVersion,
+  publishPlugin,
+  restorePluginVersion,
 } from "@/lib/skills/api";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 import { usePublishAction, useSkillLimitCopy } from "@/lib/skills/hooks";
@@ -61,7 +61,7 @@ export default function SkillVersionsTab({
     isLoading,
     mutate: refreshVersions,
   } = useSWR<SkillVersion[], Error>(
-    SWR_KEYS.skillVersions(skillId),
+    SWR_KEYS.pluginVersions(skillId),
     errorHandlingFetcher
   );
   const currentVersion = versions.find((version) => version.is_current);
@@ -72,7 +72,7 @@ export default function SkillVersionsTab({
     if (!currentVersion || busy) return;
     setBusy(true);
     try {
-      const restored = await restoreSkillVersion(
+      const restored = await restorePluginVersion(
         skillId,
         version.id,
         currentVersion.id
@@ -108,7 +108,7 @@ export default function SkillVersionsTab({
     if (!currentVersion || busy) return;
     setBusy(true);
     try {
-      const published = await publishSkill(skillId, currentVersion.id);
+      const published = await publishPlugin(skillId, currentVersion.id);
       if (
         published.published_version_number === currentVersion.version_number
       ) {
@@ -353,7 +353,7 @@ function SkillVersionPreviewView({
     error,
     isLoading,
   } = useSWR<SkillVersionPreview, Error>(
-    SWR_KEYS.skillVersion(skillId, version.id),
+    SWR_KEYS.pluginVersion(skillId, version.id),
     errorHandlingFetcher
   );
 

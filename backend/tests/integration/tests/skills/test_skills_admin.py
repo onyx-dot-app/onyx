@@ -330,7 +330,7 @@ def test_replace_group_shares_400_on_unknown_group_id(
 def test_delete_skill_404_for_nonexistent(admin_user: DATestUser) -> None:
     bogus_id = uuid4()
     response = client.delete(
-        f"{API_SERVER_URL}/skills/custom/{bogus_id}",
+        f"{API_SERVER_URL}/plugins/{bogus_id}",
         headers=admin_user.headers,
     )
     assert response.status_code == 404

@@ -130,7 +130,7 @@ def test_non_owner_cannot_delete_skill(
     """Users without edit permissions cannot delete another user's skill."""
     skill = SkillManager.create_custom(admin_user, name=f"no-del-{uuid4().hex[:6]}")
     response = client.delete(
-        f"{API_SERVER_URL}/skills/custom/{skill.id}",
+        f"{API_SERVER_URL}/plugins/{skill.id}",
         headers=basic_user.headers,
     )
     assert response.status_code == 404

@@ -37,9 +37,9 @@ import {
   TransferTrailingButton,
 } from "@/sections/modals/ShareModalPermissionControls";
 import {
-  updateSkillShares,
+  updatePluginShares,
   takenPluginName,
-  transferSkillOwnership,
+  transferPluginOwnership,
 } from "@/lib/skills/api";
 import TakenNameField, { canUseName } from "@/sections/skills/TakenNameField";
 import type {
@@ -115,7 +115,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     isValidating,
     mutate: refreshSkill,
   } = useSWR<CustomSkill>(
-    open && skillId ? SWR_KEYS.skillSharing(skillId) : null,
+    open && skillId ? SWR_KEYS.pluginSharing(skillId) : null,
     errorHandlingFetcher,
     {
       // Deleted elsewhere: the refreshed list drops it.
@@ -453,7 +453,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       if (canSetGroupSettings && groupChanges.length > 0) {
         payload.group_settings = groupChanges;
       }
-      const saved = await updateSkillShares(props.skillId, payload);
+      const saved = await updatePluginShares(props.skillId, payload);
       void refreshSkill();
       if (
         isPublishing &&
@@ -492,7 +492,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         new_owner_user_id: transferTarget.value.replace("user-", ""),
       };
       if (transferTakenNames.length > 0) request.name = transferName;
-      await transferSkillOwnership(props.skillId, request);
+      await transferPluginOwnership(props.skillId, request);
       toast.success(t("share.transferredToast.message"));
       props.onSaved();
       closeModal();

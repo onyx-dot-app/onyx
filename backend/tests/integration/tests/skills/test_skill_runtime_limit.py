@@ -83,7 +83,7 @@ def test_group_join_past_500_mb_keeps_every_skill_under_900_mb(
         _set_size(skill.id, SKILL_RUNTIME_MAX_BYTES * 3 // 10)
         # The group is empty, so the write check passes.
         client.patch(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
+            f"{API_SERVER_URL}/plugins/{skill.id}/share",
             json={
                 "group_shares": [{"group_id": group.id, "permission": "VIEWER"}],
                 "group_settings": [

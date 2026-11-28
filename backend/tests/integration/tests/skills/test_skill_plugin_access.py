@@ -55,7 +55,7 @@ def _patch(
     user: DATestUser, skill_id: UUID | str, body: dict[str, Any]
 ) -> httpx.Response:
     return client.patch(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}",
+        f"{API_SERVER_URL}/plugins/{skill_id}",
         json=body,
         headers=user.headers,
     )
@@ -79,16 +79,14 @@ def _transfer(
     if name is not None:
         body["name"] = name
     return client.post(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/transfer-ownership",
+        f"{API_SERVER_URL}/plugins/{skill_id}/transfer-ownership",
         json=body,
         headers=user.headers,
     )
 
 
 def _delete(user: DATestUser, skill_id: UUID | str) -> httpx.Response:
-    return client.delete(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}", headers=user.headers
-    )
+    return client.delete(f"{API_SERVER_URL}/plugins/{skill_id}", headers=user.headers)
 
 
 def _publish(user: DATestUser, skill: SkillResponse) -> SkillResponse:

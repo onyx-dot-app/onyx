@@ -70,9 +70,7 @@ test.describe("Customize page", () => {
       await skills.saveSkillMd(
         text.replace("Do the task.", "Do the task in three steps.")
       );
-      const saved = await page.request.get(
-        `/api/skills/custom/${created.id}/edit`
-      );
+      const saved = await page.request.get(`/api/plugins/${created.id}/edit`);
       expect((await saved.json()).instructions_markdown).toBe(
         "Do the task in three steps."
       );

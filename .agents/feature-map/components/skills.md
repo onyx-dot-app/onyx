@@ -68,9 +68,9 @@
   dialog (`lib/skills/sharing.ts:canChangeOrganizationAccess`); each says
   why. `can_delete` is false for a synced plugin.
 - **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
-  ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
+  ([[#plugin-upload]]). `POST /plugins/upload/inspect` shows the skills, the
   MCP servers the plugin needs with their state for the user, the parts Onyx
-  does not use, and the save target. `POST /skills/plugins` saves it. On the
+  does not use, and the save target. `POST /plugins/upload` saves it. On the
   web, Add > Upload plugin on the Plugins tab of Customize opens
   `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
   plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
@@ -156,7 +156,7 @@
   every file. A SKILL.md bundle replaces the text and
   the files after a confirmation.
   The skill comes from `GET /skills`; only owners and editors read
-  `/skills/custom/{id}/edit` (it is 404 for a viewer), and a viewer reads the
+  `/plugins/{id}/edit` (it is 404 for a viewer), and a viewer reads the
   instructions and the supporting file list from `/skills/{id}/preview`. `ShareSkillModal` holds only the
   share settings. Admin Panel → Skills (`views/SkillsPage.tsx`,
   `sections/skills/AdminSkillsTable.tsx`; `kind: plugin` rows are on Admin
@@ -859,7 +859,7 @@ the app from the same rule
     (`file_store/staging.py:delete_files_best_effort`).
 22. `version-history-api` **Version history uses the EDIT policy.** The
     owner, editors and global `MANAGE_PLUGINS` list every version
-    (`GET /skills/custom/{id}/versions`), preview one
+    (`GET /plugins/{id}/versions`), preview one
     (`GET .../versions/{version_id}`) and restore one
     (`POST .../versions/{version_id}/restore`); a viewer or a version of
     another skill gets 404. `review_status` is derived from the plugin
@@ -877,13 +877,13 @@ the app from the same rule
     failed settings read stops the publish. Global `MANAGE_PLUGINS` and a
     system write (`actor` None: community downgrade, approve) always
     publish. Every publish path calls it: the access-change
-    write path for a private plugin, `POST /skills/custom/{id}/publish` and
+    write path for a private plugin, `POST /plugins/{id}/publish` and
     approve. A save never moves `published_version_id`. Review state is two
     pointers on `plugin`: a request sets `pending_version_id` (a newer request
     replaces it), and a publish or a deny clears it. There is no denied state.
     A new skill created published and other publishes return CONFLICT on a
     clash. Requests
-    (`GET /skills/review-requests`, approve, deny) need global
+    (`GET /plugins/review-requests`, approve, deny) need global
     `MANAGE_PLUGINS`; the list shows the plugin author and the version's
     `created_at`, and the admin approves or denies from a view of the version
     preview. The web hook `usePublishAction` mirrors the setting for the
@@ -891,7 +891,7 @@ the app from the same rule
     The **Skill Publishing** card on Admin Panel → Skills
     (`web/src/sections/skills/SkillPublishingCard.tsx`) also
     holds **Default Access**, saved with
-    `PUT /skills/organization-library/default-access`, and **Sharing**, saved
+    `PUT /plugins/organization-library/default-access`, and **Sharing**, saved
     as `plugin_sharing`.
 24. `chat-skills-one-definition` **Chat's skills have one definition and
     mentions are records.** Change which skills chat gets only in
@@ -951,7 +951,7 @@ the app from the same rule
     plugins ahead of it on a shared name, also one that loses another name
     (`db/skill.py:skill_user_states`); a 409
     `SKILL_NAME_CONFLICT` on a turn-on has `conflict_names`.
-    `GET /skills/{id}/plugin-skill?path=` returns one skill's SKILL.md
+    `GET /plugins/{id}/skill?path=` returns one skill's SKILL.md
     instructions in the version the user runs. `GET /skills` marks each custom
     skill `member_visible`: false for one a global `MANAGE_PLUGINS` user sees
     only through that permission; the Customize lists leave those out. The description is the plugin.json description of the version

@@ -28,7 +28,7 @@ def _assert_skill_hidden(skill_id: object, user: DATestUser) -> None:
 
 def _assert_edit_hidden(skill_id: object, user: DATestUser) -> None:
     response = client.get(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/edit",
+        f"{API_SERVER_URL}/plugins/{skill_id}/edit",
         headers=user.headers,
     )
     assert response.status_code == 404
@@ -388,7 +388,7 @@ def test_transfer_rejects_missing_and_inactive_targets(
     skill_id = _skill_id(skill)
 
     missing_response = client.post(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/transfer-ownership",
+        f"{API_SERVER_URL}/plugins/{skill_id}/transfer-ownership",
         json={"new_owner_user_id": str(uuid4())},
         headers=basic_user.headers,
     )

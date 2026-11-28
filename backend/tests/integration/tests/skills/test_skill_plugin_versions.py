@@ -120,7 +120,7 @@ def _patch(
     body: dict[str, Any],
 ) -> httpx.Response:
     return client.patch(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}",
+        f"{API_SERVER_URL}/plugins/{skill_id}",
         json=body,
         headers=user.headers,
     )
@@ -138,7 +138,7 @@ def _replace(
     if base_version_id is not None:
         files["base_version_id"] = (None, base_version_id, None)
     return client.put(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/bundle",
+        f"{API_SERVER_URL}/plugins/{skill_id}/bundle",
         files=files,
         headers=_multipart_headers(user),
     )
@@ -157,7 +157,7 @@ def _add_file(
     if base_version_id is not None:
         files["base_version_id"] = (None, base_version_id, None)
     return client.post(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/files",
+        f"{API_SERVER_URL}/plugins/{skill_id}/files",
         files=files,
         headers=_multipart_headers(user),
     )
@@ -170,7 +170,7 @@ def _remove_file(
     if base_version_id is not None:
         params["base_version_id"] = base_version_id
     return client.delete(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/files",
+        f"{API_SERVER_URL}/plugins/{skill_id}/files",
         params=params,
         headers=user.headers,
     )
@@ -496,7 +496,7 @@ def test_save_on_published_plugin_waits_for_publish_update(user: DATestUser) -> 
     assert _instructions_seen_by(user, created["id"]) == "Published edit."
 
     client.post(
-        f"{API_SERVER_URL}/skills/custom/{created['id']}/publish",
+        f"{API_SERVER_URL}/plugins/{created['id']}/publish",
         json={"base_version_id": str(state.current_version_id)},
         headers=user.headers,
     ).raise_for_status()
@@ -707,7 +707,7 @@ def test_delete_removes_the_plugin(user: DATestUser) -> None:
     _patch(user, skill["id"], {"description": "Edited"}).raise_for_status()
 
     client.delete(
-        f"{API_SERVER_URL}/skills/custom/{skill['id']}", headers=user.headers
+        f"{API_SERVER_URL}/plugins/{skill['id']}", headers=user.headers
     ).raise_for_status()
     with get_session_with_current_tenant() as db_session:
         assert db_session.get(Plugin, UUID(skill["id"])) is None

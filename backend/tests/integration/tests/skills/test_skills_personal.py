@@ -1,7 +1,7 @@
 """Personal (user-level) skill API tests (HTTP boundary).
 
 Covers the user-facing ``POST /skills/custom``,
-``PUT /skills/custom/{id}/bundle``, and ``DELETE /skills/custom/{id}``
+``PUT /plugins/{id}/bundle``, and ``DELETE /plugins/{id}``
 endpoints: ownership/visibility rules, reserved names, duplicate names,
 promotion to org-wide, and admin disable as a reversible mute.
 """

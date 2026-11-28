@@ -84,14 +84,14 @@ def test_off_refuses_every_publish_path(
     _assert_refused_off(SkillManager.publish_response(published.id, owner))
     _assert_refused_off(
         client.patch(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
+            f"{API_SERVER_URL}/plugins/{skill.id}/share",
             json={"public_permission": "VIEWER"},
             headers=owner.headers,
         )
     )
     _assert_refused_off(
         client.patch(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}",
+            f"{API_SERVER_URL}/plugins/{skill.id}",
             json={"public_permission": "VIEWER"},
             headers=owner.headers,
         )
@@ -184,7 +184,7 @@ def test_requires_review_makes_a_pending_request(
 
     first = SkillManager.publish(by_route.id, owner)
     shared = client.patch(
-        f"{API_SERVER_URL}/skills/custom/{by_share.id}/share",
+        f"{API_SERVER_URL}/plugins/{by_share.id}/share",
         json={"public_permission": "VIEWER"},
         headers=owner.headers,
     )

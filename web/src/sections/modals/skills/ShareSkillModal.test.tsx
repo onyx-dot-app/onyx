@@ -59,8 +59,8 @@ jest.mock("@/hooks/useShareableGroups", () => ({
 }));
 const mockTransferSkillOwnership = jest.fn();
 jest.mock("@/lib/skills/api", () => ({
-  updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
-  transferSkillOwnership: (...args: unknown[]) =>
+  updatePluginShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
+  transferPluginOwnership: (...args: unknown[]) =>
     mockTransferSkillOwnership(...args),
   takenPluginName: jest.requireActual("@/lib/skills/api").takenPluginName,
 }));
@@ -292,9 +292,7 @@ describe("ShareSkillModal", () => {
       />
     );
     await pickCompanySetting(/^Required/);
-    expect(mockLoadSkill).toHaveBeenCalledWith(
-      "/api/skills/custom/custom-1/share"
-    );
+    expect(mockLoadSkill).toHaveBeenCalledWith("/api/plugins/custom-1/share");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
