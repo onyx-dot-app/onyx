@@ -679,6 +679,8 @@ class AzureVoiceProvider(VoiceProviderInterface):
             model=self.tts_model or "azure-speech-tts",
             provider="azure",
             input_messages=[{"role": "user", "content": text}],
+            # The body yields; the caller can resume it in another task.
+            mark_as_current=False,
         ):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=headers, data=ssml) as response:

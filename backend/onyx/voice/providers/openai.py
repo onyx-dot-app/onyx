@@ -633,6 +633,8 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
             model=self.tts_model,
             provider="openai",
             input_messages=[{"role": "user", "content": text}],
+            # The body yields; the caller can resume it in another task.
+            mark_as_current=False,
         ):
             async with client.audio.speech.with_streaming_response.create(
                 model=self.tts_model,
