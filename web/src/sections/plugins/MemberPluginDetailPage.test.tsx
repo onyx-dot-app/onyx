@@ -12,6 +12,7 @@ import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import { mockFetch } from "@tests/setup/integrationTestUtils";
 
 const PLUGIN_ID = "11111111-1111-4111-8111-111111111111";
+const NOT_FOUND = "This plugin is not available to you.";
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -53,6 +54,27 @@ test("a plugin that is one skill opens the skill page", async () => {
   expect(
     screen.queryByRole("tab", { name: /^Skills/ })
   ).not.toBeInTheDocument();
+});
+
+test("the member page does not open a plugin that members cannot see", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  mockFetch({
+    "/api/skills": {
+      builtins: [],
+      customs: [
+        customFixture({
+          id: PLUGIN_ID,
+          name: "private-kit",
+          kind: "plugin",
+          member_visible: false,
+        }),
+      ],
+    },
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(await screen.findByText(NOT_FOUND)).toBeInTheDocument();
+  expect(screen.queryByText("private-kit")).not.toBeInTheDocument();
 });
 
 test("an uploaded plugin lists its needs and turning it on shows the ones not on", async () => {
