@@ -21,9 +21,10 @@ providers.
 | `onyx_connector` | Connector definitions (`/manage/admin/connector`) | numeric id |
 | `onyx_cc_pair` | Connector-credential pairs (`/manage/connector/.../credential/...`) | numeric id |
 | `onyx_document_set` | Document sets (`/manage/admin/document-set`) | numeric id |
-| `onyx_custom_tool` | Custom actions (`/admin/tool/custom`) | numeric id |
+| `onyx_integration` | Integrations: MCP servers and OpenAPI apps (`/admin/integrations`) | numeric id |
+| `onyx_custom_tool` | **Deprecated**, use `onyx_integration`. Custom actions (`/admin/tool/custom`) | numeric id |
 | `onyx_agent` | Agents / assistants (`/persona`) | numeric id |
-| `onyx_mcp_server` | MCP servers Onyx connects to (`/admin/mcp`) | numeric id |
+| `onyx_mcp_server` | **Deprecated**, use `onyx_integration`. MCP servers (`/admin/mcp`) | numeric id |
 | `onyx_user_group` | User groups: roster, managers, permission grants (**EE only**) | numeric id |
 | `data.onyx_llm_providers` | Read-only list of providers + defaults | — |
 | `data.onyx_embedding_providers` | Read-only list of embedding providers | — |
@@ -85,6 +86,7 @@ configuration and never reaches a state file. Prefer the twin.
 | `onyx_credential` | `credential_json` | `credential_json_wo` |
 | `onyx_mcp_server` | `api_token`, `admin_credentials` | `api_token_wo`, `admin_credentials_wo` |
 | `onyx_custom_tool` | `custom_headers` | `custom_headers_wo` |
+| `onyx_integration` | — | `organization_credentials_wo` |
 
 Set one or the other, never both. `onyx_credential` needs exactly one of the two, because
 the payload is mandatory.

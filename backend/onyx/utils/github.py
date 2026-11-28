@@ -6,6 +6,7 @@ from urllib.parse import quote, unquote, urlparse
 
 import requests
 from pydantic import BaseModel, ConfigDict
+from requests.structures import CaseInsensitiveDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -158,6 +159,65 @@ def _github_get(
         ) from exc
 
 
+def _github_failure(
+    status: int, headers: Mapping[str, str], used_authorization: bool
+) -> OnyxError:
+    """The error for a GitHub repository request that did not succeed."""
+    if status == 401:
+        return OnyxError(
+            OnyxErrorCode.UNAUTHENTICATED,
+            "Your GitHub connection has expired. Reconnect GitHub, then try again.",
+        )
+    if status in {403, 429} and (
+        status == 429
+        or headers.get("X-RateLimit-Remaining") == "0"
+        or "Retry-After" in headers
+    ):
+        return github_rate_limited(headers)
+    if status == 403 and used_authorization:
+        return OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "GitHub denied access to this repository. Confirm that your connected account has access and has authorized organization SSO if required.",
+        )
+    if status in {403, 404}:
+        return OnyxError(OnyxErrorCode.NOT_FOUND, GITHUB_REPOSITORY_NOT_FOUND)
+    return OnyxError(
+        OnyxErrorCode.BAD_GATEWAY,
+        "Couldn't load the repository from GitHub. Try again in a few minutes.",
+    )
+
+
+def github_default_branch(
+    source: GitHubSource, authorization_header: str | None = None
+) -> str:
+    """The repository's default branch. Raises when GitHub does not give it."""
+    repository_url = (
+        f"{GITHUB_API_BASE_URL}/repos/{quote(source.owner, safe='')}/"
+        f"{quote(source.repo, safe='')}"
+    )
+    response = _github_get(repository_url)
+    used_authorization = False
+    if response.status_code in {401, 403, 404, 429} and authorization_header:
+        response.close()
+        response = _github_get(repository_url, authorization=authorization_header)
+        used_authorization = True
+    with response:
+        if response.status_code != 200:
+            raise _github_failure(
+                response.status_code, response.headers, used_authorization
+            )
+        try:
+            branch = response.json().get("default_branch")
+        except (requests.JSONDecodeError, ValueError, AttributeError):
+            branch = None
+    if not isinstance(branch, str) or not branch:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "GitHub returned an unreadable repository. Try again.",
+        )
+    return branch
+
+
 def resolve_github_revision(
     source: GitHubSource,
     authorization_header: str | None = None,
@@ -194,7 +254,7 @@ def resolve_github_revision(
         for index in range(len(ref_parts), 0, -1)
     ]
     last_status = 404
-    last_headers: dict[str, str] = {}
+    last_headers: Mapping[str, str] = CaseInsensitiveDict()
     used_authorization = False
     for candidate_ref, candidate_subpath in candidates:
         commit_url = (
@@ -212,7 +272,7 @@ def resolve_github_revision(
         with response:
             # GitHub answers 422 for a branch, tag or commit that does not exist.
             last_status = 404 if response.status_code == 422 else response.status_code
-            last_headers = dict(response.headers)
+            last_headers = response.headers
             if response.status_code != 200:
                 continue
             try:
@@ -233,22 +293,6 @@ def resolve_github_revision(
                 subpath=candidate_subpath,
             )
 
-    if last_status == 401:
-        raise OnyxError(
-            OnyxErrorCode.UNAUTHENTICATED,
-            "Your GitHub connection has expired. Reconnect GitHub, then try again.",
-        )
-    if last_status in {403, 429} and (
-        last_status == 429
-        or last_headers.get("X-RateLimit-Remaining") == "0"
-        or "Retry-After" in last_headers
-    ):
-        raise github_rate_limited(last_headers)
-    if last_status == 403 and used_authorization:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "GitHub denied access to this repository. Confirm that your connected account has access and has authorized organization SSO if required.",
-        )
     if last_status == 404 and source.tree_tail:
         repository_url = f"{GITHUB_API_BASE_URL}/repos/{encoded_owner}/{encoded_repo}"
         with _github_get(
@@ -262,12 +306,7 @@ def resolve_github_revision(
                 f"The branch or folder '{'/'.join(source.tree_tail)}' is not in "
                 f"{source.owner}/{source.repo}.",
             )
-    if last_status in {403, 404}:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, GITHUB_REPOSITORY_NOT_FOUND)
-    raise OnyxError(
-        OnyxErrorCode.BAD_GATEWAY,
-        "Couldn't load the repository from GitHub. Try again in a few minutes.",
-    )
+    raise _github_failure(last_status, last_headers, used_authorization)
 
 
 def download_github_archive(

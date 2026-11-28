@@ -1,17 +1,20 @@
 """Unit tests for onyx.utils.github."""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from requests.structures import CaseInsensitiveDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.github import (
     GitHubSource,
     download_github_archive,
+    github_default_branch,
     parse_github_source,
+    resolve_github_revision,
 )
 
 _SOURCE = GitHubSource(owner="onyx-dot-app", repo="onyx")
@@ -46,7 +49,7 @@ class TestParseGithubSource:
 def _mock_response(
     chunks: Iterable[bytes],
     status_code: int = 200,
-    headers: dict[str, str] | None = None,
+    headers: Mapping[str, str] | None = None,
 ) -> MagicMock:
     """Build a MagicMock that quacks like a streamed ``requests.Response``."""
     response = MagicMock(spec=requests.Response)
@@ -184,3 +187,25 @@ class TestDownloadGithubArchive:
                 )
 
         assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+
+
+class TestRateLimitHeaders:
+    @pytest.mark.parametrize("lookup", [github_default_branch, resolve_github_revision])
+    def test_lowercase_rate_limit_headers_give_the_rate_limit_error(
+        self, lookup: Callable[[GitHubSource, str | None], object]
+    ) -> None:
+        def limited(*_args: object, **_kwargs: object) -> MagicMock:
+            return _mock_response(
+                [],
+                status_code=403,
+                headers=CaseInsensitiveDict(
+                    {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1800000000"}
+                ),
+            )
+
+        with patch("onyx.utils.github.ssrf_safe_get", side_effect=limited):
+            with pytest.raises(OnyxError) as exc_info:
+                lookup(_SOURCE, "Bearer ghp_secret")
+
+        assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
+        assert exc_info.value.extra == {"reset_at": "2027-01-15T08:00:00+00:00"}

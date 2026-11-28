@@ -21,10 +21,31 @@ BREAKING CHANGES:
 
 FEATURES:
 
+* **New resource:** `onyx_integration` (Onyx v5.1+). It manages an MCP server or an OpenAPI
+  app on the integrations API (`/admin/integrations`), with its sign-in, organization
+  credentials, switch and install setting.
 * **New resource:** `onyx_agent_label`.
 * **New data source:** `onyx_tools`. Use it to find built-in action ids for
   `onyx_agent.tool_ids`.
 * **New data source:** `onyx_user_groups` (Enterprise Edition).
+
+DEPRECATIONS:
+
+* resource/onyx_mcp_server: use `onyx_integration` with `server_url`. A later release removes it.
+  `onyx_integration` cannot limit a server to a list of `users` and `groups`. Keep a server
+  with `is_public = false` on `onyx_mcp_server` until Onyx supports that list.
+* resource/onyx_custom_tool: use `onyx_integration` with `openapi_document`. A later release
+  removes it. `onyx_integration` cannot send the calling user's Onyx credentials, and
+  `auth_mode = "individual"` is not the same as `passthrough_auth`. Keep a tool with
+  `passthrough_auth = true` on `onyx_custom_tool`.
+* The integration ids are not the old resource ids. To move a resource:
+  1. Add an `onyx_integration` block and run `terraform import` with the integration id from
+     **Admin Panel → Integrations**.
+  2. Change references to the old resource, such as `onyx_agent.tool_ids`, to the action ids
+     from the `onyx_tools` data source. The `onyx_integration` id is not an action id.
+  3. Remove the old resource from state with `terraform state rm`.
+  4. Remove the old resource block from the configuration. If you keep the block, the next
+     plan creates the old resource again.
 
 ENHANCEMENTS:
 

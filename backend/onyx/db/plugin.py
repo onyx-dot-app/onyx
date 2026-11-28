@@ -627,16 +627,6 @@ def get_plugin_current_version_id(plugin_id: UUID, db_session: Session) -> UUID 
     )
 
 
-def get_current_version_bundle_file_id(
-    plugin_id: UUID, db_session: Session
-) -> str | None:
-    return db_session.scalar(
-        select(PluginVersion.bundle_file_id)
-        .join(Plugin, Plugin.current_version_id == PluginVersion.id)
-        .where(Plugin.id == plugin_id)
-    )
-
-
 # --- Skill plugins and their access ----------------------------------------
 
 

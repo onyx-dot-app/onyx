@@ -126,7 +126,12 @@ export default function SkillBundlePicker({
             ".zip,.md,application/zip,application/x-zip-compressed,text/markdown",
         })}
       />
-      <Section height="auto" flexDirection={compact ? "row" : "column"} gap={2}>
+      <Section
+        height="auto"
+        flexDirection={compact ? "row" : "column"}
+        gap={2}
+        wrap={compact}
+      >
         <Button
           type="button"
           icon={SvgUploadCloud}
@@ -154,7 +159,12 @@ export default function SkillBundlePicker({
           </Button>
         )}
         {(value || compact) && (
-          <Text font="main-ui-body" color="text-03">
+          <Text
+            font="main-ui-body"
+            color="text-03"
+            maxLines={compact ? 1 : undefined}
+            overflowTooltip={compact}
+          >
             {value
               ? `${value.displayName}${value.source === "folder" ? "/" : ""}`
               : t("bundlePicker.noFile.description")}

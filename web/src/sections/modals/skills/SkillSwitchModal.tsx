@@ -4,10 +4,10 @@ import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { SvgAlertTriangle } from "@opal/icons";
-import type { SkillEnablement } from "@/lib/skills/hooks";
+import type { PluginEnablement } from "@/lib/skills/hooks";
 
 interface SkillSwitchModalProps {
-  enablement: SkillEnablement;
+  enablement: PluginEnablement;
 }
 
 /** Confirms turning on a skill or plugin whose skill name another enabled

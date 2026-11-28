@@ -7,7 +7,7 @@ import { toast } from "@opal/layouts";
 import { usePanel } from "@/lib/customize/hooks";
 import { newSkillHref, pluginHref } from "@/lib/customize/paths";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
-import { useRefreshSkillLists } from "@/lib/skills/hooks";
+import { useRefreshPluginLists } from "@/lib/skills/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import UploadPluginModal from "@/sections/modals/plugins/UploadPluginModal";
 
@@ -25,7 +25,7 @@ export default function UploadPluginFlow({
   const uploadCopy = useTranslations("plugins.upload");
   const panel = usePanel();
   const navigation = useNavigation();
-  const revalidate = useRefreshSkillLists();
+  const revalidate = useRefreshPluginLists();
   const { mutate } = useSWRConfig();
   return (
     <UploadPluginModal
