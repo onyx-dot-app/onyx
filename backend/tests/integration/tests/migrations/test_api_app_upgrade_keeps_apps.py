@@ -89,7 +89,7 @@ def _spec(title: str) -> dict[str, Any]:
 SNAPSHOT_TABLES: dict[str, tuple[str, list[str]]] = {
     "integration": ("id", ["api_app_id"]),
     "integration_connection": ("id", []),
-    "integration_oauth_client": ("integration_id", []),
+    "integration_oauth_client": ("integration_id", ["legacy_redirect_path"]),
     "integration_action": ("id", []),
     "integration_action_policy": ("id", []),
     "persona__integration": ("integration_id", []),
