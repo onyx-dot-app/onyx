@@ -35,7 +35,10 @@ import {
 } from "@/lib/customize/paths";
 import { FetchError } from "@/lib/fetcher";
 import { appType } from "@/lib/integrations/craft";
-import { useIntegrationPresets } from "@/lib/integrations/hooks";
+import {
+  useAdminIntegrations,
+  useIntegrationPresets,
+} from "@/lib/integrations/hooks";
 import { createIntegration } from "@/lib/integrations/svc";
 import type {
   AuthMethod,
@@ -177,6 +180,8 @@ export default function AddIntegrationModal({
   const prefill = start.kind === "prefill" ? start.prefill : null;
   const flow: Flow = start.kind === "prefill" ? "mcp_server" : start.kind;
   const presets = useIntegrationPresets(flow === "catalog");
+  // A built-in app can be added once, so the catalog leaves out added presets.
+  const integrations = useAdminIntegrations(flow === "catalog");
 
   // A link with a bad URL opens the form with the URL error.
   const badPrefillUrl = prefill !== null && !normalizedUrl(prefill.serverUrl);
@@ -532,10 +537,18 @@ export default function AddIntegrationModal({
     canChooseOrganization;
 
   function catalogStep() {
-    if (presets.isLoading) return <IconLoader />;
+    if (presets.isLoading || integrations.isLoading) return <IconLoader />;
+    const addedPresetIds = new Set(
+      (integrations.data ?? []).map((integration) => integration.preset_id)
+    );
+    // Without the integrations list, the modal cannot tell which presets are added.
+    const presetsLoadFailed = presets.error || integrations.error;
     const tiles = [
-      ...(presets.data ?? [])
-        .filter((preset) => !hasSuggestedMcpServer(preset.id))
+      ...(presetsLoadFailed ? [] : (presets.data ?? []))
+        .filter(
+          (preset) =>
+            !hasSuggestedMcpServer(preset.id) && !addedPresetIds.has(preset.id)
+        )
         .map((preset) => ({
           id: preset.id,
           name: preset.name,
@@ -555,7 +568,7 @@ export default function AddIntegrationModal({
     );
     return (
       <Section gap={4} alignItems="stretch" height="auto">
-        {presets.error && (
+        {presetsLoadFailed && (
           <MessageCard variant="error" title={t("preset.loadFailed")} />
         )}
         <CardGrid columns="one-to-four">

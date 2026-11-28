@@ -25,6 +25,8 @@ Group or user restriction needs EE.
   and suggested MCP servers in one grid, with or without Craft, where a suggested MCP server replaces
   the preset of its service
   ([TECH-DEBT.md](../TECH-DEBT.md#linear-and-notion-presets-hidden-from-the-catalog)).
+  The modal leaves out a preset whose `preset_id` is in `GET /admin/integrations`,
+  because a built-in app has only one app row.
   Each opens the two-step
   add modal: a name and a URL, then the detected sign-in, which posts to
   `POST /admin/integrations`. `/admin/integrations/new` and
