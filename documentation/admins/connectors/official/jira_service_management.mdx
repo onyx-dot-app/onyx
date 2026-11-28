@@ -14,6 +14,9 @@ The default is every **30** minutes.
 
 Onyx indexes public comments. It does not index internal (agent-only) comments.
 
+**Sync with Jira Service Management** is not offered. Onyx does not copy the permissions of a request.
+The access type can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**.
+
 The Jira connector and this connector index the same issue as two separate documents.
 
 | Content  | Notes                                                                                            |
@@ -30,6 +33,12 @@ To index a software or business project, use the [Jira connector](/admins/connec
 
 The connector uses the same credential as the Jira connector.
 Give the account **Browse Projects** in the service project to index.
+
+<Warning>
+  Onyx indexes every request the account can browse. It does not keep the restrictions of the service project,
+  such as a request that only its reporter or an agent can see. Anyone who can see the connector's documents
+  in Onyx can see every indexed request.
+</Warning>
 
 <Steps>
   <Step title="Create an API token">
@@ -55,5 +64,13 @@ Give the account **Browse Projects** in the service project to index.
     Enter the key of the service project, for example `HELP`. Onyx checks the project before you create
     the connector. It fails when the project does not exist, the account cannot browse it,
     or the project is not a Jira Service Management project.
+  </Step>
+
+  <Step title="Choose who can see the requests">
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Only Me**.
+    **Specific Groups** and **Only Me** are available on Onyx Cloud and Enterprise Edition.
+    On the Community Edition, requests are visible to all Onyx users.
+    Use a service project that all Onyx users may read, or use Enterprise Edition and **Specific Groups**.
+    See [Document Access Controls](/admins/connectors/overview#document-access-controls) for what each option means.
   </Step>
 </Steps>
