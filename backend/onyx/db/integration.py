@@ -623,8 +623,9 @@ def upsert_oauth_client__no_commit(
     db_session: Session,
 ) -> IntegrationOAuthClient:
     """Write the OAuth client in the new format. An unset ``client_secret``
-    keeps the stored one. A new client id drops the registration of the old
-    one. A row in an old format keeps its client and registration."""
+    keeps the stored one. A new client id drops the registration and the
+    legacy redirect path of the old one. A row in an old format keeps its
+    client and registration."""
     oauth_client = db_session.get(IntegrationOAuthClient, integration_id)
     if oauth_client is None:
         oauth_client = IntegrationOAuthClient(
@@ -642,6 +643,7 @@ def upsert_oauth_client__no_commit(
     if client_id != stored.client_id:
         oauth_client.client_id = client_id  # ty: ignore[invalid-assignment]
         oauth_client.registration = None
+        oauth_client.legacy_redirect_path = None
     elif legacy:
         oauth_client.client_id = client_id  # ty: ignore[invalid-assignment]
         oauth_client.registration = stored.registration or None  # ty: ignore[invalid-assignment]

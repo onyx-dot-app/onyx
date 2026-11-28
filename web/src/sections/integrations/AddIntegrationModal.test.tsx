@@ -52,7 +52,7 @@ const GITHUB_PRESET = {
   ],
   setup_steps: ["Create a GitHub OAuth app.", "Paste the Client ID."],
   setup_url: "https://github.com/settings/developers",
-  callback_url: "https://onyx.example.com/craft/v1/apps/oauth/callback",
+  callback_url: "https://onyx.example.com/integrations/oauth/callback",
   scopes: ["repo", "read:org"],
 };
 
@@ -545,7 +545,7 @@ describe("Catalog", () => {
       GITHUB_PRESET.setup_steps
     );
     expect(
-      screen.getByText("https://onyx.example.com/craft/v1/apps/oauth/callback")
+      screen.getByText("https://onyx.example.com/integrations/oauth/callback")
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: add.setup.copyCallbackUrl })

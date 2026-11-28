@@ -7,9 +7,10 @@ from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers.registry import PROVIDERS
 from onyx.integrations.models import Preset
 
-# The redirect URI admins registered with each service before the integration
-# tables. Keep it, so no OAuth app needs a new registration.
-PRESET_OAUTH_REDIRECT_URI = f"{WEB_DOMAIN}/craft/v1/apps/oauth/callback"
+# The redirect URI of a new OAuth client of an API integration, preset or
+# manual. An older client keeps the path that admins registered for it
+# (``IntegrationOAuthClient.legacy_redirect_path``).
+OAUTH_REDIRECT_URI = f"{WEB_DOMAIN}/integrations/oauth/callback"
 
 
 def _build_presets() -> dict[ExternalAppType, Preset]:

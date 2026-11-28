@@ -284,6 +284,9 @@ test("older desktop builds without the flag keep the in-app tab", async () => {
 
 test("desktop callbacks are recognised only on allowlisted paths", () => {
   expect(
+    isDesktopOAuthCallback("/integrations/oauth/callback", "s.desktop")
+  ).toBe(true);
+  expect(
     isDesktopOAuthCallback("/craft/v1/apps/oauth/callback", "s.desktop")
   ).toBe(true);
   expect(

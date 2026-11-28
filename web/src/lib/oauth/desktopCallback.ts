@@ -4,9 +4,10 @@ export const DESKTOP_STATE_SUFFIX = ".desktop";
 /** Page served in place of a callback that must go back to the desktop app. */
 export const DESKTOP_HANDOFF_PATH = "/oauth/desktop-handoff";
 
-// Same allowlist as oauth_handoff.rs in the earlier desktop app, which older
-// installs still run.
+// The allowlist of oauth_handoff.rs in the earlier desktop app, which older
+// installs still run, plus /integrations/oauth/callback.
 const CALLBACK_PATHS = new Set([
+  "/integrations/oauth/callback",
   "/mcp/oauth/callback",
   "/federated/oauth/callback",
   "/craft/v1/apps/oauth/callback",

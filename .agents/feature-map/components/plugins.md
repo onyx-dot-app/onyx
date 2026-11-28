@@ -243,9 +243,10 @@ The gate is UI only: the chat API does not check Required integrations.
 `return_path`; the admin Configuration tab passes `organization: true`) through `lib/oauth/launch.ts:launchOAuth`: a new tab on the
 web, the system browser in the desktop app. When the browser blocks the tab,
 it loads the provider in the same tab. Each redirect URI
-(`/craft/v1/apps/oauth/callback` for presets, `/oauth-config/callback` for
-manual clients, `/mcp/oauth/callback` for MCP) renders
-`sections/oauth/IntegrationOAuthCallback.tsx`. The preset URI is a
+(`/integrations/oauth/callback` for new preset and manual clients,
+`/mcp/oauth/callback` for MCP, and the legacy `/craft/v1/apps/oauth/callback`
+and `/oauth-config/callback` of older clients) renders
+`sections/oauth/IntegrationOAuthCallback.tsx`. The legacy preset URI is a
 `next.config.js` rewrite to `/mcp/oauth/callback`, so it works with Craft off.
 It posts `{code, state}` to
 `POST /integrations/oauth/callback`, reports to the waiting tab, and goes to
