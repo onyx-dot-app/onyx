@@ -9,7 +9,7 @@ from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import MCPTransport
 from onyx.integrations.call_credentials import (
     credentials_near_expiry,
-    mark_api_key_rejected,
+    mark_credential_rejected,
     mcp_oauth_provider,
     resolve_fresh_call_credentials,
 )
@@ -296,9 +296,19 @@ class MCPTool(Tool):
             raise
         except Exception as e:
             status_code = http_status(e)
-            if has_unauthorized_response(e) and credentials is not None:
+            rejected_token_fingerprint = (
+                e.rejected_token_fingerprint
+                if isinstance(e, MCPReauthenticationRequired)
+                else None
+            )
+            if credentials is not None and (
+                has_unauthorized_response(e) or rejected_token_fingerprint is not None
+            ):
                 try:
-                    mark_api_key_rejected(credentials)
+                    mark_credential_rejected(
+                        credentials,
+                        rejected_token_fingerprint=rejected_token_fingerprint,
+                    )
                 except Exception:
                     logger.exception("Could not record rejected MCP credentials")
             error_str = str(e).lower()

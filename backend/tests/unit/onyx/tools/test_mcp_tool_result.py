@@ -180,7 +180,7 @@ def test_server_reported_error_is_a_tool_error_not_an_auth_error(
                 content=[TextContent(type="text", text=message)], isError=True
             ),
         ),
-        patch(f"{MODULE}.mark_api_key_rejected") as mark,
+        patch(f"{MODULE}.mark_credential_rejected") as mark,
         patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
         caplog.at_level(logging.INFO),
     ):
@@ -203,13 +203,13 @@ def test_rejected_user_credentials_still_require_reauthentication() -> None:
     )
     with (
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
-        patch(f"{MODULE}.mark_api_key_rejected") as mark,
+        patch(f"{MODULE}.mark_credential_rejected") as mark,
     ):
         response = _run(_github_tool())
 
     assert response.is_error
     assert "Authentication failed" in response.text
-    mark.assert_called_once_with(_CREDENTIALS)
+    mark.assert_called_once_with(_CREDENTIALS, rejected_token_fingerprint=None)
 
 
 def _status_error(status: int) -> httpx.HTTPStatusError:
@@ -224,19 +224,19 @@ def test_a_401_anywhere_in_the_error_group_requires_reauthentication() -> None:
     error = ExceptionGroup("task group", [_status_error(401), _status_error(500)])
     with (
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
-        patch(f"{MODULE}.mark_api_key_rejected") as mark,
+        patch(f"{MODULE}.mark_credential_rejected") as mark,
     ):
         response = _run(_github_tool())
 
     assert "Authentication failed" in response.text
-    mark.assert_called_once_with(_CREDENTIALS)
+    mark.assert_called_once_with(_CREDENTIALS, rejected_token_fingerprint=None)
 
 
 def test_unreachable_server_with_auth_words_in_the_error_is_not_an_auth_error() -> None:
     error = httpx.ConnectError("could not connect to auth.example: unauthorized")
     with (
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
-        patch(f"{MODULE}.mark_api_key_rejected") as mark,
+        patch(f"{MODULE}.mark_credential_rejected") as mark,
     ):
         response = _run(_github_tool())
 
