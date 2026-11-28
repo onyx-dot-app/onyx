@@ -299,6 +299,16 @@ external_forbidden = [
 ]
 
 [[contract.exception]]
+importer = "scripts/vertex_embedding_bench/bench.py"
+imports = "google.genai.models"
+reason = "The benchmark counts the SDK calls that Onyx's Vertex adapter makes."
+
+[[contract.exception]]
+importer = "scripts/vertex_embedding_bench/smoke_sdk.py"
+imports = "google.genai"
+reason = "The benchmark checks that the SDK works against the mock Vertex server."
+
+[[contract.exception]]
 importer = "onyx/image_gen/interfaces.py"
 imports = "litellm.types.utils.ImageResponse"
 reason = "Uses the SDK response type for annotations."

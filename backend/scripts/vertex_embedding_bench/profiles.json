@@ -1,0 +1,274 @@
+{
+  "unlimited": {
+    "description": "No limits, no errors, no latency. Baseline for client-side capacity.",
+    "sources": [],
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 250,
+    "max_input_tokens": 8192,
+    "dsq": null,
+    "latency": {
+      "base_ms": 0.0,
+      "per_1k_tokens_ms": 0.0,
+      "jitter_sigma": 0.0
+    },
+    "transient_error_rate": 0.0,
+    "notes": "Baseline. Use max_inputs_per_request=1 on the client side to mimic gemini-embedding-2."
+  },
+  "vertex_paygo_dsq": {
+    "description": "Vertex AI Standard PayGo, gemini-embedding-2 (default Onyx setup). Global per-base-model quota of 60,000 RPM / 200M input TPM per project, plus contention 429s on shared capacity well below that ceiling.",
+    "sources": [
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/quotas",
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/embedding-2",
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/error-code-429",
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/dynamic-shared-quota",
+      "https://discuss.ai.google.dev/t/gemini-embedding-2-returning-429-resource-exhausted-citing-vertex-quota-despite-near-zero-usage-ai-studio-tier-2/169814"
+    ],
+    "rpm": 60000,
+    "tpm": 200000000,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 1,
+    "max_input_tokens": 8192,
+    "dsq": {
+      "base_429_prob": 0.002,
+      "load_threshold_rps": 100.0,
+      "slope": 0.0015
+    },
+    "latency": {
+      "base_ms": 270.0,
+      "per_1k_tokens_ms": 130.0,
+      "jitter_sigma": 0.2
+    },
+    "transient_error_rate": 0.001,
+    "notes": "rpm/tpm are documented (global_embed_content_*_per_minute_per_base_model). The model page lists 'Fixed quota: Not supported' and the DSQ page does not list embedding models, so contention 429s ('Resource exhausted, please try again later.') are the real-world failure mode. DSQ parameters are GUESSES: p(429)=0.2% below 100 rps, ~30% at 300 rps. Forum users report 429s at <5% of their quota. Latency fitted to our measurement (~0.31 s for ~325 tokens, from a laptop outside GCP)."
+  },
+  "vertex_paygo_dsq_congested": {
+    "description": "Vertex Standard PayGo on a bad day (regional endpoint, peak hours): same quota, much more aggressive contention 429s.",
+    "sources": [
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/error-code-429",
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/dynamic-shared-quota",
+      "https://discuss.ai.google.dev/t/gemini-embedding-001-returns-429-despite-ai-studio-showing-76-20k-rpm/180436",
+      "https://discuss.ai.google.dev/t/gemini-embedding-2-returning-429-resource-exhausted-citing-vertex-quota-despite-near-zero-usage-ai-studio-tier-2/169814"
+    ],
+    "rpm": 60000,
+    "tpm": 200000000,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 1,
+    "max_input_tokens": 8192,
+    "dsq": {
+      "base_429_prob": 0.02,
+      "load_threshold_rps": 20.0,
+      "slope": 0.005
+    },
+    "latency": {
+      "base_ms": 300.0,
+      "per_1k_tokens_ms": 150.0,
+      "jitter_sigma": 0.4
+    },
+    "transient_error_rate": 0.003,
+    "notes": "All DSQ/latency numbers are GUESSES for stress tests. Google says single-region endpoints have the highest 429 likelihood and that second-level spikes are throttled even within per-minute quota. At 100 rps p(429)=42%."
+  },
+  "vertex_fixed_quota_low": {
+    "description": "Vertex legacy text-embedding-005 / text-multilingual-embedding-002 via :predict with a low regional per-project quota (old textembedding-gecko style).",
+    "sources": [
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings",
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/quotas"
+    ],
+    "rpm": 1500,
+    "tpm": null,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 250,
+    "max_input_tokens": 2048,
+    "dsq": null,
+    "latency": {
+      "base_ms": 150.0,
+      "per_1k_tokens_ms": 60.0,
+      "jitter_sigma": 0.25
+    },
+    "transient_error_rate": 0.001,
+    "notes": "1,500 RPM is the documented textembedding-gecko RAG Engine quota per base model per region; the quotas page lists no current value for text-embedding-005, so treat 1,500 as a GUESS for a low regional quota. Per request: max 250 texts and 20,000 total tokens (400 error above that); each text 2,048 tokens, silently truncated when autoTruncate=true (default). Latency is a GUESS."
+  },
+  "vertex_fixed_quota_default": {
+    "description": "Vertex gemini-embedding-001 via :predict (SDK uses :predict for this model). Online prediction requests quota 30,000 per minute.",
+    "sources": [
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/quotas",
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings"
+    ],
+    "rpm": 30000,
+    "tpm": null,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 1,
+    "max_input_tokens": 2048,
+    "dsq": null,
+    "latency": {
+      "base_ms": 250.0,
+      "per_1k_tokens_ms": 120.0,
+      "jitter_sigma": 0.25
+    },
+    "transient_error_rate": 0.001,
+    "notes": "30,000 is aiplatform.googleapis.com/online_prediction_requests for gemini-embedding-001 (predict API only); it is shared with other :predict models in the project. TPM not documented for this path. The embeddings page conflicts: the general section says 250 texts/request, but the REST section says gemini-embedding-001 accepts a single input text per request; we use 1. 001 may also be metered against the global gemini-embedding quota (100,000 RPM / 100M TPM). Latency is a GUESS."
+  },
+  "vertex_fixed_quota_high": {
+    "description": "Vertex gemini-embedding-001/2 at the documented global per-base-model ceiling with no contention noise (hard quota only).",
+    "sources": [
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/quotas"
+    ],
+    "rpm": 100000,
+    "tpm": 100000000,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 1,
+    "max_input_tokens": 8192,
+    "dsq": null,
+    "latency": {
+      "base_ms": 270.0,
+      "per_1k_tokens_ms": 130.0,
+      "jitter_sigma": 0.2
+    },
+    "transient_error_rate": 0.001,
+    "notes": "100,000 RPM / 100M input TPM is the documented global quota for base model 'gemini-embedding'. It is unclear if that row means 001 or the family. Use to test pure token-bucket 429 handling at a high limit. Quotas can be raised by request."
+  },
+  "vertex_provisioned_throughput": {
+    "description": "Hypothetical Provisioned Throughput (GSU) reservation. Reserved traffic never 429s; overage spills over to PayGo and sees contention 429s.",
+    "sources": [
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput/supported-models",
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/embedding-2",
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/error-code-429"
+    ],
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 1,
+    "max_input_tokens": 8192,
+    "dsq": {
+      "base_429_prob": 0.0,
+      "load_threshold_rps": 200.0,
+      "slope": 0.0015
+    },
+    "latency": {
+      "base_ms": 250.0,
+      "per_1k_tokens_ms": 120.0,
+      "jitter_sigma": 0.15
+    },
+    "transient_error_rate": 0.0005,
+    "notes": "gemini-embedding-2 lists 'Provisioned Throughput: Not supported' and the PT supported-models page lists no embedding model. This profile is for completeness only. Spillover behaviour is documented: usage above the purchased amount is processed as PayGo (unless a PT-only request header is set; from memory it is X-Vertex-AI-LLM-Request-Type: dedicated. Then over-limit requests 429 with 'Too many requests. Exceeded the Provisioned Throughput.'). 200 rps reservation size is a GUESS."
+  },
+  "vertex_free_trial_or_express": {
+    "description": "Vertex free trial ($300 credit) or express mode. Express mode does not support embedding models; free-trial projects use the normal PayGo path but are more 429-prone.",
+    "sources": [
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview",
+      "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/quotas",
+      "https://discuss.ai.google.dev/t/gemini-embedding-001-returns-429-despite-ai-studio-showing-76-20k-rpm/180436"
+    ],
+    "rpm": 600,
+    "tpm": 1000000,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 1,
+    "max_input_tokens": 8192,
+    "dsq": {
+      "base_429_prob": 0.01,
+      "load_threshold_rps": 5.0,
+      "slope": 0.01
+    },
+    "latency": {
+      "base_ms": 270.0,
+      "per_1k_tokens_ms": 130.0,
+      "jitter_sigma": 0.2
+    },
+    "transient_error_rate": 0.002,
+    "notes": "Express mode only lists Gemini generative models (10 RPM for 2.5 models); embeddings are not supported there. No documented free-trial embedding quota exists. rpm/tpm/DSQ values are GUESSES for a conservative low-priority project."
+  },
+  "gemini_api_free": {
+    "description": "Gemini Developer API (API key), Free tier, gemini-embedding-001/2.",
+    "sources": [
+      "https://ai.google.dev/gemini-api/docs/rate-limits",
+      "https://ai.google.dev/gemini-api/docs/embeddings",
+      "https://discuss.ai.google.dev/t/gemini-embedding-free-tier-documentation/112553"
+    ],
+    "rpm": 100,
+    "tpm": 30000,
+    "rpd": 1000,
+    "max_concurrency": null,
+    "max_inputs_per_request": 100,
+    "max_input_tokens": 8192,
+    "dsq": null,
+    "latency": {
+      "base_ms": 260.0,
+      "per_1k_tokens_ms": 130.0,
+      "jitter_sigma": 0.25
+    },
+    "transient_error_rate": 0.002,
+    "notes": "100 RPM / 30k TPM / 1k RPD come from a forum reply, not the official table (limits are only shown in AI Studio). RPD resets at midnight Pacific. Limits are per project, not per API key. Batch API is not available on free tier. max_inputs_per_request=100 is the batchEmbedContents limit (from memory; not on the fetched page); each item is still counted as a request for RPM. gemini-embedding-001 max input is 2,048 tokens. Some users see quota 'limit: 0'."
+  },
+  "gemini_api_tier1": {
+    "description": "Gemini Developer API, Tier 1 (billing linked).",
+    "sources": [
+      "https://ai.google.dev/gemini-api/docs/rate-limits",
+      "https://discuss.ai.google.dev/t/gemini-embedding-001-returns-429-despite-ai-studio-showing-76-20k-rpm/180436"
+    ],
+    "rpm": 3000,
+    "tpm": 1000000,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 100,
+    "max_input_tokens": 8192,
+    "dsq": null,
+    "latency": {
+      "base_ms": 260.0,
+      "per_1k_tokens_ms": 130.0,
+      "jitter_sigma": 0.25
+    },
+    "transient_error_rate": 0.002,
+    "notes": "3,000 RPM / 1M TPM are user-reported AI Studio dashboard values for Gemini Embedding 2 on Tier 1; RPD unlimited. Batch enqueued tokens: 500,000 (official). Users report 429s that cite a Vertex quota at <10% of these limits, so add DSQ noise if you need that."
+  },
+  "gemini_api_tier2": {
+    "description": "Gemini Developer API, Tier 2 ($100 spend + 3 days).",
+    "sources": [
+      "https://ai.google.dev/gemini-api/docs/rate-limits",
+      "https://discuss.ai.google.dev/t/gemini-embedding-2-returning-429-resource-exhausted-citing-vertex-quota-despite-near-zero-usage-ai-studio-tier-2/169814"
+    ],
+    "rpm": 5000,
+    "tpm": 5000000,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 100,
+    "max_input_tokens": 8192,
+    "dsq": null,
+    "latency": {
+      "base_ms": 260.0,
+      "per_1k_tokens_ms": 130.0,
+      "jitter_sigma": 0.25
+    },
+    "transient_error_rate": 0.002,
+    "notes": "5,000 RPM is a user-reported AI Studio value for Gemini Embedding 2 on Tier 2. 5M TPM is a GUESS (it matches the old public table). Batch enqueued tokens: 5,000,000 (official)."
+  },
+  "gemini_api_tier3": {
+    "description": "Gemini Developer API, Tier 3 ($1,000 spend + 30 days).",
+    "sources": [
+      "https://ai.google.dev/gemini-api/docs/rate-limits",
+      "https://discuss.ai.google.dev/t/gemini-embedding-001-returns-429-despite-ai-studio-showing-76-20k-rpm/180436"
+    ],
+    "rpm": 20000,
+    "tpm": 20000000,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 100,
+    "max_input_tokens": 8192,
+    "dsq": null,
+    "latency": {
+      "base_ms": 260.0,
+      "per_1k_tokens_ms": 130.0,
+      "jitter_sigma": 0.25
+    },
+    "transient_error_rate": 0.002,
+    "notes": "20,000 RPM / 20M TPM / unlimited RPD are user-reported AI Studio values for Gemini Embedding 1 on Tier 3 (older public docs said 10,000 RPM / 10M TPM). Batch enqueued tokens: 10,000,000 (official)."
+  }
+}

@@ -1,0 +1,13 @@
+# An Onyx backend image with this branch's pinned requirements, for bench.py
+# trials under pod CPU and memory limits. docker_trial.sh mounts the code at run
+# time. Build from the backend directory:
+#   docker build -f scripts/vertex_embedding_bench/Dockerfile.bench \
+#     --build-arg BASE_IMAGE=onyxdotapp/onyx-backend:latest \
+#     -t onyx-backend:vertex-bench .
+ARG BASE_IMAGE=onyxdotapp/onyx-backend:latest
+FROM ${BASE_IMAGE}
+COPY --from=ghcr.io/astral-sh/uv:0.13.8 /uv /bin/uv
+USER root
+COPY requirements/default.txt /tmp/requirements.txt
+COPY requirements/ee.txt /tmp/ee-requirements.txt
+RUN uv pip install --system --no-cache-dir --no-deps -r /tmp/requirements.txt -r /tmp/ee-requirements.txt
