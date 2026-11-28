@@ -5,7 +5,7 @@ usage in tenant_usage into it. tenant_usage stays for one release because old
 pods still use it during the rolling deploy.
 
 Revision ID: db8e1bfe4729
-Revises: 00a73eb4dccf
+Revises: 651681a57efa
 Create Date: 2026-11-27 20:05:59.840834
 
 """
@@ -18,7 +18,7 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 # revision identifiers, used by Alembic.
 revision = "db8e1bfe4729"
-down_revision = "00a73eb4dccf"
+down_revision = "651681a57efa"
 branch_labels = None
 depends_on = None
 

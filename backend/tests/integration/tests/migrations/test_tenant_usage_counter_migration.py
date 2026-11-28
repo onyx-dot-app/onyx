@@ -19,7 +19,7 @@ from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from onyx.db.usage import current_calendar_period
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
-PREVIOUS_REVISION = "00a73eb4dccf"
+PREVIOUS_REVISION = "651681a57efa"
 COUNTER_REVISION = "db8e1bfe4729"
 
 LAST_WEEK = datetime(2026, 11, 16, tzinfo=timezone.utc)
