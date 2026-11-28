@@ -1,12 +1,12 @@
-"""TTS streams keep their tracing span in one context across tasks.
+"""TTS streams must not leave tracing state for another task to reset.
 
 `synthesize_speech` pulls the first chunk in the request task, and Starlette's
 `StreamingResponse` reads the rest in another task with a copied context. The
-provider's span must still start and end in the same context.
+provider's span must not set a context variable that the other task resets.
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
@@ -90,6 +90,7 @@ def test_read_aloud_streams_every_chunk(tts_app: FastAPI) -> None:
 @pytest.mark.asyncio
 async def test_stream_closed_early_from_another_task() -> None:
     stream = _openai_provider().synthesize_stream("Hello there")
+    assert isinstance(stream, AsyncGenerator)
 
     assert await stream.__anext__() == _CHUNKS[0]
     # The provider's span stays inside the stream, not in the caller's context.

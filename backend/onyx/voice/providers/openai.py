@@ -10,13 +10,12 @@ import asyncio
 import base64
 import io
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
-from onyx.llm.cancellation import isolated_async_context
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import traced_llm_call
@@ -607,10 +606,9 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
 
         return response.text
 
-    @isolated_async_context
     async def synthesize_stream(
         self, text: str, voice: str | None = None, speed: float = 1.0
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncIterator[bytes]:
         """
         Convert text to audio using OpenAI TTS with streaming.
 
@@ -635,6 +633,8 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
             model=self.tts_model,
             provider="openai",
             input_messages=[{"role": "user", "content": text}],
+            # The body yields; the caller can resume it in another task.
+            mark_as_current=False,
         ):
             async with client.audio.speech.with_streaming_response.create(
                 model=self.tts_model,

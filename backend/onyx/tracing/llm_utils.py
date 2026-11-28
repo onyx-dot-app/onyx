@@ -56,6 +56,22 @@ def llm_generation_span(
 
 
 @contextmanager
+def _not_current(
+    span: Span[GenerationSpanData],
+) -> Iterator[Span[GenerationSpanData]]:
+    """Run ``span`` like ``with span:``, but never as the current span."""
+    span.start(mark_as_current=False)
+    try:
+        yield span
+    except BaseException as exc:
+        if span.error is None:
+            span.set_error({"message": type(exc).__name__, "data": None})
+        raise
+    finally:
+        span.finish()
+
+
+@contextmanager
 def traced_llm_call(
     flow: LLMFlow,
     model: str,
@@ -67,6 +83,7 @@ def traced_llm_call(
     parent: Any | None = None,
     content_mode: TraceContentMode | None = None,
     model_configuration_id: int | None = None,
+    mark_as_current: bool = True,
 ) -> Iterator[Span[GenerationSpanData]]:
     """Open a generation span for call sites that don't go through ``LLM``.
 
@@ -78,13 +95,19 @@ def traced_llm_call(
 
     Pass ``model_configuration_id`` when the call runs a saved model
     configuration, so its admin cost override prices the usage.
+
+    Pass ``mark_as_current=False`` when the body yields to a caller that can
+    resume it in another task, such as an async generator that
+    ``StreamingResponse`` streams. The span is still recorded, but it never
+    becomes the current span, so no context variable is reset in a different
+    context. Spans opened inside the body do not nest under it.
     """
     # Build extra_config first, then overlay authoritative keys so callers
     # cannot accidentally override ``flow`` / ``model_provider``.
     model_config: dict[str, str] = dict(extra_config) if extra_config else {}
     model_config["model_provider"] = provider
     model_config["flow"] = flow.value
-    with generation_span(
+    span = generation_span(
         model=model,
         model_config=model_config,
         image_count=image_count,
@@ -92,7 +115,8 @@ def traced_llm_call(
         parent=parent,
         content_mode=content_mode,
         model_configuration_id=model_configuration_id,
-    ) as span:
+    )
+    with span if mark_as_current else _not_current(span):
         if input_messages is not None and span.content_mode == TraceContentMode.FULL:
             if isinstance(input_messages, Sequence) and not isinstance(
                 input_messages, (str, bytes)

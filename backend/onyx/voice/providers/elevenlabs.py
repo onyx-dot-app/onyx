@@ -14,13 +14,12 @@ See https://elevenlabs.io/docs for API reference.
 import asyncio
 import base64
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator
 from enum import StrEnum
 from typing import Any
 
 import aiohttp
 
-from onyx.llm.cancellation import isolated_async_context
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.voice.audio_utils import Pcm16Resampler, pcm16_to_wav
@@ -768,10 +767,9 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
                     logger.info("ElevenLabs transcribe: got result: %s...", text[:50])
                     return text
 
-    @isolated_async_context
     async def synthesize_stream(
         self, text: str, voice: str | None = None, speed: float = 1.0
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncIterator[bytes]:
         """
         Convert text to audio using ElevenLabs TTS with streaming.
 
@@ -823,6 +821,8 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             model=self.tts_model,
             provider="elevenlabs",
             input_messages=[{"role": "user", "content": text}],
+            # The body yields; the caller can resume it in another task.
+            mark_as_current=False,
         ):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=headers, json=payload) as response:

@@ -4,7 +4,7 @@ import pytest
 
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework import setup
-from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.framework.create import ensure_trace, get_current_span
 from onyx.tracing.framework.provider import DefaultTraceProvider
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.llm_utils import traced_llm_call
@@ -37,6 +37,30 @@ async def test_timed_out_llm_call_records_cancellation(
     assert task.cancelled()
     (span,) = processor.ended_spans
     assert span.error == {"message": "CancelledError", "data": None}
+
+
+def test_span_not_marked_current_is_recorded_with_its_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    processor = CaptureProcessor()
+    provider = DefaultTraceProvider()
+    provider.register_processor(processor)
+    monkeypatch.setattr(setup, "GLOBAL_TRACE_PROVIDER", provider)
+
+    with ensure_trace("voice_tts"):
+        current_before = get_current_span()
+        with pytest.raises(RuntimeError):
+            with traced_llm_call(
+                flow=LLMFlow.TTS,
+                model="tts-1",
+                provider="openai",
+                mark_as_current=False,
+            ):
+                assert get_current_span() is current_before
+                raise RuntimeError("stream failed")
+
+    (span,) = processor.ended_spans
+    assert span.error == {"message": "RuntimeError", "data": None}
 
 
 @pytest.mark.parametrize("mark_error", [False, True])
