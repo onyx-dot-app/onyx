@@ -1889,7 +1889,8 @@ def docprocessing_task(
 def _check_chunk_usage_limit(tenant_id: str) -> None:
     """Check if chunk indexing usage limit has been exceeded.
 
-    Raises UsageLimitExceededError if the limit is exceeded.
+    Raises OnyxError (RATE_LIMITED) if the limit is exceeded. Its detail is the
+    sentence the admin reads on the failed run.
     """
     if not USAGE_LIMITS_ENABLED:
         return

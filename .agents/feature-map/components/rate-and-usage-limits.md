@@ -28,6 +28,12 @@ limits are CE.
 - **A cloud tenant** that passes its weekly LLM cost, indexed chunks or API calls
   gets a 429 that names the metric and asks it to upgrade or wait. A trial has
   lower limits than a paid tenant. Its own admin cannot raise the limit.
+- **A playground user** who hits a limit sees one sentence: what ran out, when
+  it opens again, and "talk to sales". The chat banner adds that it is a
+  playground limit, that their own Onyx has none, and a "Talk to sales" link.
+  It shows no countdown and no count or amount: the only countdown on the
+  playground is the trial's days left. A connector run stopped by the chunk
+  cap shows the same sentence on its failed run.
 - **An API key or PAT caller on cloud** has a weekly call allowance on the chat
   and search routes. A trial tenant's allowance is zero by default, so its API
   calls get a 429 that says the API needs a paid plan.
@@ -194,6 +200,20 @@ is no longer read or written ([TECH-DEBT](../TECH-DEBT.md)).
   deleted and its images stay. A usage
   type no plan in force limits returns before any lookup
   (`is_usage_type_limited`), so cloud does no work for it.
+- **Refusals.** Every refusal is one `OnyxError` `RATE_LIMITED` from
+  `check_usage_and_raise`. Its body carries `detail`, the sentence written
+  once in `_refusal_detail` for all surfaces (chat, Craft, the failed connector
+  run, a Slack thread, API clients), and the fields `limit_type`, `scope` and
+  `policy`; when the period ends, `reset_at`, `retry_after_seconds` and a
+  `Retry-After` header too, the same keys as the token budget 429
+  (`backend/onyx/server/query_and_chat/token_limit.py`). A refusal raised
+  mid-turn keeps them (`backend/onyx/chat/errors.py:chat_error`). The web reads
+  them as `RateLimitDetails` (`web/src/app/app/types.ts`). On the playground a
+  refusal also sends the analytics event `usage_limit_refused`, and the first
+  refusal of a tenant, or of a user for a per-user limit, in a period sends
+  `usage_limit_entered` as well, remembered in a cache key that lives until the
+  period ends (`_first_refusal_in_period`). A cache outage drops only that
+  second event.
 - **Playground cache.** `backend/ee/onyx/server/tenants/usage_limit_cache.py`
   keeps each playground tenant's trial start and overrides. The control plane
   owns them; the data plane only caches them, like the billing cache: a miss
@@ -332,6 +352,17 @@ rejected signup attempt still counts.
   agent makes hundreds of gateway calls in one session. Whether those count
   toward the cloud cap is an open product decision. Both surfaces still check
   token budgets, and the gateway also checks the managed-key cost cap.
+- **The refusal sentence is written on the server, and names no date.** Five
+  surfaces show the same text, so one function writes it; the web adds only the
+  playground line and the sales link. The sentence says when the limit opens
+  again in words ("when the next trial week starts"), so nobody reads a UTC
+  date. `reset_at` and `Retry-After` are still sent for API clients, and the
+  cloud token-budget banner keeps its countdown; a playground refusal shows
+  none. Cloud's existing sentences are unchanged.
+- **Refusal events are sent on the playground only.** Cloud's limits are not
+  being tuned; the playground's are (ENG-4756), and the `usage_limit_entered`
+  event is what decides whether a credit system is ever needed (plan decision
+  L8).
 - **The playground's per-user image limit is soft.** The check reserves
   nothing, image calls in one model step keep running in parallel, and a user
   can run two turns at once, so calls that start together all pass and a user

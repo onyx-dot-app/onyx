@@ -12576,6 +12576,9 @@
         }
       },
       "rateLimitBanner": {
+        "playground": {
+          "text": "이것은 플레이그라운드 제한입니다. 자체 Onyx에는 없습니다. <link>영업팀에 문의</link>"
+        },
         "defaultError": {
           "text": "사용량 한도에 도달했습니다."
         },

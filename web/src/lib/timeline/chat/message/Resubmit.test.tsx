@@ -29,4 +29,33 @@ describe("rate-limit error banner", () => {
 
     expect(screen.getByText("You can try again now.")).toBeInTheDocument();
   });
+
+  test("a playground limit says so, links to sales and shows no countdown", () => {
+    render(
+      <ErrorBanner
+        error="Your team has used this trial week's allowance."
+        errorCode={RATE_LIMITED_ERROR_CODE}
+        details={{ policy: "playground", reset_at: "2026-07-31T12:00:00Z" }}
+      />
+    );
+
+    expect(screen.getByText(/This is a playground limit/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Talk to sales" })).toHaveAttribute(
+      "href",
+      "https://www.onyx.app/contact-sales"
+    );
+    expect(screen.queryByText(/Resets in/)).toBeNull();
+  });
+
+  test("a cloud limit has no sales link", () => {
+    render(
+      <ErrorBanner
+        error="You've reached the usage budget for your account."
+        errorCode={RATE_LIMITED_ERROR_CODE}
+        details={{ scope: "user", policy: "cloud_trial" }}
+      />
+    );
+
+    expect(screen.queryByRole("link")).toBeNull();
+  });
 });

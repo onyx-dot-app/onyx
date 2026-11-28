@@ -12576,6 +12576,9 @@
         }
       },
       "rateLimitBanner": {
+        "playground": {
+          "text": "这是 playground 的限制，您自己的 Onyx 没有此限制。<link>联系销售</link>"
+        },
         "defaultError": {
           "text": "您已达到用量上限。"
         },

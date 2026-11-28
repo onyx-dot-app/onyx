@@ -378,6 +378,8 @@ interface RateLimited429Body {
   scope?: string;
   reset_at?: string;
   retry_after_seconds?: number;
+  limit_type?: string;
+  policy?: string;
 }
 
 /**
@@ -436,6 +438,8 @@ export async function createTurn(
             scope: body.scope,
             reset_at: body.reset_at,
             retry_after_seconds: body.retry_after_seconds,
+            limit_type: body.limit_type,
+            policy: body.policy,
           }
         );
       }

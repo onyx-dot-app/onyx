@@ -367,7 +367,14 @@ export interface RateLimitDetails {
   retry_after_seconds?: number;
   // Set when the budget that ran out limits one model; other models still run.
   model?: string;
+  // Which limit refused (such as llm_cost_cents) and whose plan it is in. A
+  // tenant usage limit sends them; a token budget does not.
+  limit_type?: string;
+  policy?: string;
 }
+
+// The plan whose refusals say so and link to sales.
+export const PLAYGROUND_LIMIT_POLICY = "playground";
 
 export interface InputPrompt {
   id: number;

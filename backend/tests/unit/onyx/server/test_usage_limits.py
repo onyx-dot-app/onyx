@@ -8,6 +8,7 @@ from uuid import UUID
 
 import pytest
 
+from onyx.configs.constants import MilestoneRecordType
 from onyx.db.usage import UsageLimitExceededError, UsagePeriod, UsageType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -158,8 +159,23 @@ class TestGetLimitForUsageType:
             )
 
 
-def _over(usage_type: UsageType, current: float, limit: float) -> MagicMock:
-    return MagicMock(side_effect=UsageLimitExceededError(usage_type, current, limit))
+def _over(
+    usage_type: UsageType,
+    current: float,
+    limit: float,
+    period: UsagePeriod | None = None,
+) -> MagicMock:
+    return MagicMock(
+        side_effect=UsageLimitExceededError(usage_type, current, limit, period)
+    )
+
+
+def _trial_week() -> UsagePeriod:
+    """A 7-day trial period that ends in three days."""
+    end = datetime.now(timezone.utc) + timedelta(days=3)
+    return UsagePeriod(
+        anchor=WindowAnchor.TENANT_START, start=end - timedelta(days=7), end=end
+    )
 
 
 class TestCheckUsageAndRaise:
@@ -283,6 +299,52 @@ class TestCheckUsageAndRaise:
             check_usage_and_raise(MagicMock(), usage_type, _TENANT)
         assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
         assert exc_info.value.detail == expected
+
+    def test_the_429_names_the_limit_and_when_it_resets(self) -> None:
+        """The banner shows the reset in the user's time zone from the body,
+        and clients read Retry-After. Cloud sends no event."""
+        period = _trial_week()
+        assert period.end is not None
+        with (
+            patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
+            patch.object(usage_limits, "is_tenant_on_trial_fn", return_value=True),
+            patch.object(usage_limits, "get_limit_for_usage_type", return_value=3200),
+            patch.object(
+                usage_limits,
+                "check_usage_limit",
+                _over(UsageType.LLM_COST, 3300.0, 3200.0, period),
+            ),
+            patch.object(usage_limits, "mt_cloud_telemetry") as telemetry,
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            check_usage_and_raise(MagicMock(), UsageType.LLM_COST, _TENANT)
+        error = exc_info.value
+        assert error.extra is not None and error.headers is not None
+        assert error.extra["limit_type"] == UsageType.LLM_COST.value
+        assert error.extra["scope"] == LimitScope.TENANT.value
+        assert error.extra["policy"] == LimitPolicyName.CLOUD_TRIAL.value
+        assert error.extra["reset_at"] == period.end.isoformat()
+        retry_after = error.extra["retry_after_seconds"]
+        assert isinstance(retry_after, int) and 1 <= retry_after <= 3 * 24 * 3600
+        assert abs(int(error.headers["Retry-After"]) - retry_after) <= 1
+        telemetry.assert_not_called()
+
+    def test_a_limit_without_a_period_end_has_no_reset(self) -> None:
+        with (
+            patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
+            patch.object(usage_limits, "is_tenant_on_trial_fn", return_value=True),
+            patch.object(usage_limits, "get_limit_for_usage_type", return_value=3200),
+            patch.object(
+                usage_limits,
+                "check_usage_limit",
+                _over(UsageType.LLM_COST, 3300.0, 3200.0),
+            ),
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            check_usage_and_raise(MagicMock(), UsageType.LLM_COST, _TENANT)
+        assert exc_info.value.extra is not None
+        assert "reset_at" not in exc_info.value.extra
+        assert exc_info.value.headers is None
 
 
 class TestCheckLlmCostLimitForProvider:
@@ -605,6 +667,8 @@ class TestImageGenerationsPerUser:
             patch.object(usage_limits, "IS_PLAYGROUND", True),
             patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
             patch.object(usage_limits, "tenant_limit_override_fn", return_value=None),
+            patch.object(usage_limits, "mt_cloud_telemetry"),
+            patch.object(usage_limits, "get_cache_backend"),
             patch.object(
                 usage_limits.tenant_usage_db,
                 "count_generated_images",
@@ -668,3 +732,128 @@ class TestImageGenerationsPerUser:
         ):
             record_usage(MagicMock(), UsageType.IMAGE_GENERATIONS, 1, "t")
         add.assert_not_called()
+
+
+class TestPlaygroundRefusals:
+    """The sentence a playground user reads, and the events a refusal sends."""
+
+    @pytest.fixture
+    def refused(self) -> Generator[tuple[MagicMock, MagicMock], None, None]:
+        """A playground tenant with nothing overridden. Yields the analytics
+        and cache mocks; the cache says the first refusal is the first."""
+        cache = MagicMock()
+        cache.set_if_absent.side_effect = [True, False, False]
+        with (
+            patch.object(usage_limits, "IS_PLAYGROUND", True),
+            patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
+            patch.object(usage_limits, "tenant_limit_override_fn", return_value=None),
+            patch.object(usage_limits, "tenant_trial_start_fn", return_value=None),
+            patch.object(usage_limits, "mt_cloud_telemetry") as telemetry,
+            patch.object(usage_limits, "get_cache_backend", return_value=cache),
+        ):
+            yield telemetry, cache
+
+    def _refuse(self, usage_type: UsageType, period: UsagePeriod) -> OnyxError:
+        with (
+            patch.object(
+                usage_limits,
+                "check_usage_limit",
+                _over(usage_type, 5001.0, 5000.0, period),
+            ),
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            check_usage_and_raise(MagicMock(), usage_type, _TENANT)
+        return exc_info.value
+
+    @pytest.mark.usefixtures("refused")
+    def test_the_cost_sentence_says_when_chat_opens_again(self) -> None:
+        period = _trial_week()
+        assert period.end is not None
+        error = self._refuse(UsageType.LLM_COST, period)
+        assert error.detail == (
+            "Your team has used this trial week's allowance. Your messages are "
+            "not lost: chat opens again when the next trial week starts, or "
+            "talk to sales to lift it now."
+        )
+        assert error.extra is not None
+        assert error.extra["policy"] == LimitPolicyName.PLAYGROUND.value
+        assert error.extra["reset_at"] == period.end.isoformat()
+
+    @pytest.mark.usefixtures("refused")
+    def test_the_indexing_sentence_has_no_reset(self) -> None:
+        whole_trial = UsagePeriod(
+            anchor=WindowAnchor.TENANT_START,
+            start=datetime(2026, 11, 25, tzinfo=timezone.utc),
+        )
+        error = self._refuse(UsageType.CHUNKS_INDEXED, whole_trial)
+        assert error.detail == (
+            "Your team has used the playground's indexing allowance for this "
+            "trial. What is already indexed stays searchable. Talk to sales to "
+            "raise it."
+        )
+        assert error.extra is not None
+        assert "reset_at" not in error.extra
+        assert error.headers is None
+
+    def test_each_refusal_sends_an_event_and_the_first_one_more(
+        self, refused: tuple[MagicMock, MagicMock]
+    ) -> None:
+        telemetry, cache = refused
+        period = _trial_week()
+        assert period.end is not None
+        for _ in range(3):
+            self._refuse(UsageType.LLM_COST, period)
+        assert [call.args[2] for call in telemetry.call_args_list] == [
+            MilestoneRecordType.USAGE_LIMIT_REFUSED,
+            MilestoneRecordType.USAGE_LIMIT_ENTERED,
+            MilestoneRecordType.USAGE_LIMIT_REFUSED,
+            MilestoneRecordType.USAGE_LIMIT_REFUSED,
+        ]
+        tenant, subject, _, properties = telemetry.call_args_list[0].args
+        assert (tenant, subject) == (_TENANT, _TENANT)
+        assert properties["limit_type"] == UsageType.LLM_COST.value
+        assert (properties["used"], properties["allowed"]) == (5001.0, 5000.0)
+        assert properties["reset_at"] == period.end.isoformat()
+        key = cache.set_if_absent.call_args.args[0]
+        assert key == (
+            f"usage_limit_entered:{UsageType.LLM_COST.value}:tenant:"
+            f"{period.start.isoformat()}"
+        )
+        assert 1 <= cache.set_if_absent.call_args.kwargs["ex"] <= 3 * 24 * 3600
+
+    def test_a_per_user_refusal_is_the_users_event(
+        self, refused: tuple[MagicMock, MagicMock]
+    ) -> None:
+        telemetry, cache = refused
+        with (
+            patch.object(
+                usage_limits.tenant_usage_db, "count_generated_images", return_value=5
+            ),
+            pytest.raises(OnyxError),
+        ):
+            check_usage_and_raise(
+                MagicMock(),
+                UsageType.IMAGE_GENERATIONS,
+                _TENANT,
+                pending_amount=1,
+                user_id=_USER,
+            )
+        assert telemetry.call_args_list[0].args[1] == str(_USER)
+        key, _ = cache.set_if_absent.call_args.args
+        assert (
+            key
+            == f"usage_limit_entered:{UsageType.IMAGE_GENERATIONS.value}:{_USER}:trial"
+        )
+        # A whole-trial limit never resets, so the key outlives the trial.
+        assert cache.set_if_absent.call_args.kwargs["ex"] == 30 * 24 * 3600
+
+    def test_a_cache_outage_keeps_the_refusal(
+        self, refused: tuple[MagicMock, MagicMock]
+    ) -> None:
+        telemetry, cache = refused
+        cache.set_if_absent.side_effect = RuntimeError("cache down")
+        error = self._refuse(UsageType.LLM_COST, _trial_week())
+        assert error.error_code == OnyxErrorCode.RATE_LIMITED
+        assert [call.args[2] for call in telemetry.call_args_list] == [
+            MilestoneRecordType.USAGE_LIMIT_REFUSED
+        ]
