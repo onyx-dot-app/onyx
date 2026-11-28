@@ -56,7 +56,6 @@ from onyx.server.tenant_usage_limits import (
 from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
-from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import (
     IS_PLAYGROUND,
@@ -650,32 +649,10 @@ def _record_refusal(
     time this tenant, or this user for a per-user limit, is refused in the
     period. The second counts who hit a limit without counting retries, which
     the watch and tune work (ENG-4756) reads. The 429 itself is logged by the
-    error handler, so there is no log line here. The events go out in a
-    background thread: sending one flushes to PostHog, and the refused request
-    should not wait for that."""
+    error handler, so there is no log line here. The events are sent on the
+    request, like every other product event."""
     if policy.name is not LimitPolicyName.PLAYGROUND:
         return
-    run_in_background(
-        _send_refusal_events,
-        usage_type,
-        allowance,
-        policy,
-        tenant_id,
-        user_id,
-        e,
-        reset_at,
-    )
-
-
-def _send_refusal_events(
-    usage_type: UsageType,
-    allowance: Allowance,
-    policy: LimitPolicy,
-    tenant_id: str,
-    user_id: UUID | None,
-    e: UsageLimitExceededError,
-    reset_at: datetime | None,
-) -> None:
     properties: dict[str, Any] = {
         "policy": policy.name.value,
         "limit_type": usage_type.value,
