@@ -8,6 +8,7 @@ and Redis-backed dedup that degrades safely when Redis is unavailable.
 import io
 import json
 import logging
+from collections.abc import Generator
 from typing import Any, TextIO, cast
 from unittest.mock import MagicMock
 
@@ -31,6 +32,12 @@ from onyx.utils.audit import (
     actor_from_user,
 )
 from onyx.utils.variable_functionality import global_version
+from shared_configs.contextvars import (
+    CURRENT_USAGE_CREDENTIAL_CONTEXTVAR,
+    CURRENT_USER_ID_CONTEXTVAR,
+    UsageCredentialIdentity,
+)
+from shared_configs.enums import UsageCredentialType
 from tests.utils.audit import audit_events
 
 pytestmark = pytest.mark.usefixtures("enterprise_audit")
@@ -118,7 +125,11 @@ def test_emits_stable_ocsf_shaped_schema(caplog: pytest.LogCaptureFixture) -> No
         "email": "a@example.com",
         "api_key_id": None,
         "auth_type": "oauth",
+        "credential_type": None,
+        "credential_id": None,
+        "oauth_client_id": None,
     }
+    assert event["audit_schema_version"] == "1.1"
 
 
 def test_routes_to_per_class_child_logger(caplog: pytest.LogCaptureFixture) -> None:
@@ -338,3 +349,69 @@ def test_tier_is_resolved_once_per_window(monkeypatch: pytest.MonkeyPatch) -> No
     emit_audit_event(AuditAction.LOGOUT, AuditOutcome.SUCCESS)
 
     assert get_tier.call_count == 1
+
+
+@pytest.fixture
+def pat_request() -> Generator[str, None, None]:
+    """A request authenticated by PAT 42, made by user ``requester``."""
+    user_token = CURRENT_USER_ID_CONTEXTVAR.set("requester")
+    credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
+        UsageCredentialIdentity(UsageCredentialType.PAT, "42", "ci")
+    )
+    try:
+        yield "requester"
+    finally:
+        CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.reset(credential_token)
+        CURRENT_USER_ID_CONTEXTVAR.reset(user_token)
+
+
+def test_requester_actor_carries_the_request_credential(
+    pat_request: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(
+            AuditAction.LOGOUT,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=pat_request),
+        )
+
+    (event,) = audit_events(caplog)
+    assert event["actor"]["credential_type"] == "pat"
+    assert event["actor"]["credential_id"] == "42"
+    assert event["actor"]["oauth_client_id"] is None
+
+
+def test_other_actor_does_not_get_the_request_credential(
+    pat_request: str,  # noqa: ARG001
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(
+            AuditAction.LOGOUT,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id="someone-else"),
+        )
+
+    (event,) = audit_events(caplog)
+    assert event["actor"]["credential_type"] is None
+    assert event["actor"]["credential_id"] is None
+
+
+def test_explicit_credential_is_kept(
+    pat_request: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(
+            AuditAction.LOGOUT,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(
+                user_id=pat_request,
+                credential_type="oauth_provider",
+                credential_id="grant-1",
+                oauth_client_id="client-1",
+            ),
+        )
+
+    (event,) = audit_events(caplog)
+    assert event["actor"]["credential_type"] == "oauth_provider"
+    assert event["actor"]["oauth_client_id"] == "client-1"

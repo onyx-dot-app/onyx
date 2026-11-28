@@ -41,8 +41,15 @@ from onyx.server.oauth_provider import provider as oauth_provider
 from onyx.server.oauth_provider.api import router as user_router
 from onyx.server.oauth_provider.protocol import router as protocol_router
 from onyx.server.oauth_provider.provider import _cimd_fetcher
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
+from tests.utils.audit import events_for
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
@@ -106,6 +113,12 @@ async def protocol_client(
     def search(
         user: User = Depends(require_permission(Permission.READ_SEARCH)),
     ) -> dict[str, str]:
+        # Lets a test check the actor of an event written under an OAuth token.
+        emit_audit_event(
+            AuditAction.PERMISSION_DENIED,
+            AuditOutcome.DENIED,
+            actor=actor_from_user(user),
+        )
         return {"user_id": str(user.id)}
 
     @app.post("/search/postgres-query")
@@ -1011,3 +1024,71 @@ async def test_malformed_pkce_verifier_does_not_consume_code(
     assert (
         await _exchange(protocol_client, client_id, code, valid_verifier)
     ).status_code == 200
+
+
+@pytest.mark.usefixtures("audit_stream")
+async def test_audit_events_name_the_oauth_client(
+    protocol_client: httpx.AsyncClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    owner = protocol_client.headers["X-Mcp-Test-Owner"]
+    client_id = await _register(protocol_client)
+    code, verifier = await _authorize(protocol_client, client_id)
+    exchange = await _exchange(protocol_client, client_id, code, verifier)
+    assert exchange.status_code == 200, exchange.text
+    grant = (await protocol_client.get("/oauth-provider/grants")).json()[0]
+
+    audited = await protocol_client.post(
+        "/search",
+        headers={"Authorization": f"Bearer {exchange.json()['access_token']}"},
+    )
+    assert audited.status_code == 200, audited.text
+    revoked = await protocol_client.delete(
+        f"/oauth-provider/grants/{grant['id']}", headers={"Origin": _ORIGIN}
+    )
+    assert revoked.status_code == 200, revoked.text
+
+    (registered,) = events_for(caplog, "oauth_client.register")
+    assert registered["resource_id"] == client_id
+    assert registered["actor"] is None
+    (granted,) = events_for(caplog, "oauth_grant.create")
+    assert granted["resource_id"] == grant["id"]
+    assert granted["actor"]["user_id"] == owner
+    assert granted["extra"]["client_id"] == client_id
+    assert granted["extra"]["scopes"] == grant["scopes"]
+    (via_token,) = events_for(caplog, "permission.denied")
+    assert via_token["actor"]["user_id"] == owner
+    assert via_token["actor"]["credential_type"] == "oauth_provider"
+    assert via_token["actor"]["credential_id"] == grant["id"]
+    assert via_token["actor"]["oauth_client_id"] == client_id
+    (revoke,) = events_for(caplog, "oauth_grant.revoke")
+    assert revoke["resource_id"] == grant["id"]
+    assert revoke["actor"]["credential_type"] == "session"
+    assert revoke["extra"]["source"] == "user_disconnect"
+
+
+@pytest.mark.usefixtures("audit_stream")
+async def test_client_token_revocation_writes_a_revoke_event(
+    protocol_client: httpx.AsyncClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    owner = protocol_client.headers["X-Mcp-Test-Owner"]
+    client_id = await _register(protocol_client)
+    code, verifier = await _authorize(protocol_client, client_id)
+    exchange = await _exchange(protocol_client, client_id, code, verifier)
+    assert exchange.status_code == 200, exchange.text
+    grant = (await protocol_client.get("/oauth-provider/grants")).json()[0]
+
+    for _ in range(2):
+        revoked = await protocol_client.post(
+            "/oauth-provider/revoke",
+            data={"client_id": client_id, "token": exchange.json()["access_token"]},
+        )
+        assert revoked.status_code == 200, revoked.text
+
+    # The second revocation changes nothing, so it writes no event.
+    (revoke,) = events_for(caplog, "oauth_grant.revoke")
+    assert revoke["resource_id"] == grant["id"]
+    assert revoke["actor"]["user_id"] == owner
+    assert revoke["actor"]["oauth_client_id"] == client_id
+    assert revoke["extra"]["source"] == "token_revocation"

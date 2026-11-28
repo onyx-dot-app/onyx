@@ -86,6 +86,21 @@ class AuditAction(str, Enum):
     # Fires only when a scoped write gate refuses an actor who already holds
     # partial authority, not on every 403.
     PERMISSION_DENIED = "permission.denied"
+    PAT_CREATE = "pat.create"
+    PAT_REVOKE = "pat.revoke"
+    PERSONA_CREATE = "persona.create"
+    PERSONA_UPDATE = "persona.update"
+    PERSONA_DELETE = "persona.delete"
+    DOCUMENT_SET_CREATE = "document_set.create"
+    DOCUMENT_SET_UPDATE = "document_set.update"
+    DOCUMENT_SET_DELETE = "document_set.delete"
+    # Exports fire when the file is downloaded, which is when data leaves Onyx.
+    EXPORT_QUERY_HISTORY = "export.query_history"
+    EXPORT_USAGE_REPORT = "export.usage_report"
+    EXPORT_LOGS = "export.logs"
+    OAUTH_CLIENT_REGISTER = "oauth_client.register"
+    OAUTH_GRANT_CREATE = "oauth_grant.create"
+    OAUTH_GRANT_REVOKE = "oauth_grant.revoke"
 
 
 class AuditActor(BaseModel):
@@ -98,6 +113,12 @@ class AuditActor(BaseModel):
     email: SkipValidation[str | None] = None
     api_key_id: str | None = None
     auth_type: str | None = None  # e.g. "password", "oauth", "saml", "api_key"
+    # The credential that authenticated the request: a ``UsageCredentialType``
+    # value and that credential's id (PAT id, API key id, OAuth grant id).
+    # Filled from the request context when the actor is the requester.
+    credential_type: str | None = None
+    credential_id: str | None = None
+    oauth_client_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -105,6 +126,9 @@ class AuditActor(BaseModel):
             "email": self.email,
             "api_key_id": self.api_key_id,
             "auth_type": self.auth_type,
+            "credential_type": self.credential_type,
+            "credential_id": self.credential_id,
+            "oauth_client_id": self.oauth_client_id,
         }
 
 
