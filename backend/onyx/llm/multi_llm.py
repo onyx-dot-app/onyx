@@ -979,7 +979,9 @@ class LitellmLLM(LLM):
             return
         # Import here to avoid circular imports
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.db.usage import UsageType, increment_usage
+        from onyx.db.usage import UsageType
+        from onyx.server.usage_limits import record_usage
+        from shared_configs.contextvars import get_current_tenant_id
 
         provider = self._custom_llm_provider or self._model_provider
 
@@ -999,7 +1001,9 @@ class LitellmLLM(LLM):
                 cost_cents = input_cents + output_cents
                 if cost_cents <= 0:
                     return
-                increment_usage(db_session, UsageType.LLM_COST, cost_cents)
+                record_usage(
+                    db_session, UsageType.LLM_COST, cost_cents, get_current_tenant_id()
+                )
                 db_session.commit()
         except Exception as e:
             # Log but don't fail the LLM call if tracking fails

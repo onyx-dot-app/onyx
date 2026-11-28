@@ -2251,13 +2251,15 @@ def _docprocessing_task(
         # Track chunk indexing usage for cloud usage limits
         if USAGE_LIMITS_ENABLED and index_pipeline_result.total_chunks > 0:
             try:
-                from onyx.db.usage import UsageType, increment_usage
+                from onyx.db.usage import UsageType
+                from onyx.server.usage_limits import record_usage
 
                 with get_session_with_current_tenant() as usage_db_session:
-                    increment_usage(
+                    record_usage(
                         db_session=usage_db_session,
                         usage_type=UsageType.CHUNKS_INDEXED,
                         amount=index_pipeline_result.total_chunks,
+                        tenant_id=tenant_id,
                     )
                     usage_db_session.commit()
             except Exception as e:

@@ -1224,3 +1224,6 @@ class WindowAnchor(str, PyEnum):
     # The same periods for every tenant. With the default
     # USAGE_LIMIT_WINDOW_SECONDS, the calendar week from Monday 00:00 UTC.
     CALENDAR = "calendar"
+    # Periods start at the tenant's trial start. With a 7-day length: days 1-7,
+    # then days 8-14, and so on. With no length: one period for the whole trial.
+    TENANT_START = "tenant_start"

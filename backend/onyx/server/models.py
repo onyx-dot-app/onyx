@@ -91,7 +91,7 @@ class InvitedUserSnapshot(BaseModel):
 
 
 """
-Tenant usage limit policies (enforced in ``onyx.server.usage_limits``)
+Tenant usage limit plans (used in ``onyx.server.usage_limits``)
 """
 
 
@@ -111,31 +111,34 @@ class LimitMeasure(str, Enum):
 
 
 class LimitWindow(BaseModel):
-    """The period a limit's usage is counted over before it starts from zero."""
+    """How long usage is counted before it starts again from zero."""
 
     model_config = ConfigDict(frozen=True)
 
     anchor: WindowAnchor
-    # Length of one window. None means one window that never resets.
+    # Length of one period. None means one period that never ends.
     length_seconds: int | None = None
 
     @model_validator(mode="after")
-    def _calendar_has_length(self) -> "LimitWindow":
+    def _length_is_valid(self) -> "LimitWindow":
         if self.anchor == WindowAnchor.CALENDAR and self.length_seconds is None:
             raise ValueError("A calendar window needs a length")
+        if self.length_seconds is not None and self.length_seconds <= 0:
+            raise ValueError("A window length must be positive")
         return self
 
 
 class LimitPolicyName(str, Enum):
-    """The plans a tenant can be held to. Fixed in code; one ``LimitPolicy`` each."""
+    """The plans. Each has one ``LimitPolicy``."""
 
     CLOUD_TRIAL = "cloud_trial"
     CLOUD_PAID = "cloud_paid"
+    PLAYGROUND = "playground"
 
 
 class Allowance(BaseModel):
-    """One usage type under one policy: how much, over what window, whose usage,
-    read from where, and which override field can replace the amount."""
+    """One limit in one plan: how much, over what period, whose usage, where to
+    read it, and which override field can replace the amount."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -150,7 +153,7 @@ class Allowance(BaseModel):
     # count. To carry usage over, add the old total into the new period's row
     # when the change ships, or read the old window's usage alongside the new.
     window: LimitWindow | None = None
-    # Field of cloud's override record that replaces ``limit`` for one tenant.
+    # Cloud only: the override field that replaces ``limit`` for one tenant.
     override_field: TenantUsageLimitKeys | None = None
 
     @model_validator(mode="after")
@@ -161,7 +164,7 @@ class Allowance(BaseModel):
 
 
 class LimitPolicy(BaseModel):
-    """Everything one plan allows. A usage type with no allowance is unlimited."""
+    """All limits of one plan. A limit not listed here is not limited."""
 
     model_config = ConfigDict(frozen=True)
 
