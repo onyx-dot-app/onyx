@@ -124,6 +124,7 @@ def test_sync_applies_releases_and_retirements_after_setup(
     assert str(provider.id) not in _sync_with_catalog(db_session, catalog)
 
 
+@pytest.mark.usefixtures("restore_chat_default")
 def test_sync_does_not_change_the_global_default(
     db_session: Session, provider_name: str
 ) -> None:
@@ -354,6 +355,7 @@ def test_playground_sync_shows_exactly_the_models_its_price_rule_offers(
     }
 
 
+@pytest.mark.usefixtures("restore_chat_default")
 def test_playground_sync_replaces_a_chat_default_the_rule_no_longer_offers(
     db_session: Session, provider_name: str
 ) -> None:
