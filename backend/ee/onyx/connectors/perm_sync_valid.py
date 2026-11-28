@@ -17,6 +17,10 @@ from ee.onyx.external_permissions.youtrack.capability_checks import (
     build_youtrack_doc_permission_sync_checks,
     build_youtrack_group_sync_checks,
 )
+from ee.onyx.external_permissions.zendesk.capability_checks import (
+    build_zendesk_doc_permission_sync_checks,
+    build_zendesk_group_sync_checks,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.azure_datalake.config import AzureDataLakeConnectorConfig
 from onyx.connectors.azure_datalake.connector import AzureDataLakeConnector
@@ -60,6 +64,8 @@ from onyx.connectors.sharepoint.capability_checks import (
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.youtrack.config import YouTrackConnectorConfig
 from onyx.connectors.youtrack.connector import YouTrackConnector
+from onyx.connectors.zendesk.config import ZendeskConnectorConfig
+from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zoom.connector import ZoomConnector
 from onyx.utils.logger import setup_logger
 
@@ -208,6 +214,34 @@ def validate_youtrack_perm_sync(connector: YouTrackConnector) -> None:
         check.run(context)
 
 
+def validate_zendesk_perm_sync(connector: ZendeskConnector) -> None:
+    """Scheduled syncs validate through here, so a token that lost admin
+    access fails the sync instead of shrinking every group and ACL."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.ZENDESK,
+        credential_json={},
+        connector=connector,
+        connector_specific_config=ZendeskConnectorConfig(
+            content_type=connector.content_type,
+            calls_per_minute=connector.calls_per_minute,
+            grant_end_users=connector.grant_end_users,
+        ).model_dump(mode="json"),
+        source_operations=connector.ops,
+    )
+    form_state = context.form_state
+    if form_state is None:
+        raise RuntimeError("Bug: the Zendesk config did not validate.")
+    # Checks mirrored across both capabilities share an id and run once.
+    checks: dict[str, CapabilityCheck] = {
+        check.check_id: check
+        for check in build_zendesk_doc_permission_sync_checks()
+        + build_zendesk_group_sync_checks()
+        if check.applies(form_state)
+    }
+    for check in checks.values():
+        check.run(context)
+
+
 def _run_egnyte_checks(
     connector: EgnyteConnector, checks: list[CapabilityCheck]
 ) -> None:
@@ -316,6 +350,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
     YouTrackConnector: validate_youtrack_perm_sync,
+    ZendeskConnector: validate_zendesk_perm_sync,
     ZoomConnector: validate_zoom_perm_sync,
 }
 

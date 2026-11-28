@@ -6,7 +6,10 @@ from requests.exceptions import HTTPError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zendesk.source_operations import (
     ZendeskRequestError,
@@ -189,3 +192,43 @@ def test_is_article_public_sends_no_netrc_credentials(
     monkeypatch.setattr(requests.Session, "send", send)
     assert _gateway().is_article_public(article_id=7) is False
     assert "Authorization" not in sent[0].headers
+
+
+def test_a_listing_page_without_its_items_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = ZendeskConnector()
+    set_request_function(
+        monkeypatch, connector, MagicMock(return_value={"meta": {"has_more": False}})
+    )
+    with pytest.raises(ZendeskRequestError):
+        next(connector.ops.iterate_group_memberships())
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        InsufficientPermissionsError("plan has no custom roles"),
+        ZendeskRequestError(404, "not found"),
+    ],
+)
+def test_custom_roles_are_none_on_plans_without_them(
+    monkeypatch: pytest.MonkeyPatch, answer: Exception
+) -> None:
+    connector = ZendeskConnector()
+    set_request_function(monkeypatch, connector, MagicMock(side_effect=answer))
+    assert connector.ops.list_custom_roles() is None
+
+
+def test_a_custom_role_without_configuration_grants_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = ZendeskConnector()
+    set_request_function(
+        monkeypatch,
+        connector,
+        MagicMock(return_value={"custom_roles": [{"id": 1, "configuration": None}]}),
+    )
+    roles = connector.ops.list_custom_roles()
+    assert roles is not None
+    assert roles[0].ticket_access is None
