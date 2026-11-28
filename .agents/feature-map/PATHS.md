@@ -183,7 +183,7 @@ covers new files that match it.
 | `web/src/lib/badges/` | editions-and-gating |
 | `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
-| `backend/onyx/tracing/`, `backend/onyx/server/manage/tracing/`, `backend/onyx/db/tracing.py`, `backend/onyx/server/metrics/` | observability |
+| `backend/onyx/tracing/`, `backend/ee/onyx/tracing/`, `backend/onyx/server/manage/tracing/`, `backend/onyx/db/tracing.py`, `backend/onyx/server/metrics/` | observability |
 | `backend/onyx/server/metrics/mcp_server.py` | mcp-server, observability |
 | `backend/onyx/server/metrics/mcp_client.py` | mcp-and-custom-tools, observability |
 | `backend/onyx/db/llm_usage.py`, `backend/onyx/db/usage.py`, `backend/onyx/db/user_usage.py`, `backend/onyx/db/system_usage.py`, `backend/onyx/server/features/usage/` | observability |

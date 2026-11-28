@@ -5623,6 +5623,13 @@ class SecuritySettings(Base):
     allow_connector_check_findings: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    # AuditEventCategory values; None falls back to the default categories.
+    audit_event_categories: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True, default=None
+    )
+    audit_include_query_text: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True, default=None
     )

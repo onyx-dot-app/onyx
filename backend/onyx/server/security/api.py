@@ -21,7 +21,9 @@ from onyx.server.security.store import (
     env_pinned_active_fields,
     get_security_settings,
 )
-from onyx.utils.audit import AuditActor
+from onyx.server.settings.models import Tier
+from onyx.server.settings.tier_order import get_current_tier, tier_at_least
+from onyx.utils.audit import actor_from_user
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
@@ -32,6 +34,8 @@ admin_router = APIRouter(prefix="/admin/security")
 
 # Single-tenant only, reject in multi-tenant where it would never enforce.
 _PASSWORD_LOCKDOWN_FIELDS = frozenset({"password_auth_enabled"})
+# The audit stream is Enterprise only, so its settings are too.
+_AUDIT_FIELDS = frozenset({"audit_event_categories", "audit_include_query_text"})
 
 
 def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, set[str]]:
@@ -129,9 +133,14 @@ async def put_security_settings_endpoint(
             )
         )
 
-    # The auth dependency always yields a user, test seams may not.
-    actor = (
-        AuditActor(user_id=str(user.id), email=user.email) if user is not None else None
-    )
+    if present_keys & _AUDIT_FIELDS and not tier_at_least(
+        await run_in_threadpool(get_current_tier), Tier.ENTERPRISE
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Audit log settings require the Enterprise plan.",
+        )
+
+    actor = actor_from_user(user)
     # Sync DB + Redis IO — offload so the event loop isn't blocked.
     return await run_in_threadpool(apply_patch, overrides, present_keys, actor)

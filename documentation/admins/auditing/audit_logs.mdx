@@ -51,6 +51,11 @@ auditable events, AU-3 record content, AU-6 review, AU-12 generation).
     Downloads of a query history export, a usage report, and a log export. The event fires when the file is downloaded.
   </Accordion>
 
+  <Accordion title="User activity (off by default)">
+    Chat messages, searches (including searches by MCP clients), LLM gateway requests, and file downloads.
+    Turn these on in [Choose what Onyx records](#choose-what-onyx-records).
+  </Accordion>
+
   <Accordion title="Authorization refusals">
     Writes that a scoped permission gate refuses, for example a group manager acting outside the groups they manage.
   </Accordion>
@@ -66,9 +71,36 @@ Emission is **fail-safe**: it never interrupts a user request or a connector run
 High-volume event classes are de-duplicated within a short window. If de-duplication is unavailable,
 Onyx still emits the event, so an audit event is never silently dropped (you may see a duplicate).
 
-The subsystem is **always on** — there is no enable/disable flag, output-format, or destination setting.
-The only related knob is `LOG_FORMAT` (below), which shapes the *surrounding* log records;
+There is no output-format or destination setting. `LOG_FORMAT` (below) shapes the *surrounding* log records;
 the audit JSON body itself is identical either way.
+
+## Choose what Onyx records
+
+An admin chooses the event categories with the `audit_event_categories` field of `PUT /api/admin/security`.
+This setting needs an Enterprise license.
+
+| Category | Actions | Default |
+|---|---|---|
+| `authentication` | `auth.*` | On |
+| `user_and_group_management` | `user.*`, `user_group.*`, `oauth_grant.*` | On |
+| `configuration` | Settings, resources, agents, document sets, keys and tokens, `oauth_client.register`, `permission.denied` | On |
+| `credential_access` | `credential.access` and the [credential access](#credential-access) stream | On |
+| `data_export` | `export.*` | On |
+| `chat` | `chat.message_send` | Off |
+| `search` | `search.query` | Off |
+| `llm_gateway` | `gateway.llm_request` | Off |
+| `file_download` | `file.download` | Off |
+
+A change to the security settings, which include these categories,
+is always recorded as `settings.security_settings_change`.
+
+### Query text
+
+User activity events record metadata: ids, the agent, the model, tool names, and document ids.
+They do not record what the user typed or what the answer said.
+To add the user's query text to `chat.message_send` and `search.query`, set `audit_include_query_text` to `true`.
+Onyx adds the text only when the query history setting is **normal**.
+When query history is **anonymized** or **disabled**, events never include query text. Answer text is never recorded.
 
 <Tip>
   Run Onyx with `LOG_FORMAT=json` so that *all* log records — not just audit events — are machine-parseable,
@@ -276,6 +308,36 @@ and the actor is the provisioning token (`auth_type: "scim"`). SCIM emits an eve
 | `export.query_history` | A query history CSV is downloaded | `query_history_export` | export request id |
 | `export.usage_report` | A usage report is downloaded | `usage_report` | report name |
 | `export.logs` | A log export ZIP is downloaded | `log_export` | export id |
+
+### User activity
+
+`ocsf_class: api_activity`. These actions are off until an admin turns on their category.
+Document id lists hold at most 100 ids. When Onyx drops ids, the matching `_truncated` field is `true`.
+
+| `action` | Triggered when | `resource_type` | `resource_id` | Key `extra` fields |
+|---|---|---|---|---|
+| `chat.message_send` | A chat answer finishes. A turn that asks several models writes one event for each model | `chat_session` | chat session id | `user_message_id`, `assistant_message_id`, `persona_id`, `model_provider`, `model_name`, `origin`, `tool_names`, `retrieved_document_ids`, `cited_document_ids`, `cancelled`, `error` |
+| `search.query` | A search runs from the search page, the search API, or an MCP client | — | — | `api`, `persona_id`, `retrieved_document_ids`, `selected_document_ids` |
+| `gateway.llm_request` | A client calls a model through the LLM gateway | — | — | `model_provider`, `model`, `routed_model`, `input_tokens`, `output_tokens` |
+| `file.download` | A user downloads a chat file, or a file the chat browser downloaded | `file` or `chat_browser_download` | file id or name | `file_name`, `file_type`, `form` |
+
+In an incognito chat that keeps no content, `chat.message_send` has `incognito: true` and no document ids or query text.
+For chat files, `file.download` writes one event per user, file, and form in a 10-minute window,
+because the browser fetches the same file each time a chat renders. Chat browser downloads write an event every time.
+
+## Investigate an incident
+
+Use these fields to follow one user's activity across the stream:
+
+- `actor.user_id` finds everything one user did.
+- `actor.credential_type` and `actor.credential_id` find everything that one personal access token, API key,
+  or MCP client grant did. `actor.oauth_client_id` names the MCP client.
+- `extra.chat_session_id` and `resource_id` of `chat.message_send` follow one conversation.
+- `retrieved_document_ids` and `cited_document_ids` show which documents a user saw.
+- `request_id` joins an event to the rest of that request's logs.
+
+For example, to see what an MCP client read after a user approved it, filter on `oauth_grant.create` for the user,
+take `extra.client_id`, then filter `search.query` events on `actor.oauth_client_id`.
 
 ### Credential access
 

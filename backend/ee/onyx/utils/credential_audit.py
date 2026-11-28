@@ -26,9 +26,10 @@ from typing import Any
 
 # Importing it also sets up the ``onyx.audit`` stdout handler that this
 # module's logger reaches.
-from ee.onyx.utils.audit import audit_enabled_for_tenant
+from ee.onyx.utils.audit import audit_enabled_for_tenant, category_enabled
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.constants import CacheBackendType
+from onyx.utils.audit import AuditEventCategory
 
 # Dedicated audit logger. We intentionally use a plain ``logging.getLogger``
 # rather than ``setup_logger`` so the record message is exactly one clean JSON
@@ -132,7 +133,9 @@ def emit_credential_access(
     """
     try:
         tenant_id = _safe_get_tenant_id()
-        if not audit_enabled_for_tenant(tenant_id):
+        if not audit_enabled_for_tenant(tenant_id) or not category_enabled(
+            AuditEventCategory.CREDENTIAL_ACCESS
+        ):
             return
         request_id = _safe_get_request_id()
         endpoint = _safe_get_endpoint()

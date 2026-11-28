@@ -276,6 +276,12 @@ from onyx.server.usage_limits import (
 from onyx.server.utils import get_json_line
 from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
@@ -1431,12 +1437,31 @@ def fetch_chat_file(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    def audit_download() -> None:
+        # One event per user, file and form in the dedup window: the browser
+        # fetches the same image each time a chat renders. Written once the
+        # content is known to be served, so a refused preview claims no window.
+        emit_audit_event(
+            AuditAction.FILE_DOWNLOAD,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="file",
+            resource_id=file_id,
+            dedup_key=f"file_download:{user.id}:{file_id}{etag_variant}",
+            extra={
+                "file_name": file_name,
+                "file_type": file_record.file_type,
+                "form": preview or ("parsed" if parse_spreadsheet else "original"),
+            },
+        )
+
     if preview is not None:
         stored = read_stored_chat_file_preview(db_session, file_record)
         if stored is None:
             raise OnyxError(
                 OnyxErrorCode.PREVIEW_NOT_READY, "The PDF preview is not made yet"
             )
+        audit_download()
         # The link is written once, so the ETag names one PDF.
         return StreamingResponse(
             stored,
@@ -1451,9 +1476,11 @@ def fetch_chat_file(
             preview_sheets = parse_spreadsheet_for_preview(
                 xlsx_io, file_record.display_name or ""
             )
+        audit_download()
         return JSONResponse(content=preview_sheets.model_dump(), headers=cache_headers)
 
     file_io = file_store.read_file(file_id, mode="b")
+    audit_download()
     return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 

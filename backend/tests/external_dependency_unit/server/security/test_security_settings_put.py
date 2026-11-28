@@ -40,6 +40,8 @@ from onyx.server.security.store import (
     _install_cache_for_test,
     invalidate_security_cache,
 )
+from onyx.server.settings.models import Tier
+from onyx.utils.audit import DEFAULT_AUDIT_EVENT_CATEGORIES, AuditEventCategory
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -517,3 +519,54 @@ def test_pinned_fields_endpoint_reflects_env(
     monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_ISSUER", None)
     monkeypatch.setattr(security_store._cfg, "JWT_PUBLIC_KEY_URL", None)
     assert get_pinned_fields_endpoint(_PLACEHOLDER_USER) == ["jwt_expected_audience"]
+
+
+# -----------------------------------------------------------------------------
+# Audit settings (Enterprise only)
+# -----------------------------------------------------------------------------
+
+
+def test_put_audit_settings_round_trip_on_enterprise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(security_api, "get_current_tier", lambda: Tier.ENTERPRISE)
+
+    effective = _put(
+        {
+            "audit_event_categories": ["authentication", "chat", "chat"],
+            "audit_include_query_text": True,
+        }
+    )
+
+    assert effective.audit_event_categories == (
+        AuditEventCategory.AUTHENTICATION,
+        AuditEventCategory.CHAT,
+    )
+    assert effective.audit_include_query_text is True
+    assert _load_row_as_dict() == {
+        "audit_event_categories": [
+            AuditEventCategory.AUTHENTICATION,
+            AuditEventCategory.CHAT,
+        ],
+        "audit_include_query_text": True,
+    }
+
+
+def test_audit_settings_default_to_the_categories_written_before() -> None:
+    effective = security_store.get_security_settings()
+
+    assert effective.audit_event_categories == DEFAULT_AUDIT_EVENT_CATEGORIES
+    assert effective.audit_include_query_text is False
+
+
+@pytest.mark.parametrize("tier", [Tier.BUSINESS, Tier.COMMUNITY])
+def test_put_rejects_audit_settings_below_enterprise(
+    monkeypatch: pytest.MonkeyPatch, tier: Tier
+) -> None:
+    monkeypatch.setattr(security_api, "get_current_tier", lambda: tier)
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"audit_include_query_text": True})
+
+    assert exc_info.value.error_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE
+    assert _load_row_as_dict() is None
