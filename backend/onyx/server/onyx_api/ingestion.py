@@ -233,14 +233,7 @@ def upsert_ingestion_doc(
     )
 
     if count_chunks and indexing_pipeline_result.total_chunks > 0:
-        with get_session_with_current_tenant() as usage_db_session:
-            record_usage(
-                db_session=usage_db_session,
-                usage_type=UsageType.CHUNKS_INDEXED,
-                amount=indexing_pipeline_result.total_chunks,
-                tenant_id=tenant_id,
-            )
-            usage_db_session.commit()
+        _count_ingested_chunks(tenant_id, indexing_pipeline_result.total_chunks)
 
     # If there's a secondary index being built, index the doc but don't use it for return here
     sec_search_settings = active_search_settings.secondary
@@ -268,6 +261,23 @@ def upsert_ingestion_doc(
         document_id=document.id,
         already_existed=indexing_pipeline_result.new_docs == 0,
     )
+
+
+def _count_ingested_chunks(tenant_id: str, chunks: int) -> None:
+    """Add ingested chunks to the tenant's chunk usage. A failure is logged and
+    does not fail the request: the document is already in the primary index,
+    and the secondary write must still run, as in connector indexing."""
+    try:
+        with get_session_with_current_tenant() as usage_db_session:
+            record_usage(
+                db_session=usage_db_session,
+                usage_type=UsageType.CHUNKS_INDEXED,
+                amount=chunks,
+                tenant_id=tenant_id,
+            )
+            usage_db_session.commit()
+    except Exception:
+        logger.exception("Failed to count ingested chunks for tenant %s", tenant_id)
 
 
 @router.delete("/ingestion/{document_id}", dependencies=[Depends(require_vector_db)])
