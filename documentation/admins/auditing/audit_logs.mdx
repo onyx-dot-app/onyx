@@ -1,0 +1,405 @@
+---
+title: "Audit Logs & SIEM Integration"
+description: "Forward Onyx's structured audit-event stream to your SIEM for security monitoring and compliance"
+icon: "shield-check"
+---
+
+<Note>
+  Audit logging is available on **self-hosted** deployments with an **Enterprise** license.
+  You control the log pipeline. With a Business license or no license, Onyx does not write audit events.
+</Note>
+
+## Overview
+
+Onyx emits a normalized, structured **audit-event stream** for security-relevant actions — authentication,
+user and access-control changes, admin configuration changes, and credential access.
+Every event is a single JSON object, so you can forward the stream to any SIEM — **Splunk, Microsoft Sentinel, Elastic,
+Google Chronicle, AWS Security Lake** — with no Onyx-side integration to build.
+
+Field names and the action taxonomy are shaped toward [**OCSF**](https://schema.ocsf.io)
+(the Open Cybersecurity Schema Framework), so events map cleanly onto the event classes most SIEMs already understand.
+
+This maps directly onto common compliance controls — **SOC 2 CC7** and the **NIST 800-53 / FedRAMP AU** family (AU-2
+auditable events, AU-3 record content, AU-6 review, AU-12 generation).
+
+## What gets captured
+
+<AccordionGroup>
+  <Accordion title="Authentication">
+    Login success, login failure, logout, registration, password forgot, password reset, email verification,
+    and admin impersonation.
+  </Accordion>
+
+  <Accordion title="User & access management">
+    User creation (admin invites), deletion, deactivation, reactivation, role changes, and Craft access changes.
+    A user approving or disconnecting an MCP client (OAuth grant create and revoke).
+  </Accordion>
+
+  <Accordion title="Group management">
+    User-group creation, rename, deletion, membership changes, permission changes, and group-manager changes.
+    Changes made through SCIM use the same actions.
+  </Accordion>
+
+  <Accordion title="Configuration & resources">
+    Create / update / delete of LLM providers, connectors, connector-credential pairs, API keys, credentials, agents,
+    and document sets, plus selected workspace settings and credential-access (decrypt) events.
+    Agent updates include sharing, public status, ownership transfer, and restore.
+    Personal access token creation and revocation. MCP client registration (OAuth dynamic client registration).
+  </Accordion>
+
+  <Accordion title="Data exports">
+    Downloads of a query history export, a usage report, and a log export. The event fires when the file is downloaded.
+  </Accordion>
+
+  <Accordion title="User activity (off by default)">
+    Chat messages, searches (including searches by MCP clients), LLM gateway requests, and file downloads.
+    Turn these on in [Choose what Onyx records](#choose-what-onyx-records).
+  </Accordion>
+
+  <Accordion title="Authorization refusals">
+    Writes that a scoped permission gate refuses, for example a group manager acting outside the groups they manage.
+  </Accordion>
+</AccordionGroup>
+
+## How it works
+
+Audit events are emitted as `INFO` log records on a dedicated **`onyx.audit`** logger.
+The message body of each record is a single JSON object — Onyx serializes the event itself,
+so the audit line is identical regardless of your log format.
+
+Emission is **fail-safe**: it never interrupts a user request or a connector run.
+High-volume event classes are de-duplicated within a short window. If de-duplication is unavailable,
+Onyx still emits the event, so an audit event is never silently dropped (you may see a duplicate).
+
+There is no output-format or destination setting. `LOG_FORMAT` (below) shapes the *surrounding* log records;
+the audit JSON body itself is identical either way.
+
+## Choose what Onyx records
+
+An admin chooses the event categories in **Admin Panel > Security & Hardening > Audit Logs and SIEM**,
+or with the `audit_event_categories` field of `PUT /api/admin/security`. This setting needs an Enterprise license.
+
+<img
+
+className="rounded-image" src="/assets/admins/auditing/audit_logs_section.webp" alt="The Audit Logs and SIEM section:
+the audit stream status, the audit event switches, and the user activity switches" />
+
+| Category | Actions | Default |
+|---|---|---|
+| `authentication` | `auth.*` | On |
+| `user_and_group_management` | `user.*`, `user_group.*`, `oauth_grant.*` | On |
+| `configuration` | Settings, resources, agents, document sets, keys and tokens, `oauth_client.register`, `permission.denied` | On |
+| `credential_access` | `credential.access` and the [credential access](#credential-access) stream | On |
+| `data_export` | `export.*` | On |
+| `chat` | `chat.message_send` | Off |
+| `search` | `search.query` | Off |
+| `llm_gateway` | `gateway.llm_request` | Off |
+| `file_download` | `file.download` | Off |
+
+A change to the security settings, which include these categories,
+is always recorded as `settings.security_settings_change`.
+
+### Query text
+
+User activity events record metadata: ids, the agent, the model, tool names, and document ids.
+They do not record what the user typed or what the answer said.
+To add the user's query text to `chat.message_send` and `search.query`,
+turn on **Include Query Text** (`audit_include_query_text`).
+Onyx adds the text only when the query history setting is **normal**.
+When query history is **anonymized** or **disabled**, events never include query text. Answer text is never recorded.
+
+<Tip>
+  Run Onyx with `LOG_FORMAT=json` so that *all* log records — not just audit events — are machine-parseable,
+  and request/tenant context is promoted to top-level fields.
+  This makes filtering and parsing in your shipper much simpler.
+</Tip>
+
+## Event schema
+
+| Field | Type | Description |
+|---|---|---|
+| `audit_schema_version` | string | Schema version (currently `"1.1"`). |
+| `ts` | number | Event time, epoch seconds. |
+| `action` | string | Action taxonomy value, `<domain>.<verb>` (e.g. `llm_provider.update`). Stable, append-only. |
+| `ocsf_class` | string | `authentication`, `account_change`, `user_access_management`, `group_management`, or `api_activity`. |
+| `outcome` | string | `success`, `failure`, or `denied`. |
+| `tenant_id` | string \| null | Tenant the action occurred in. |
+| `actor` | object \| null | Who acted. See [Actor fields](#actor-fields). Never contains a secret. |
+| `resource_type` | string \| null | Affected resource type (e.g. `llm_provider`, `user`, `api_key`). |
+| `resource_id` | string \| null | Affected resource identifier. |
+| `request_id` | string \| null | Correlates the event with the rest of that request's logs. |
+| `endpoint` | string \| null | Route that produced the event. |
+| `source_ip` | string \| null | Client IP (from `X-Forwarded-For`). |
+| `extra` | object \| null | Additional non-secret context. |
+
+The `action` values are a stable, append-only contract — safe to filter and build dashboards against.
+New actions may be added over time; existing ones do not change meaning. A minor schema version adds fields.
+Configure your parser to accept fields it does not know.
+
+### Actor fields
+
+| Field | Type | Description |
+|---|---|---|
+| `user_id` | string \| null | The acting user's id. |
+| `email` | string \| null | The acting user's email. |
+| `api_key_id` | string \| null | Set for SCIM token actions. |
+| `auth_type` | string \| null | How the actor signed in, when known. |
+| `credential_type` | string \| null | The credential that authenticated the request: `session`, `jwt`, `pat`, `craft_pat`, `oauth_provider`, or `api_key`. |
+| `credential_id` | string \| null | The id of that credential: the personal access token id, the API key id, or the MCP client's OAuth grant id. |
+| `oauth_client_id` | string \| null | The OAuth `client_id` of the MCP client, when the request used an MCP client token. |
+
+`credential_type`, `credential_id`, and `oauth_client_id` are set when the actor is the user who made the request.
+They are null for background jobs and for events about another user.
+
+### Example event
+
+```json
+{
+  "audit_schema_version": "1.1",
+  "ts": 1750000000.123,
+  "action": "llm_provider.update",
+  "ocsf_class": "api_activity",
+  "outcome": "success",
+  "tenant_id": "tenant_abc",
+  "actor": {
+    "user_id": "u-42",
+    "email": "admin@example.com",
+    "api_key_id": null,
+    "auth_type": "oauth",
+    "credential_type": "session",
+    "credential_id": null,
+    "oauth_client_id": null
+  },
+  "resource_type": "llm_provider",
+  "resource_id": "7",
+  "request_id": "01J...",
+  "endpoint": "PUT /admin/llm/provider",
+  "source_ip": "203.0.113.5",
+  "extra": null
+}
+```
+
+## Forward to your SIEM
+
+<Steps>
+  <Step title="Run Onyx with JSON logging">
+    Set `LOG_FORMAT=json` so every log record is structured and carries a `logger` and `message` field.
+  </Step>
+
+  <Step title="Ship Onyx's logs">
+    Point Fluent Bit, Vector, the CloudWatch agent, Filebeat,
+    or your existing collector at the Onyx container stdout (or the mounted log files).
+  </Step>
+
+  <Step title="Isolate and parse the audit stream">
+    Keep only records whose `logger` starts with `onyx.audit`,
+    then parse each record's `message` field as JSON to recover the event fields above.
+  </Step>
+
+  <Step title="Route to your SIEM">
+    Send the parsed events to your SIEM's ingest endpoint. The OCSF-shaped fields map onto Authentication,
+    Account Change, User Access Management, Group Management, and API Activity event classes.
+  </Step>
+</Steps>
+
+### Shipper examples
+
+<CodeGroup>
+  ```toml Vector
+# Keep only audit records, then replace the event with the parsed JSON payload.
+[transforms.onyx_audit]
+type = "filter"
+inputs = ["onyx_logs"]
+condition = '''starts_with(string!(.logger), "onyx.audit")'''
+
+[transforms.onyx_audit_parsed]
+type = "remap"
+inputs = ["onyx_audit"]
+source = '. = parse_json!(.message)'
+  ```
+
+  ```ini Fluent Bit
+# Match the audit stream by logger prefix.
+[FILTER]
+    Name    grep
+    Match   onyx.*
+    Regex   logger ^onyx\.audit
+  ```
+</CodeGroup>
+
+<Info>
+  Filter on the `onyx.audit` **prefix** to capture everything.
+  The stream is also split into per-class child loggers — `onyx.audit.authentication`, `onyx.audit.account_change`,
+  `onyx.audit.user_access_management`, `onyx.audit.group_management`, `onyx.audit.api_activity`,
+  and `onyx.audit.credential_access` — if you want to route classes to different destinations.
+</Info>
+
+## Check that Onyx writes events
+
+**Admin Panel > Security & Hardening > Audit Logs and SIEM** shows what Onyx wrote for your workspace.
+`GET /api/admin/security/audit-status` returns the same data:
+
+- `enabled`: the license includes the audit stream.
+- `log_format`: the `LOG_FORMAT` of the API server. Use `json`.
+- `categories` and `include_query_text`: the current settings.
+- `classes`: for each `ocsf_class` and for `credential_access`, `events_last_24h` and the time of the last event.
+  Onyx counts in whole clock hours: `events_last_24h` is the current hour and the 23 hours before it.
+  Both values can be up to one minute old, and the counts are a diagnostic, not a complete record.
+
+Onyx cannot see your log shipper or your SIEM. If Onyx writes events but your SIEM shows none, check the shipper.
+
+## Event reference
+
+Every `action` value, what triggers it, and the fields most useful for building SIEM detection rules. `actor`,
+`tenant_id`, `request_id`, `endpoint`, `source_ip`,
+and `outcome` are present on every event (see [Event schema](#event-schema)) and are omitted from the tables below.
+
+### Authentication
+
+`ocsf_class: authentication`
+
+| `action` | Triggered when | Notes |
+|---|---|---|
+| `auth.login` | A user successfully signs in | |
+| `auth.login_failure` | A sign-in attempt fails | `outcome` is `failure`, or `denied` for a non-interactive login |
+| `auth.logout` | A user signs out | |
+| `auth.register` | A new account is registered (self-signup) | |
+| `auth.password_forgot` | A password-reset email is requested | |
+| `auth.password_reset` | A password reset is completed | |
+| `auth.email_verify` | An email-verification email is requested | |
+| `auth.impersonate` | An admin impersonates another user | |
+
+### User & access management
+
+`ocsf_class: account_change` or `user_access_management` — `resource_type` is `user`.
+
+| `action` | Triggered when | `resource_id` | Key `extra` fields |
+|---|---|---|---|
+| `user.create` | An admin invites new users | — | `invited_emails` |
+| `user.delete` | A user is deleted | user id | `target_email` |
+| `user.deactivate` | A user is deactivated | user id | `target_email` |
+| `user.reactivate` | A user is reactivated | user id | `target_email` |
+| `user.role_change` | A user's role is changed | user id | `target_email`, `old_role`, `new_role` |
+| `user.craft_access_change` | A user's Craft access is changed | user id | |
+| `oauth_grant.create` | An MCP client that a user approved gets its first tokens | `resource_type` is `oauth_grant`: grant id | `client_id`, `client_name`, `scopes` (the scopes the user approved) |
+| `oauth_grant.revoke` | A user disconnects an MCP client, the client revokes its token, or the user leaves the workspace | `resource_type` is `oauth_grant`: grant id | `source`: `user_disconnect` or `token_revocation` |
+
+### Group management
+
+`ocsf_class: group_management` — `resource_type` is `user_group`.
+
+| `action` | Triggered when | `resource_id` | Key `extra` fields |
+|---|---|---|---|
+| `user.group_change` | A user group's membership changes | user-group id | `added_user_ids`, `removed_user_ids` |
+| `user_group.create` / `.rename` / `.delete` | A user group is created, renamed, or deleted | user-group id | |
+| `user_group.permission_change` | A user group's permissions change | user-group id | |
+| `user_group.manager_change` | A user group's managers change | user-group id | |
+
+Changes that arrive through SCIM reuse these actions. They carry `extra.source: "scim"` and `extra.scim_token_name`,
+and the actor is the provisioning token (`auth_type: "scim"`). SCIM emits an event only when something changes.
+
+### Configuration & resources
+
+`ocsf_class: api_activity`
+
+| `action` | Triggered when | `resource_type` | `resource_id` | Key `extra` fields |
+|---|---|---|---|---|
+| `llm_provider.create` / `.update` / `.delete` | An LLM provider is created, updated, or deleted | `llm_provider` | provider id | |
+| `connector.create` / `.update` / `.delete` | A connector is created, updated, or deleted | `connector` | connector id | `source` (on create) |
+| `cc_pair.create` / `.update` / `.delete` | A connector is linked to a credential, its status changes, or it is unlinked | `cc_pair` | connector-credential-pair id | `connector_id`, `credential_id`; `status` (on update) |
+| `api_key.create` / `.regenerate` / `.update` / `.delete` | An API key is created, regenerated, updated, or revoked | `api_key` | API-key id | |
+| `credential.create` / `.update` / `.delete` | A stored credential is created, updated, or deleted | `credential` | credential id | `source` (on create) |
+| `settings.craft_default_change` | The workspace default for Craft access changes | — | — | |
+| `search_settings.contextual_rag_model_update` | The contextual retrieval model changes | — | — | |
+| `search_settings.cc_pair_access_mode_change` | A connector's access type changes | `cc_pair` | connector-credential-pair id | |
+| `pat.create` / `pat.revoke` | A personal access token is created or revoked | `pat` | token id | `name`, `expiration_days`, `scopes` (on create) |
+| `persona.create` / `.update` / `.delete` | An agent is created, changed, or deleted | `persona` | agent id | `change` (on update): `config`, `share`, `public_status`, `transfer_ownership`, or `undelete`; create and update events carry the saved sharing state (`is_public`, `public_permission`, `owner_user_id`, `owner_group_id`, `user_shares`, `group_shares`), and delete events carry no `extra` |
+| `document_set.create` / `.update` / `.delete` | A document set is created, changed, or deleted | `document_set` | document-set id | `name`, `is_public`, `cc_pair_ids`, `users`, `groups` |
+| `oauth_client.register` | An MCP client registers itself (OAuth dynamic client registration) | `oauth_client` | OAuth `client_id` | `client_name`, `redirect_uris`; the event has no actor |
+| `permission.denied` | A scoped permission gate refuses a write | — | — | `gate` (`within_scope`, `manages_group`, or `global_only`); `outcome` is `denied` |
+| `credential.access` | A stored credential is decrypted for use | — | — | Emitted on a **different schema** — see [Credential access](#credential-access) below |
+
+### Data exports
+
+`ocsf_class: api_activity`. Each event fires when the file is downloaded.
+
+| `action` | Triggered when | `resource_type` | `resource_id` |
+|---|---|---|---|
+| `export.query_history` | A query history CSV is downloaded | `query_history_export` | export request id |
+| `export.usage_report` | A usage report is downloaded | `usage_report` | report name |
+| `export.logs` | A log export ZIP is downloaded | `log_export` | export id |
+
+### User activity
+
+`ocsf_class: api_activity`. These actions are off until an admin turns on their category.
+Document id lists hold at most 100 ids. When Onyx drops ids, the matching `_truncated` field is `true`.
+
+| `action` | Triggered when | `resource_type` | `resource_id` | Key `extra` fields |
+|---|---|---|---|---|
+| `chat.message_send` | A chat answer finishes. A turn that asks several models writes one event for each model | `chat_session` | chat session id | `user_message_id`, `assistant_message_id`, `persona_id`, `model_provider`, `model_name`, `origin`, `tool_names`, `retrieved_document_ids`, `cited_document_ids`, `cancelled`, `error` |
+| `search.query` | A search runs from the search page, the search API, or an MCP client | — | — | `api`, `persona_id`, `retrieved_document_ids`, `selected_document_ids` |
+| `gateway.llm_request` | A client calls a model through the LLM gateway | — | — | `model_provider`, `model`, `routed_model`, `input_tokens`, `output_tokens` |
+| `file.download` | A user downloads a chat file, or a file the chat browser downloaded | `file` or `chat_browser_download` | file id or name | `file_name`, `file_type`, `form` |
+
+In an incognito chat that keeps no content, `chat.message_send` has `incognito: true` and no document ids or query text.
+For chat files, `file.download` writes one event per user, file, and form in a 10-minute window,
+because the browser fetches the same file each time a chat renders. Chat browser downloads write an event every time.
+
+## Investigate an incident
+
+Use these fields to follow one user's activity across the stream:
+
+- `actor.user_id` finds everything one user did.
+- `actor.credential_type` and `actor.credential_id` find everything that one personal access token, API key,
+  or MCP client grant did. `actor.oauth_client_id` names the MCP client.
+- `extra.chat_session_id` and `resource_id` of `chat.message_send` follow one conversation.
+- `retrieved_document_ids` and `cited_document_ids` show which documents a user saw.
+- `request_id` joins an event to the rest of that request's logs.
+
+For example, to see what an MCP client read after a user approved it, filter on `oauth_grant.create` for the user,
+take `extra.client_id`, then filter `search.query` events on `actor.oauth_client_id`.
+
+### Credential access
+
+`onyx.audit.credential_access`
+
+Credential-decrypt events predate the generalized schema and are emitted on a **flat,
+legacy field set** for backward compatibility.
+They share the `onyx.audit` logger tree and the same fail-safe / fail-open behavior,
+but do **not** carry the generalized fields — there is no `action`, `ocsf_class`, `outcome`,
+`resource_type`/`resource_id`, `extra`, or nested `actor` object, and the client IP is `client_ip` (not `source_ip`).
+Parse this stream separately; detection rules written against the generalized schema will not match it.
+
+| Field | Type | Description |
+|---|---|---|
+| `ts` | number | Event time, epoch seconds. |
+| `tenant_id` | string \| null | Tenant the decrypt occurred in. |
+| `credential_type` | string | Coarse category, e.g. `llm_provider` or `connector`. |
+| `provider` | string \| null | Provider / source name if known (e.g. `openai`, `google_drive`). |
+| `row_id` | number \| null | DB row id of the credential / LLM provider. |
+| `user_id` | string \| null | Acting user id, if available (may be null for background jobs). |
+| `auth_type` | string \| null | How the actor authenticated, if known. |
+| `request_id` | string \| null | Correlates with the rest of that request's logs. |
+| `endpoint` | string \| null | Route that produced the event. |
+| `client_ip` | string \| null | Client IP (from `X-Forwarded-For`). |
+
+## Export logs for support
+
+Enterprise self-hosted admins can download the raw server log files, including the audit stream,
+from **Admin Panel > Export Logs**.
+Click **Export Logs** to collect logs from the API server and background workers into one ZIP file.
+Attach the file to an Onyx support thread.
+
+The page shows one status line for each source of logs.
+A line that starts with the uploaded file count and then says **incomplete** means that Onyx collected only part of the
+logs from that source. The line gives the reason and the fix. For example,
+on Kubernetes the API server can need permission to read pod logs and events. With the Helm chart,
+set `logExport.kubernetes.enabled=true` to give the API server this permission.
+
+## Notes
+
+- **Secrets are never logged.** Actor objects and `extra` context are scrubbed
+  of credential values by design.
+- For **Onyx Cloud** (multi-tenant) deployments, audit-log forwarding is handled
+  differently since you don't control the log pipeline — [contact us](/security/contact_us)
+  to discuss SIEM delivery options.
