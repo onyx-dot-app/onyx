@@ -227,10 +227,9 @@ def test_a_firecracker_sandbox_stays_on_firecracker_while_its_node_serves(
     # A drain blocks only new VMs: the placed sandbox keeps its node.
     registry.set_node_draining(shared_cache, node_id, True)
     assert _backend(_selector(), ref) == "firecracker"
-    # Its node stopped reporting: the VM cannot serve, so the next start
-    # picks again.
+    # Its node stopped reporting: the VM cannot serve, so the sandbox starts
+    # again elsewhere, though the calls above marked Firecracker.
     registry.record_node_report(shared_cache, node_id, int(time.time()) - 3600)
-    tenant_cache.delete(harness_selection._CHOICE_PREFIX + str(ref.sandbox_id))
     assert _backend(cached_no, ref) == "container"
 
 
