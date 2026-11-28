@@ -311,3 +311,13 @@ def test_the_pods_can_own_their_secret_and_the_namespace_is_a_string() -> None:
     # PodRuntime patches the daemon Secret to make the pod its owner.
     secrets = next(r for r in role["rules"] if r["resources"] == ["secrets"])
     assert "patch" in secrets["verbs"]
+
+
+def test_daemon_policy_follows_custom_workload_labels() -> None:
+    docs = _render([*_NO_CRAFT, "--set-string", "api.deploymentLabels.app=my-api"])
+    policy = _find(docs, "NetworkPolicy", _POLICY)
+    assert policy is not None
+    (rule,) = policy["spec"]["ingress"]
+    apps = {peer["podSelector"]["matchLabels"]["app"] for peer in rule["from"]}
+    assert "my-api" in apps
+    assert "api-server" not in apps

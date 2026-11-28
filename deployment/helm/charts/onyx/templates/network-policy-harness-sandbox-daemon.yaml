@@ -24,13 +24,17 @@ spec:
         {{- /* api-server: chat tools and purges. heavy: the sandbox queue
         (idle stop, orphan sweep). light: chat retention purges.
         scheduled-tasks: scheduled task runs. */}}
-        {{- range $app := list "api-server" "celery-worker-heavy" "celery-worker-light" "celery-worker-scheduled-tasks" }}
+        {{- range $workload := list "api" "celery_worker_heavy" "celery_worker_light" "celery_worker_scheduled_tasks" }}
+        {{- $labels := (index $.Values $workload | default dict).deploymentLabels | default dict }}
+        {{- if not $labels.app }}
+        {{- fail (printf "harness sandbox pods need %s.deploymentLabels.app: the daemon NetworkPolicy selects that pod label" $workload) }}
+        {{- end }}
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+              kubernetes.io/metadata.name: {{ $.Release.Namespace | quote }}
           podSelector:
             matchLabels:
-              app: {{ $app }}
+              app: {{ $labels.app | quote }}
         {{- end }}
         {{- range $harness.extraDaemonClients | default list }}
         - {{- toYaml . | nindent 10 }}

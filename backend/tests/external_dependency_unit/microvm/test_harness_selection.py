@@ -250,6 +250,12 @@ def test_calls_that_see_different_node_states_agree(
         firecracker=_fake(), container=_fake(), firecracker_available=lambda: False
     )
     assert _backend(cached_no, ref) == "container"
+    # Another call also sees the node down, with a different cached answer:
+    # it keeps the first choice, it does not replace it.
+    cached_yes = SelectingHarnessSandbox(
+        firecracker=_fake(), container=_fake(), firecracker_available=lambda: True
+    )
+    assert _backend(cached_yes, ref) == "container"
     registry.record_node_report(shared_cache, node_id, int(time.time()))
     assert _backend(_selector(), ref) == "container"
 

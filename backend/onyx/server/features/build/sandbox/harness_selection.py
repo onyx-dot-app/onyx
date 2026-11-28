@@ -6,8 +6,9 @@ A sandbox stays on its backend while it runs there: a container record
 keeps it on the container backend, and a Firecracker placement keeps it on
 Firecracker while the placement's own node is registered and reports. A
 sandbox that runs on neither starts on Firecracker when a live node serves
-the template, else on the container backend. A short choice mark makes
-concurrent first calls agree. Errors of the chosen backend, such as a
+the template and accepts new VMs (not draining), else on the container
+backend. A short choice mark (`set_if_absent`; one per placement that a
+start replaces) makes concurrent calls agree. Errors of the chosen backend, such as a
 Firecracker capacity error, reach the caller: there is no fallback to the
 other backend. Sessions come back from their saves on either backend.
 """
@@ -18,6 +19,7 @@ from typing import IO
 from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.microvm.models import FileListing, HarnessBackend
 from onyx.microvm.registry import (
     SandboxPlacement,
@@ -63,30 +65,35 @@ def choose_backend(
     tenant_cache = get_cache_backend(tenant_id=tenant_id)
     if get_container_record(tenant_cache, sandbox_id) is not None:
         return HarnessBackend.CONTAINER
-    key = _CHOICE_PREFIX + str(sandbox_id)
     placement = get_sandbox_placement(tenant_cache, sandbox_id)
-    if placement is not None and _placed_node_is_up(placement):
-        pick = HarnessBackend.FIRECRACKER
+    if placement is None:
+        key = _CHOICE_PREFIX + str(sandbox_id)
     else:
-        if placement is not None:
-            # The placed VM is gone: a mark made for it no longer holds.
-            tenant_cache.delete(key)
-        pick = (
-            HarnessBackend.FIRECRACKER
-            if firecracker_available()
-            else HarnessBackend.CONTAINER
-        )
-    # Every pick goes through the mark, so calls that see different node
-    # states in one start still agree.
+        # A mark per placement: a start that replaces this VM never meets the
+        # mark of an earlier start, and no call deletes another's mark.
+        attempt, generation = placement.fence()
+        key = f"{_CHOICE_PREFIX}{sandbox_id}:{placement.node_id}:{attempt}:{generation}"
+        if _placed_node_is_up(placement):
+            # Only a call that saw the node down writes this mark.
+            return _read_choice(tenant_cache, key) or HarnessBackend.FIRECRACKER
+    pick = (
+        HarnessBackend.FIRECRACKER
+        if firecracker_available()
+        else HarnessBackend.CONTAINER
+    )
     if tenant_cache.set_if_absent(key, pick.value, ex=CHOICE_SECONDS):
         return pick
+    return _read_choice(tenant_cache, key) or pick
+
+
+def _read_choice(tenant_cache: CacheBackend, key: str) -> HarnessBackend | None:
     raw = tenant_cache.get(key)
     if raw is None:
-        return pick
+        return None
     try:
         return HarnessBackend(raw.decode())
     except ValueError:
-        return pick
+        return None
 
 
 def _placed_node_is_up(placement: SandboxPlacement) -> bool:
