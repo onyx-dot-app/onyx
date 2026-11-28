@@ -227,10 +227,10 @@ const noTab = () =>
   new OperationError("tab_not_found", "This chat has no tab yet. Open one with browser_open.");
 
 const UNSHARED_TAB_MESSAGE =
-  "The tab is on a site that the user did not share with this chat. Ask the user to share it, or go back to a shared site.";
+  "The tab is on a site that this chat may not use yet. Open the page URL with browser_open, so Onyx asks the user to allow the site.";
 
 function outsideMessage(url) {
-  return `${originOf(url) ?? url} is not a site that the user shared with this chat. Ask the user to share it.`;
+  return `${originOf(url) ?? url} is not a site that this chat may use yet. Open the page URL with browser_open, so Onyx asks the user to allow the site.`;
 }
 
 // ---- tabs ----
@@ -241,7 +241,7 @@ async function tabJson(grant, tabId) {
   const shared = isShared(grant, tab.url ?? "");
   return {
     id: String(tab.id),
-    url: shared ? (tab.url ?? "") : "(a site that the user did not share)",
+    url: shared ? (tab.url ?? "") : "(a site that this chat may not use)",
     title: shared ? (tab.title ?? "") : "",
     loading: tab.status === "loading",
     controller: isHumanControlled(tabId) ? "human" : "agent",
@@ -358,7 +358,7 @@ async function frameUrls(tabId) {
 const outsideFrame = () =>
   new OperationError(
     "failed",
-    "That part of the page is a frame from a site that the user did not share. Ask the user to share it."
+    "That part of the page is a frame from a site that this chat may not use. Ask the user to do this step."
   );
 
 /** Refuse input at a point whose frame is not shared: the frame of the
@@ -775,7 +775,7 @@ async function navigateTab(grant, tabId, target, readiness, deadline) {
     const entry = entries[currentIndex + (target.history === "back" ? -1 : 1)];
     if (!entry) throw new OperationError("failed", `There is no page to go ${target.history} to.`);
     if (!isShared(grant, entry.url))
-      throw new OperationError("failed", "That page is on a site that the user did not share with this chat.");
+      throw new OperationError("failed", "That page is on a site that this chat may not use yet.");
     await checkLive({ grant, tabId, deadline });
     await send(tabId, "Page.navigateToHistoryEntry", { entryId: entry.id });
     // A page restored from the back-forward cache stays "interactive" with
@@ -915,7 +915,7 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
       if (!grant.origins.includes(originOf(state.dialog.origin) ?? ""))
         throw new OperationError(
           "failed",
-          "A dialog from a site that the user did not share is open. Ask the user to close it."
+          "A dialog from a site that this chat may not use is open. Ask the user to close it."
         );
       await checkLive({ grant, tabId, deadline });
       await send(tabId, "Page.handleJavaScriptDialog", {
