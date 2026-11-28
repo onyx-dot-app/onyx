@@ -34,9 +34,13 @@ from pydantic import BaseModel, JsonValue, ValidationError
 from onyx.browser_extension.models import (
     ChromeGrant,
     CommandResult,
+    FrameReport,
     GrantReport,
     GrantTab,
+    PointerReport,
     Presence,
+    PreviewFrame,
+    PreviewPointer,
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -99,6 +103,18 @@ def _installation_lock_key(user_id: UUID, installation_id: UUID) -> str:
 
 def _installation_grant_key(user_id: UUID, installation_id: UUID) -> str:
     return f"{_PREFIX}:installation_grant:{user_id}:{installation_id}"
+
+
+def _viewer_key(chat_session_id: UUID) -> str:
+    return f"{_PREFIX}:viewer:{chat_session_id}"
+
+
+def _frame_key(chat_session_id: UUID) -> str:
+    return f"{_PREFIX}:frame:{chat_session_id}"
+
+
+def _pointer_key(chat_session_id: UUID) -> str:
+    return f"{_PREFIX}:pointer:{chat_session_id}"
 
 
 def _cache(tenant_id: str) -> CacheBackend:
@@ -447,6 +463,84 @@ def _end_grant(
             {"type": "end_grant", "chat_session_id": str(chat_session_id)},
             time.time() + REQUEST_SECONDS,
         )
+
+
+# ---- live preview ----
+
+_VIEWER_SECONDS = 10
+_FRAME_SECONDS = 30
+_POINTER_SECONDS = 10
+_SCREENCAST_SECONDS = 10
+
+
+def mark_viewer(tenant_id: str, chat_session_id: UUID) -> None:
+    """A web viewer watches the chat's tab; the extension's frames are kept
+    only while one does."""
+    _cache(tenant_id).set(_viewer_key(chat_session_id), "1", ex=_VIEWER_SECONDS)
+
+
+def request_screencast(tenant_id: str, user_id: UUID, chat_session_id: UUID) -> None:
+    """Ask the grant's extension for frames while a viewer watches."""
+    grant = load_grant(tenant_id, chat_session_id, user_id)
+    if grant is None:
+        return
+    cache = _cache(tenant_id)
+    presence = _connection(cache, user_id, grant.installation_id)
+    if presence is not None:
+        _send(
+            cache,
+            user_id,
+            presence,
+            {"type": "screencast", "chat_session_id": str(chat_session_id)},
+            time.time() + _SCREENCAST_SECONDS,
+        )
+
+
+def _watched_by(
+    cache: CacheBackend, user_id: UUID, installation_id: UUID, chat_session_id: UUID
+) -> bool:
+    """Whether this installation holds the chat's grant and a viewer watches."""
+    grant = _load(cache, _grant_key(chat_session_id), ChromeGrant)
+    return (
+        grant is not None
+        and grant.user_id == user_id
+        and grant.installation_id == installation_id
+        and cache.exists(_viewer_key(chat_session_id))
+    )
+
+
+def save_frame(
+    tenant_id: str, user_id: UUID, installation_id: UUID, frame: FrameReport
+) -> None:
+    cache = _cache(tenant_id)
+    if not _watched_by(cache, user_id, installation_id, frame.chat_session_id):
+        return
+    cache.set(
+        _frame_key(frame.chat_session_id),
+        PreviewFrame(**frame.model_dump(), seq=time.time_ns()).model_dump_json(),
+        ex=_FRAME_SECONDS,
+    )
+
+
+def save_pointer(
+    tenant_id: str, user_id: UUID, installation_id: UUID, pointer: PointerReport
+) -> None:
+    cache = _cache(tenant_id)
+    if not _watched_by(cache, user_id, installation_id, pointer.chat_session_id):
+        return
+    cache.set(
+        _pointer_key(pointer.chat_session_id),
+        PreviewPointer(**pointer.model_dump(), seq=time.time_ns()).model_dump_json(),
+        ex=_POINTER_SECONDS,
+    )
+
+
+def load_frame(tenant_id: str, chat_session_id: UUID) -> PreviewFrame | None:
+    return _load(_cache(tenant_id), _frame_key(chat_session_id), PreviewFrame)
+
+
+def load_pointer(tenant_id: str, chat_session_id: UUID) -> PreviewPointer | None:
+    return _load(_cache(tenant_id), _pointer_key(chat_session_id), PreviewPointer)
 
 
 # ---- the tools' backend ----
