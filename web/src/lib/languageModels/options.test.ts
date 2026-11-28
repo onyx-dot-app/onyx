@@ -5,6 +5,7 @@ import {
   findDefaultModelDisplayName,
   findLlmOptionById,
   fromSelectValue,
+  groupLlmOptions,
   llmOptionKey,
   toSelectValue,
 } from "@/lib/languageModels/options";
@@ -357,5 +358,26 @@ describe("model select options", () => {
       expect(fromSelectValue("")).toBeNull();
       expect(fromSelectValue("nope")).toBeNull();
     });
+  });
+});
+
+describe("groupLlmOptions", () => {
+  // Venice is a gateway: one connection serves Anthropic, Google, OpenAI and
+  // open-weight models. Sub-grouping only happens for providers listed in
+  // AGGREGATOR_PROVIDERS, and that list is duplicated between `./svc` (which
+  // this path reads) and `./constants` (which the icon resolver reads). Venice
+  // missing from either half leaves one flat group of every hosted model.
+  it("splits Venice's models by vendor", () => {
+    const provider = makeProvider(1, "Venice", "venice", [
+      { ...makeModelConfiguration(11, "claude-opus-4-5"), vendor: "Anthropic" },
+      { ...makeModelConfiguration(12, "gemini-3-6-flash"), vendor: "Google" },
+    ]);
+
+    const groups = groupLlmOptions(buildLlmOptions([provider]));
+
+    expect(groups.map((group) => group.displayName)).toEqual([
+      "Venice/Anthropic",
+      "Venice/Google",
+    ]);
   });
 });

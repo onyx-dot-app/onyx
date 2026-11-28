@@ -19,6 +19,7 @@ import {
   SvgNebius,
   SvgPortkey,
   SvgTypeSafe,
+  SvgVenice,
   SvgVercel,
   SvgZoom,
 } from "@opal/logos";
@@ -40,6 +41,7 @@ import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
+import VeniceModal from "@/sections/modals/languageModels/VeniceModal";
 import VercelAIGatewayModal from "@/sections/modals/languageModels/VercelAIGatewayModal";
 import type { ProviderEntry } from "@/lib/languageModels/types";
 
@@ -151,6 +153,12 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Vercel",
     Modal: VercelAIGatewayModal,
   },
+  [LLMProviderName.VENICE]: {
+    icon: SvgVenice,
+    productName: "Venice",
+    companyName: "Venice AI",
+    Modal: VeniceModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: LLMProviderName.CUSTOM,
@@ -179,6 +187,8 @@ export const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
 // ─── Aggregator providers ────────────────────────────────────────────────────
 // Providers that host models from multiple vendors (e.g. Bedrock hosts Claude,
 // Llama, etc.) Used by the model-icon resolver to prioritise vendor icons.
+// A second set of the same name in `./svc` gates vendor sub-grouping in the
+// model pickers; a provider added here usually belongs there too.
 
 export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.BEDROCK,
@@ -193,6 +203,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.PORTKEY,
   LLMProviderName.VERCEL_AI_GATEWAY,
   LLMProviderName.VERTEX_AI,
+  LLMProviderName.VENICE,
 ]);
 
 // ─── Model icons ─────────────────────────────────────────────────────────────
@@ -213,6 +224,7 @@ export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
   [LLMProviderName.VERCEL_AI_GATEWAY]: SvgVercel,
+  [LLMProviderName.VENICE]: SvgVenice,
 
   amazon: SvgAWS,
   gpt: SvgOpenAI,
