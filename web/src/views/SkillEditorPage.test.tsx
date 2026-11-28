@@ -238,6 +238,40 @@ describe("SkillEditorPage", () => {
     );
   });
 
+  it("sends an uploaded SKILL.md with no other files, so its frontmatter is kept", async () => {
+    const user = setupUser();
+    const upload = new File(["---\nlicense: MIT\n---"], "SKILL.md");
+    mockGetSkillCreationDraft.mockReturnValue({
+      contents: {
+        name: "report-writer",
+        description: "Writes reports",
+        instructions_markdown: "Write the requested report.",
+        files: [],
+      },
+      upload: {
+        file: upload,
+        displayName: upload.name,
+        entries: [],
+        containsSkillMd: true,
+      },
+    });
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      id: "created-id",
+      name: "report-writer",
+      enabled: true,
+    } as SkillEditableDetail);
+
+    render(<SkillEditorPage draftId="draft-id" />);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "report-writer" }),
+        upload
+      )
+    );
+  });
+
   it("creates the skill with every added file and its sharing in one request", async () => {
     const user = setupUser();
     mockPickedUploads.push(

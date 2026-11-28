@@ -13,17 +13,24 @@ Craft gate for the Craft pages.
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timezone
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    StringConstraints,
+    model_validator,
+)
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as celery_app
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     Permission,
@@ -37,7 +44,9 @@ from onyx.db.scheduled_task import (
     create_scheduled_task,
     get_run_of_chat_session,
     get_scheduled_task,
+    has_in_flight_run_for_task,
     insert_run,
+    latest_runs_for_tasks,
     list_runs_for_task,
     list_scheduled_tasks_for_user,
     mark_runs_viewed,
@@ -49,6 +58,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.craft import list_task_integration_views
 from onyx.integrations.policy import parse_action_settings
+from onyx.scheduled_tasks.enqueue import send_scheduled_run
 from onyx.server.features.build.models import TaskIntegrationView
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EDITOR_PAYLOAD_MODELS,
@@ -58,7 +68,6 @@ from onyx.server.features.build.scheduled_tasks.schedule import (
     human_readable,
     next_n_fires,
 )
-from onyx.server.features.build.timeouts import SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
 from onyx.tools.models import IntegrationLinkConfiguration
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
@@ -96,6 +105,22 @@ class _Forbid(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+TaskName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+]
+TASK_PROMPT_MAX_CHARS = 20_000
+TaskPrompt = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TASK_PROMPT_MAX_CHARS
+    ),
+]
+# A task saved before the limit can keep its longer prompt; see ``patch_task``.
+EditedTaskPrompt = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1)
+]
+
+
 def _dispatch_editor_payload(data: Any) -> Any:
     """``model_validator(mode="before")`` helper.
 
@@ -125,8 +150,8 @@ def _dispatch_editor_payload(data: Any) -> Any:
 class ScheduledTaskCreate(_Forbid):
     """Request body for ``POST /scheduled-tasks``."""
 
-    name: str = Field(..., min_length=1, max_length=200)
-    prompt: str = Field(..., min_length=1)
+    name: TaskName
+    prompt: TaskPrompt
     editor_mode: EditorMode
     editor_payload: EditorPayload
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
@@ -143,8 +168,8 @@ class ScheduledTaskPatch(_Forbid):
     supplied together (enforced below).
     """
 
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    prompt: str | None = Field(default=None, min_length=1)
+    name: TaskName | None = None
+    prompt: EditedTaskPrompt | None = None
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
     status: ScheduledTaskStatus | None = None
@@ -173,6 +198,7 @@ class RunSummary(BaseModel):
     summary: str | None
     skip_reason: str | None
     error_class: str | None
+    error_detail: str | None
     revision: int
     viewed_revision: int | None
 
@@ -190,6 +216,7 @@ class RunSummary(BaseModel):
             summary=run.summary,
             skip_reason=run.skip_reason,
             error_class=run.error_class,
+            error_detail=run.error_detail,
             revision=run.version,
             viewed_revision=run.viewed_revision,
         )
@@ -221,9 +248,7 @@ class ScheduledRunContextResponse(BaseModel):
         )
 
 
-class ScheduledTaskListItem(BaseModel):
-    """Row in ``GET /scheduled-tasks``."""
-
+class _ScheduledTaskBase(BaseModel):
     id: str
     name: str
     human_readable_schedule: str
@@ -232,29 +257,24 @@ class ScheduledTaskListItem(BaseModel):
     status: ScheduledTaskStatus
     next_run_at: datetime | None
     last_run: RunSummary | None
-    unviewed_run_count: int
     created_at: datetime
     updated_at: datetime
 
 
-class ScheduledTaskDetail(BaseModel):
+class ScheduledTaskListItem(_ScheduledTaskBase):
+    """Row in ``GET /scheduled-tasks``."""
+
+    unviewed_run_count: int
+
+
+class ScheduledTaskDetail(_ScheduledTaskBase):
     """Response for ``GET /scheduled-tasks/{id}`` and the mutating endpoints
     that return the full task.
     """
 
-    id: str
-    name: str
     prompt: str
-    human_readable_schedule: str
-    cron_expression: str
-    editor_mode: str
-    status: ScheduledTaskStatus
-    next_run_at: datetime | None
     next_runs: list[datetime]
-    last_run: RunSummary | None
     integrations: list[IntegrationLinkConfiguration]
-    created_at: datetime
-    updated_at: datetime
 
 
 class ScheduledTaskListResponse(BaseModel):
@@ -270,12 +290,8 @@ class UnviewedTaskCountResponse(BaseModel):
     count: int
 
 
-class RunsViewedRequest(BaseModel):
+class RunsViewedRequest(_Forbid):
     revisions: dict[UUID, PositiveInt] = Field(max_length=RUNS_VIEWED_MAX_ENTRIES)
-
-
-class RunViewedRequest(BaseModel):
-    revision: int = Field(gt=0)
 
 
 class RunNowResponse(BaseModel):
@@ -288,54 +304,24 @@ class RunNowResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _latest_run(
-    db_session: Session,
-    task: ScheduledTask,
-    user_id: UUID,
-) -> ScheduledTaskRun | None:
-    """Fetch the most recent run for the task, or ``None`` if none exist.
-
-    Trades a per-task query (N+1 in the list endpoint) for code simplicity;
-    V1 per-user task counts are small and the index covers the lookup.
-    """
-    runs = list_runs_for_task(
-        db_session=db_session,
-        task_id=task.id,
-        user_id=user_id,
-        cursor=None,
-        limit=1,
-    )
-    return runs[0] if runs else None
+def _base_fields(
+    task: ScheduledTask, last_run: ScheduledTaskRun | None
+) -> dict[str, Any]:
+    return {
+        "id": str(task.id),
+        "name": task.name,
+        "human_readable_schedule": human_readable(task.cron_expression),
+        "cron_expression": task.cron_expression,
+        "editor_mode": task.editor_mode,
+        "status": task.status,
+        "next_run_at": task.next_run_at,
+        "last_run": RunSummary.from_model(last_run) if last_run is not None else None,
+        "created_at": task.created_at,
+        "updated_at": task.updated_at,
+    }
 
 
-def _list_item(
-    db_session: Session,
-    task: ScheduledTask,
-    user_id: UUID,
-    unviewed_run_count: int,
-) -> ScheduledTaskListItem:
-    last_run = _latest_run(db_session, task, user_id)
-    return ScheduledTaskListItem(
-        id=str(task.id),
-        name=task.name,
-        human_readable_schedule=human_readable(task.cron_expression),
-        cron_expression=task.cron_expression,
-        editor_mode=task.editor_mode,
-        status=task.status,
-        next_run_at=task.next_run_at,
-        last_run=RunSummary.from_model(last_run) if last_run is not None else None,
-        unviewed_run_count=unviewed_run_count,
-        created_at=task.created_at,
-        updated_at=task.updated_at,
-    )
-
-
-def _detail(
-    db_session: Session,
-    task: ScheduledTask,
-    user_id: UUID,
-) -> ScheduledTaskDetail:
-    last_run = _latest_run(db_session, task, user_id)
+def _detail(db_session: Session, task: ScheduledTask) -> ScheduledTaskDetail:
     next_runs: list[datetime] = []
     if task.status == ScheduledTaskStatus.ACTIVE:
         next_runs = next_n_fires(
@@ -344,16 +330,9 @@ def _detail(
             NEXT_RUNS_PREVIEW_COUNT,
         )
     return ScheduledTaskDetail(
-        id=str(task.id),
-        name=task.name,
+        **_base_fields(task, latest_runs_for_tasks(db_session, [task.id]).get(task.id)),
         prompt=task.prompt,
-        human_readable_schedule=human_readable(task.cron_expression),
-        cron_expression=task.cron_expression,
-        editor_mode=task.editor_mode,
-        status=task.status,
-        next_run_at=task.next_run_at,
         next_runs=next_runs,
-        last_run=RunSummary.from_model(last_run) if last_run is not None else None,
         integrations=[
             IntegrationLinkConfiguration(
                 integration_id=link.integration_id,
@@ -361,47 +340,25 @@ def _detail(
             )
             for link in list_task_integration_links(db_session, task.id)
         ],
-        created_at=task.created_at,
-        updated_at=task.updated_at,
     )
 
 
-def _enqueue_executor(run_id: UUID) -> None:
-    """Enqueue the headless executor for a run.
-
-    The executor task definition lives in the background-workers package
-    (a sibling agent owns that). We only need its name + queue + an
-    ``expires=`` (per CLAUDE.md).
-
-    Passes ``tenant_id`` so ``TenantAwareTask`` sets the per-task
-    contextvar on the executor — without it, the run would execute
-    against the default schema.
-    """
-    tenant_id = get_current_tenant_id()
-    celery_app.send_task(
-        OnyxCeleryTask.SCHEDULED_TASKS_RUN,
-        kwargs={"run_id": str(run_id), "tenant_id": tenant_id},
-        queue=OnyxCeleryQueues.SCHEDULED_TASKS,
-        priority=OnyxCeleryPriority.MEDIUM,
-        expires=SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS,
-    )
+def _encode_cursor(run: ScheduledTaskRun) -> str:
+    raw = f"{run.started_at.isoformat()}|{run.id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
-def _parse_cursor(cursor: str | None) -> datetime | None:
-    """Parse the ``cursor`` query param (ISO-8601) into a UTC datetime.
-
-    ``None`` and the empty string both mean "first page".
-    """
-    if cursor is None or cursor == "":
+def _decode_cursor(cursor: str | None) -> tuple[datetime, UUID] | None:
+    """``None`` and the empty string both mean "first page"."""
+    if not cursor:
         return None
     try:
-        parsed = datetime.fromisoformat(cursor)
+        started_at, run_id = (
+            base64.urlsafe_b64decode(cursor.encode()).decode().split("|")
+        )
+        return datetime_to_utc(datetime.fromisoformat(started_at)), UUID(run_id)
     except ValueError as e:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Invalid cursor (expected ISO-8601 datetime): {cursor!r}",
-        ) from e
-    return datetime_to_utc(parsed)
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid cursor") from e
 
 
 # ---------------------------------------------------------------------------
@@ -417,8 +374,12 @@ def list_scheduled_tasks(
     """List the caller's scheduled tasks, newest first."""
     tasks = list_scheduled_tasks_for_user(db_session=db_session, user_id=user.id)
     unviewed = unread_run_counts_for_user(db_session=db_session, user_id=user.id)
+    last_runs = latest_runs_for_tasks(db_session, [task.id for task in tasks])
     items = [
-        _list_item(db_session, task, user.id, unviewed.get(task.id, 0))
+        ScheduledTaskListItem(
+            **_base_fields(task, last_runs.get(task.id)),
+            unviewed_run_count=unviewed.get(task.id, 0),
+        )
         for task in tasks
     ]
     return ScheduledTaskListResponse(items=items)
@@ -494,12 +455,12 @@ def create_task(
         db_session.commit()
         # Enqueue only after the row is durably persisted so the worker
         # cannot race ahead of its own input.
-        _enqueue_executor(run.id)
+        send_scheduled_run(celery_app, run.id, get_current_tenant_id())
     else:
         db_session.commit()
 
     db_session.refresh(task)
-    return _detail(db_session, task, user.id)
+    return _detail(db_session, task)
 
 
 @router.get("/{task_id}")
@@ -510,7 +471,7 @@ def get_task(
 ) -> ScheduledTaskDetail:
     """Fetch one task + the next 3 fire times for the UI preview."""
     task = get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
-    return _detail(db_session, task, user.id)
+    return _detail(db_session, task)
 
 
 @router.patch("/{task_id}")
@@ -527,6 +488,18 @@ def patch_task(
     handles ``next_run_at`` recomputation (schedule change, pause/resume) on
     its own.
     """
+    if (
+        request.prompt is not None
+        and len(request.prompt) > TASK_PROMPT_MAX_CHARS
+        and request.prompt
+        != get_scheduled_task(
+            db_session=db_session, task_id=task_id, user_id=user.id
+        ).prompt.strip()
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"The prompt can have at most {TASK_PROMPT_MAX_CHARS} characters",
+        )
     cron_expression: str | None = None
     if request.editor_payload is not None:
         # ``_editor_pair_consistency`` already guaranteed editor_mode is set
@@ -546,7 +519,7 @@ def patch_task(
     )
     db_session.commit()
     db_session.refresh(task)
-    return _detail(db_session, task, user.id)
+    return _detail(db_session, task)
 
 
 @router.delete("/{task_id}")
@@ -555,9 +528,8 @@ def delete_task(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    """Soft-delete a task. Idempotent — calling on a missing or already-
-    deleted task is a no-op (matches ``soft_delete_scheduled_task``).
-    """
+    """Soft-delete a task. Deleting an already-deleted task is a no-op; a
+    task that is missing or owned by another user is a 404."""
     soft_delete_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
     db_session.commit()
     return Response(status_code=204)
@@ -571,10 +543,17 @@ def run_now(
 ) -> RunNowResponse:
     """Fire a one-off ``manual_run_now`` execution.
 
-    Allowed on PAUSED tasks. Does NOT mutate ``next_run_at`` — that's
+    Allowed on PAUSED tasks. A 409 while a run is QUEUED or RUNNING. Does NOT mutate ``next_run_at`` — that's
     the dispatcher's job for recurring fires.
     """
-    task = get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
+    # The task row lock serializes run-now calls, so only one run starts.
+    task = get_scheduled_task(
+        db_session=db_session, task_id=task_id, user_id=user.id, lock=True
+    )
+    if has_in_flight_run_for_task(db_session=db_session, task_id=task.id):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "A run of this task is already in progress"
+        )
     run = insert_run(
         db_session=db_session,
         task_id=task.id,
@@ -582,7 +561,11 @@ def run_now(
         status=ScheduledTaskRunStatus.QUEUED,
     )
     db_session.commit()
-    _enqueue_executor(run.id)
+    if not send_scheduled_run(celery_app, run.id, get_current_tenant_id()):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "The run could not be started. Try again later.",
+        )
     return RunNowResponse(run_id=str(run.id), status=run.status)
 
 
@@ -597,31 +580,25 @@ def list_task_runs(
 ) -> RunListResponse:
     """Paginated run history for a task, newest first.
 
-    ``cursor`` is the ``started_at`` (ISO-8601) of the last row returned by
-    the previous page. ``next_cursor`` is ``None`` when the last page is
+    ``cursor`` is the opaque ``next_cursor`` of the previous page. ``next_cursor`` is ``None`` when the last page is
     reached. ``unviewed`` keeps only runs with results the owner has not
     opened.
 
     Raises ``OnyxError(NOT_FOUND)`` when the task is missing, soft-deleted,
     or owned by another user (ownership check happens inside the DB op).
     """
-    cursor_dt = _parse_cursor(cursor)
     runs = list_runs_for_task(
         db_session=db_session,
         task_id=task_id,
         user_id=user.id,
-        cursor=cursor_dt,
+        cursor=_decode_cursor(cursor),
         limit=limit,
         unviewed_only=unviewed,
     )
-    next_cursor: str | None = None
-    if len(runs) == limit:
-        # Use the last row's started_at as the cursor for the next page.
-        # If the next page turns out empty, the client just stops paging.
-        next_cursor = runs[-1].started_at.isoformat()
+    # A full page may be the last one; the client stops at an empty page.
     return RunListResponse(
         items=[RunSummary.from_model(run) for run in runs],
-        next_cursor=next_cursor,
+        next_cursor=_encode_cursor(runs[-1]) if len(runs) == limit else None,
     )
 
 
@@ -644,30 +621,6 @@ def view_task_runs(
     response = RunListResponse(
         items=[RunSummary.from_model(run) for run in runs], next_cursor=None
     )
-    db_session.commit()
-    return response
-
-
-@router.patch("/{task_id}/runs/{run_id}/viewed")
-def view_task_run(
-    task_id: UUID,
-    run_id: UUID,
-    body: RunViewedRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> RunSummary:
-    try:
-        runs = mark_runs_viewed(
-            db_session=db_session,
-            task_id=task_id,
-            user_id=user.id,
-            revisions={run_id: body.revision},
-        )
-    except ValueError as error:
-        raise OnyxError(OnyxErrorCode.CONFLICT, str(error)) from error
-    if not runs:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
-    response = RunSummary.from_model(runs[0])
     db_session.commit()
     return response
 

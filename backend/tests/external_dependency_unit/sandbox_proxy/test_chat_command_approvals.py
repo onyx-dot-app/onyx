@@ -53,7 +53,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
-from onyx.integrations.models import ApiShape
+from onyx.integrations.models import ApiShape, EffectivePolicy
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -937,6 +937,128 @@ def test_approving_a_request_that_the_policies_now_block_saves_a_rejection(
             ["issues.create"],
             cache,
         )
+    finally:
+        cache.delete_prefix(f"approval:command:{command_id}:")
+
+
+def test_a_saved_approval_repeated_after_the_policies_block_returns_it(
+    db_session: Session, chat: _Chat
+) -> None:
+    """A retry whose first attempt saved the approval, but lost its HTTP
+    response, gets the saved approval, also after an admin blocks the action,
+    as a chat tool approval does. A different decision is a conflict."""
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, uuid4()), _matched(chat.integration_id), {}
+    )
+    assert (
+        _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_ONCE)
+        == ApprovalDecidedVia.USER
+    )
+    set_policy(
+        db_session,
+        chat.integration_id,
+        "issues.create",
+        IntegrationActionPolicyValue.BLOCKED,
+    )
+
+    assert (
+        _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_ONCE)
+        == ApprovalDecidedVia.USER
+    )
+    with pytest.raises(OnyxError) as conflict:
+        _decide(db_session, chat, approval_id, ApprovalChoice.REJECT)
+    assert conflict.value.error_code is OnyxErrorCode.CONFLICT
+    db_session.expire_all()
+    row = db_session.get(ActionApproval, approval_id)
+    assert row is not None and row.decision == ApprovalDecision.APPROVED
+
+
+def test_a_request_that_expires_during_the_policy_lookup_is_a_conflict(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The waiting cutoff is taken after the policy lookup, so a request that
+    expires during the lookup is not approved."""
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, uuid4()), _matched(chat.integration_id), {}
+    )
+    row = db_session.get(ActionApproval, approval_id)
+    assert row is not None
+    created_at = row.created_at
+    looked_up: list[bool] = []
+    lookup = command_approvals.current_chat_action_policies
+
+    def recording_lookup(
+        *args: Any, **kwargs: Any
+    ) -> dict[str, EffectivePolicy] | None:
+        looked_up.append(True)
+        return lookup(*args, **kwargs)
+
+    def cutoff() -> datetime:
+        return created_at + timedelta(seconds=1 if looked_up else -1)
+
+    monkeypatch.setattr(
+        command_approvals, "current_chat_action_policies", recording_lookup
+    )
+    monkeypatch.setattr(command_approvals.action_approval, "waiting_cutoff", cutoff)
+
+    with pytest.raises(OnyxError) as conflict:
+        _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_ONCE)
+    assert conflict.value.error_code is OnyxErrorCode.CONFLICT
+    assert looked_up
+    db_session.rollback()
+    db_session.expire_all()
+    row = db_session.get(ActionApproval, approval_id)
+    assert row is not None and row.decision is None
+
+
+def test_a_covered_request_that_expires_during_the_policy_lookup_stays_waiting(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The command grant takes the waiting cutoff after the policy lookup of
+    the covered requests, so a covered request that expires during the lookup
+    is not approved."""
+    command_id = uuid4()
+    gate = _gate()
+    ctx = _ctx(chat, command_id)
+    first_id = gate._persist_approval_row(ctx, _matched(chat.integration_id), {})
+    second_id = gate._persist_approval_row(ctx, _matched(chat.integration_id), {})
+    created = [
+        row.created_at
+        for row in (
+            db_session.get(ActionApproval, first_id),
+            db_session.get(ActionApproval, second_id),
+        )
+        if row is not None
+    ]
+    assert len(created) == 2
+    lookups: list[bool] = []
+    lookup = command_approvals.current_chat_action_policies
+
+    def recording_lookup(
+        *args: Any, **kwargs: Any
+    ) -> dict[str, EffectivePolicy] | None:
+        lookups.append(True)
+        return lookup(*args, **kwargs)
+
+    def cutoff() -> datetime:
+        if len(lookups) < 2:
+            return min(created) - timedelta(seconds=1)
+        return max(created) + timedelta(seconds=1)
+
+    monkeypatch.setattr(
+        command_approvals, "current_chat_action_policies", recording_lookup
+    )
+    monkeypatch.setattr(command_approvals.action_approval, "waiting_cutoff", cutoff)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    try:
+        assert (
+            _decide(db_session, chat, first_id, ApprovalChoice.APPROVE_COMMAND)
+            == ApprovalDecidedVia.COMMAND_GRANT
+        )
+        assert len(lookups) == 2
+        db_session.expire_all()
+        second = db_session.get(ActionApproval, second_id)
+        assert second is not None and second.decision is None
     finally:
         cache.delete_prefix(f"approval:command:{command_id}:")
 

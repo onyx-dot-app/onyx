@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useCallback, useState, type ReactNode } from "react";
-import { FilePreviewLoading } from "@/app/craft/components/output-panel/FilePreviewLoading";
+import { FilePreviewLoading } from "@/sections/file-preview/FilePreviewLoading";
 import { SWRConfig } from "swr";
 import { useUser } from "@/providers/UserProvider";
 import { useFilePreview } from "@/lib/build/hooks";
@@ -13,7 +13,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { Text } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { PreviewUnavailable } from "@/app/craft/components/output-panel/PreviewUnavailable";
+import { PreviewUnavailable } from "@/sections/file-preview/PreviewUnavailable";
 import { binaryPreviewKind } from "@/app/craft/services/filePreview";
 import BinaryFilePreview from "@/app/craft/components/output-panel/BinaryFilePreview";
 import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";

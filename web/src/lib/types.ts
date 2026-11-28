@@ -672,6 +672,42 @@ export interface SecuritySettings {
   jwt_public_key_url: string | null;
   jwt_expected_audience: string | null;
   jwt_expected_issuer: string | null;
+  audit_event_categories: AuditEventCategory[];
+  audit_include_query_text: boolean;
+}
+
+export type AuditEventCategory =
+  | "authentication"
+  | "user_and_group_management"
+  | "configuration"
+  | "credential_access"
+  | "data_export"
+  | "chat"
+  | "search"
+  | "llm_gateway"
+  | "file_download";
+
+// An OCSF class of the audit stream, or the credential-access stream.
+export type AuditStatusClass =
+  | "authentication"
+  | "account_change"
+  | "user_access_management"
+  | "group_management"
+  | "api_activity"
+  | "credential_access";
+
+export interface AuditClassStatus {
+  event_class: AuditStatusClass;
+  events_last_24h: number;
+  last_event_at: string | null;
+}
+
+export interface AuditStreamStatus {
+  enabled: boolean;
+  log_format: string;
+  categories: AuditEventCategory[];
+  include_query_text: boolean;
+  classes: AuditClassStatus[];
 }
 
 // Federated Connector Types

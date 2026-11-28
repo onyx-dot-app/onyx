@@ -99,6 +99,13 @@ export class SkillFolderRootError extends Error {
   }
 }
 
+/** One file that is not a ZIP or SKILL.md. */
+export class SkillUnsupportedFileError extends Error {
+  constructor(readonly fileName: string) {
+    super(`${fileName} is not a ZIP or SKILL.md file.`);
+  }
+}
+
 export interface PrepareSkillBundleOptions {
   /** Also take a folder with a plugin manifest at its top level. */
   allowPlugin?: boolean;
@@ -125,6 +132,7 @@ export async function prepareSkillBundleUpload(
         source: "skill-md",
       };
     }
+    if (parts.length === 1) throw new SkillUnsupportedFileError(file!.name);
   }
 
   const filesWithParts = selectedFilesWithParts(files);

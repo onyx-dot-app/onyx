@@ -18,10 +18,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: mcp-compatibility-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  group: mcp-compatibility-${{ github.event_name }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   routing:
     if: github.event_name != 'schedule' || github.event.schedule == '37 9 * * *'
     runs-on:

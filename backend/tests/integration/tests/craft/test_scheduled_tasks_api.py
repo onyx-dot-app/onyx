@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Generator
+from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
@@ -42,6 +42,24 @@ def _db_access() -> Generator[None, None, None]:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
+_created_task_ids: list[UUID] = []
+
+
+@pytest.fixture(autouse=True)
+def _delete_created_tasks(_db_access: None) -> Generator[None, None, None]:  # noqa: ARG001
+    try:
+        yield
+    finally:
+        if _created_task_ids:
+            # Runs and integration links cascade with their task.
+            with get_session_with_current_tenant() as db_session:
+                db_session.execute(
+                    delete(ScheduledTask).where(ScheduledTask.id.in_(_created_task_ids))
+                )
+                db_session.commit()
+            _created_task_ids.clear()
+
+
 def _url(*parts: str) -> str:
     base = f"{API_SERVER_URL}/build/scheduled-tasks"
     if not parts:
@@ -70,12 +88,15 @@ def _create_task(
     }
     if integrations is not None:
         body["integrations"] = integrations
-    return client.post(
+    response = client.post(
         _url(),
         json=body,
         headers=user.headers,
         cookies=user.cookies,
     )
+    if response.is_success:
+        _created_task_ids.append(UUID(response.json()["id"]))
+    return response
 
 
 def _patch_task(
@@ -319,6 +340,54 @@ def test_run_now_on_paused_task_allowed(admin_user: DATestUser) -> None:
     )
 
 
+def test_run_now_is_refused_while_a_run_is_in_flight(admin_user: DATestUser) -> None:
+    response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+    with get_session_with_current_tenant() as db_session:
+        insert_run(
+            db_session=db_session,
+            task_id=task_id,
+            trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+        )
+        db_session.commit()
+
+    response = _run_now(admin_user, task_id)
+
+    assert response.status_code == 409
+    assert len(_get_runs_for_task(task_id)) == 1
+
+
+def test_a_prompt_over_the_limit_is_rejected(admin_user: DATestUser) -> None:
+    response = _create_task(admin_user, prompt="x" * 20_001)
+
+    assert response.status_code == 422
+
+
+def test_a_task_saved_with_a_longer_prompt_can_still_be_edited(
+    admin_user: DATestUser,
+) -> None:
+    response = _create_task(admin_user)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+    long_prompt = "x" * 20_001
+    with get_session_with_current_tenant() as db_session:
+        task = db_session.get(ScheduledTask, task_id)
+        assert task is not None
+        task.prompt = f" {long_prompt}\n"
+        db_session.commit()
+
+    kept = _patch_task(admin_user, task_id, {"name": "Renamed", "prompt": long_prompt})
+    changed = _patch_task(admin_user, task_id, {"prompt": long_prompt + "y"})
+
+    assert kept.status_code == 200
+    assert changed.status_code == 400
+
+
+def test_delete_of_a_missing_task_is_not_found(admin_user: DATestUser) -> None:
+    assert _delete_task(admin_user, uuid4()).status_code == 404
+
+
 def test_delete_task_is_idempotent_soft_delete(admin_user: DATestUser) -> None:
     response = _create_task(admin_user)
     response.raise_for_status()
@@ -337,30 +406,75 @@ def test_delete_task_is_idempotent_soft_delete(admin_user: DATestUser) -> None:
     assert row.deleted is True
 
 
-def test_list_runs_paginates_by_started_at_cursor(admin_user: DATestUser) -> None:
+def test_list_runs_pages_through_runs_with_the_same_started_at(
+    admin_user: DATestUser,
+) -> None:
+    response = _create_task(admin_user)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+    with get_session_with_current_tenant() as db_session:
+        runs = [
+            insert_run(
+                db_session=db_session,
+                task_id=task_id,
+                trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+            )
+            for _ in range(5)
+        ]
+        tied_at = runs[0].started_at
+        for run in runs:
+            run.started_at = tied_at
+        db_session.commit()
+        expected_ids = {str(run.id) for run in runs}
+
+    seen: list[str] = []
+    cursor: str | None = None
+    while True:
+        page = _list_runs(admin_user, task_id, cursor=cursor, limit=2)
+        page.raise_for_status()
+        body = page.json()
+        seen.extend(item["id"] for item in body["items"])
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+
+    assert sorted(seen) == sorted(expected_ids)
+
+
+def test_list_runs_rejects_a_malformed_cursor(admin_user: DATestUser) -> None:
     response = _create_task(admin_user)
     response.raise_for_status()
     task_id = UUID(response.json()["id"])
 
-    # Small sleep gives the two runs distinct started_at values for the cursor.
-    run_one = _run_now(admin_user, task_id)
-    run_one.raise_for_status()
-    time.sleep(0.05)
-    run_two = _run_now(admin_user, task_id)
-    run_two.raise_for_status()
+    assert _list_runs(admin_user, task_id, cursor="not-a-cursor").status_code == 400
 
-    page_one = _list_runs(admin_user, task_id, limit=1)
-    page_one.raise_for_status()
-    page_one_body = page_one.json()
-    assert len(page_one_body["items"]) == 1
-    cursor = page_one_body["next_cursor"]
-    assert isinstance(cursor, str) and cursor
 
-    page_two = _list_runs(admin_user, task_id, cursor=cursor, limit=1)
-    page_two.raise_for_status()
-    page_two_body = page_two.json()
-    assert len(page_two_body["items"]) >= 1
-    assert page_one_body["items"][0]["id"] != page_two_body["items"][0]["id"]
+def test_blank_name_or_prompt_is_rejected_and_values_are_trimmed(
+    admin_user: DATestUser,
+) -> None:
+    assert _create_task(admin_user, name="   ").status_code == 422
+    assert _create_task(admin_user, prompt=" \n ").status_code == 422
+
+    response = _create_task(admin_user, name="  Digest  ", prompt="  Summarize  ")
+    response.raise_for_status()
+    body = response.json()
+    assert body["name"] == "Digest"
+    assert body["prompt"] == "Summarize"
+    assert _patch_task(admin_user, UUID(body["id"]), {"name": " "}).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "editor_payload",
+    [
+        {"unit": "minutes", "every": 90},
+        {"unit": "hours", "every": 48},
+        {"unit": "days", "every": 40, "time_of_day": "09:00"},
+    ],
+)
+def test_an_interval_that_cron_cannot_express_is_rejected(
+    admin_user: DATestUser, editor_payload: dict[str, Any]
+) -> None:
+    assert _create_task(admin_user, editor_payload=editor_payload).status_code == 422
 
 
 def _insert_run_with_status(task_id: UUID, *statuses: ScheduledTaskRunStatus) -> UUID:
@@ -386,8 +500,8 @@ def _view_run(
     user: DATestUser, task_id: UUID, run_id: UUID, revision: int
 ) -> httpx.Response:
     return client.patch(
-        _url(str(task_id), "runs", str(run_id), "viewed"),
-        json={"revision": revision},
+        _url(str(task_id), "runs", "viewed"),
+        json={"revisions": {str(run_id): revision}},
         headers=user.headers,
         cookies=user.cookies,
     )
@@ -437,7 +551,7 @@ def test_run_results_stay_unviewed_until_opened(
 
     viewed = _view_run(admin_user, task_id, run_id, 1)
     viewed.raise_for_status()
-    assert viewed.json()["viewed_revision"] == 1
+    assert viewed.json()["items"][0]["viewed_revision"] == 1
     assert _unviewed_run_count(admin_user, task_id) == 0
     assert _list_runs(admin_user, task_id, unviewed=True).json()["items"] == []
 
@@ -474,3 +588,47 @@ def test_bulk_view_keeps_newer_run_results_unviewed(admin_user: DATestUser) -> N
     )
     stale.raise_for_status()
     assert _unviewed_run_count(admin_user, task_id) == 1
+
+
+def test_list_shows_latest_run_of_each_task(admin_user: DATestUser) -> None:
+    task_ids = []
+    for _ in range(2):
+        response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+        response.raise_for_status()
+        task_ids.append(UUID(response.json()["id"]))
+    first, second = task_ids
+    _insert_run_with_status(first, ScheduledTaskRunStatus.RUNNING)
+    latest_id = _insert_run_with_status(first, ScheduledTaskRunStatus.RUNNING)
+    with get_session_with_current_tenant() as db_session:
+        latest = db_session.get_one(ScheduledTaskRun, latest_id)
+        latest.started_at += timedelta(minutes=1)
+        db_session.commit()
+
+    response = client.get(
+        _url(), headers=admin_user.headers, cookies=admin_user.cookies
+    )
+    response.raise_for_status()
+    items = {item["id"]: item for item in response.json()["items"]}
+    assert items[str(first)]["last_run"]["id"] == str(latest_id)
+    assert items[str(second)]["last_run"] is None
+
+    detail = client.get(
+        _url(str(first)), headers=admin_user.headers, cookies=admin_user.cookies
+    )
+    detail.raise_for_status()
+    assert detail.json()["last_run"]["id"] == str(latest_id)
+
+
+def test_a_paused_task_rejects_a_cron_with_no_future_fire(
+    admin_user: DATestUser,
+) -> None:
+    response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+
+    patch = _patch_task(
+        admin_user,
+        task_id,
+        {"editor_mode": "advanced", "editor_payload": {"cron": "0 0 30 2 *"}},
+    )
+    assert patch.status_code == 422

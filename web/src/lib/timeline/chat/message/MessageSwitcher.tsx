@@ -38,6 +38,7 @@ export default function MessageSwitcher({
         icon={SvgChevronLeft}
         onClick={previous}
         prominence="tertiary"
+        size="xs"
         tooltip={
           disableForStreaming
             ? disabledTooltip
@@ -46,13 +47,13 @@ export default function MessageSwitcher({
       />
 
       <div className="flex flex-row items-center justify-center">
-        <Text as="p" font="main-ui-action" color="text-03">
+        <Text as="p" font="secondary-body" color="text-03">
           {String(currentPage)}
         </Text>
-        <Text as="p" font="main-ui-action" color="text-03">
+        <Text as="p" font="secondary-body" color="text-03">
           /
         </Text>
-        <Text as="p" font="main-ui-action" color="text-03">
+        <Text as="p" font="secondary-body" color="text-03">
           {String(totalPages)}
         </Text>
       </div>
@@ -62,6 +63,7 @@ export default function MessageSwitcher({
         icon={SvgChevronRight}
         onClick={next}
         prominence="tertiary"
+        size="xs"
         tooltip={
           disableForStreaming
             ? disabledTooltip

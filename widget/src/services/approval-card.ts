@@ -12,6 +12,7 @@ import {
   ARGUMENT_ROWS_SHOWN,
   ArgumentRow,
   argumentRows,
+  grantScope,
 } from "@/services/approvals";
 
 export const ICON_LOADER = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1.5v2M8 12.5v2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M1.5 8h2M12.5 8h2M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>`;
@@ -50,7 +51,7 @@ const CHAT_SCOPE = {
 function sessionScope(
   request: ToolApprovalRequest
 ): typeof COMMAND_SCOPE | typeof CHAT_SCOPE | null {
-  if (request.can_approve_for_command) return COMMAND_SCOPE;
+  if (grantScope(request) === "command") return COMMAND_SCOPE;
   return request.can_approve_for_chat === false ? null : CHAT_SCOPE;
 }
 
@@ -63,7 +64,7 @@ export function renderApprovalCard(
   const { request } = entry;
   const { submitting, expanded, onDecide, onToggle } = view;
   const name = request.display_name || request.tool_name;
-  const record = approvalRecord(status, name);
+  const record = approvalRecord(status, name, grantScope(request));
   const title = `Approval requested: ${
     request.app_name ? `${name} in ${request.app_name}` : name
   }`;

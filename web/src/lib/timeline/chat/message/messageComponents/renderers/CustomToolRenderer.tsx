@@ -156,7 +156,11 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
           t("customTool.unreachableStatus.text", { toolName: chip })
         );
       if (error.status_code === null)
-        return markdown(t("customTool.blockedStatus.text", { toolName: chip }));
+        return markdown(
+          error.is_auth_error
+            ? t("customTool.callFailedStatus.text", { toolName: chip })
+            : t("customTool.blockedStatus.text", { toolName: chip })
+        );
       return markdown(
         error.is_auth_error
           ? t("customTool.authFailedStatus.text", {

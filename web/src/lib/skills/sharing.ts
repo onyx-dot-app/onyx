@@ -89,27 +89,71 @@ export function emptySkillSharingDraft(
   };
 }
 
+function userShareRequests(draft: SkillSharingDraft) {
+  return draft.user_shares
+    .filter((share) => share.user.id !== draft.owner?.id)
+    .map((share) => ({
+      user_id: share.user.id,
+      permission: share.permission,
+    }));
+}
+
+function groupShareRequests(draft: SkillSharingDraft) {
+  return draft.group_shares.map((share) => ({
+    group_id: share.group_id,
+    permission: share.permission,
+  }));
+}
+
+function sameShares<T extends { permission: string }>(
+  a: T[],
+  b: T[],
+  key: (share: T) => string
+): boolean {
+  const byKey = new Map(b.map((share) => [key(share), share.permission]));
+  return (
+    a.length === b.length &&
+    a.every((share) => byKey.get(key(share)) === share.permission)
+  );
+}
+
+/** The access change to send. With `initial`, the access the dialog loaded,
+ * a field the user did not change is left out, so the save keeps what
+ * someone else changed in the meantime. */
 export function serializeSkillSharing(
   draft: SkillSharingDraft,
-  isOrganizationManager: boolean
+  isOrganizationManager: boolean,
+  initial?: SkillSharingDraft
 ): SkillShareUpdatePayload {
+  const userShares = userShareRequests(draft);
+  const groupShares = groupShareRequests(draft);
+  const changed = <T>(value: T, unchanged: boolean): T | undefined =>
+    initial && unchanged ? undefined : value;
   return {
     installation_policy: isOrganizationManager
-      ? draft.installation_policy
+      ? changed(
+          draft.installation_policy,
+          draft.installation_policy === initial?.installation_policy
+        )
       : undefined,
     public_permission: canChangeOrganizationAccess(draft, isOrganizationManager)
-      ? draft.public_permission
+      ? changed(
+          draft.public_permission,
+          draft.public_permission === initial?.public_permission
+        )
       : undefined,
-    user_shares: draft.user_shares
-      .filter((share) => share.user.id !== draft.owner?.id)
-      .map((share) => ({
-        user_id: share.user.id,
-        permission: share.permission,
-      })),
-    group_shares: draft.group_shares.map((share) => ({
-      group_id: share.group_id,
-      permission: share.permission,
-    })),
+    user_shares: changed(
+      userShares,
+      !!initial &&
+        sameShares(userShares, userShareRequests(initial), (s) => s.user_id)
+    ),
+    group_shares: changed(
+      groupShares,
+      !!initial &&
+        sameShares(groupShares, groupShareRequests(initial), (s) =>
+          String(s.group_id)
+        )
+    ),
   };
 }
 

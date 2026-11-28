@@ -32,7 +32,13 @@ from onyx.server.security.models import (
     SecuritySettingsOverrides,
     SSRFProtectionLevel,
 )
-from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
+from onyx.utils.audit import (
+    DEFAULT_AUDIT_EVENT_CATEGORIES,
+    AuditAction,
+    AuditActor,
+    AuditOutcome,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -108,6 +114,8 @@ def _build_env_defaults() -> SecuritySettings:
         allow_connector_group_restrictions=False,
         # No env knob on purpose: on until an admin turns it off.
         allow_connector_check_findings=True,
+        audit_event_categories=DEFAULT_AUDIT_EVENT_CATEGORIES,
+        audit_include_query_text=False,
         ssrf_protection_level=_derive_ssrf_level_from_env(),
         mask_credential_prefix=_cfg.MASK_CREDENTIAL_PREFIX,
         llm_custom_config_env_injection=not MULTI_TENANT,
@@ -151,9 +159,10 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
     # multi-tenant no matter what any stored or env-derived value says.
     if MULTI_TENANT:
         merged["llm_custom_config_env_injection"] = False
-    # SecuritySettings types valid_email_domains as tuple; overrides as list.
-    if isinstance(merged["valid_email_domains"], list):
-        merged["valid_email_domains"] = tuple(merged["valid_email_domains"])
+    # SecuritySettings types these as tuples; overrides as lists.
+    for name in ("valid_email_domains", "audit_event_categories"):
+        if isinstance(merged[name], list):
+            merged[name] = tuple(merged[name])
     return SecuritySettings(**merged)
 
 

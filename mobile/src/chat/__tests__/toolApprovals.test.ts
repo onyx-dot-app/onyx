@@ -61,7 +61,7 @@ describe("toolApprovalStatus", () => {
   it.each([
     ["approved", "approved"],
     ["approved_for_chat", "approvedForSession"],
-    ["approved_for_command", "approved"],
+    ["approved_for_command", "approvedForSession"],
     ["rejected", "rejected"],
     ["disabled", "disabled"],
     ["cancelled", "closed"],
@@ -132,6 +132,7 @@ describe("decidedStatus", () => {
   >([
     ["APPROVED", "USER", "approved"],
     ["APPROVED", "SESSION_GRANT", "approvedForSession"],
+    ["APPROVED", "COMMAND_GRANT", "approvedForSession"],
     ["REJECTED", "USER", "rejected"],
     ["REJECTED", "POLICY", "disabled"],
   ])("shows %s via %s as %s", (decision, decidedVia, status) => {

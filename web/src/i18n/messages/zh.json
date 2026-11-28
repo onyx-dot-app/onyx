@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "审计日志与 SIEM",
+          "description": "Onyx 将审计事件以 JSON 行的形式写入其日志。您的日志采集器会将其发送到您的 SIEM。[设置 SIEM 转发]({url})。"
+        },
+        "status": {
+          "title": "审计流状态",
+          "description": "Onyx 写入的事件。Onyx 无法看到您的日志采集器或 SIEM，因此请确认事件已到达那里。",
+          "loadFailed": {
+            "title": "无法加载审计流状态",
+            "description": "请重新加载页面后重试。"
+          },
+          "notEnabled": {
+            "title": "Onyx 未写入审计事件",
+            "description": "审计流需要 Enterprise 许可证。"
+          },
+          "logFormat": {
+            "title": "使用 JSON 日志",
+            "description": "日志格式为 {logFormat}。请设置 LOG_FORMAT=json，以便您的日志采集器能解析每条日志记录。"
+          },
+          "noEvents": "暂无事件",
+          "eventSummary": "过去 24 小时内有 {count, plural, one {# 个事件} other {# 个事件}}。最后一个事件 {lastEvent}。",
+          "eventCount": "过去 24 小时内有 {count, plural, one {# 个事件} other {# 个事件}}。",
+          "classes": {
+            "authentication": "身份验证",
+            "account_change": "账户变更",
+            "user_access_management": "用户访问管理",
+            "group_management": "组管理",
+            "api_activity": "API 活动",
+            "credential_access": "凭据访问"
+          }
+        },
+        "auditEvents": {
+          "title": "审计事件",
+          "description": "安全与管理变更。默认开启。"
+        },
+        "userActivity": {
+          "title": "用户活动",
+          "description": "每个用户的操作，用于事件调查。默认关闭，可能产生大量事件。"
+        },
+        "categories": {
+          "authentication": {
+            "title": "身份验证",
+            "description": "登录、登录失败、退出登录和密码重置。"
+          },
+          "user_and_group_management": {
+            "title": "用户和组管理",
+            "description": "用户、角色和组的变更，以及 MCP 客户端的批准。"
+          },
+          "configuration": {
+            "title": "配置变更",
+            "description": "设置、连接器、凭据、智能体、文档集、API 密钥和访问令牌的变更。"
+          },
+          "credential_access": {
+            "title": "凭据访问",
+            "description": "已存储凭据的解密。对于同一凭据和用户，Onyx 可能不会记录 10 分钟内的重复解密。"
+          },
+          "data_export": {
+            "title": "数据导出",
+            "description": "查询历史、使用情况报告和日志导出的下载。"
+          },
+          "chat": {
+            "title": "聊天消息",
+            "description": "每条聊天回答，包括智能体、模型、工具以及用户看到的文档。"
+          },
+          "search": {
+            "title": "搜索",
+            "description": "来自搜索页面、API 或 MCP 客户端的每次搜索，以及找到的文档。"
+          },
+          "llm_gateway": {
+            "title": "LLM 网关请求",
+            "description": "通过 LLM 网关的每次调用，包括模型和令牌数。"
+          },
+          "file_download": {
+            "title": "文件下载",
+            "description": "用户下载的每个聊天文件。"
+          }
+        },
+        "queryText": {
+          "title": "包含查询文本",
+          "description": "将用户输入的内容添加到聊天和搜索事件中。仅当查询历史为正常时才会添加。"
+        }
       }
     },
     "serviceAccounts": {
@@ -11426,6 +11509,8 @@
         "invalidScope": "请求的权限不可用。",
         "loginBadCredentials": "此账户无法登录，可能已被停用。请联系您的工作区管理员。",
         "loginRequired": "您需要先通过身份提供方登录。",
+        "magicLinkInvalid": "此登录链接已失效或已被使用。请重新获取。",
+        "magicLinkWrongEmail": "此链接是发送到另一个邮箱地址的。请重新获取链接。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
         "playgroundActiveTenant": "您公司的团队已经在试用 Onyx。加入您的团队，还是创建新团队？",
         "playgroundAskAdmin": "请让您的管理员邀请您。",
@@ -11449,6 +11534,9 @@
       },
       "joinTeamButton": {
         "label": "加入我的团队"
+      },
+      "newLinkButton": {
+        "label": "获取新链接"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11601,6 +11689,34 @@
       },
       "workEmailField": {
         "label": "工作邮箱"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "此链接是在与请求它的浏览器不同的浏览器中打开的。请输入接收此链接的邮箱地址。",
+        "title": "确认您的邮箱"
+      },
+      "differentEmailButton": {
+        "label": "使用其他邮箱"
+      },
+      "redeeming": {
+        "text": "正在登录…"
+      },
+      "requestButton": {
+        "label": "通过邮件获取链接"
+      },
+      "resendWait": {
+        "error": "刚刚已向此地址发送登录链接。请查看收件箱，或等待一分钟后再次请求。"
+      },
+      "sendFailed": {
+        "error": "无法发送登录邮件。请稍后再试。"
+      },
+      "sent": {
+        "description": "我们已向 {email} 发送登录链接。该链接只能使用一次，15 分钟后失效。",
+        "title": "请查看您的邮箱"
+      },
+      "useSso": {
+        "error": "请通过您的 SSO 提供商登录。此工作区已关闭邮件链接登录。"
       }
     },
     "passwordRequirements": {
@@ -12231,6 +12347,9 @@
         },
         "timedOut": {
           "text": "回复已达到时间限制，因此已停止。"
+        },
+        "approvalExpired": {
+          "text": "由于无人及时回复审批请求，计划运行已停止。"
         }
       },
       "callout": {
@@ -12568,6 +12687,12 @@
           },
           "waitingForAnswer": {
             "label": "正在等待你的回答..."
+          },
+          "waitingForOwnerApproval": {
+            "label": "正在等待所有者的批准..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "正在等待所有者的回答..."
           },
           "runningCommand": {
             "label": "正在运行命令..."
@@ -12937,11 +13062,10 @@
         },
         "submitError": "无法发送你的答案。请重试。",
         "record": {
-          "answered": "已回答",
+          "answeredCount": "{count, plural, other {已回答 # 个问题}}",
           "answeredInChat": "已在聊天中回答",
           "cancelled": "未回答",
           "closed": "不再等待",
-          "answer": "{header}：{answer}",
           "optionAndNote": "{option}（{note}）"
         }
       },
@@ -13613,6 +13737,10 @@
       },
       "viewAllButton": {
         "label": "查看全部 {count} 个文件"
+      },
+      "unavailable": {
+        "title": "此文件不可用",
+        "description": "它已被删除，或者您没有访问权限。"
       }
     },
     "rightPanel": {
@@ -14675,9 +14803,6 @@
       },
       "unsupported": {
         "description": "下载文件以查看其内容。"
-      },
-      "retry": {
-        "label": "重试"
       },
       "download": {
         "label": "下载文件"
@@ -17317,7 +17442,9 @@
           "publishOff": {
             "description": "管理员已关闭向组织发布。请让管理员发布此插件。"
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx 无法加载您的群组，因此无法更改群组共享。请关闭并重新打开此对话框后重试。",
+        "groupSharesLocked": "此技能已与您不管理的群组共享，因此您无法更改其群组共享。请联系组织级技能管理员。"
       },
       "tabs": {
         "details": "详情",
@@ -17426,7 +17553,8 @@
         "disableFailed": "停用 {name} 失败",
         "enableFailed": "启用 {name} 失败",
         "refreshFailed": "{name} 已更新，但技能列表无法刷新。",
-        "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。"
+        "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。",
+        "requiredHolder": "无法开启 {name}。已有一个必需技能使用此名称。"
       }
     },
     "sections": {
@@ -17469,7 +17597,8 @@
       "upload": {
         "error": {
           "readFailed": "无法读取上传的内容。",
-          "folderRoot": "{upload, select, plugin {所选文件夹的顶层必须包含 SKILL.md 或 plugin.json 清单。} other {所选文件夹的顶层必须包含 SKILL.md。}}"
+          "folderRoot": "{upload, select, plugin {所选文件夹的顶层必须包含 SKILL.md 或 plugin.json 清单。} other {所选文件夹的顶层必须包含 SKILL.md。}}",
+          "unsupportedFile": "{name} 不是 ZIP 或 SKILL.md 文件。请上传 ZIP、SKILL.md 文件或技能文件夹。"
         }
       }
     },
@@ -17488,6 +17617,8 @@
       "updated": "{count, plural, one {已更新 # 个技能} other {已更新 # 个技能}}",
       "failed": "无法更新技能。请重试。",
       "partialFailure": "{count, plural, one {# 个技能未能更新} other {# 个技能未能更新}}",
+      "deleted": "{count, plural, one {已删除 # 个技能} other {已删除 # 个技能}}",
+      "deleteFailure": "{count, plural, one {# 个技能未能删除} other {# 个技能未能删除}}",
       "deleteTitle": "{count, plural, one {删除 # 个技能？} other {删除 # 个技能？}}",
       "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选技能。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选技能。此操作无法撤销。}}",
       "shareTitle": "{count, plural, one {更新 # 个技能的访问权限} other {更新 # 个技能的访问权限}}",
@@ -17500,7 +17631,8 @@
       "publishWarning": {
         "title": "发布后无法撤销",
         "description": "应用后，组织中的所有人都可以使用所选技能。已发布的技能无法再设为私有。只有管理员可以删除它们。"
-      }
+      },
+      "skipped": "{count, plural, other {已跳过 # 个你无法开启或关闭的技能}}"
     },
     "reviewRequests": {
       "title": "发布请求",
@@ -17802,6 +17934,7 @@
         "newPlugin": "新插件：{name}"
       },
       "willBeOff": "插件将以关闭状态保存。{names} 已有同名技能。",
+      "willClash": "{names} 已有同名技能。只能开启其中一个。",
       "saveAsNew": {
         "label": "另存为新插件",
         "description": "保持同名插件不变。"
@@ -17833,7 +17966,8 @@
         "newPlugin": "已添加 {name}。",
         "newVersion": "已将 {name} 更新为 Onyx 版本 {version}。",
         "unchanged": "没有更改。{name} 已是 Onyx 版本 {version}。",
-        "off": "已添加 {name}。由于 {names} 已有同名技能，它处于关闭状态。"
+        "off": "已添加 {name}。由于 {names} 已有同名技能，它处于关闭状态。",
+        "clash": "已将 {name} 更新到 Onyx 版本 {version}。{names} 已有同名技能，因此只有其中一个处于开启状态。"
       }
     },
     "turnOn": {
@@ -18004,6 +18138,8 @@
       "updated": "{count, plural, one {已更新 # 个插件} other {已更新 # 个插件}}",
       "failed": "无法更新插件。请重试。",
       "partialFailure": "{count, plural, one {# 个插件未能更新} other {# 个插件未能更新}}",
+      "deleted": "{count, plural, one {已删除 # 个插件} other {已删除 # 个插件}}",
+      "deleteFailure": "{count, plural, one {# 个插件未能删除} other {# 个插件未能删除}}",
       "deleteTitle": "{count, plural, one {删除 # 个插件？} other {删除 # 个插件？}}",
       "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选插件。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选插件。此操作无法撤销。}}",
       "shareTitle": "{count, plural, one {更新 # 个插件的访问权限} other {更新 # 个插件的访问权限}}",
@@ -18012,7 +18148,8 @@
       "apply": "{count, plural, one {应用于 # 个插件} other {应用于 # 个插件}}",
       "publishWarning": {
         "description": "应用后，组织中的所有人都可以使用所选插件。已发布的插件无法再设为私有。只有管理员可以删除它们。"
-      }
+      },
+      "skipped": "{count, plural, other {已跳过 # 个你无法开启或关闭的插件}}"
     }
   },
   "integrations": {
@@ -18338,7 +18475,7 @@
       },
       "confirmDelete": {
         "title": "删除“{name}”？",
-        "description": "任务将停止运行，其运行历史也会被删除。",
+        "description": "任务将停止运行。其过往运行的聊天会被保留。",
         "submit": "删除"
       }
     },
@@ -18351,7 +18488,8 @@
       "markAllViewed": "全部标记为已查看",
       "markAllViewedFailed": "无法将运行标记为已查看。请重试。",
       "trigger": "{source, select, MANUAL_RUN_NOW {运行一次} other {计划}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} timeout {失败：运行达到了一小时的上限。} other {失败：{errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} timeout {失败：运行达到了一小时的上限。} chat_deleted {已取消：此运行的聊天已被删除。} owner_cannot_chat {失败：你已无法聊天，因此任务已暂停。} rate_limited {失败：已达到使用上限。} other {失败：{errorClass}}}",
+      "errorDetail": "失败：{detail}",
       "columns": {
         "started": "开始时间",
         "status": "状态",
@@ -18389,7 +18527,8 @@
         "title": "按计划运行",
         "label": "按计划运行 {name}"
       },
-      "menu": "更多操作"
+      "menu": "更多操作",
+      "notFound": "此计划任务已被删除，或属于其他用户。"
     },
     "editor": {
       "newTitle": "新建计划任务",
@@ -18401,7 +18540,8 @@
       "saveAndRun": "保存并立即运行",
       "errors": {
         "nameRequired": "请输入名称。",
-        "promptRequired": "请输入提示词。"
+        "promptRequired": "请输入提示词。",
+        "tooLong": "请使用不超过 {max, number} 个字符。"
       },
       "toasts": {
         "created": "计划任务已创建。",

@@ -11,10 +11,8 @@ import {
 } from "@/app/app/services/messageTree";
 import type { SessionError } from "@/app/app/stores/useChatSessionStore";
 import type { ApprovalStatus } from "@/lib/approvals/types";
-import {
-  readWaitingToolRequests,
-  type ToolQuestionStatus,
-} from "@/lib/chat/toolApprovals";
+import { readWaitingToolRequests } from "@/lib/chat/toolApprovals";
+import { type ToolQuestionStatus } from "@/lib/chat/toolQuestions";
 
 export type ChatRunStatus = "working" | "approval" | "question" | EndedRun;
 

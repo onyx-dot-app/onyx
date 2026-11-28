@@ -17,7 +17,7 @@ from itertools import chain, count, zip_longest
 from uuid import UUID
 
 import regex
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue, TypeAdapter
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -419,15 +419,35 @@ def replace_file(
     return published
 
 
-def _chat_id(chat_id: str | None) -> UUID | None:
-    """The chat that a list or search keeps to; a tool error for an ID that
-    names no chat."""
-    if chat_id is None:
-        return None
+_SEARCH_CURSOR = TypeAdapter(LibrarySearchCursor)
+
+
+def _encode_cursor[T](adapter: TypeAdapter[T], cursor: T) -> str:
+    return base64.urlsafe_b64encode(adapter.dump_json(cursor)).decode()
+
+
+def _decode_cursor[T](adapter: TypeAdapter[T], cursor: str, again: str) -> T:
+    """The cursor that _encode_cursor made; a tool error that asks the model
+    to `again` ("list", "search") without it for any other text."""
     try:
-        return UUID(chat_id)
+        return adapter.validate_json(base64.urlsafe_b64decode(cursor))
     except ValueError as error:
-        raise tool_error(f"No chat {chat_id} of yours") from error
+        raise tool_error(
+            f"The cursor is not a next_cursor of this tool; {again} again without it"
+        ) from error
+
+
+def _fit_page[T, P: BaseModel](shown: list[T], page: Callable[[list[T]], P]) -> P:
+    """The page of the most leading entries of `shown` whose JSON keeps to
+    ARTIFACT_RESULT_MAX_CHARS, with at least one entry."""
+    while True:
+        result = page(shown)
+        if (
+            len(result.model_dump_json()) <= ARTIFACT_RESULT_MAX_CHARS
+            or len(shown) <= 1
+        ):
+            return result
+        shown = shown[:-1]
 
 
 def list_artifacts(user_id: UUID, arguments: LibraryListArguments) -> ArtifactList:
@@ -435,17 +455,9 @@ def list_artifacts(user_id: UUID, arguments: LibraryListArguments) -> ArtifactLi
     database only; it never starts the VM. A page keeps to
     ARTIFACT_RESULT_MAX_CHARS, under the spill limit of one result, and the
     step's budget does not spill it."""
-    chat_id = _chat_id(arguments.chat_id)
     cursor: ArtifactCursor | None = None
     if arguments.cursor is not None:
-        try:
-            cursor = ARTIFACT_CURSOR.validate_json(
-                base64.urlsafe_b64decode(arguments.cursor)
-            )
-        except ValueError as error:
-            raise tool_error(
-                "The cursor is not a next_cursor of this tool; list again without it"
-            ) from error
+        cursor = _decode_cursor(ARTIFACT_CURSOR, arguments.cursor, "list")
         if (cursor.sort, cursor.sort_order) != (
             arguments.sort,
             arguments.sort_order,
@@ -461,7 +473,7 @@ def list_artifacts(user_id: UUID, arguments: LibraryListArguments) -> ArtifactLi
             rows = get_user_published_files(
                 db_session,
                 user_id,
-                chat_session_id=chat_id,
+                chat_session_id=arguments.chat_id,
                 filters=arguments.filters or LibraryListFilters(),
                 sort=arguments.sort,
                 sort_order=arguments.sort_order,
@@ -470,19 +482,16 @@ def list_artifacts(user_id: UUID, arguments: LibraryListArguments) -> ArtifactLi
             )
     if rows is None:
         raise tool_error(f"No chat {arguments.chat_id} of yours")
-    shown, more = rows[:limit], len(rows) > limit
-    while True:
-        page = ArtifactList(
-            files=[artifact for artifact, _ in shown],
-            next_cursor=base64.urlsafe_b64encode(
-                ARTIFACT_CURSOR.dump_json(shown[-1][1])
-            ).decode()
-            if more and shown
+    shown = rows[:limit]
+    return _fit_page(
+        shown,
+        lambda page: ArtifactList(
+            files=[artifact for artifact, _ in page],
+            next_cursor=_encode_cursor(ARTIFACT_CURSOR, page[-1][1])
+            if page and len(page) < len(rows)
             else None,
-        )
-        if len(page.model_dump_json()) <= ARTIFACT_RESULT_MAX_CHARS or len(shown) <= 1:
-            return page
-        shown, more = shown[:-1], True
+        ),
+    )
 
 
 def materialize(
@@ -1344,17 +1353,11 @@ def search_artifacts(
     LIBRARY_SEARCH_WINDOW files, and the other sorts reorder only the
     window. A cursor is an offset into the window, and a page keeps to
     ARTIFACT_RESULT_MAX_CHARS."""
-    chat_id = _chat_id(arguments.chat_id)
-    offset = 0
-    if arguments.cursor is not None:
-        try:
-            offset = LibrarySearchCursor.model_validate_json(
-                base64.urlsafe_b64decode(arguments.cursor)
-            ).offset
-        except ValueError as error:
-            raise tool_error(
-                "The cursor is not a next_cursor of this tool; search again without it"
-            ) from error
+    offset = (
+        0
+        if arguments.cursor is None
+        else _decode_cursor(_SEARCH_CURSOR, arguments.cursor, "search").offset
+    )
     top_k = min(max(arguments.top_k, 1), LIBRARY_SEARCH_MAX_TOP_K)
     filters = arguments.filters or LibraryListFilters()
     queries = arguments.search_query
@@ -1386,7 +1389,7 @@ def search_artifacts(
             candidates = get_user_artifact_search_candidates(
                 db_session,
                 user_id,
-                chat_session_id=chat_id,
+                chat_session_id=arguments.chat_id,
                 filters=filters,
                 artifact_ids=artifact_ids,
                 term_sets=term_sets,
@@ -1466,7 +1469,7 @@ def search_artifacts(
                     db_session,
                     user_id,
                     [artifact_id for artifact_id, _ in window],
-                    chat_session_id=chat_id,
+                    chat_session_id=arguments.chat_id,
                     filters=filters,
                 )
     hits = [
@@ -1514,24 +1517,19 @@ def search_artifacts(
         len(candidates),
         len(hits),
     )
-    while True:
-        end = offset + len(shown)
-        result = LibrarySearchResult(
-            results=shown,
-            next_cursor=base64.urlsafe_b64encode(
-                LibrarySearchCursor(offset=end).model_dump_json().encode()
-            ).decode()
-            if end < len(hits) and shown
+    return _fit_page(
+        shown,
+        lambda page: LibrarySearchResult(
+            results=page,
+            next_cursor=_encode_cursor(
+                _SEARCH_CURSOR, LibrarySearchCursor(offset=offset + len(page))
+            )
+            if page and offset + len(page) < len(hits)
             else None,
             complete=complete,
             content_search="unavailable" if DISABLE_VECTOR_DB else None,
-        )
-        if (
-            len(result.model_dump_json()) <= ARTIFACT_RESULT_MAX_CHARS
-            or len(shown) <= 1
-        ):
-            return result
-        shown = shown[:-1]
+        ),
+    )
 
 
 def run_operation(
