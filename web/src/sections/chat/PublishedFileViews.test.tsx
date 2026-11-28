@@ -71,7 +71,7 @@ test("the Files list shows a tile for each file, with its title, else its name",
   const onOpen = jest.fn();
   const files = [
     file("file-2", "report.html", "Q3 report"),
-    file("file-3", "chart.png", null),
+    { ...file("file-3", "chart.png", null), mime_type: "image/png" },
     { ...file("file-4", "notes.md", null), display_path: "drafts/notes.md" },
     { ...file("file-5", "notes.md", null), display_path: "final/notes.md" },
   ];

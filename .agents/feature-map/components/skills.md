@@ -532,7 +532,11 @@ the app from the same rule
    rows. A scoped manager edits a private skill only when every group share is
    in their groups and every user share goes to a member of those groups. One
    SQL predicate, `db/plugin_access.py:plugin_in_managed_scope`, decides it for
-   the edit check and the response permission.
+   the edit check and the response permission. Such a manager adds a user
+   share only for a member of their groups, and cannot give themselves
+   EDITOR (403, `db/plugin.py:_check_user_shares_in_managed_scope`). Editor
+   rights that the manager could grant themselves (their own user share or a
+   managed group's share) do not lift the rule.
 4. `enablement-not-preference-row` **Never infer enablement from a preference
    row.** Use `db/plugin_access.py:load_user_plugin_states`. It reads
    `user_plugin_preference` and the install setting that applies to the user
@@ -912,9 +916,11 @@ the app from the same rule
     `mcpServers`. It refuses a plugin with no skill and no MCP server. A zip
     with only a SKILL.md stays a skill upload. A need stores the normalized
     URL (`utils/url.py:normalize_mcp_server_url`) and no integration id.
-    Each viewer sees that URL, so a URL with a credential (user info or a
-    query value such as `api_key`), a `${VAR}` or a bad scheme is dropped;
-    `url_problem` keeps the reason (`mcp_server_url_problem`) for the UI.
+    Each viewer sees that URL, so a URL with a credential (user info, or a
+    query or fragment value such as `api_key`), a `${VAR}` or a bad scheme is
+    dropped; `url_problem` keeps the reason (`mcp_server_url_problem`) for the
+    UI. `need_views` checks a saved URL again, so a version saved before a
+    rule existed does not show it.
     `integrations/plugin_needs.py:need_views` matches it at read time against
     the integrations of `integrations_for_needs`, so a private integration
     the user cannot see is `not_added`. `integrations_for_needs` adds the

@@ -111,7 +111,8 @@ Group or user restriction needs EE.
   integration (`access.can_manage`) gets a "..." menu with Share
   (`sections/plugins/ShareIntegrationModal.tsx`: specific people, groups in
   EE, no permission picker, `PUT /integrations/{id}/access`) and Publish to Org
-  (`POST /integrations/{id}/publish`, off without global manage:actions). A row opens
+  (`PUT /admin/integrations/{id}/installation-policy` with `AVAILABLE`, off
+  without global manage:actions). A row opens
   `/app/customize/integrations/[id]` (`sections/customize/CustomizeIntegrationPage.tsx`):
   the connection status, Connect or Disconnect (also while turned off, for the
   user's own connection) and the "..." menu in the header, then Overview (type,

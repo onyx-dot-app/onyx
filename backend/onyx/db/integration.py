@@ -378,9 +378,13 @@ def replace_integration_actions__no_commit(
     source: IntegrationActionSource,
     specs: Sequence[IntegrationActionSpec],
     db_session: Session,
+    *,
+    keep_policies: bool = False,
 ) -> None:
     """Locks the integration row, so two syncs of one integration run one at a
-    time. If two specs have the same key, the first one wins."""
+    time. If two specs have the same key, the first one wins. The policies of
+    removed actions go too, unless ``keep_policies``: the specs are not the
+    server's list because the server did not answer."""
     db_session.execute(
         select(Integration.id).where(Integration.id == integration_id).with_for_update()
     )
@@ -400,15 +404,32 @@ def replace_integration_actions__no_commit(
             continue
         db_session.add(integration_action_from_spec(integration_id, spec))
 
-    stale_ids = [
-        action.id
+    stale = {
+        key: action.id
         for key, action in existing_by_key.items()
         if action.source == source and key not in kept_keys
-    ]
-    if stale_ids:
+    }
+    if stale:
         db_session.execute(
             delete(IntegrationAction)
-            .where(IntegrationAction.id.in_(stale_ids))
+            .where(IntegrationAction.id.in_(stale.values()))
+            .execution_options(synchronize_session="fetch")
+        )
+    if not keep_policies:
+        # A policy of a removed action must not come back with the action.
+        removed: ColumnElement[bool] = IntegrationActionPolicy.action.in_(stale.keys())
+        if source is IntegrationActionSource.MCP:
+            # Also the policies that a failed MCP sync kept without their
+            # actions. Other sources keep policies without actions on purpose,
+            # such as the other-request action of a REST app.
+            removed = and_(
+                # The "" row is the default for new actions.
+                IntegrationActionPolicy.action != "",
+                IntegrationActionPolicy.action.not_in(kept_keys),
+            )
+        db_session.execute(
+            delete(IntegrationActionPolicy)
+            .where(IntegrationActionPolicy.integration_id == integration_id, removed)
             .execution_options(synchronize_session="fetch")
         )
     db_session.flush()

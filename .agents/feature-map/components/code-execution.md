@@ -469,7 +469,7 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         not run again after a lost server.
                                         artifact_operations.publish (the artifact tool's
                                         publish and replace_file run it too): at most
-                                        PUBLISH_FILES_MAX_FILES (20) files a call;
+                                        PUBLISH_FILES_MAX_FILES (25) files a call;
                                         for each file in order: HarnessSandbox.read_file
                                         (a working-directory path, or an absolute path
                                         under ONYX_VM_FILES_ROOT; other paths are refused

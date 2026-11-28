@@ -104,6 +104,7 @@ export const SWR_KEYS = {
   authType: "/api/auth/type",
   adminSecuritySettings: "/api/admin/security",
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
+  adminAuditStatus: "/api/admin/security/audit-status",
   incognitoAvailability: "/api/chat/incognito-availability",
   // A chat file's preview data, not a URL: see `useChatFilePreview`
   chatFilePreview: (fileId: string) => `chat-file-preview:${fileId}`,

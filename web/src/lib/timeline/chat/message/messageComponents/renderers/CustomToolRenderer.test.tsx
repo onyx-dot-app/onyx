@@ -119,6 +119,18 @@ describe("CustomToolRenderer", () => {
     );
   });
 
+  test("shows a sign-in failure without a status code as failed, not blocked", () => {
+    renderStatus({
+      is_auth_error: true,
+      is_unreachable: false,
+      status_code: null,
+      message: "Reconnect in Customize > Integrations.",
+    });
+
+    expect(screen.getByText("get_meta_data failed")).toBeInTheDocument();
+    expect(screen.queryByText(/was blocked/)).not.toBeInTheDocument();
+  });
+
   test("shows an HTTP failure with its status code", () => {
     renderStatus({
       is_auth_error: false,

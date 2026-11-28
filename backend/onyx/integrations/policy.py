@@ -19,6 +19,7 @@ when a person can answer, and it is Blocked in each other run.
 """
 
 from collections.abc import Collection, Mapping, Sequence
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, InstanceOf, ValidationError
@@ -475,3 +476,61 @@ def resolve_chat_action_policies(
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=None,
     )
+
+
+def current_chat_action_policies(
+    db_session: Session,
+    *,
+    integration_id: int | None,
+    action_keys: Collection[str],
+    user_id: UUID,
+    chat_session_id: UUID,
+) -> dict[str, EffectivePolicy] | None:
+    """`resolve_chat_action_policies` for a decision on a waiting request, or
+    None when the integration is gone (a deleted one leaves the request
+    without one) or turned off."""
+    integration = (
+        None
+        if integration_id is None
+        else get_integration_by_id(integration_id, db_session)
+    )
+    if integration is None or not integration.enabled:
+        return None
+    return resolve_chat_action_policies(
+        db_session,
+        integration=integration,
+        action_keys=action_keys,
+        user_id=user_id,
+        chat_session_id=chat_session_id,
+    )
+
+
+class ApprovalRecheck(str, Enum):
+    """How the current policies treat a request that waits for approval."""
+
+    UNCHANGED = "unchanged"
+    # Blocked now, or the integration is gone: an approval is a rejection by
+    # the policy.
+    BLOCKED = "blocked"
+    # An action asks now that did not ask when the request arrived, so a
+    # grant for the asked actions does not cover the request.
+    ASKS_MORE = "asks_more"
+
+
+def recheck_approval(
+    policies: Mapping[str, EffectivePolicy] | None,
+    action_keys: Collection[str],
+    asked: Collection[str],
+) -> ApprovalRecheck:
+    """Recheck a waiting request of `action_keys`, of which `asked` asked when
+    it arrived, against `current_chat_action_policies`."""
+    if policies is None or any(
+        policies.get(key) is EffectivePolicy.BLOCKED for key in action_keys
+    ):
+        return ApprovalRecheck.BLOCKED
+    if any(
+        policies.get(key) is EffectivePolicy.ASK and key not in asked
+        for key in action_keys
+    ):
+        return ApprovalRecheck.ASKS_MORE
+    return ApprovalRecheck.UNCHANGED

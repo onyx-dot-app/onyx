@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "Journaux d'audit et SIEM",
+          "description": "Onyx écrit les événements d'audit sous forme de lignes JSON dans ses journaux. Votre collecteur de journaux les envoie à votre SIEM. [Configurer le transfert vers le SIEM]({url})."
+        },
+        "status": {
+          "title": "État du flux d'audit",
+          "description": "Les événements écrits par Onyx. Onyx ne voit ni votre collecteur de journaux ni votre SIEM : vérifiez que les événements y arrivent.",
+          "loadFailed": {
+            "title": "Impossible de charger l'état du flux d'audit",
+            "description": "Rechargez la page pour réessayer."
+          },
+          "notEnabled": {
+            "title": "Onyx n'écrit pas d'événements d'audit",
+            "description": "Le flux d'audit nécessite une licence Enterprise."
+          },
+          "logFormat": {
+            "title": "Utiliser des journaux JSON",
+            "description": "Le format des journaux est {logFormat}. Définissez LOG_FORMAT=json pour que votre collecteur de journaux puisse analyser chaque enregistrement."
+          },
+          "noEvents": "Aucun événement pour l'instant",
+          "eventSummary": "{count, plural, one {# événement} other {# événements}} au cours des dernières 24 heures. Dernier événement {lastEvent}.",
+          "eventCount": "{count, plural, one {# événement} other {# événements}} au cours des dernières 24 heures.",
+          "classes": {
+            "authentication": "Authentification",
+            "account_change": "Modifications de compte",
+            "user_access_management": "Gestion des accès utilisateur",
+            "group_management": "Gestion des groupes",
+            "api_activity": "Activité de l'API",
+            "credential_access": "Accès aux identifiants"
+          }
+        },
+        "auditEvents": {
+          "title": "Événements d'audit",
+          "description": "Modifications de sécurité et d'administration. Ils sont activés par défaut."
+        },
+        "userActivity": {
+          "title": "Activité des utilisateurs",
+          "description": "Ce que chaque utilisateur a fait, pour enquêter sur un incident. Ils sont désactivés par défaut et peuvent produire de nombreux événements."
+        },
+        "categories": {
+          "authentication": {
+            "title": "Authentification",
+            "description": "Connexions, échecs de connexion, déconnexions et réinitialisations de mot de passe."
+          },
+          "user_and_group_management": {
+            "title": "Gestion des utilisateurs et des groupes",
+            "description": "Modifications des utilisateurs, des rôles et des groupes, et approbations de clients MCP."
+          },
+          "configuration": {
+            "title": "Modifications de configuration",
+            "description": "Modifications des paramètres, connecteurs, identifiants, agents, ensembles de documents, clés API et jetons d'accès."
+          },
+          "credential_access": {
+            "title": "Accès aux identifiants",
+            "description": "Déchiffrements d'identifiants enregistrés. Onyx peut omettre une répétition pour le même identifiant et le même utilisateur dans un délai de 10 minutes."
+          },
+          "data_export": {
+            "title": "Exportations de données",
+            "description": "Téléchargements de l'historique des requêtes, des rapports d'utilisation et des exports de journaux."
+          },
+          "chat": {
+            "title": "Messages de chat",
+            "description": "Chaque réponse du chat, avec l'agent, le modèle, les outils et les documents que l'utilisateur a vus."
+          },
+          "search": {
+            "title": "Recherches",
+            "description": "Chaque recherche depuis la page de recherche, l'API ou un client MCP, avec les documents trouvés."
+          },
+          "llm_gateway": {
+            "title": "Requêtes à la passerelle LLM",
+            "description": "Chaque appel via la passerelle LLM, avec le modèle et le nombre de jetons."
+          },
+          "file_download": {
+            "title": "Téléchargements de fichiers",
+            "description": "Chaque fichier de chat qu'un utilisateur télécharge."
+          }
+        },
+        "queryText": {
+          "title": "Inclure le texte de la requête",
+          "description": "Ajoute ce que l'utilisateur a saisi aux événements de chat et de recherche. Onyx l'ajoute uniquement lorsque l'historique des requêtes est normal."
+        }
       }
     },
     "serviceAccounts": {
@@ -12264,6 +12347,9 @@
         },
         "timedOut": {
           "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
+        },
+        "approvalExpired": {
+          "text": "L’exécution planifiée s’est arrêtée, car personne n’a répondu à temps à sa demande d’approbation."
         }
       },
       "callout": {
@@ -12601,6 +12687,12 @@
           },
           "waitingForAnswer": {
             "label": "En attente de votre réponse..."
+          },
+          "waitingForOwnerApproval": {
+            "label": "En attente de l'approbation du propriétaire..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "En attente de la réponse du propriétaire..."
           },
           "runningCommand": {
             "label": "Exécution de la commande..."
@@ -13645,6 +13737,10 @@
       },
       "viewAllButton": {
         "label": "Voir les {count} fichiers"
+      },
+      "unavailable": {
+        "title": "Ce fichier n'est pas disponible",
+        "description": "Il a été supprimé, ou vous n'y avez pas accès."
       }
     },
     "rightPanel": {
@@ -14707,9 +14803,6 @@
       },
       "unsupported": {
         "description": "Téléchargez le fichier pour consulter son contenu."
-      },
-      "retry": {
-        "label": "Réessayer"
       },
       "download": {
         "label": "Télécharger le fichier"

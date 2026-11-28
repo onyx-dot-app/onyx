@@ -100,7 +100,7 @@ func TestApprovalShortcutsDecide(t *testing.T) {
 		record   string
 	}{
 		{'y', models.ApproveOnce, "approved", "Approved: Create issue"},
-		{'a', models.ApproveSession, "approved_for_chat", "Approved for this session: Create issue"},
+		{'a', models.ApproveSession, "approved_for_chat", "Approved for this chat: Create issue"},
 		{'n', models.RejectApproval, "rejected", "Not approved: Create issue"},
 	}
 	for _, tt := range tests {
@@ -219,7 +219,7 @@ func TestApprovalKeepsDraftAndBlocksSend(t *testing.T) {
 func TestApprovalResolvedOutcomes(t *testing.T) {
 	for outcome, record := range map[string]string{
 		"approved":          "Approved",
-		"approved_for_chat": "Approved for this session",
+		"approved_for_chat": "Approved for this chat",
 		"rejected":          "Not approved",
 		"disabled":          "Disabled",
 		"cancelled":         "No longer waiting",
@@ -319,6 +319,66 @@ func TestStopLeavesTheOutcomeToTheServer(t *testing.T) {
 	}
 	if got := approvalEntry(t, m, "a1"); got != "● Not approved: Create issue" || len(m.approvals) != 0 {
 		t.Fatalf("record = %q, want the server's outcome", got)
+	}
+}
+
+func TestReloadAfterStopShowsTheSavedOutcomeOfTheCard(t *testing.T) {
+	saved := waitingSession(t)
+	// The Stop rejected the request.
+	saved.Packets[0] = append(saved.Packets[0][:2], savedPacket(t, map[string]any{"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "rejected"}))
+	client := &resumingClient{saved: saved}
+	m, ch := streamingModel(client)
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m.approvalsVersion = saved.ApprovalsVersion
+	m = receive(t, m, ch, approvalRequest("a1"))
+	m.streamCancel = func() {}
+	m, _ = press(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	// The status names a saved response that the stopped stream did not
+	// show, so the session reloads.
+	latest := 2
+	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
+	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{ApprovalsVersion: saved.ApprovalsVersion, LatestResponseID: &latest}})
+	m = runAll(t, updated.(Model), cmd)
+	if got := approvalEntry(t, m, "a1"); got != "● Not approved: Create issue" || len(m.approvals) != 0 {
+		t.Fatalf("record = %q, approvals = %+v, want the saved outcome", got, m.approvals)
+	}
+}
+
+func TestCommandRequestOffersApprovalForTheCommand(t *testing.T) {
+	client := &decidingClient{}
+	m, ch := streamingModel(client)
+	request := approvalRequest("a1")
+	no := false
+	request.CanApproveForChat = &no
+	request.CanApproveForCommand = true
+	request.AppName = "Linear"
+	m = receive(t, m, ch, request)
+	card := approvalEntry(t, m, "a1")
+	if !strings.Contains(card, "Approval requested: Create issue in Linear") || !strings.Contains(card, "Approve for this command (a)") || strings.Contains(card, "this chat") {
+		t.Fatalf("card:\n%s", card)
+	}
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'a', Text: "a"})
+	decide(t, m, cmd)
+	if len(client.decisions) != 1 || client.decisions[0] != models.ApproveCommand {
+		t.Fatalf("decisions = %v, want [approve_command]", client.decisions)
+	}
+}
+
+func TestRequestThatAsksEachTimeOffersNoWiderApproval(t *testing.T) {
+	client := &decidingClient{}
+	m, ch := streamingModel(client)
+	request := approvalRequest("a1")
+	no := false
+	request.CanApproveForChat = &no
+	m = receive(t, m, ch, request)
+	if card := approvalEntry(t, m, "a1"); strings.Contains(card, "(a)") || !strings.Contains(card, "y/n") {
+		t.Fatalf("card:\n%s", card)
+	}
+	m, _ = press(t, m, tea.KeyPressMsg{Code: 'a', Text: "a"})
+	if len(client.decisions) != 0 || strings.Contains(approvalEntry(t, m, "a1"), "Sending") {
+		t.Fatal("a sent a decision that the request does not offer")
 	}
 }
 
@@ -620,7 +680,7 @@ func TestSessionGrantThatDecidesTheOtherRequestsFollowsTheContinuation(t *testin
 		t.Fatalf("a decision that continued the response is not followed: %+v", client.requests)
 	}
 	m = receive(t, m, client.running, models.ToolApprovalResolvedEvent{ApprovalID: "a2", Outcome: "approved_for_chat"})
-	if got := approvalEntry(t, m, "a2"); got != "● Approved for this session: Create issue" {
+	if got := approvalEntry(t, m, "a2"); got != "● Approved for this chat: Create issue" {
 		t.Fatalf("a2 = %q, want the grant's outcome", got)
 	}
 }

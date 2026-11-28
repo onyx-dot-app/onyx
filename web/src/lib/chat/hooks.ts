@@ -24,7 +24,7 @@ import {
   type ToolConfigurationHandle,
 } from "@/lib/tools/hooks";
 
-import useSWR, { useSWRConfig } from "swr";
+import useSWR, { type SWRResponse, useSWRConfig } from "swr";
 import { useTranslations } from "next-intl";
 import { useShallow } from "zustand/react/shallow";
 import { toast } from "@opal/layouts";
@@ -44,7 +44,8 @@ import {
   readChatSessionStatus,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
-import { postQuestionAnswers } from "@/lib/chat/svc";
+import { postChatApprovalDecision, postQuestionAnswers } from "@/lib/chat/svc";
+import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 import { requestMentions } from "@/lib/chat/mentions";
 import type {
   ChatSessionQueue,
@@ -76,16 +77,20 @@ import {
 import {
   awaitsDecision,
   type AwaitingUser,
+  decidedStatus,
   readToolApprovals,
-  readToolQuestions,
   readWaitingQuestions,
   readWaitingToolRequests,
   type ToolRequestRecord,
   toolApprovalStatus,
-  toolQuestionStatus,
+  ToolRequestDeciderContext,
   useToolRequestUi,
   type WaitingToolRequest,
 } from "@/lib/chat/toolApprovals";
+import {
+  readToolQuestions,
+  toolQuestionStatus,
+} from "@/lib/chat/toolQuestions";
 import type {
   Packet,
   PublishedFile,
@@ -154,7 +159,7 @@ export interface ResponseToolRequests {
   /** Requests and questions that wait no more, as records in the reply's
    * timeline. */
   records: ToolRequestRecord[];
-  /** What the reply's own requests wait for from this user, if anything. */
+  /** What the reply's own requests wait for, if anything. */
   awaiting: AwaitingUser | null;
 }
 
@@ -166,6 +171,7 @@ export interface ResponseToolRequests {
 export function useToolRequests(rawPackets: Packet[]): ResponseToolRequests {
   const approvals = readToolApprovals(rawPackets).entries;
   const questions = readToolQuestions(rawPackets).entries;
+  const viewerDecides = useContext(ToolRequestDeciderContext);
   // Only this response's statuses, so other decisions do not re-render it.
   const localStatuses = useToolRequestUi(
     useShallow((state) =>
@@ -220,15 +226,17 @@ export function useToolRequests(rawPackets: Packet[]): ResponseToolRequests {
         });
       else if (status.kind === "pending") awaitingAnswer = true;
     });
-    return {
-      records,
-      awaiting: awaitingApproval
+    const awaiting: AwaitingUser | null = awaitingApproval
+      ? viewerDecides
         ? "approval"
-        : awaitingAnswer
+        : "ownerApproval"
+      : awaitingAnswer
+        ? viewerDecides
           ? "answer"
-          : null,
-    };
-  }, [approvals, questions, localStatuses, localAnswers]);
+          : "ownerAnswer"
+        : null;
+    return { records, awaiting };
+  }, [approvals, questions, localStatuses, localAnswers, viewerDecides]);
 }
 
 /**
@@ -371,6 +379,36 @@ export function isClosedRequestError(error: unknown): boolean {
 }
 
 /**
+ * Sends this user's decision on an approval request and follows the response
+ * that it continues. The decided status shows until the resolution packet
+ * confirms it; a request that no longer waits shows as closed.
+ */
+export function useToolApprovalDecision(
+  approvalId: string
+): (decision: ApprovalSubmitDecision) => Promise<void> {
+  const follow = useFollowUserInput();
+  return useCallback(
+    async (decision: ApprovalSubmitDecision) => {
+      const { recordStatus } = useToolRequestUi.getState();
+      const sessionId = useChatSessionStore.getState().currentSessionId;
+      let continuation: ChatStream | null;
+      try {
+        const response = await postChatApprovalDecision(approvalId, decision);
+        recordStatus(approvalId, decidedStatus(response));
+        continuation = response.continuation;
+      } catch (cause) {
+        if (!isClosedRequestError(cause)) throw cause;
+        recordStatus(approvalId, "closed");
+        if (sessionId !== null) await follow.refused(sessionId);
+        return;
+      }
+      if (sessionId !== null) await follow.continued(sessionId, continuation);
+    },
+    [approvalId, follow]
+  );
+}
+
+/**
  * The questions on the selected branch that wait for the user's answer, by
  * request ID, oldest first. A typed message answers them all: it goes to the
  * first, and the server answers every question of its response that waits.
@@ -497,16 +535,62 @@ export function useAnswerWithMessage(): (
 }
 
 /**
- * How often a chat's status reloads. Pending input and background work can
- * start a turn this client did not send; a decided agent request counts as
- * background work until its agent settles. Pass it in a new arrow on each
- * render: SWR reschedules its poll only when `refreshInterval` changes, so a
- * stable function reads only the data from before the first load.
+ * How often a chat's status reloads. It polls while a reply streams, which
+ * can start agents, and while a shown request waits: another tab or client
+ * can decide it and continue the response there. Pending input and
+ * background work can start a turn this client did not send; a decided agent
+ * request counts as background work until its agent settles.
  */
-function statusPollInterval(current: ChatSessionStatus | undefined): number {
-  return current?.has_startable_input || current?.has_active_subagents
+function statusPollInterval(
+  current: ChatSessionStatus | undefined,
+  streaming: boolean,
+  requestWaits: boolean
+): number {
+  return streaming ||
+    requestWaits ||
+    current?.has_startable_input ||
+    current?.has_active_subagents
     ? SERVER_WORK_POLL_MS
     : 0;
+}
+
+/**
+ * A chat's status, which every reader of it loads through this hook so that
+ * all poll by one rule, `statusPollInterval`. Pass a null `sessionId` to load
+ * nothing.
+ */
+export function useChatSessionStatus(
+  sessionId: string | null
+): SWRResponse<ChatSessionStatus, Error> {
+  // Primitives only: the message tree changes on every streamed frame.
+  const { streaming, requestWaits } = useChatSessionStore(
+    useShallow((state) => {
+      const session = sessionId ? state.sessions.get(sessionId) : undefined;
+      const streaming = session !== undefined && session.chatState !== "input";
+      return {
+        streaming,
+        requestWaits:
+          !streaming && session !== undefined
+            ? readWaitingToolRequests(session.messageTree).length > 0
+            : false,
+      };
+    })
+  );
+  const key = sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null;
+  // The current status, for the interval below. SWR restarts its poll timer
+  // each time `refreshInterval` changes, so the interval is a number that
+  // changes only when the rule's answer does, not a new function per render.
+  // It has the fetcher too: SWR sends a key's focus and mutate reloads to one
+  // of its subscribers only.
+  const { data: cached } = useSWR<ChatSessionStatus, Error>(
+    key,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+  return useSWR<ChatSessionStatus, Error>(key, errorHandlingFetcher, {
+    refreshInterval: statusPollInterval(cached, streaming, requestWaits),
+    onErrorRetry: skipRetryOnAuthError,
+  });
 }
 
 /**
@@ -542,10 +626,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
   // An incognito chat has no server queue, but its background agents' requests
   // still arrive through its status.
-  const statusKey =
-    (enabled || incognito) && sessionId
-      ? SWR_KEYS.chatSessionStatus(sessionId)
-      : null;
+  const statusSessionId = enabled || incognito ? sessionId : null;
 
   // Key-addressed, unlike the mutate useSWR returns, which follows the current key.
   const { mutate } = useSWRConfig();
@@ -554,14 +635,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError }
   );
-  const { data: status } = useSWR<ChatSessionStatus, Error>(
-    statusKey,
-    errorHandlingFetcher,
-    {
-      refreshInterval: (current) => statusPollInterval(current),
-      onErrorRetry: skipRetryOnAuthError,
-    }
-  );
+  const { data: status } = useChatSessionStatus(statusSessionId);
 
   // A reader owns a busy session; an idle one attaches to turns the server
   // started, whichever status read found them.
@@ -634,7 +708,9 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       action: (key: string) => Promise<T>
     ): Promise<T | null> {
       const key = pendingKey;
-      const status = statusKey;
+      const status = statusSessionId
+        ? SWR_KEYS.chatSessionStatus(statusSessionId)
+        : null;
       if (!key || !status || busy) return null;
       setBusyKey(key);
       try {
@@ -732,7 +808,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     needsResponseSelection,
     sessionId,
     pendingKey,
-    statusKey,
+    statusSessionId,
     mutate,
     t,
     showPendingRequest,
@@ -1016,30 +1092,14 @@ export const MAX_LISTED_SUBAGENTS = 128;
  * and `stopAgent`, which stops one agent and the agents below it. They load
  * once the chat's status does, again when it changes whether agents are
  * active or which response is newest, and poll while agents are active. The
- * status polls as the queue's does, also for chats without a queue, and while
- * a reply streams (`streaming`), which can start agents. `loaded` turns true
+ * status polls by `useChatSessionStatus`, also for chats without a queue.
+ * `loaded` turns true
  * once a list has been read from the server since the hook mounted.
  */
-export function useChatSubagents(
-  sessionId: string | null,
-  streaming: boolean
-): ChatSubagents {
+export function useChatSubagents(sessionId: string | null): ChatSubagents {
   const t = useTranslations("chat.activity.agents");
-  const { data: status, mutate: reloadStatus } = useSWR<
-    ChatSessionStatus,
-    Error
-  >(
-    sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null,
-    errorHandlingFetcher,
-    {
-      // A number while a reply streams: each streamed packet renders the
-      // caller again, and a new function would restart SWR's timer
-      refreshInterval: streaming
-        ? SERVER_WORK_POLL_MS
-        : (current) => statusPollInterval(current),
-      onErrorRetry: skipRetryOnAuthError,
-    }
-  );
+  const { data: status, mutate: reloadStatus } =
+    useChatSessionStatus(sessionId);
   const active = status?.has_active_subagents ?? false;
   const url = sessionId ? SWR_KEYS.chatSessionAgents(sessionId) : "";
   const {
@@ -1101,6 +1161,7 @@ export function useOpenArtifactFromUrl(
   loadedChatId: string | null,
   openFile: (file: PublishedFile, pinVersion: boolean) => void
 ): void {
+  const t = useTranslations("chat.messages");
   const searchParams = useSearchParams();
   const navigation = useNavigation();
   const artifactId = searchParams?.get(SEARCH_PARAM_NAMES.ARTIFACT_ID);
@@ -1122,17 +1183,16 @@ export function useOpenArtifactFromUrl(
   );
   const pinVersion = link?.version != null;
   useEffect(() => {
+    if (!artifactId || isValidating || !searchParams) return;
     // A cached response of an earlier visit can name an older version, or a
     // file that is gone, which SWR keeps when its reload fails
-    if (
-      !file ||
-      isValidating ||
-      error ||
-      file.chat_id !== loadedChatId ||
-      !searchParams
-    )
+    if (error) {
+      toast.error(t("memoizedLink.artifactError.message"));
+    } else if (!file || file.chat_id !== loadedChatId) {
       return;
-    openFile(file, pinVersion);
+    } else {
+      openFile(file, pinVersion);
+    }
     const params = new URLSearchParams(searchParams.toString());
     params.delete(SEARCH_PARAM_NAMES.ARTIFACT_ID);
     params.delete(SEARCH_PARAM_NAMES.ARTIFACT_VERSION);
@@ -1146,6 +1206,8 @@ export function useOpenArtifactFromUrl(
     openFile,
     searchParams,
     navigation,
+    artifactId,
+    t,
   ]);
 }
 
@@ -1348,7 +1410,7 @@ export function useSpawnedSubagents(
 ): SpawnedSubagents {
   const base = useContext(SubagentPathContext);
   const sessionId = useChatSessionStore((state) => state.currentSessionId);
-  const { agents } = useChatSubagents(sessionId, false);
+  const { agents } = useChatSubagents(sessionId);
   return {
     agents: names.map((name) =>
       name

@@ -115,17 +115,3 @@ export async function markScheduledRunsViewed(
   if (!res.ok) await readError(res, "Failed to mark runs viewed");
   return await res.json();
 }
-
-export async function markScheduledRunViewed(
-  taskId: string,
-  runId: string,
-  revision: number
-): Promise<ScheduledRunSummary> {
-  const res = await fetch(`${API_BASE}/${taskId}/runs/${runId}/viewed`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ revision }),
-  });
-  if (!res.ok) await readError(res, "Failed to mark run viewed");
-  return await res.json();
-}

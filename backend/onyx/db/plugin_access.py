@@ -256,7 +256,7 @@ def plugin_in_managed_scope(
             Plugin__UserGroup.plugin_id == plugin.id,
             Plugin__UserGroup.permission.is_not(None),
         )
-        .correlate_except(Plugin__UserGroup)
+        .correlate(plugin)
     )
     user_share_outside = (
         select(Plugin__User.plugin_id)
@@ -264,7 +264,7 @@ def plugin_in_managed_scope(
             Plugin__User.plugin_id == plugin.id,
             Plugin__User.user_id.not_in(managed_group_member_ids_subquery(manager)),
         )
-        .correlate_except(Plugin__User)
+        .correlate(plugin)
     )
     return and_(
         ~seen_by_organization(marketplace),

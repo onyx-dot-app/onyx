@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "Audit Logs and SIEM",
+          "description": "Onyx writes audit events as JSON lines to its logs. Your log shipper sends them to your SIEM. [Set up SIEM forwarding]({url})."
+        },
+        "status": {
+          "title": "Audit Stream Status",
+          "description": "The events Onyx wrote. Onyx cannot see your log shipper or your SIEM, so confirm that the events arrive there.",
+          "loadFailed": {
+            "title": "Could not load the audit stream status",
+            "description": "Reload the page to try again."
+          },
+          "notEnabled": {
+            "title": "Onyx does not write audit events",
+            "description": "The audit stream needs an Enterprise license."
+          },
+          "logFormat": {
+            "title": "Use JSON logs",
+            "description": "The log format is {logFormat}. Set LOG_FORMAT=json so that your log shipper can parse every log record."
+          },
+          "noEvents": "No events yet",
+          "eventSummary": "{count, plural, one {# event} other {# events}} in the last 24 hours. Last event {lastEvent}.",
+          "eventCount": "{count, plural, one {# event} other {# events}} in the last 24 hours.",
+          "classes": {
+            "authentication": "Authentication",
+            "account_change": "Account Changes",
+            "user_access_management": "User Access Management",
+            "group_management": "Group Management",
+            "api_activity": "API Activity",
+            "credential_access": "Credential Access"
+          }
+        },
+        "auditEvents": {
+          "title": "Audit Events",
+          "description": "Security and administration changes. These are on by default."
+        },
+        "userActivity": {
+          "title": "User Activity",
+          "description": "What each user did, for incident investigation. These are off by default and can add many events."
+        },
+        "categories": {
+          "authentication": {
+            "title": "Authentication",
+            "description": "Sign-ins, failed sign-ins, sign-outs, and password resets."
+          },
+          "user_and_group_management": {
+            "title": "User and Group Management",
+            "description": "User, role, and group changes, and MCP client approvals."
+          },
+          "configuration": {
+            "title": "Configuration Changes",
+            "description": "Changes to settings, connectors, credentials, agents, document sets, API keys, and access tokens."
+          },
+          "credential_access": {
+            "title": "Credential Access",
+            "description": "Decryptions of stored credentials. Onyx can leave out a repeat for the same credential and user within 10 minutes."
+          },
+          "data_export": {
+            "title": "Data Exports",
+            "description": "Downloads of query history, usage reports, and log exports."
+          },
+          "chat": {
+            "title": "Chat Messages",
+            "description": "Each chat answer, with the agent, the model, the tools, and the documents the user saw."
+          },
+          "search": {
+            "title": "Searches",
+            "description": "Each search from the search page, the API, or an MCP client, with the documents it found."
+          },
+          "llm_gateway": {
+            "title": "LLM Gateway Requests",
+            "description": "Each call through the LLM gateway, with the model and the token counts."
+          },
+          "file_download": {
+            "title": "File Downloads",
+            "description": "Each chat file that a user downloads."
+          }
+        },
+        "queryText": {
+          "title": "Include Query Text",
+          "description": "Add what the user typed to chat and search events. Onyx adds it only when query history is normal."
+        }
       }
     },
     "serviceAccounts": {
@@ -12264,6 +12347,9 @@
         },
         "timedOut": {
           "text": "The response stopped because it reached its time limit."
+        },
+        "approvalExpired": {
+          "text": "The scheduled run stopped because nobody answered its approval request in time."
         }
       },
       "callout": {
@@ -12601,6 +12687,12 @@
           },
           "waitingForAnswer": {
             "label": "Waiting for your answer..."
+          },
+          "waitingForOwnerApproval": {
+            "label": "Waiting for the owner's approval..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "Waiting for the owner's answer..."
           },
           "runningCommand": {
             "label": "Running command..."
@@ -13645,6 +13737,10 @@
       },
       "viewAllButton": {
         "label": "View all {count} files"
+      },
+      "unavailable": {
+        "title": "This file is not available",
+        "description": "It was deleted, or you do not have access to it."
       }
     },
     "rightPanel": {
@@ -14707,9 +14803,6 @@
       },
       "unsupported": {
         "description": "Download the file to view its contents."
-      },
-      "retry": {
-        "label": "Try again"
       },
       "download": {
         "label": "Download file"

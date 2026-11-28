@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "監査ログと SIEM",
+          "description": "Onyx は監査イベントを JSON 行としてログに書き込みます。ログシッパーがそれを SIEM に送ります。[SIEM への転送を設定する]({url})。"
+        },
+        "status": {
+          "title": "監査ストリームの状態",
+          "description": "Onyx が書き込んだイベントです。Onyx からはログシッパーや SIEM が見えないため、イベントが届いていることをそちらで確認してください。",
+          "loadFailed": {
+            "title": "監査ストリームの状態を読み込めませんでした",
+            "description": "ページを再読み込みしてもう一度お試しください。"
+          },
+          "notEnabled": {
+            "title": "Onyx は監査イベントを書き込んでいません",
+            "description": "監査ストリームには Enterprise ライセンスが必要です。"
+          },
+          "logFormat": {
+            "title": "JSON ログを使用する",
+            "description": "ログ形式は {logFormat} です。ログシッパーがすべてのログレコードを解析できるように LOG_FORMAT=json を設定してください。"
+          },
+          "noEvents": "まだイベントはありません",
+          "eventSummary": "過去 24 時間に {count, plural, one {# 件のイベント} other {# 件のイベント}}。最後のイベントは {lastEvent}。",
+          "eventCount": "過去 24 時間に {count, plural, one {# 件のイベント} other {# 件のイベント}}。",
+          "classes": {
+            "authentication": "認証",
+            "account_change": "アカウントの変更",
+            "user_access_management": "ユーザーアクセス管理",
+            "group_management": "グループ管理",
+            "api_activity": "API アクティビティ",
+            "credential_access": "認証情報へのアクセス"
+          }
+        },
+        "auditEvents": {
+          "title": "監査イベント",
+          "description": "セキュリティと管理の変更です。既定でオンです。"
+        },
+        "userActivity": {
+          "title": "ユーザーアクティビティ",
+          "description": "インシデント調査のための各ユーザーの操作です。既定でオフで、多くのイベントが発生することがあります。"
+        },
+        "categories": {
+          "authentication": {
+            "title": "認証",
+            "description": "サインイン、失敗したサインイン、サインアウト、パスワードのリセット。"
+          },
+          "user_and_group_management": {
+            "title": "ユーザーとグループの管理",
+            "description": "ユーザー、ロール、グループの変更と、MCP クライアントの承認。"
+          },
+          "configuration": {
+            "title": "設定の変更",
+            "description": "設定、コネクタ、認証情報、エージェント、ドキュメントセット、API キー、アクセストークンの変更。"
+          },
+          "credential_access": {
+            "title": "認証情報へのアクセス",
+            "description": "保存された認証情報の復号。同じ認証情報とユーザーについて 10 分以内の繰り返しは記録されない場合があります。"
+          },
+          "data_export": {
+            "title": "データのエクスポート",
+            "description": "クエリ履歴、使用状況レポート、ログエクスポートのダウンロード。"
+          },
+          "chat": {
+            "title": "チャットメッセージ",
+            "description": "各チャット回答と、そのエージェント、モデル、ツール、ユーザーが見たドキュメント。"
+          },
+          "search": {
+            "title": "検索",
+            "description": "検索ページ、API、MCP クライアントからの各検索と、見つかったドキュメント。"
+          },
+          "llm_gateway": {
+            "title": "LLM ゲートウェイのリクエスト",
+            "description": "LLM ゲートウェイを通る各呼び出しと、そのモデルとトークン数。"
+          },
+          "file_download": {
+            "title": "ファイルのダウンロード",
+            "description": "ユーザーがダウンロードした各チャットファイル。"
+          }
+        },
+        "queryText": {
+          "title": "クエリテキストを含める",
+          "description": "ユーザーが入力した内容をチャットと検索のイベントに追加します。クエリ履歴が通常の場合にのみ追加されます。"
+        }
       }
     },
     "serviceAccounts": {
@@ -12264,6 +12347,9 @@
         },
         "timedOut": {
           "text": "応答は制限時間に達したため停止しました。"
+        },
+        "approvalExpired": {
+          "text": "承認リクエストに期限内に応答がなかったため、スケジュール実行は停止しました。"
         }
       },
       "callout": {
@@ -12601,6 +12687,12 @@
           },
           "waitingForAnswer": {
             "label": "回答を待っています..."
+          },
+          "waitingForOwnerApproval": {
+            "label": "オーナーの承認を待っています..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "オーナーの回答を待っています..."
           },
           "runningCommand": {
             "label": "コマンドを実行中..."
@@ -13645,6 +13737,10 @@
       },
       "viewAllButton": {
         "label": "{count}件のファイルをすべて表示"
+      },
+      "unavailable": {
+        "title": "このファイルは利用できません",
+        "description": "削除されたか、アクセス権がありません。"
       }
     },
     "rightPanel": {
@@ -14707,9 +14803,6 @@
       },
       "unsupported": {
         "description": "ファイルをダウンロードして内容を確認してください。"
-      },
-      "retry": {
-        "label": "再試行"
       },
       "download": {
         "label": "ファイルをダウンロード"

@@ -38,6 +38,7 @@ import { marketplacesHref, pluginHref } from "@/lib/customize/paths";
 import type { SkillStatusFilter } from "@/lib/customize/skills";
 import {
   memberPluginEntries,
+  panelShowsSkill,
   pluginSwitch,
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
@@ -229,8 +230,7 @@ export default function CustomizePluginsPage() {
   const userEmail = user?.email ?? null;
   const entries = memberPluginEntries(
     (skills.data?.customs ?? []).filter(
-      (skill) =>
-        skill.kind === "plugin" && (panel === "admin" || skill.member_visible)
+      (skill) => skill.kind === "plugin" && panelShowsSkill(skill, panel)
     ),
     userEmail,
     locale
