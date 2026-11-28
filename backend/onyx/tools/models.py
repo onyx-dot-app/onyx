@@ -40,6 +40,10 @@ class ToolArguments[R](BaseModel):
     def request(self) -> R: ...
 
 
+# The response type of a generic card's call that failed without details.
+CUSTOM_TOOL_ERROR_RESPONSE_TYPE = "error"
+
+
 class CustomToolErrorInfo(BaseModel):
     is_unreachable: bool = False
     is_auth_error: bool = False
