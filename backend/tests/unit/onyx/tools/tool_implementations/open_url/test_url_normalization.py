@@ -86,6 +86,27 @@ def test_self_hosted_jira_candidates_include_service_management_id(url: str) -> 
 
 
 @pytest.mark.parametrize(
+    "url,browse",
+    [
+        (
+            "https://example.atlassian.net/servicedesk/customer/portal/1/HELP-1",
+            "https://example.atlassian.net/browse/HELP-1",
+        ),
+        (
+            "https://jira.corp.example/servicedesk/customer/portal/2/HELP-7?x=1#y",
+            "https://jira.corp.example/browse/HELP-7",
+        ),
+        (
+            "https://corp.example/jira/servicedesk/customer/portal/2/HELP-7",
+            "https://corp.example/jira/browse/HELP-7",
+        ),
+    ],
+)
+def test_portal_url_candidates_use_browse_url(url: str, browse: str) -> None:
+    assert normalize_url_candidates(url) == [browse, JSM_DOCUMENT_ID_PREFIX + browse]
+
+
+@pytest.mark.parametrize(
     "url",
     ["https://x.atlassian.net/wiki/spaces/A/pages/1", "https://example.com/browse/A"],
 )
@@ -280,6 +301,10 @@ def test_sharepoint_normalization(url: str, expected: str) -> None:
             DocumentSource.CONFLUENCE,
         ),
         ("https://example.atlassian.net/jira/browse/PROJ-123", DocumentSource.JIRA),
+        (
+            "https://example.atlassian.net/servicedesk/customer/portal/1/HELP-1",
+            DocumentSource.JIRA,
+        ),
         ("https://github.com/owner/repo/blob/main/file.py", DocumentSource.GITHUB),
         ("https://gitlab.com/owner/repo", DocumentSource.GITLAB),
         ("https://example.sharepoint.com/sites/Site", DocumentSource.SHAREPOINT),

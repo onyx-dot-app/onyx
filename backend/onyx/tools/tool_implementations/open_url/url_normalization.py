@@ -24,6 +24,24 @@ logger = setup_logger()
 
 # Self-hosted (Data Center) Jira has no fixed host, so match the issue path.
 _JIRA_ISSUE_PATH = re.compile(r"/browse/[a-z][a-z0-9_]*-\d+", re.IGNORECASE)
+# Jira Service Management customer portal request link. The prefix keeps any
+# context path (for example /jira).
+_JSM_PORTAL_PATH = re.compile(
+    r"^(?P<prefix>.*?)/servicedesk/customer/portal/\d+/(?P<key>[a-z][a-z0-9_]*-\d+)",
+    re.IGNORECASE,
+)
+
+
+def _portal_to_browse_url(url: str) -> str | None:
+    """Rewrite a JSM portal request link to the issue's /browse/ URL."""
+    parsed = urlparse(url)
+    match = _JSM_PORTAL_PATH.search(parsed.path)
+    if not parsed.netloc or not match:
+        return None
+    scheme = parsed.scheme or "https"
+    return (
+        f"{scheme}://{parsed.netloc}{match.group('prefix')}/browse/{match.group('key')}"
+    )
 
 
 def _default_url_normalizer(url: str) -> str | None:
@@ -94,6 +112,7 @@ def normalize_url_candidates(
     candidate exists in the index. Falls back to the default normalizer's single value
     when a connector doesn't provide candidates.
     """
+    url = _portal_to_browse_url(url) or url
     if source_type is None:
         source_type = _detect_source_type(url)
     return _with_service_management_candidate(
@@ -141,6 +160,8 @@ def _detect_source_type(url: str) -> DocumentSource | None:
         return DocumentSource.GOOGLE_DRIVE
     if "notion.so" in netloc or "notion.site" in netloc or "app.notion.com" in netloc:
         return DocumentSource.NOTION
+    if _JSM_PORTAL_PATH.search(parsed.path):
+        return DocumentSource.JIRA
     if "atlassian.net" in netloc:
         # Check path for Jira indicators (more specific than netloc)
         if "/jira/" in path or "/browse/" in path or "jira" in netloc:
