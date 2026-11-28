@@ -73,10 +73,14 @@ def _form_channel_config(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
-    if (
-        slack_channel_config_creation_request.is_ephemeral
-        and slack_channel_config_creation_request.respond_member_group_list
-    ):
+    # Blank entries are dropped, so a blank-only allowlist means "no allowlist".
+    cleaned_members = [
+        m.strip()
+        for m in respond_member_group_list or []
+        if isinstance(m, str) and m.strip()
+    ]
+
+    if slack_channel_config_creation_request.is_ephemeral and cleaned_members:
         raise ValueError(
             "Cannot set OnyxBot to respond to users in a private (ephemeral) message "
             "and also respond to a selected list of users."
@@ -87,8 +91,8 @@ def _form_channel_config(
     }
     if respond_tag_only is not None:
         channel_config["respond_tag_only"] = respond_tag_only
-    if respond_member_group_list:
-        channel_config["respond_member_group_list"] = respond_member_group_list
+    if cleaned_members:
+        channel_config["respond_member_group_list"] = cleaned_members
     if answer_filters:
         channel_config["answer_filters"] = answer_filters
     if follow_up_tags is not None:
