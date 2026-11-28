@@ -10,6 +10,7 @@ customer schema and export guide is
 the ``AuditAction`` taxonomy changes. ``AuditAction`` values are append-only.
 
 Callers use ``onyx.utils.audit``, which resolves here when EE is loaded.
+Events are written only for tenants on the Enterprise tier.
 
 Invariants (from the ``credential_audit`` seed): never raise into the caller
 (emission sits on hot paths), never log a secret, always tenant-tag, and dedup
@@ -19,9 +20,12 @@ hot event classes via Redis (degrade to always-emit if Redis is down).
 import json
 import logging
 import sys
+import threading
 import time
 from enum import Enum
 from typing import Any
+
+from cachetools import TTLCache
 
 from onyx.utils.audit import (
     DEFAULT_AUDIT_DEDUP_TTL_SECONDS,
@@ -150,6 +154,44 @@ def _safe_get_client_ip() -> str | None:
         return None
 
 
+# Emission is checked on hot paths, and ``get_tier`` reads the cache backend on
+# every call, so each process keeps the answer per tenant for a short time.
+_TIER_CACHE_TTL_SECONDS = 60.0
+_tier_cache: TTLCache[str, bool] = TTLCache(
+    maxsize=10_000, ttl=_TIER_CACHE_TTL_SECONDS, timer=time.monotonic
+)
+_tier_cache_lock = threading.Lock()
+
+
+def audit_enabled_for_tenant(tenant_id: str | None) -> bool:
+    """``True`` when the tenant's license tier includes the audit stream
+    (Enterprise). An exception from the tier lookup emits (fails open), and
+    that answer is cached too, so a process that cannot resolve the tier warns
+    once per window, not once per event. ``get_tier`` handles its own cache
+    errors with a fallback tier (Business on multi-tenant), which this uses
+    as given."""
+    key = tenant_id or ""
+    with _tier_cache_lock:
+        cached = _tier_cache.get(key)
+    if cached is not None:
+        return cached
+    try:
+        from ee.onyx.utils.tier import get_tier
+        from onyx.server.settings.models import Tier
+        from onyx.server.settings.tier_order import tier_at_least
+
+        enabled = tier_at_least(get_tier(tenant_id), Tier.ENTERPRISE)
+    except Exception:
+        _internal_logger.warning(
+            "Audit tier lookup failed; emitting events for this tenant",
+            exc_info=True,
+        )
+        enabled = True
+    with _tier_cache_lock:
+        _tier_cache[key] = enabled
+    return enabled
+
+
 def should_emit(dedup_key: str, ttl_seconds: int, tenant_id: str | None) -> bool:
     """Set-if-absent dedup with a TTL. ``True`` if the window wasn't already
     claimed; degrades to always-emit (``True``) if the cache is unavailable."""
@@ -182,6 +224,10 @@ def emit_audit_event(
     """
     try:
         tenant_id = _safe_get_tenant_id()
+
+        # Check the tier before the dedup, so a dropped event claims no window.
+        if not audit_enabled_for_tenant(tenant_id):
+            return
 
         if dedup_key is not None and not should_emit(
             dedup_key, dedup_ttl_seconds, tenant_id

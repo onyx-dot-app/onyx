@@ -16,7 +16,7 @@ at INFO. To consume the audit trail, filter logs on that logger name and parse
 the JSON payload.
 
 Callers use ``onyx.utils.credential_audit``, which resolves here when EE is
-loaded.
+loaded. Events are written only for tenants on the Enterprise tier.
 """
 
 import json
@@ -24,9 +24,9 @@ import logging
 import time
 from typing import Any
 
-# Imported for its side effect: the ``onyx.audit`` stdout handler that this
+# Importing it also sets up the ``onyx.audit`` stdout handler that this
 # module's logger reaches.
-import ee.onyx.utils.audit  # noqa: F401
+from ee.onyx.utils.audit import audit_enabled_for_tenant
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.constants import CacheBackendType
 
@@ -132,6 +132,8 @@ def emit_credential_access(
     """
     try:
         tenant_id = _safe_get_tenant_id()
+        if not audit_enabled_for_tenant(tenant_id):
+            return
         request_id = _safe_get_request_id()
         endpoint = _safe_get_endpoint()
         client_ip = _safe_get_client_ip()

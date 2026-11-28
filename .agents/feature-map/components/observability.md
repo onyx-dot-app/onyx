@@ -157,7 +157,9 @@ counters of the use of that capacity carry `tenant_id`.
 
 **Audit.** Call sites use `backend/onyx/utils/audit.py:emit_audit_event`, which
 does nothing unless EE is loaded. The EE `backend/ee/onyx/utils/audit.py:emit_audit_event`
-writes one JSON line to the child logger `onyx.audit.<ocsf_class>`. The EE module
+writes one JSON line to the child logger `onyx.audit.<ocsf_class>`, but only for a tenant on
+the Enterprise tier (`backend/ee/onyx/utils/audit.py:audit_enabled_for_tenant`, cached per
+process for 60 s, fails open). The credential-access line uses the same gate. The EE module
 owns its stdout handler, set at import, because root-logger propagation drops
 the events under uvicorn.
 High-volume actions pass a `dedup_key`, which a Redis `SET NX` checks.
