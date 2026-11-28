@@ -295,6 +295,7 @@ def filter_model_configurations(
     use_stored_display_name: bool = False,
     custom_config: dict[str, str] | None = None,
     deployment_name: str | None = None,
+    include_image_generation: bool = False,
 ) -> list:
     """Filter out dated duplicate models from configurations.
 
@@ -308,6 +309,8 @@ def filter_model_configurations(
         deployment_name: The provider-level deployment alias (e.g. Azure AI
             Foundry), which is the string actually sent to LiteLLM when a
             model's own name doesn't carry its identity.
+        include_image_generation: Keep image-only models (the admin page);
+            otherwise they stay out of chat-side lists.
 
     Returns:
         List of ModelConfigurationView objects with duplicate models removed
@@ -320,7 +323,8 @@ def filter_model_configurations(
     for model_configuration in model_configurations:
         flows = model_configuration.llm_model_flow_types
         if (
-            LLMModelFlowType.IMAGE_GENERATION in flows
+            not include_image_generation
+            and LLMModelFlowType.IMAGE_GENERATION in flows
             and LLMModelFlowType.CHAT not in flows
         ):
             continue

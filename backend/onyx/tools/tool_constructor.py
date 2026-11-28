@@ -10,7 +10,10 @@ from onyx.configs.chat_configs import DISABLE_POSTGRES_QUERY_TOOL
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.image_generation import get_default_image_generation_config
+from onyx.db.image_generation import (
+    can_user_generate_images,
+    get_default_image_generation_config,
+)
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
@@ -295,6 +298,17 @@ def _construct_tools_impl(
 
             # Handle Image Generation Tool
             elif tool_cls.__name__ == ImageGenerationTool.__name__:
+                # The default image model's provider limits its users and
+                # agents, as a chat model's does.
+                if not can_user_generate_images(
+                    db_session, user, configuration.persona_id
+                ):
+                    logger.debug(
+                        "Skipping tool %s: the user cannot use the default "
+                        "image model's provider",
+                        tool_cls.__name__,
+                    )
+                    continue
                 img_generation_llm_config = _get_image_generation_config(
                     llm, db_session
                 )

@@ -244,9 +244,11 @@ build their own clients.
     provider. `db/llm.py:upsert_decision_provider` refuses to drop the selected model. Clear the
     selection first.
 11. `image-gen-rows-hidden-from-list` **Image-generation configs own hidden
-    provider rows.** Each config has its own `LLMProvider` named
-    `Image Gen - <image_provider_id>`. The provider list hides these rows unless
-    the caller passes `include_image_gen=true`. A client that syncs providers,
+    provider rows.** Each config made with its own credentials has its own
+    `LLMProvider` named `Image Gen - <image_provider_id>`. The provider list
+    hides these rows, and every provider's image-only models, unless the caller
+    passes `include_image_gen=true` (also on `GET /provider/{id}`); image models
+    then carry `supports_image_generation`. A client that syncs providers,
     such as the Terraform provider, must pass it, or it reads those rows as
     deleted. [[image-generation]] explains why its writes do not use the
     provider upsert.

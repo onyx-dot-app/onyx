@@ -12,7 +12,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from onyx.auth.permissions import require_permission
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
+from onyx.db.image_generation import can_user_generate_images
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -218,7 +220,7 @@ def _keepalive_stream(run: _GenerationRun) -> Iterator[bytes]:
 @router.post("/generate", responses={200: {"model": ImageGenerationResponse}})
 def generate_image(
     request: ImageGenerationRequest,
-    _user: User = Depends(require_permission(Permission.GENERATE_IMAGE)),
+    user: User = Depends(require_permission(Permission.GENERATE_IMAGE)),
 ) -> StreamingResponse:
     if not request.prompt.strip():
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "prompt must not be empty")
@@ -240,6 +242,13 @@ def generate_image(
         ensure_image_generation_configured()
     except ImageGenerationNotConfiguredError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    # Outside an agent, so a provider limited to agents never serves it.
+    with get_session_with_current_tenant() as db_session:
+        if not can_user_generate_images(db_session, user, persona_id=None):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "You do not have access to the image generation model.",
+            )
 
     run = _GenerationRun(request, reference_images)
     run.start()
