@@ -5,8 +5,14 @@ import {
   WEB_MESSAGE,
   CHROME_SPECIFIC_STORAGE_KEYS,
   SIDE_PANEL_PATH,
+  BROWSER_MESSAGES,
+  SIDE_PANEL_PORT,
 } from "../utils/constants.js";
+import { getInstallationId } from "../utils/storage.js";
 (function () {
+  // Opening the panel connects the chat browser socket now, not at the next retry.
+  chrome.runtime.sendMessage({ action: BROWSER_MESSAGES.WAKE }).catch(() => {});
+
   const iframe = document.getElementById("onyx-panel-iframe");
   const loadingScreen = document.getElementById("loading-screen");
 
@@ -107,6 +113,7 @@ import {
           getIframeOrigin()
         );
       }
+      void sendActiveTab().catch(() => {});
     } else if (event.data.type === CHROME_MESSAGE.AUTH_REQUIRED) {
       authRequired = true;
     } else if (event.data.type === CHROME_MESSAGE.TAB_READING_ENABLED) {
@@ -153,6 +160,45 @@ import {
         );
       }
     }
+  });
+
+  // Tell the app which window and tab the chat works on.
+  let panelWindowId = null;
+  async function sendBrowserContext(tabId) {
+    if (panelWindowId === null || tabId === undefined || !iframe.src) return;
+    iframe.contentWindow?.postMessage(
+      {
+        type: CHROME_MESSAGE.BROWSER_CONTEXT,
+        installation_id: await getInstallationId(),
+        window_id: panelWindowId,
+        tab_id: tabId,
+      },
+      getIframeOrigin()
+    );
+  }
+
+  async function sendActiveTab() {
+    const [tab] = await chrome.tabs.query({ active: true, windowId: panelWindowId });
+    await sendBrowserContext(tab?.id);
+  }
+
+  chrome.tabs.onActivated.addListener((info) => {
+    if (info.windowId === panelWindowId) void sendBrowserContext(info.tabId).catch(() => {});
+  });
+  iframe.addEventListener("load", () => {
+    void sendActiveTab().catch(() => {});
+  });
+
+  // An open port tells the service worker that this panel lives.
+  function connectPort() {
+    const port = chrome.runtime.connect({ name: SIDE_PANEL_PORT });
+    port.postMessage({ window_id: panelWindowId });
+    port.onDisconnect.addListener(connectPort);
+  }
+  chrome.windows.getCurrent().then((win) => {
+    panelWindowId = win.id;
+    connectPort();
+    void sendActiveTab().catch(() => {});
   });
 
   window.addEventListener("message", handleMessage);

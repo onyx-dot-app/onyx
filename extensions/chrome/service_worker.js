@@ -1,7 +1,9 @@
 import {
   CHROME_SPECIFIC_STORAGE_KEYS,
   ACTIONS,
+  BROWSER_MESSAGES,
   SIDE_PANEL_PATH,
+  SIDE_PANEL_PORT,
 } from "./src/utils/constants.js";
 import {
   getOnyxDomain,
@@ -9,6 +11,8 @@ import {
   setUseOnyxAsDefaultNewTab,
   isNewTabOverrideChange,
 } from "./src/utils/storage.js";
+import * as browserRelay from "./src/browser/relay.js";
+import { handleEvent as handleDebuggerEvent } from "./src/browser/driver.js";
 
 // Track side panel state per window
 const sidePanelOpenState = new Map();
@@ -174,6 +178,19 @@ async function sendActiveTabUrlToPanel() {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (Object.values(BROWSER_MESSAGES).includes(request.action)) {
+    // A web page may only wake the socket, and only an Onyx page. The
+    // extension's own pages (the popup) may send all of them.
+    if (!(sender.url ?? "").startsWith(chrome.runtime.getURL(""))) {
+      if (request.action !== BROWSER_MESSAGES.WAKE) return false;
+      getOnyxDomain().then((domain) => {
+        if (new URL(sender.url ?? "about:blank").origin === new URL(domain).origin)
+          browserRelay.wake();
+      });
+      return false;
+    }
+    return browserRelay.handleRuntimeMessage(request, sendResponse);
+  }
   if (request.action === ACTIONS.GET_CURRENT_ONYX_DOMAIN) {
     getOnyxDomain().then((domain) => {
       sendResponse({ [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: domain });
@@ -316,3 +333,46 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 setupSidePanel();
+
+// Chat browser control: one socket to Onyx, kept up by pings and an alarm.
+chrome.debugger.onEvent.addListener(handleDebuggerEvent);
+chrome.debugger.onDetach.addListener((source, reason) => {
+  void browserRelay.onDebuggerDetach(source, reason);
+});
+chrome.tabs.onRemoved.addListener((tabId) => {
+  void browserRelay.onTabRemoved(tabId);
+});
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  void browserRelay.onTabUpdated(tabId, changeInfo);
+});
+// A side panel holds a port with its window ID. When its last port closes,
+// the panel is gone and its chat loses access.
+const sidePanelPorts = new Map();
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== SIDE_PANEL_PORT) return;
+  port.onMessage.addListener((message) => {
+    if (typeof message?.window_id === "number") sidePanelPorts.set(port, message.window_id);
+  });
+  port.onDisconnect.addListener(() => {
+    const windowId = sidePanelPorts.get(port);
+    sidePanelPorts.delete(port);
+    if (windowId !== undefined && ![...sidePanelPorts.values()].includes(windowId))
+      void browserRelay.onSidePanelClosed(windowId);
+  });
+});
+chrome.alarms.create(browserRelay.CONNECT_ALARM, { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== browserRelay.CONNECT_ALARM) return;
+  void browserRelay.checkExpiry();
+  void browserRelay.connect();
+});
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (
+    (namespace === "local" || namespace === "managed") &&
+    (CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN in changes ||
+      CHROME_SPECIFIC_STORAGE_KEYS.BROWSER_CONTROL_DISABLED in changes)
+  ) {
+    void browserRelay.endGrant(true).then(() => browserRelay.reconnect());
+  }
+});
+void browserRelay.connect();

@@ -28,6 +28,7 @@ export async function getManagedSettings() {
   return getManaged([
     CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN,
     CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB,
+    CHROME_SPECIFIC_STORAGE_KEYS.BROWSER_CONTROL_DISABLED,
   ]);
 }
 
@@ -89,4 +90,18 @@ export function isNewTabOverrideChange(changes, namespace) {
     (namespace === "local" || namespace === "managed") &&
     CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB in changes
   );
+}
+
+const INSTALLATION_KEY = "onyxBrowserInstallationId";
+
+/** This Chrome's ID for Onyx. The lock keeps the worker and the side panel
+ * from each making one. */
+export function getInstallationId() {
+  return navigator.locks.request(INSTALLATION_KEY, async () => {
+    const stored = await chrome.storage.local.get(INSTALLATION_KEY);
+    if (stored[INSTALLATION_KEY]) return stored[INSTALLATION_KEY];
+    const id = crypto.randomUUID();
+    await chrome.storage.local.set({ [INSTALLATION_KEY]: id });
+    return id;
+  });
 }

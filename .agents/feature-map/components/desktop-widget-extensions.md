@@ -33,6 +33,13 @@ deployments only.
   domain and the new-tab default by Chrome policy. SSO sign-in inside the panel
   opens the IdP in a new tab, and the panel picks up the session when the user
   returns.
+- **A chat can use the user's Chrome.** Onyx asks the user for each site in
+  the chat (tool approval card); the extension has no consent window. The
+  server binds a chat to the extension, and the chat's browser tools then act
+  in Chrome as the user, on the allowed sites only. The extension streams a
+  live preview of the current tab. The user stops it from the chat, the
+  extension popup, or Chrome's debugging bar. A side panel chat ends when the
+  panel closes.
 
 On failure: the widget shows the error text in the chat when the send fails,
 for example on a stream line that is not valid JSON or a missing credential.
@@ -217,6 +224,21 @@ reading is on, the service worker sends the URL of the active tab to the
 panel, which passes it to the iframe. `extensions/chrome/src/utils/storage.js`
 reads `chrome.storage.managed` (policy) before `chrome.storage.local`.
 
+**Chat browser control.** `extensions/chrome/src/browser/relay.js` keeps one
+websocket to `/api/chat/browser/extension/ws` (a single-use token from a
+cookie POST; pings every
+`extensions/chrome/src/browser/relay.js:PING_MS`; an alarm reconnects). It answers the chat
+browser methods with `extensions/chrome/src/browser/driver.js`, which drives the chat's tabs over
+`chrome.debugger` (CDP): an accessibility-tree snapshot with refs, trusted
+input, dialogs, and an origin check on every call. A `bind` message from
+the server makes the grant (chat, window, tabs); each `command` carries the
+allowed `origins`, which the driver enforces. The debugger attaches to a tab
+on first use. The grant lives in `chrome.storage.session`. The side panel
+(`extensions/chrome/src/pages/panel.js`) sends its window and active tab to the app
+(`BROWSER_CONTEXT`) and holds a port (`onyx-side-panel`); when the port
+closes, the service worker ends that window's grant. The backend half is `backend/onyx/browser_extension/relay.py` and
+`backend/onyx/server/query_and_chat/chrome_browser.py`.
+
 **Framed sign-in.** In an iframe,
 `web/src/app/auth/login/ProviderSignInButton.tsx:openIdpTab` opens the IdP in a
 new tab, because IdPs refuse to load in a frame.
@@ -321,7 +343,10 @@ panel picks up the new session when the user returns.
     requests `<all_urls>` host access and injects the selection icon on every
     page. The host grant may also be what lets the panel iframe send its
     auth cookie (Known issues).
-14. `desktop-window-commands-async` **A desktop command that can open a window
+14. `chrome-input-waits-on-dialogs` **CDP input blocks while a page dialog
+    is open.** `extensions/chrome/src/browser/driver.js:input` also ends when a dialog opens; otherwise a
+    click that opens `confirm()` holds the command queue until its deadline.
+15. `desktop-window-commands-async` **A desktop command that can open a window
     must be `async`.** Tauri runs a sync command on the main thread inside the
     WebView2 message handler. A window built there deadlocks on Windows: the
     new window stays blank and the app stops. macOS and Linux do not show it.

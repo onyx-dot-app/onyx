@@ -203,6 +203,34 @@
         cursor: not-allowed;
       }
 
+      .browser-state {
+        font-size: 12px;
+        color: var(--text-light-03);
+      }
+      .browser-grant {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px 12px;
+        font-size: 12px;
+        color: var(--text-light-03);
+      }
+      .browser-grant[hidden] {
+        display: none;
+      }
+      .browser-grant-text {
+        flex: 1;
+        min-width: 0;
+      }
+      .stop-button {
+        border: 1px solid var(--white-20);
+        background: rgba(255, 80, 80, 0.25);
+        color: var(--text-light-05);
+        border-radius: 6px;
+        padding: 4px 12px;
+        cursor: pointer;
+      }
+
       .managed-notice {
         font-size: 12px;
         color: var(--text-light-03);
@@ -232,6 +260,17 @@
         </div>
         <div id="newTabManagedNotice" class="managed-notice">
           Managed by your organization.
+        </div>
+      </div>
+
+      <div class="settings-group" id="browserControl">
+        <div class="setting-row">
+          <span class="setting-label">Chat browser control</span>
+          <span class="browser-state" id="browserState">Offline</span>
+        </div>
+        <div class="browser-grant" id="browserGrant" hidden>
+          <div class="browser-grant-text" id="browserGrantText"></div>
+          <button class="stop-button" id="browserStop">Stop</button>
         </div>
       </div>
 
