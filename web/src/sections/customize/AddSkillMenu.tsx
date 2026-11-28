@@ -8,7 +8,7 @@ import { SvgGitHub } from "@opal/logos";
 import { useNavigation } from "@opal/navigation";
 import { newSkillHref } from "@/lib/customize/paths";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
-import { useRefreshSkillLists } from "@/lib/skills/hooks";
+import { useRefreshPluginLists } from "@/lib/skills/hooks";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 
 type AddSkillMenuProps =
@@ -22,7 +22,7 @@ type AddSkillMenuProps =
 export default function AddSkillMenu(props: AddSkillMenuProps) {
   const t = useTranslations("customize.skills.add");
   const navigation = useNavigation();
-  const revalidate = useRefreshSkillLists();
+  const revalidate = useRefreshPluginLists();
   const [uploadOpen, setUploadOpen] = useState(false);
   // A plugin is uploaded or synced, not written here.
   const items: DropdownMenuItem[] =

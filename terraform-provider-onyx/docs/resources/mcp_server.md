@@ -3,12 +3,15 @@
 page_title: "onyx_mcp_server Resource - terraform-provider-onyx"
 subcategory: ""
 description: |-
+  Deprecated: use onyx_integration with server_url.
   An MCP server Onyx connects to, so its tools can be attached to agents.
   Only servers that need no interactive sign-in can be managed here: NONE and API_TOKEN. An OAuth server is refused while the plan is built, because the flow needs a browser round-trip that Terraform cannot perform.
   Which tools the server exposes is not part of this resource. Onyx learns them by calling the server, and both the tool selection and the Craft approval policies are rejected for a tool it has never seen.
 ---
 
 # onyx_mcp_server (Resource)
+
+**Deprecated:** use `onyx_integration` with `server_url`.
 
 An MCP server Onyx connects to, so its tools can be attached to agents.
 

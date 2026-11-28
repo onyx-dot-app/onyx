@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 
 // About three lines at a phone's card width.
-const STRING_TRUNCATE_AT = 200;
+const STRING_TRUNCATE_AT = 300;
 const JSON_TRUNCATE_AT_LINES = 8;
 // web 18rem
 const MAX_HEIGHT = 288;

@@ -1,4 +1,11 @@
-import { render, screen, setupUser, within } from "@tests/setup/test-utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
 import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
 import CustomizeSkillsPage from "@/sections/customize/CustomizeSkillsPage";
 import messages from "@/i18n/messages/en.json";
@@ -85,6 +92,7 @@ test("shows the built-in skills that chat offers", async () => {
       short_description: null,
       version_id: "pptx",
       built_in_skill_id: "pptx",
+      plugin_id: null,
     },
   ]);
   const builtins = await screen.findByRole("region", {
@@ -102,6 +110,34 @@ test("Turn on enables a skill that is off", async () => {
   expect(
     requestBody(fetchMock, "PUT", "/api/skills/off-skill/enabled")
   ).toEqual({ enabled: true, replace_conflict: false });
+});
+
+test("the second click of a double-click on Turn on does not open the skill", async () => {
+  window.history.replaceState(null, "", "/app/customize/skills");
+  let enabled = false;
+  mockFetch({
+    "/api/skills": () => ({ builtins: [], customs: [{ ...off, enabled }] }),
+    "PUT /api/skills/off-skill/enabled": () => {
+      enabled = true;
+      return { ...off, enabled };
+    },
+  });
+  render(<CustomizeSkillsPage />);
+  const mine = await screen.findByRole("region", { name: copy.groups.mine });
+  await setupUser().click(
+    within(mine).getByRole("button", { name: copy.menu.turnOn })
+  );
+  await waitFor(() =>
+    expect(
+      within(mine).queryByRole("button", { name: copy.menu.turnOn })
+    ).not.toBeInTheDocument()
+  );
+
+  fireEvent.click(within(mine).getByRole("button", { name: "Open standup" }), {
+    detail: 2,
+  });
+
+  expect(window.location.pathname).toBe("/app/customize/skills");
 });
 
 test("a synced skill names its marketplace and whether it is personal", async () => {

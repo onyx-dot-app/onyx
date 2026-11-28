@@ -653,3 +653,37 @@ test("an uploaded plugin opens its admin plugin page without skill-only requests
       .filter((url) => url.startsWith("/api/skills/"))
   ).toEqual([]);
 });
+
+test("a failed delete with an empty error message shows the fallback toast", async () => {
+  const fetchMock = open(
+    detail({
+      user_permission: "OWNER",
+      owner: { id: "user-me", email: "me@example.com" },
+      can_delete: true,
+    })
+  );
+  const error = jest.spyOn(toast, "error");
+  const user = setupUser();
+
+  await user.click(await screen.findByRole("button", { name: copy.menu }));
+  await user.click(await screen.findByRole("menuitem", { name: copy.remove }));
+  const route = fetchMock.getMockImplementation();
+  fetchMock.mockImplementation(async (input, init) => {
+    if (init?.method === "DELETE")
+      return new Response(JSON.stringify({ detail: "" }), { status: 500 });
+    if (!route) throw new Error("No fetch mock");
+    return route(input, init);
+  });
+  await user.click(
+    await screen.findByRole("button", {
+      name: messages.skills.editor.deleteModal.label,
+    })
+  );
+
+  await waitFor(() =>
+    expect(error).toHaveBeenCalledWith(
+      messages.skills.editor.toasts.deleteFailed
+    )
+  );
+  expect(window.location.pathname).toBe("/app/customize/skills/custom-1");
+});

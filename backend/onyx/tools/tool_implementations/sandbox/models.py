@@ -470,7 +470,7 @@ class LibraryListArguments(BaseModel):
     )
     sort_order: SortOrder = "desc"
     filters: LibraryListFilters | None = None
-    chat_id: EchoedText | None = Field(
+    chat_id: UUID | None = Field(
         default=None,
         description="List only the files of this chat (a chat_id of an entry).",
     )
@@ -1131,7 +1131,7 @@ class LibrarySearchArguments(BaseModel):
     )
     filters: LibraryListFilters | None = None
     scope: LibrarySearchScope | None = None
-    chat_id: EchoedText | None = Field(
+    chat_id: UUID | None = Field(
         default=None,
         description="Search only the files of this chat (a chat_id of a result).",
     )

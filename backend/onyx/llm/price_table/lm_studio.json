@@ -10,7 +10,7 @@
       "family": "gpt-oss",
       "limit": {
         "context": 131072,
-        "output": 32768
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -59,7 +59,7 @@
         "input": 0,
         "output": 0
       },
-      "family": "qwen",
+      "family": "qwen-coder",
       "limit": {
         "context": 262144,
         "output": 65536

@@ -29,6 +29,7 @@ from onyx.skills.bundle import (
     read_stored_bundle,
     strip_skill_md_frontmatter,
 )
+from onyx.skills.metadata import with_skill_md_name
 from onyx.skills.models import ChatSkill, CustomSkillBundleContents
 from onyx.skills.rendering import resolve_skill_dir_placeholder
 from onyx.skills.validation import read_stored_bundle_bytes
@@ -168,9 +169,14 @@ def read_chat_skills_md(
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id or "")
         if definition is None:
             key = (skill.version_id, skill.path)
-            if with_sandbox and key in skill_md:
+            if key not in skill_md:
+                continue
+            text = skill_md[key]
+            if not skill.path:
+                text = with_skill_md_name(text, skill.name)
+            if with_sandbox:
                 folder = chat_skill_folder(skill.name)
-                text = resolve_skill_dir_placeholder(skill_md[key], folder)
+                text = resolve_skill_dir_placeholder(text, folder)
                 paths = bundle_paths.get(key)
                 prefix = f"{skill.path}/" if skill.path else ""
                 # A version with no file list may have files: keep the line.
@@ -180,7 +186,7 @@ def read_chat_skills_md(
                     if path.startswith(prefix)
                 ):
                     text = _files_line(skill) + text
-                skill_md[key] = text
+            skill_md[key] = text
             continue
         try:
             instructions = read_builtin_skill_instructions(definition, skill.path)

@@ -53,6 +53,7 @@ from onyx.integrations.connection_models import (
     SIGN_IN_REJECTED_REASON,
     ConnectionSecret,
     OAuthClientCredentials,
+    access_token_fingerprint,
     connection_refresh_lock_name,
     expiry_from_expires_in,
     read_connection,
@@ -128,6 +129,10 @@ class MCPReauthenticationRequired(OAuthFlowError):
 
     def __init__(self) -> None:
         super().__init__("Please reconnect to the server through Onyx.")
+        # The fingerprint of the stored access token when the server answered
+        # 401 to it. A failed refresh or a 403 insufficient_scope leaves it
+        # None: the stored sign-in can still work.
+        self.rejected_token_fingerprint: str | None = None
 
 
 def _refresh_log_context(
@@ -351,15 +356,33 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
                     )
 
         sdk_flow = super().async_auth_flow(request)
+        rejected_token_fingerprint: str | None = None
         try:
             pending = await sdk_flow.__anext__()
             while True:
+                response = yield pending
+                if pending is request and response.status_code == 401:
+                    rejected_token_fingerprint = self._sent_token_fingerprint(request)
                 try:
-                    pending = await sdk_flow.asend((yield pending))
+                    pending = await sdk_flow.asend(response)
                 except StopAsyncIteration:
                     return
+        except MCPReauthenticationRequired as error:
+            error.rejected_token_fingerprint = rejected_token_fingerprint
+            raise
         finally:
             await sdk_flow.aclose()
+
+    def _sent_token_fingerprint(self, request: httpx.Request) -> str | None:
+        """The fingerprint of the stored access token, when the request sent it."""
+        tokens = self.context.current_tokens
+        if (
+            tokens is None
+            or not tokens.access_token
+            or request.headers.get("Authorization") != f"Bearer {tokens.access_token}"
+        ):
+            return None
+        return access_token_fingerprint(tokens.access_token)
 
     def build_resumable_authorization_request(
         self,

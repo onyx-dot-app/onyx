@@ -27,9 +27,11 @@ import {
 } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
+import { skillIcon } from "@/sections/customize/skillIcon";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import {
   memberPluginEntries,
+  panelShowsSkill,
   pluginSwitch,
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
@@ -47,11 +49,11 @@ import { usePluginDetail } from "@/lib/plugins/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
 import type { PluginDetail, PluginSkillSummary } from "@/lib/plugins/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { deleteUserSkill } from "@/lib/skills/api";
 import {
-  useRefreshSkillLists,
-  useSkillEnablement,
-  type SkillEnablement,
+  useRefreshPluginLists,
+  usePluginDelete,
+  usePluginEnablement,
+  type PluginEnablement,
 } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -80,7 +82,7 @@ interface PluginTabProps {
 }
 
 interface PluginSwitchProps extends PluginTabProps {
-  enablement: SkillEnablement;
+  enablement: PluginEnablement;
 }
 
 function PluginSwitch({ entry, enablement }: PluginSwitchProps) {
@@ -335,22 +337,24 @@ export default function MemberPluginDetailPage({
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
   const skills = useUserSkills();
   const entry = memberPluginEntries(
-    skills.data?.customs ?? [],
+    (skills.data?.customs ?? []).filter((skill) =>
+      panelShowsSkill(skill, panel)
+    ),
     user?.email ?? null,
     locale
   ).find((candidate) => candidate.id === pluginId);
   const isPlugin = entry?.skill.kind === "plugin";
   const detail = usePluginDetail(isPlugin ? pluginId : null);
   const plugin = isPlugin ? (detail.data?.plugin ?? null) : null;
-  const refreshLists = useRefreshSkillLists();
+  const refreshLists = useRefreshPluginLists();
   const { mutate } = useSWRConfig();
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
   const [sharing, setSharing] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [removing, setRemoving] = useState(false);
+  const deletion = usePluginDelete({ noun: "plugin" });
   const removeModal = useCreateModal();
   const removeCopy = useTranslations("plugins.member.detail.remove");
-  const enablement = useSkillEnablement(
+  const enablement = usePluginEnablement(
     skills.data?.customs ?? [],
     skills.refresh,
     (updated) => {
@@ -439,22 +443,8 @@ export default function MemberPluginDetailPage({
       ]
     : null;
   async function remove(): Promise<void> {
-    if (!skill || removing) return;
-    setRemoving(true);
-    try {
-      await deleteUserSkill(skill.id);
-      refreshLists();
-      toast.success(removeCopy("done", { name: skill.name }));
+    if (skill && (await deletion.remove(skill)))
       navigation.go(listHref, { replace: true });
-    } catch (failure) {
-      toast.error(
-        failure instanceof Error && failure.message
-          ? failure.message
-          : removeCopy("failed")
-      );
-    } finally {
-      setRemoving(false);
-    }
   }
 
   const menu: DropdownMenuItem[] = [
@@ -497,7 +487,7 @@ export default function MemberPluginDetailPage({
   return (
     <CustomizeDetailLayout
       back={<BackLink to={listHref} label={tabCopy("plugins")} />}
-      icon={SvgBlocks}
+      icon={entry ? skillIcon(entry.skill) : SvgBlocks}
       title={entry?.name ?? t("title")}
       description={entry?.description ?? undefined}
       loading={loading || skillOnlyId !== undefined}
@@ -576,9 +566,11 @@ export default function MemberPluginDetailPage({
             entityType={removeCopy("entityType")}
             entityName={skill.name}
             additionalDetails={removeCopy("description")}
-            actionButtonText={removeCopy(removing ? "pending" : "submit")}
+            actionButtonText={removeCopy(
+              deletion.deleting ? "pending" : "submit"
+            )}
             onClose={() => {
-              if (!removing) removeModal.toggle(false);
+              if (!deletion.deleting) removeModal.toggle(false);
             }}
             onSubmit={() => void remove()}
           />

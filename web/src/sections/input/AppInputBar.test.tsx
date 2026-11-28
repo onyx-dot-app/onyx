@@ -958,7 +958,7 @@ describe("`@` skill mentions", () => {
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
   });
 
-  test("fetches the chat skills again when the input gains focus, not on a window focus", async () => {
+  test("fetches the chat skills again on an input focus at most once a minute", async () => {
     mockChatSkills = null;
     let skills: ChatSkill[] = [];
     const fetchSpy = jest
@@ -979,13 +979,9 @@ describe("`@` skill mentions", () => {
           short_description: null,
           version_id: "v1",
           built_in_skill_id: null,
+          plugin_id: null,
         },
       ];
-      await act(async () => {
-        window.dispatchEvent(new Event("focus"));
-      });
-      expect(skillFetches()).toBe(1);
-
       // The composer takes focus after each send, so a focus within a minute
       // of the last fetch does not fetch.
       const firstFetchAt = Date.now();
@@ -1041,6 +1037,46 @@ describe("`@` skill mentions", () => {
     }
   });
 
+  test("fetches the chat skills again on a window focus at most once a minute", async () => {
+    mockChatSkills = null;
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async () => new Response(JSON.stringify([])));
+    try {
+      renderHook(() => useChatSkills({ builtIns: true }), {
+        wrapper: ({ children }) => (
+          <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+            {children}
+          </SWRConfig>
+        ),
+      });
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      const focusWindow = () =>
+        act(async () => {
+          window.dispatchEvent(new Event("focus"));
+          // SWR handles the focus in a timeout.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+      const mountedAt = Date.now();
+      const nowSpy = jest.spyOn(Date, "now");
+
+      // A focus within a minute of the first fetch does not fetch.
+      nowSpy.mockReturnValue(mountedAt + 59_000);
+      await focusWindow();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      nowSpy.mockReturnValue(mountedAt + 61_000);
+      await focusWindow();
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+
+      nowSpy.mockReturnValue(mountedAt + 62_000);
+      await focusWindow();
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
   test("a row shows the skill's short description when it has one", async () => {
     mockChatSkills = null;
     const skills: ChatSkill[] = [
@@ -1050,6 +1086,7 @@ describe("`@` skill mentions", () => {
         short_description: "Review code",
         version_id: "v1",
         built_in_skill_id: null,
+        plugin_id: null,
       },
       {
         name: "commit-message",
@@ -1057,6 +1094,7 @@ describe("`@` skill mentions", () => {
         short_description: null,
         version_id: "v2",
         built_in_skill_id: null,
+        plugin_id: null,
       },
     ];
     const fetchSpy = jest
@@ -1095,6 +1133,7 @@ describe("`@` skill mentions", () => {
           short_description: null,
           version_id: "b1",
           built_in_skill_id: "pptx",
+          plugin_id: null,
         },
         {
           name: "plan",
@@ -1102,6 +1141,7 @@ describe("`@` skill mentions", () => {
           short_description: null,
           version_id: "v1",
           built_in_skill_id: null,
+          plugin_id: null,
         },
       ];
       const fetchSpy = jest

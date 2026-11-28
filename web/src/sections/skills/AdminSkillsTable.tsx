@@ -13,18 +13,18 @@ import { Content, Section } from "@opal/layouts";
 import { SvgMoreHorizontal, SvgShare, SvgTrash } from "@opal/icons";
 import {
   useInstallationPolicyCopy,
-  type SkillEnablement,
+  type PluginEnablement,
 } from "@/lib/skills/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { canShareSkill, hasUnpublishedChanges } from "@/lib/skills/sharing";
 import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
-import type { SkillBulkActions } from "@/sections/skills/useSkillBulkActions";
+import type { PluginBulkActions } from "@/sections/skills/usePluginBulkActions";
 
 interface AdminSkillsTableProps {
   skills: CustomSkill[];
-  bulk: Pick<SkillBulkActions, "selectedIds" | "select" | "busy">;
-  enablement: Pick<SkillEnablement, "isPending" | "enabledOf" | "setEnabled">;
+  bulk: Pick<PluginBulkActions, "selectedIds" | "select" | "busy">;
+  enablement: Pick<PluginEnablement, "isPending" | "enabledOf" | "setEnabled">;
   onOpen: (skill: CustomSkill) => void;
   onShare: (skill: CustomSkill) => void;
   onDelete: (skill: CustomSkill) => void;

@@ -301,6 +301,21 @@ repos:
         # Deleted chart files must also trigger the check.
         always_run: true
         stages: [pre-commit]
+      - id: pr-workflow-concurrency
+        name: PR workflows keep their newest run
+        language: python
+        entry: python .github/scripts/check_pr_workflow_concurrency.py
+        additional_dependencies: [PyYAML==6.0.3]
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^\.github/(workflows/.+\.ya?ml|scripts/check_pr_workflow_concurrency\.py)$
+      - id: cancel-superseded-runs-tests
+        name: cancel_superseded_runs tests
+        language: system
+        entry: python3 -m unittest discover -s .github/scripts -p test_cancel_superseded_runs.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^\.github/scripts/(test_)?cancel_superseded_runs\.py$
       - id: microvm-python-stubs
         name: Firecracker Python gRPC stubs match the protos
         language: python

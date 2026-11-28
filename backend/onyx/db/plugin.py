@@ -27,11 +27,12 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.enums import (
     MarketplaceKind,
     Permission,
+    PermissionAuthority,
     PluginInstallationPolicy,
     PluginPublishingPolicy,
     SkillSharePermission,
@@ -44,6 +45,7 @@ from onyx.db.models import (
     PluginSkill,
     PluginVersion,
     User,
+    User__UserGroup,
     UserPluginPreference,
 )
 from onyx.db.plugin_access import (
@@ -52,6 +54,10 @@ from onyx.db.plugin_access import (
     plugin_editable_by_user,
     seen_by_organization,
     visible_plugin_ids,
+)
+from onyx.db.scoped_permissions import (
+    managed_group_member_ids_subquery,
+    scoped_group_ids_subquery,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
@@ -212,6 +218,30 @@ def refuse_if_synced(plugin: Plugin) -> None:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, SYNCED_PLUGIN_LOCKED)
 
 
+def plugin_name_taken(
+    marketplace_id: UUID,
+    name: str,
+    db_session: Session,
+    exclude_plugin_id: UUID | None = None,
+) -> bool:
+    stmt = select(Plugin.id).where(
+        Plugin.marketplace_id == marketplace_id, Plugin.name == name
+    )
+    if exclude_plugin_id is not None:
+        stmt = stmt.where(Plugin.id != exclude_plugin_id)
+    return db_session.scalar(stmt.limit(1)) is not None
+
+
+def plugin_name_taken_error(name: str, detail: str) -> OnyxError:
+    """CONFLICT for a plugin name that its marketplace already holds. The body
+    names it in ``taken_name`` so the client asks for another name."""
+    return OnyxError(
+        OnyxErrorCode.CONFLICT,
+        f"{detail} Pick a different name.",
+        extra={"taken_name": name},
+    )
+
+
 def free_plugin_name(
     marketplace_id: UUID,
     name: str,
@@ -232,7 +262,7 @@ def free_plugin_name(
         is not None
     ):
         suffix += 1
-        base = name[: 64 - 1 - len(str(suffix))]
+        base = name[: 64 - 1 - len(str(suffix))].rstrip("-")
         candidate = f"{base}-{suffix}"
     return candidate
 
@@ -613,16 +643,6 @@ def get_plugin_current_version_id(plugin_id: UUID, db_session: Session) -> UUID 
     )
 
 
-def get_current_version_bundle_file_id(
-    plugin_id: UUID, db_session: Session
-) -> str | None:
-    return db_session.scalar(
-        select(PluginVersion.bundle_file_id)
-        .join(Plugin, Plugin.current_version_id == PluginVersion.id)
-        .where(Plugin.id == plugin_id)
-    )
-
-
 # --- Skill plugins and their access ----------------------------------------
 
 
@@ -634,12 +654,16 @@ def create_plugin__no_commit(
     db_session: Session,
 ) -> Plugin:
     marketplace_id = get_or_create_user_uploads__no_commit(author.id, db_session)
+    if plugin_name_taken(marketplace_id, name, db_session):
+        raise plugin_name_taken_error(
+            name, f"You already have a skill or plugin named '{name}'."
+        )
     version_id = uuid4()
     try:
         with db_session.begin_nested():
             plugin = Plugin(
                 id=plugin_id,
-                name=free_plugin_name(marketplace_id, name, db_session),
+                name=name,
                 description=version_description(content) or "",
                 marketplace_id=marketplace_id,
                 author_user_id=author.id,
@@ -658,9 +682,8 @@ def create_plugin__no_commit(
     except IntegrityError as exc:
         if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
             raise
-        raise OnyxError(
-            OnyxErrorCode.SKILL_NAME_CONFLICT,
-            f"Another skill named '{name}' was saved at the same time. Try again.",
+        raise plugin_name_taken_error(
+            name, f"Another skill or plugin named '{name}' was saved at the same time."
         ) from exc
     return plugin
 
@@ -732,36 +755,17 @@ def _move_plugin__no_commit(
     on_name_clash: NameClashAction,
     clash_detail: Callable[[str], str],
     db_session: Session,
+    name: str | None = None,
 ) -> None:
-    # A plugin whose current version is a skill asks for its skill name, which
-    # a "-2" suffix in the old marketplace does not change.
-    rows = db_session.execute(
-        select(PluginSkill.path, PluginSkill.frontmatter["name"].astext).where(
-            PluginSkill.plugin_version_id == plugin.current_version_id
-        )
-    ).all()
-    preferred = (
-        rows[0][1]
-        if is_skill_version(path for path, _ in rows) and rows[0][1]
-        else plugin.name
-    )
+    """Move the plugin, under ``name`` when given, else under its own name."""
+    preferred = name or plugin.name
     # A concurrent writer can take the chosen name before this move commits.
     # "rename" then picks the next free name again.
     for attempt in range(1, _RENAME_ATTEMPTS + 1):
         name = preferred
-        name_taken = (
-            db_session.scalar(
-                select(Plugin.id).where(
-                    Plugin.marketplace_id == marketplace_id,
-                    Plugin.name == name,
-                    Plugin.id != plugin.id,
-                )
-            )
-            is not None
-        )
-        if name_taken:
+        if plugin_name_taken(marketplace_id, name, db_session, plugin.id):
             if on_name_clash == "raise":
-                raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name))
+                raise plugin_name_taken_error(name, clash_detail(name))
             name = free_plugin_name(marketplace_id, name, db_session)
         try:
             with db_session.begin_nested():
@@ -773,7 +777,7 @@ def _move_plugin__no_commit(
             if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
                 raise
             if on_name_clash == "raise" or attempt == _RENAME_ATTEMPTS:
-                raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name)) from exc
+                raise plugin_name_taken_error(name, clash_detail(name)) from exc
 
 
 def private_plugins_blocking_user_delete(user_id: UUID) -> Select[tuple[Plugin]]:
@@ -863,11 +867,12 @@ def transfer_plugin__no_commit(
     new_author_user_id: UUID,
     db_session: Session,
     on_name_clash: NameClashAction = "raise",
+    name: str | None = None,
 ) -> None:
     """Set the plugin's author. A private plugin also moves to the new owner's
-    "My uploads". On a name clash there, "raise" refuses with CONFLICT and
-    "rename" takes the next free name. A published plugin stays in the
-    Organization library."""
+    "My uploads", under ``name`` when given. On a name clash there, "raise"
+    refuses with CONFLICT and "rename" takes the next free name. A published
+    plugin stays in the Organization library and keeps its name."""
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
@@ -886,6 +891,7 @@ def transfer_plugin__no_commit(
                 "Ask them to delete or rename it first."
             ),
             db_session=db_session,
+            name=name,
         )
     plugin.author_user_id = new_author_user_id
     db_session.flush()
@@ -1364,6 +1370,66 @@ def _write_group_rows__no_commit(
         raise
 
 
+def _check_user_shares_in_managed_scope(
+    locked: _LockedPlugin, actor: User, db_session: Session
+) -> None:
+    """A scoped manager who edits a plugin only through their groups shares it
+    only with members of those groups. Another user share moves the plugin out
+    of their scope. Removing a share stays allowed. Editor rights the manager
+    can grant to themselves (a user share or a managed group's share) do not
+    lift this rule."""
+    added_user_ids = {
+        user_id
+        for user_id, permission in (locked.new_user_grants or {}).items()
+        if locked.user_grants.get(user_id) != permission
+    }
+    if not added_user_ids:
+        return
+    editor = SkillSharePermission.EDITOR
+    granted_editor_by_others = (
+        locked.plugin.author_user_id == actor.id
+        or locked.user_grants.get(actor.id) == editor
+        or db_session.scalar(
+            select(Plugin__UserGroup.plugin_id)
+            .join(
+                User__UserGroup,
+                User__UserGroup.user_group_id == Plugin__UserGroup.user_group_id,
+            )
+            .where(
+                Plugin__UserGroup.plugin_id == locked.plugin.id,
+                Plugin__UserGroup.permission == editor,
+                User__UserGroup.user_id == actor.id,
+                Plugin__UserGroup.user_group_id.not_in(
+                    scoped_group_ids_subquery(actor)
+                ),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+    if granted_editor_by_others:
+        return
+    if (locked.new_user_grants or {}).get(actor.id) == editor:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Group managers cannot make themselves an editor of a skill they "
+            "manage through their groups.",
+        )
+    members = set(
+        db_session.scalars(
+            managed_group_member_ids_subquery(actor).where(
+                User__UserGroup.user_id.in_(added_user_ids)
+            )
+        )
+    )
+    if added_user_ids - members:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Group managers can only share a skill with members of the groups "
+            "they manage.",
+        )
+
+
 def _apply_to_plugin__no_commit(
     locked: _LockedPlugin,
     change: PluginAccessChange,
@@ -1371,6 +1437,12 @@ def _apply_to_plugin__no_commit(
     db_session: Session,
 ) -> None:
     plugin = locked.plugin
+    if (
+        actor is not None
+        and has_permission(actor, Permission.MANAGE_PLUGINS)
+        is PermissionAuthority.SCOPED
+    ):
+        _check_user_shares_in_managed_scope(locked, actor, db_session)
     if change.publish:
         if (
             actor is not None

@@ -1,3 +1,4 @@
+import type { CustomizePanel } from "@/lib/customize/paths";
 import type { SkillMarketplace } from "@/lib/marketplaces/types";
 import type { CustomSkill, Skill } from "@/lib/skills/types";
 
@@ -25,7 +26,7 @@ export interface MemberPluginEntry {
 }
 
 function pluginSection(
-  skill: CustomSkill,
+  skill: Skill,
   ownerEmail: string | null,
   userEmail: string | null
 ): PluginSection {
@@ -37,6 +38,12 @@ function pluginSection(
 
 function isCustomSkill(skill: Skill): skill is CustomSkill {
   return skill.source === "custom";
+}
+
+/** Whether a Customize panel lists the skill: the admin panel lists every
+ * plugin, the member panel only the ones members can see. */
+export function panelShowsSkill(skill: Skill, panel: CustomizePanel): boolean {
+  return panel === "admin" || skill.member_visible;
 }
 
 /** The plugins of the custom skills, sorted by name. */

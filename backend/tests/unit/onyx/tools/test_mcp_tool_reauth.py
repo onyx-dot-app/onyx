@@ -16,17 +16,24 @@ from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import ConnectionProblem
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
+from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
-from onyx.tools.models import ToolContext
+from onyx.tools.models import (
+    CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
+    CustomToolCallSummary,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 
 MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
 
 
-def _http_error(status: int) -> httpx.HTTPStatusError:
+def _http_error(
+    status: int, url: str = "https://mcp.example/mcp"
+) -> httpx.HTTPStatusError:
     return httpx.HTTPStatusError(
-        "upstream rejected request",
-        request=httpx.Request("POST", "https://mcp.example/mcp"),
+        f"upstream rejected request to {url}",
+        request=httpx.Request("POST", url),
         response=httpx.Response(status),
     )
 
@@ -85,11 +92,21 @@ def _run(tool: MCPTool) -> ToolResult:
     return response
 
 
+REJECTED_TOKEN = "rejected-token-fingerprint"
+
+
+def _reauthentication(token_rejected: bool) -> MCPReauthenticationRequired:
+    error = MCPReauthenticationRequired()
+    error.rejected_token_fingerprint = REJECTED_TOKEN if token_rejected else None
+    return error
+
+
 @pytest.mark.parametrize(
     "error,unauthorized",
     [
         (_http_error(401), True),
         (_wrapped_unauthorized(), True),
+        (_reauthentication(token_rejected=True), True),
         (_http_error(403), False),
         (_http_error(503), False),
         (httpx.ReadTimeout("timeout"), False),
@@ -111,18 +128,46 @@ def test_only_a_rejected_call_reports_the_credential(
     credentials = _credentials(method)
     with (
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
-        patch(f"{MODULE}.mark_api_key_rejected") as mark,
+        patch(f"{MODULE}.mark_credential_rejected") as mark,
         patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
     ):
         response = _run(_tool(credentials))
 
-    assert "error" in response.text
+    assert response.is_error
     if unauthorized:
         assert "Authentication failed" in response.text
         assert record_outcome.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
-        mark.assert_called_once_with(credentials)
+        fingerprint = (
+            error.rejected_token_fingerprint
+            if isinstance(error, MCPReauthenticationRequired)
+            else None
+        )
+        mark.assert_called_once_with(
+            credentials, rejected_token_fingerprint=fingerprint
+        )
     else:
         mark.assert_not_called()
+
+
+def test_a_reauthentication_that_did_not_reject_the_token_keeps_the_connection() -> (
+    None
+):
+    """A failed refresh or a 403 insufficient_scope asks for a new sign-in
+    but does not prove that the stored sign-in is bad."""
+    credentials = _credentials(IntegrationAuthMethod.OAUTH2)
+    with (
+        patch(
+            f"{MODULE}.call_mcp_tool",
+            side_effect=_reauthentication(token_rejected=False),
+        ),
+        patch(f"{MODULE}.mark_credential_rejected") as mark,
+        patch(f"{MODULE}.record_mcp_client_tool_outcome"),
+    ):
+        response = _run(_tool(credentials))
+
+    assert response.is_error
+    assert "Authentication failed" in response.text
+    mark.assert_not_called()
 
 
 def test_a_call_sends_the_construction_credential_with_no_new_resolve() -> None:
@@ -207,3 +252,52 @@ def test_a_call_whose_credential_no_longer_resolves_does_not_run() -> None:
     assert response.is_error
     assert "Connect your test account" in response.text
     assert record_outcome.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
+
+
+@pytest.mark.parametrize(
+    "error,is_auth_error,is_unreachable,status_code",
+    [
+        (_http_error(401), True, False, 401),
+        (_wrapped_unauthorized(), True, False, 401),
+        (_http_error(403), True, False, 403),
+        (_http_error(503), False, False, 503),
+        (
+            _http_error(503, "https://mcp.example/authentication/mcp"),
+            False,
+            False,
+            503,
+        ),
+        (httpx.ConnectError("connection refused"), False, True, None),
+        (httpx.ReadTimeout("timeout"), False, True, None),
+    ],
+)
+def test_a_failed_call_tells_the_chat_how_it_failed(
+    error: Exception, is_auth_error: bool, is_unreachable: bool, status_code: int | None
+) -> None:
+    with (
+        patch(f"{MODULE}.call_mcp_tool", side_effect=error),
+        patch(f"{MODULE}.mark_credential_rejected"),
+        patch(f"{MODULE}.record_mcp_client_tool_outcome"),
+    ):
+        response = _run(_tool(_credentials(IntegrationAuthMethod.API_KEY)))
+
+    assert isinstance(response.details, CustomToolCallSummary)
+    assert response.details.integration_id == 5
+    error_info = response.details.error
+    assert error_info is not None
+    assert error_info.is_auth_error is is_auth_error
+    assert error_info.is_unreachable is is_unreachable
+    assert error_info.status_code == status_code
+    assert "Plugins page" not in response.text
+
+
+def test_an_unexplained_failure_is_a_failed_step() -> None:
+    with (
+        patch(f"{MODULE}.call_mcp_tool", side_effect=ValueError("bad input")),
+        patch(f"{MODULE}.record_mcp_client_tool_outcome"),
+    ):
+        response = _run(_tool(_credentials(None)))
+
+    assert isinstance(response.details, CustomToolCallSummary)
+    assert response.details.response_type == CUSTOM_TOOL_ERROR_RESPONSE_TYPE
+    assert response.details.error is None

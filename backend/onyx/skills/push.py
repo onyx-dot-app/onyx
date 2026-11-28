@@ -60,6 +60,7 @@ from onyx.skills.limits import (
     SKILL_RUNTIME_MAX_BYTES,
     SKILL_RUNTIME_MAX_FILES,
 )
+from onyx.skills.metadata import with_skill_md_name
 from onyx.skills.models import (
     ChatSkill,
     ChatSkillFiles,
@@ -275,7 +276,8 @@ def _assemble_skills(
     """Hydrate the skills, in the keep order, as a flat ``{path: bytes}`` map.
 
     Built-ins render from disk. A custom skill sends the bundle of the plugin
-    version the user runs, in a folder named by that version's frontmatter.
+    version the user runs, in a folder named by its plugin name, which also
+    replaces the SKILL.md frontmatter name.
     A plugin version sends each skill folder, in a folder named by that
     skill's frontmatter, and no other file of its bundle.
     The version must already be valid or pass lazy validation before its
@@ -366,6 +368,11 @@ def _assemble_skills(
                     skill_files = {
                         sandbox_path: zf.read(info) for info, sandbox_path in infos
                     }
+                if not runtime_skill.plugin_skills:
+                    skill_md_path = f"{runtime_skill.name}/{SKILL_MD_NAME}"
+                    skill_files[skill_md_path] = with_skill_md_name(
+                        skill_files[skill_md_path].decode("utf-8"), runtime_skill.name
+                    ).encode("utf-8")
             except Exception:
                 logger.warning(
                     "Failed to unpack bundle for skill %s, skipping",

@@ -75,25 +75,24 @@ def _call(
 
 
 def _setup_preview(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock]:
-    """A deck with a stored preview PDF; return the mock lookup of its
-    owning row and the mock conversion."""
+    """A deck with a stored preview PDF; return the mock read of the stored
+    PDF and the mock conversion."""
     _setup(
         monkeypatch,
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         display_name='Q3 "Deck".pptx',
     )
-    resolve = MagicMock(
-        return_value=(SimpleNamespace(preview_file_id="preview-1"), uuid4(), "")
-    )
+    read_stored = MagicMock(return_value=BytesIO(b"%PDF-1.7"))
     convert = MagicMock(return_value=BytesIO(b"%PDF-1.7"))
     monkeypatch.setattr(
-        "onyx.server.query_and_chat.chat_backend.resolve_chat_file_preview", resolve
+        "onyx.server.query_and_chat.chat_backend.read_stored_chat_file_preview",
+        read_stored,
     )
     monkeypatch.setattr(
         "onyx.server.query_and_chat.chat_backend.convert_chat_file_preview_pdf",
         convert,
     )
-    return resolve, convert
+    return read_stored, convert
 
 
 @pytest.mark.parametrize("file_type", ["image/png", "application/pdf", "text/plain"])
@@ -257,7 +256,7 @@ def test_preview_pdf_is_served_inline_as_a_pdf_named_after_the_file(
 def test_preview_pdf_not_modified_reads_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    resolve, _ = _setup_preview(monkeypatch)
+    read_stored, _ = _setup_preview(monkeypatch)
 
     response = _call(
         if_none_match=f'"{FILE_ID}-preview-pdf-{RESPONSE_POLICY_VERSION}"',
@@ -267,7 +266,7 @@ def test_preview_pdf_not_modified_reads_nothing(
     assert response.status_code == 304
     assert response.headers["content-disposition"].startswith("inline;")
     assert response.headers["content-security-policy"] == "sandbox"
-    resolve.assert_not_called()
+    read_stored.assert_not_called()
 
 
 def test_a_made_preview_pdf_is_inline_and_never_cached(

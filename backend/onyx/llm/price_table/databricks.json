@@ -24,6 +24,68 @@
       "mode": "embedding",
       "name": "databricks-bge-large-en"
     },
+    "databricks-claude-fable-5": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 1,
+        "cache_write": 12.5,
+        "cache_write_above_1hr": 19.99998,
+        "input": 10,
+        "output": 50
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Fable 5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-09",
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-claude-fable-5-1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.25,
+        "cache_write": 12.5,
+        "cache_write_above_1hr": 19.99998,
+        "input": 10,
+        "output": 50
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Fable 5.1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-01",
+      "temperature": false,
+      "tool_call": true
+    },
     "databricks-claude-haiku-4-5": {
       "attachment": true,
       "cost": {
@@ -55,6 +117,51 @@
       "release_date": "2025-10-15",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "databricks-claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "cache_write_above_1hr": 0.19999,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
     "databricks-claude-opus-4-1": {
@@ -189,6 +296,105 @@
       "temperature": false,
       "tool_call": true
     },
+    "databricks-claude-opus-4-8": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "cache_write_above_1hr": 9.99999,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Opus 4.8",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-05-28",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-claude-opus-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "cache_write_above_1hr": 9.99999,
+        "input": 5,
+        "output": 25
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Opus 5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-24",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-claude-opus-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 5,
+        "cache_write_above_1hr": 8.00002,
+        "input": 4,
+        "output": 20
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Opus 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "databricks-claude-sonnet-4": {
       "attachment": true,
       "cost": {
@@ -267,7 +473,7 @@
       "family": "claude-sonnet",
       "limit": {
         "context": 1000000,
-        "output": 64000
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -284,6 +490,101 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-claude-sonnet-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "cache_write_above_1hr": 4.00001,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Sonnet 5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-claude-sonnet-5-5": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "cache_write_above_1hr": 4.00001,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Sonnet 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-deepseek-v4-1-flash-1017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.007,
+        "cache_write": 0.30002,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -402,10 +703,10 @@
         ]
       },
       "mode": "chat",
-      "name": "Gemini 3.1 Flash Lite Preview",
+      "name": "Gemini 3.1 Flash Lite",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2026-03-03",
+      "release_date": "2026-05-07",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -491,6 +792,108 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-19",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-gemini-3-5-flash-lite": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03,
+        "cache_write": 0.37499,
+        "input": 0.3,
+        "input_audio": 0.3,
+        "output": 2.5
+      },
+      "family": "gemini-flash-lite",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 3.5 Flash Lite",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-gemini-3-7-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "cache_write": 0.74998,
+        "input": 0.75,
+        "input_audio": 0.75,
+        "output": 3.75
+      },
+      "family": "gemini-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 3.7 Flash",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-13",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-gemini-3-8-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "cache_write": 0.74998,
+        "input": 0.75,
+        "input_audio": 0.75,
+        "output": 3.75
+      },
+      "family": "gemini-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 3.8 Flash",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-02",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -581,6 +984,71 @@
       "temperature": true,
       "tool_call": true
     },
+    "databricks-gemini-4-argon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.125,
+        "cache_write": 2.49998,
+        "input": 2.5,
+        "input_audio": 2.5,
+        "output": 12.5
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Argon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-13",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-gemma-3-12b": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15001,
+        "cache_write": 0.15001,
+        "input": 0.15,
+        "output": 0.5
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemma 3 12B IT",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "databricks-glm-5-2": {
       "attachment": false,
       "cost": {
@@ -607,6 +1075,68 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-13",
+      "status": "deprecated",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-glm-5-3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.26,
+        "cache_write": 1.4,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-5.3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-glm-5-3-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03,
+        "cache_write": 0.15001,
+        "input": 0.15,
+        "output": 0.5
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM-5.3-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-26",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -639,6 +1169,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-08-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -703,6 +1234,39 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-12-11",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-gpt-5-3-codex": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.175,
+        "cache_write": 1.75,
+        "input": 1.75,
+        "output": 14
+      },
+      "family": "gpt-codex",
+      "limit": {
+        "context": 400000,
+        "input": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-5.3 Codex",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-05",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -866,6 +1430,53 @@
       "reasoning": true,
       "release_date": "2026-04-23",
       "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-gpt-5-5-pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 29.999969999999998,
+        "cache_write": 29.999969999999998,
+        "context_over_200k": {
+          "input": 60,
+          "output": 270
+        },
+        "input": 30,
+        "output": 180,
+        "tiers": [
+          {
+            "input": 60,
+            "output": 270,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-pro",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-5.5 Pro",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-04-23",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -917,7 +1528,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "databricks-gpt-5-6-sol": {
@@ -968,7 +1579,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "databricks-gpt-5-6-terra": {
@@ -1019,7 +1630,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "databricks-gpt-5-mini": {
@@ -1050,6 +1661,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-08-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -1082,8 +1694,264 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-08-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "databricks-gpt-6-1-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-6.1 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-29",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-gpt-6-1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.05,
+        "cache_write": 1.25,
+        "context_over_200k": {
+          "cache_read": 0.1,
+          "cache_write": 2.5,
+          "input": 2,
+          "output": 7.5
+        },
+        "input": 1,
+        "output": 5,
+        "tiers": [
+          {
+            "cache_read": 0.1,
+            "cache_write": 2.5,
+            "input": 2,
+            "output": 7.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT-6.1 Terra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-gpt-6-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1,
+        "cache_write": 12.5,
+        "context_over_200k": {
+          "cache_read": 2,
+          "cache_write": 25,
+          "input": 20,
+          "output": 75
+        },
+        "input": 10,
+        "output": 50,
+        "tiers": [
+          {
+            "cache_read": 2,
+            "cache_write": 25,
+            "input": 20,
+            "output": 75,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT-6 Astra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-04",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-gpt-6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "context_over_200k": {
+          "cache_read": 0.02,
+          "cache_write": 0.25,
+          "input": 0.2,
+          "output": 0.75
+        },
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.02,
+            "cache_write": 0.25,
+            "input": 0.2,
+            "output": 0.75,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-6 Luna",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-gpt-6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.4,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.4,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-6 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "databricks-gpt-image-1": {
@@ -1183,6 +2051,82 @@
       "temperature": true,
       "tool_call": true
     },
+    "databricks-grok-4-6": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 2.49998,
+        "input": 2,
+        "output": 6
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok 4.6",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-grok-4-7": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 2.49998,
+        "context_over_200k": {
+          "cache_read": 1,
+          "input": 4,
+          "output": 12
+        },
+        "input": 2,
+        "output": 6,
+        "tiers": [
+          {
+            "cache_read": 1,
+            "input": 4,
+            "output": 12,
+            "tier": {
+              "size": 200000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Grok 4.7",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "databricks-gte-large-en": {
       "cost": {
         "cache_read": 0.12999,
@@ -1227,6 +2171,159 @@
       "temperature": false,
       "tool_call": true
     },
+    "databricks-kimi-k3": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 2.99999,
+        "input": 3,
+        "output": 15
+      },
+      "family": "kimi",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-kimi-k3-1-pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 1.99997,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3.1 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "databricks-llama-4-maverick": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5000100000000001,
+        "cache_write": 0.5000100000000001,
+        "input": 0.5,
+        "output": 1.5
+      },
+      "family": "llama",
+      "limit": {
+        "context": 1000000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Llama 4 Maverick 17B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-meta-llama-3-1-8b-instruct": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.15001,
+        "cache_write": 0.15001,
+        "input": 0.15,
+        "output": 0.45
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Llama-3.1-8B-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-07-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-meta-llama-3-3-70b-instruct": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.5000100000000001,
+        "cache_write": 0.5000100000000001,
+        "input": 0.5,
+        "output": 1.5
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Llama-3.3-70B-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-12-06",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "databricks-openjev-qwen35-4b": {
       "cost": {
         "cache_read": 0.041999999999999996,
@@ -1259,6 +2356,204 @@
       },
       "mode": "evaluation",
       "name": "databricks-typesafeai-jev-1-14-0"
+    },
+    "system.ai.claude-fable-5-2": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 10,
+        "cache_write_above_1hr": 15.999970000000001,
+        "input": 8,
+        "output": 40
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Fable 5.2",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-09",
+      "temperature": false,
+      "tool_call": true
+    },
+    "system.ai.gemini-4-carbon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.125,
+        "cache_write": 2.49998,
+        "input": 2.5,
+        "input_audio": 2.5,
+        "output": 12.5
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Carbon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-10",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "system.ai.gemini-4-hydrogen": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.09375,
+        "cache_write": 2.34375,
+        "input": 1.875,
+        "output": 9.375
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Hydrogen",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-12",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "system.ai.gpt-6-2-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "cache_write": 10,
+        "context_over_200k": {
+          "cache_read": 0.8,
+          "cache_write": 20,
+          "input": 16,
+          "output": 60
+        },
+        "input": 8,
+        "output": 40,
+        "tiers": [
+          {
+            "cache_read": 0.8,
+            "cache_write": 20,
+            "input": 16,
+            "output": 60,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT-6.2 Astra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "system.ai.gpt-6-2-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-6.2 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
     }
   },
   "models_dev_providers": [

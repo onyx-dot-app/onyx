@@ -79,6 +79,7 @@ function preview(over: Partial<PluginUploadPreview> = {}): PluginUploadPreview {
       plugin_id: "11111111-1111-4111-8111-111111111111",
       plugin_name: "review-kit",
       version_number: 3,
+      name_taken: false,
     },
     will_enable: true,
     name_conflicts: [],
@@ -114,7 +115,7 @@ async function choose(file: File) {
   return user;
 }
 
-test("a plugin zip shows the preview and Save as a new plugin re-reads it", async () => {
+test("a plugin zip shows the preview and Save as a new plugin asks for a free name", async () => {
   const fetchMock = mockFetch({
     "/api/integrations": [],
     "POST /api/skills/plugins/inspect": (init?: RequestInit) =>
@@ -123,11 +124,25 @@ test("a plugin zip shows the preview and Save as a new plugin re-reads it", asyn
             target: {
               kind: "new_plugin",
               plugin_id: null,
-              plugin_name: "review-kit-2",
+              plugin_name: "review-kit",
               version_number: 1,
+              name_taken: true,
             },
           })
         : preview(),
+    "POST /api/skills/plugins": {
+      target: {
+        kind: "new_plugin",
+        plugin_id: null,
+        plugin_name: "review-kit-copy",
+        version_number: 1,
+        name_taken: false,
+      },
+      plugin: { id: "p1", name: "review-kit-copy", plugin: null },
+      enabled: false,
+      unchanged: false,
+      name_conflicts: [],
+    },
   });
   renderModal();
   const user = await choose(zip("review-kit.zip"));
@@ -142,12 +157,82 @@ test("a plugin zip shows the preview and Save as a new plugin re-reads it", asyn
     screen.getByRole("checkbox", { name: "Save as a New Plugin" })
   );
   expect(
-    await screen.findByText("New plugin: review-kit-2")
+    await screen.findByText(
+      "review-kit is already in use. Pick a different name."
+    )
   ).toBeInTheDocument();
   const saveAsNew = fetchMock.mock.calls
     .filter(([url]) => String(url) === "/api/skills/plugins/inspect")
     .map(([, init]) => formValue(init, "save_as_new"));
   expect(saveAsNew).toEqual(["false", "true"]);
+
+  const save = screen.getByRole("button", { name: "Save" });
+  expect(save).toBeDisabled();
+  const name = screen.getByRole("textbox", { name: "Name" });
+  await user.clear(name);
+  await user.type(name, "review-kit-copy");
+  expect(screen.getByText("New plugin: review-kit-copy")).toBeInTheDocument();
+  expect(save).toBeEnabled();
+  await user.click(save);
+
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => String(url) === "/api/skills/plugins"
+      )
+    ).toBe(true)
+  );
+  const [, saveInit] = fetchMock.mock.calls.find(
+    ([url]) => String(url) === "/api/skills/plugins"
+  ) ?? [undefined, undefined];
+  expect(formValue(saveInit, "name")).toBe("review-kit-copy");
+});
+
+test("a save refused for a taken name asks for another name", async () => {
+  const fetchMock = mockFetch({
+    "/api/integrations": [],
+    "POST /api/skills/plugins/inspect": () =>
+      preview({
+        target: {
+          kind: "new_plugin",
+          plugin_id: null,
+          plugin_name: "review-kit",
+          version_number: 1,
+          name_taken: false,
+        },
+      }),
+    "POST /api/skills/plugins": () =>
+      new Response(
+        JSON.stringify({
+          error_code: "CONFLICT",
+          detail:
+            "You already have a skill or plugin named 'review-kit'. Pick a different name.",
+          taken_name: "review-kit",
+        }),
+        { status: 409 }
+      ),
+  });
+  const { onSaved } = renderModal();
+  const user = await choose(zip("review-kit.zip"));
+  await screen.findByText("New plugin: review-kit");
+  expect(
+    screen.queryByRole("textbox", { name: "Name" })
+  ).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(
+    await screen.findByText(
+      "review-kit is already in use. Pick a different name."
+    )
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  expect(onSaved).not.toHaveBeenCalled();
+  expect(
+    fetchMock.mock.calls.filter(
+      ([url]) => String(url) === "/api/skills/plugins"
+    )
+  ).toHaveLength(1);
 });
 
 test("a bad zip shows the reason from the server", async () => {
@@ -221,6 +306,7 @@ test("a skill name clash says the plugin is saved off", async () => {
           plugin_id: null,
           plugin_name: "review-kit",
           version_number: 1,
+          name_taken: false,
         },
         will_enable: false,
         name_conflicts: ["old-kit"],

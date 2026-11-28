@@ -38,13 +38,14 @@ import { marketplacesHref, pluginHref } from "@/lib/customize/paths";
 import type { SkillStatusFilter } from "@/lib/customize/skills";
 import {
   memberPluginEntries,
+  panelShowsSkill,
   pluginSwitch,
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
 import {
-  useSkillEnablement,
-  type SkillEnablement,
-  useRefreshSkillLists,
+  usePluginEnablement,
+  type PluginEnablement,
+  useRefreshPluginLists,
 } from "@/lib/skills/hooks";
 import { useMarketplaceAdded, useMarketplaces } from "@/lib/marketplaces/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
@@ -57,6 +58,7 @@ import {
   CustomizeEmpty,
   CustomizeGroup,
   CustomizeRowActions,
+  openOnSingleClick,
   StatusFilter,
 } from "@/sections/customize/CustomizeList";
 import { skillIcon } from "@/sections/customize/skillIcon";
@@ -67,7 +69,7 @@ import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
 import PluginTurnOnModal from "@/sections/modals/plugins/PluginTurnOnModal";
 import UploadPluginFlow from "@/sections/modals/plugins/UploadPluginFlow";
 import AdminSkillsTable from "@/sections/skills/AdminSkillsTable";
-import { useSkillBulkActions } from "@/sections/skills/useSkillBulkActions";
+import { usePluginBulkActions } from "@/sections/skills/usePluginBulkActions";
 
 /** Where a plugin comes from, as its row or the admin Source column says. */
 function usePluginSource(): (
@@ -98,7 +100,7 @@ function usePluginSource(): (
 interface PluginRowProps {
   entry: MemberPluginEntry;
   group: PluginGroup;
-  enablement: SkillEnablement;
+  enablement: PluginEnablement;
   onSwitch: (entry: MemberPluginEntry, enabled: boolean) => void;
   onShare: (skill: CustomSkill) => void;
 }
@@ -174,11 +176,13 @@ function PluginRow({
             : undefined
       }
       aria-label={t("skills.open", { name: entry.name })}
-      onClick={() => navigation.go(pluginHref(entry.id, undefined, panel))}
+      onClick={openOnSingleClick(() =>
+        navigation.go(pluginHref(entry.id, undefined, panel))
+      )}
       rightChildren={
         <CustomizeRowActions
           turnOn={
-            !enabled && canToggle
+            (!enabled || busy) && canToggle
               ? {
                   label: t("skills.menu.turnOn"),
                   disabled: busy,
@@ -217,7 +221,7 @@ export default function CustomizePluginsPage() {
     marketplaceList.error !== undefined;
   const locale = useLocale();
   const { user } = useUser();
-  const revalidate = useRefreshSkillLists();
+  const revalidate = useRefreshPluginLists();
   const skills = useUserSkills();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
@@ -229,13 +233,12 @@ export default function CustomizePluginsPage() {
   const userEmail = user?.email ?? null;
   const entries = memberPluginEntries(
     (skills.data?.customs ?? []).filter(
-      (skill) =>
-        skill.kind === "plugin" && (panel === "admin" || skill.member_visible)
+      (skill) => skill.kind === "plugin" && panelShowsSkill(skill, panel)
     ),
     userEmail,
     locale
   );
-  const enablement = useSkillEnablement(
+  const enablement = usePluginEnablement(
     skills.data?.customs ?? [],
     skills.refresh,
     (skill) => {
@@ -259,7 +262,7 @@ export default function CustomizePluginsPage() {
   const adminRows = entries
     .filter((entry) => shownGroups.has(entry.id))
     .map((entry) => entry.skill);
-  const bulk = useSkillBulkActions({
+  const bulk = usePluginBulkActions({
     items: adminRows,
     enablement,
     noun: "plugin",

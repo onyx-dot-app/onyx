@@ -19,21 +19,22 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 import {
-  useSkillBulkSelection,
-  type BulkSkillNoun,
-  type SkillEnablement,
+  isDisableTarget,
+  usePluginBulkSelection,
+  type PluginNoun,
+  type PluginEnablement,
 } from "@/lib/skills/hooks";
 import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
 
-interface SkillBulkActionsOptions {
+interface PluginBulkActionsOptions {
   items: readonly CustomSkill[];
-  enablement: Pick<SkillEnablement, "isPending" | "enabledOf">;
-  noun: BulkSkillNoun;
+  enablement: Pick<PluginEnablement, "isPending" | "enabledOf">;
+  noun: PluginNoun;
 }
 
-export interface SkillBulkActions {
+export interface PluginBulkActions {
   selectedIds: ReadonlySet<string>;
   select: (ids: ReadonlySet<string>) => void;
   busy: boolean;
@@ -50,11 +51,11 @@ export interface SkillBulkActions {
 
 /** The bulk toolbar actions, failure report and dialogs for an admin table
  * of skills or plugins. */
-export function useSkillBulkActions({
+export function usePluginBulkActions({
   items,
   enablement,
   noun,
-}: SkillBulkActionsOptions): SkillBulkActions {
+}: PluginBulkActionsOptions): PluginBulkActions {
   const bulkCopy = useTranslations("skills.bulk");
   const pluginNounCopy = useTranslations("plugins.bulk");
   // The strings that name the rows say "plugin" or "skill".
@@ -77,7 +78,7 @@ export function useSkillBulkActions({
     confirmDelete,
     run,
     reset,
-  } = useSkillBulkSelection({ items, enablement, noun });
+  } = usePluginBulkSelection({ items, enablement, noun });
 
   // A sync can remove every selected plugin; Share has nothing left to save.
   const nothingSelected = selectedItems.length === 0;
@@ -86,23 +87,23 @@ export function useSkillBulkActions({
   }, [nothingSelected, setSharingOpen]);
 
   const toggleActions: DropdownMenuRow[] = [];
-  if (selectedItems.some((item) => !item.enabled)) {
+  if (toggleableItems.some((item) => !item.enabled)) {
     toggleActions.push({
       kind: "action",
       id: "enable",
       icon: SvgCheckCircle,
       title: bulkCopy("enable"),
-      disabled: locked || toggleableItems.length === 0,
+      disabled: locked,
       onSelect: () => void run("enable"),
     });
   }
-  if (selectedItems.some((item) => item.enabled)) {
+  if (toggleableItems.some(isDisableTarget)) {
     toggleActions.push({
       kind: "action",
       id: "disable",
       icon: SvgXCircle,
       title: bulkCopy("disable"),
-      disabled: locked || toggleableItems.length === 0,
+      disabled: locked,
       onSelect: () => void run("disable"),
     });
   }

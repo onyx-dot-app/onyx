@@ -125,7 +125,7 @@ def test_client_records_reauthentication_required_as_auth_error() -> None:
         response = tool.run(_invocation(), ToolContext())
 
     assert isinstance(response, ToolResult)
-    assert "from the Plugins page" in response.text
+    assert "in Customize > Integrations" in response.text
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
     assert response.is_error

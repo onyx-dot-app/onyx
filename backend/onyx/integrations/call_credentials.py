@@ -24,7 +24,9 @@ from onyx.db.users import fetch_user_by_id
 from onyx.integrations.connection_models import (
     SIGN_IN_REJECTED_REASON,
     ConnectionState,
-    connection_secret_fingerprint,
+    access_token_fingerprint,
+    read_connection_secret,
+    secret_fingerprint,
 )
 from onyx.integrations.connections import (
     REFRESH_SKEW,
@@ -175,12 +177,16 @@ def mcp_oauth_provider(
     )
 
 
-def mark_api_key_rejected(credentials: CallCredentials) -> None:
-    """Set Needs reconnect on an API key connection that the service
-    rejected, when the row still holds the key the call sent. OAuth2
-    connections are left to the refresh."""
+def mark_credential_rejected(
+    credentials: CallCredentials, *, rejected_token_fingerprint: str | None = None
+) -> None:
+    """Set Needs reconnect on an API key or OAuth2 connection that the
+    service rejected, when the row still holds the secret the call sent.
+    ``rejected_token_fingerprint``: the access token that the server rejected,
+    which can be a token that the call renewed."""
     if (
-        credentials.auth_method is not IntegrationAuthMethod.API_KEY
+        credentials.auth_method
+        not in (IntegrationAuthMethod.API_KEY, IntegrationAuthMethod.OAUTH2)
         or credentials.connection_id is None
     ):
         return
@@ -188,11 +194,18 @@ def mark_api_key_rejected(credentials: CallCredentials) -> None:
         connection = get_connection_by_id(
             db_session, credentials.connection_id, for_update=True
         )
-        if (
-            connection is None
-            or connection_secret_fingerprint(connection)
-            != credentials.secret_fingerprint
-        ):
+        if connection is None:
+            return
+        secret = read_connection_secret(connection)
+        if rejected_token_fingerprint is not None:
+            still_current = (
+                secret.access_token is not None
+                and access_token_fingerprint(secret.access_token)
+                == rejected_token_fingerprint
+            )
+        else:
+            still_current = secret_fingerprint(secret) == credentials.secret_fingerprint
+        if not still_current:
             return
         mark_connection_needs_reconnect__no_commit(
             db_session, connection, SIGN_IN_REJECTED_REASON

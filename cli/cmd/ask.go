@@ -492,12 +492,19 @@ func (r *askRun) answerApproval(req models.ToolApprovalRequestEvent) {
 	}
 	r.asked[req.ApprovalID] = title
 	decision := r.approveDecision
+	wider, widerLabel, canWiden := approval.WiderApproval(req)
+	if decision == models.ApproveSession && canWiden {
+		decision = wider
+	}
 	if r.prompt != nil {
 		if r.ended[req.ApprovalID] {
 			// The outer loop reports the queued resolution.
 			return
 		}
-		const promptText = "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject: "
+		promptText := "[y] approve once / [d] show all arguments / [N] reject: "
+		if canWiden {
+			promptText = "[y] approve once / [a] " + strings.ToLower(widerLabel[:1]) + widerLabel[1:] + " / [d] show all arguments / [N] reject: "
+		}
 		wait := r.waitForLines(r.prompt, req.ApprovalID)
 		defer wait.stop()
 		line, ok := wait.readLine(promptText)
@@ -515,7 +522,11 @@ func (r *askRun) answerApproval(req models.ToolApprovalRequestEvent) {
 		case "y", "yes":
 			decision = models.ApproveOnce
 		case "a":
-			decision = models.ApproveSession
+			if canWiden {
+				decision = wider
+			} else {
+				decision = models.RejectApproval
+			}
 		default:
 			decision = models.RejectApproval
 		}

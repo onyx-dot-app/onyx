@@ -53,6 +53,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import WRITE_STDIN_TOOL_NAME
 from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import (
+    CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     FileReadResult,
@@ -722,10 +723,6 @@ def question_resolved(
         answers=details.answers,
         message=details.message,
     )
-
-
-# The response type of a generic card's call that failed without details.
-CUSTOM_TOOL_ERROR_RESPONSE_TYPE = "error"
 
 
 class ToolRenderer:
