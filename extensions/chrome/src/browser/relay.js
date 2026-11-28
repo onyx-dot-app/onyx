@@ -135,6 +135,8 @@ export async function connect() {
       // An old socket's close leaves its replacement alone.
       if (socket !== ws) return;
       socket = null;
+      // The admin switch or the account refused: Chrome leaves the chat's tabs.
+      if (event.code === 4403) void endGrant(false);
       void setStatus({ state: event.code === 4403 ? "disabled" : "offline" });
       scheduleRetry();
     };
@@ -356,7 +358,10 @@ async function bind(message) {
     side_panel: message.side_panel === true,
   };
   const tabId = message.tab_id;
-  if (tabId != null && (await chrome.tabs.get(tabId).catch(() => null))) {
+  const tab = tabId == null ? null : await chrome.tabs.get(tabId).catch(() => null);
+  // Only a page with a web site joins: a blank or browser page may hold
+  // another site's content, and has no site that Onyx can ask about.
+  if (tab && driver.originOf(tab.url ?? "")) {
     grant.tabs = [...new Set([...grant.tabs, tabId])];
     grant.current = tabId;
     await setGrant(grant);
