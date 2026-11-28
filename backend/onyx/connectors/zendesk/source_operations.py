@@ -123,7 +123,12 @@ def _make_request_function(
 @retry_builder(tries=5, retry_if=_is_transient)
 def _anonymous_get(url: str) -> requests.Response:
     # A redirect leads to a sign-in page, which is no proof of public access.
-    response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=False)
+    # Without the environment, no netrc credentials ride along.
+    with requests.Session() as session:
+        session.trust_env = False
+        response = session.get(
+            url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=False
+        )
     if response.status_code == 429 or response.status_code >= 500:
         response.raise_for_status()
     return response
@@ -348,10 +353,11 @@ class ZendeskSourceOperations(SourceOperations):
         if response.status_code == 200:
             # A sign-in page or a host mapping answers with something else.
             try:
-                read_id = response.json().get("article", {}).get("id")
+                payload = response.json()
             except ValueError:
                 return False
-            return read_id == article_id
+            article = payload.get("article") if isinstance(payload, dict) else None
+            return isinstance(article, dict) and article.get("id") == article_id
         if response.status_code in (301, 302, 303, 307, 308, 401, 403, 404):
             return False
         raise ZendeskRequestError(

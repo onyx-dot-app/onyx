@@ -326,3 +326,25 @@ def test_end_users_are_not_granted_by_default(monkeypatch: pytest.MonkeyPatch) -
     assert (
         "acme:org_end_users:20" not in docs[0].external_access.external_user_group_ids
     )
+
+
+def test_ticket_without_group_is_for_public_group_agents() -> None:
+    access = ticket_access(SUBDOMAIN, _ticket(group_id=None), USERS, GROUPS, ORGS, True)
+    assert "acme:public_groups" in access.external_user_group_ids
+
+
+def test_a_stop_before_the_last_batch_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A listing smaller than one batch must not end normally after a stop."""
+    make_request = MagicMock(
+        return_value={
+            "articles": [{"id": 1, "body": "<p>x</p>", "user_segment_ids": [3]}],
+            "meta": {"has_more": False},
+        }
+    )
+    connector = ZendeskConnector(content_type="articles")
+    set_request_function(monkeypatch, connector, make_request)
+    callback = MagicMock()
+    callback.should_stop.side_effect = [False, True]
+
+    with pytest.raises(RuntimeError):
+        list(connector.retrieve_all_slim_docs(callback=callback))

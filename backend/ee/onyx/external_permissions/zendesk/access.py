@@ -119,6 +119,10 @@ def ticket_access(
         group = groups.get(group_id)
         if group is not None and group.is_public:
             group_ids.add(public_groups_group_id(account))
+    else:
+        # Zendesk's "within their groups and all public groups" also covers
+        # tickets with no group.
+        group_ids.add(public_groups_group_id(account))
 
     organization_id: int | None = ticket.get("organization_id")
     if organization_id:

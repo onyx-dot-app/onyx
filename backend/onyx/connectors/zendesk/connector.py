@@ -608,6 +608,7 @@ class ZendeskConnector(
 
         if self.content_type == "articles":
             for article in _iterate_articles(self.ops, start_time=start_time):
+                stop_if_requested()
                 if _skips_article(article):
                     continue
                 created_at = article.get("created_at")
@@ -625,7 +626,6 @@ class ZendeskConnector(
                     )
                 )
                 if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
-                    stop_if_requested()
                     yield slim_doc_batch
                     slim_doc_batch = []
         elif self.content_type == "tickets":
@@ -655,10 +655,14 @@ class ZendeskConnector(
                     if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
                         yield slim_doc_batch
                         slim_doc_batch = []
-                if callback is not None:
-                    callback.progress("zendesk_slim_tickets", len(page.data))
+                    # Per ticket: with grant_end_users, each one may read its
+                    # comments, and a page can take long enough to look stalled.
+                    if callback is not None:
+                        callback.progress("zendesk_slim_tickets", 1)
         else:
             raise ValueError(f"Unsupported content_type: {self.content_type}")
+        # A stop during the last batch must not read as a complete listing.
+        stop_if_requested()
         if slim_doc_batch:
             yield slim_doc_batch
 

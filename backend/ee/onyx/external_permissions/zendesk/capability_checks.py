@@ -6,6 +6,8 @@ from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
+    CheckOutput,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -19,6 +21,8 @@ from onyx.connectors.zendesk.models import ZendeskRole, ZendeskTicketPage, Zende
 from onyx.connectors.zendesk.source_operations import ZendeskSourceOperations
 
 _ADMIN_REMEDIATION: str = "Use the API token of a Zendesk admin."
+# Enough tickets that one is likely live when the oldest were deleted.
+_TICKET_SAMPLE_SIZE: int = 10
 
 
 class _AdminCheck(CapabilityCheck[ZendeskConnectorConfig]):
@@ -87,26 +91,40 @@ class _TicketAccessCheck(CapabilityCheck[ZendeskConnectorConfig]):
     def applies(self, form_state: FormState[ZendeskConnectorConfig]) -> bool:
         return form_state.config.content_type == ZendeskContentType.TICKETS
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway: ZendeskSourceOperations = gateway_from_context(context)
 
         def read_first_ticket_access() -> ZendeskTicketPage:
             page = gateway.get_ticket_page(
-                start_time=0, per_page=PROBE_PAGE_SIZE, include_access=True
+                start_time=0, per_page=_TICKET_SAMPLE_SIZE, include_access=True
             )
-            if page.data:
-                gateway.list_ticket_comments(ticket_id=page.data[0]["id"])
+            # The export lists deleted tickets, whose comments are gone.
+            live = next(
+                (ticket for ticket in page.data if ticket.get("status") != "deleted"),
+                None,
+            )
+            if live is not None:
+                gateway.list_ticket_comments(ticket_id=live["id"])
             return page
 
         page: ZendeskTicketPage = probe(
             read_first_ticket_access, "The token cannot read ticket access."
         )
-        # A ticket always names a requester. No user email at all means Zendesk
-        # hides them from this token, and only groups would be granted.
+        # A ticket always names a requester, but shared tickets from another
+        # Zendesk name placeholder users without emails, so this only warns.
         if page.data and not any(user.email for user in page.users):
-            raise InsufficientPermissionsError(
-                f"Zendesk shows no user emails to this token. {_ADMIN_REMEDIATION}"
+            return CheckOutput(
+                advisories=[
+                    CheckAdvisory(
+                        message=(
+                            "No user email was readable on the sampled tickets, so "
+                            "only groups may be granted. Check that the token "
+                            "belongs to an admin."
+                        )
+                    )
+                ]
             )
+        return None
 
 
 def build_zendesk_doc_permission_sync_checks() -> list[CapabilityCheck]:

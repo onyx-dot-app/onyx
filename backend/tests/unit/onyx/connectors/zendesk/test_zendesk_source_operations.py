@@ -20,7 +20,7 @@ from tests.unit.onyx.connectors.zendesk.utils import (
 )
 
 
-def _response(status_code: int, payload: dict[str, Any]) -> MagicMock:
+def _response(status_code: int, payload: Any) -> MagicMock:
     response = MagicMock()
     response.status_code = status_code
     response.headers = {}
@@ -153,15 +153,15 @@ def test_ticket_indexing_reads_no_content_tags(monkeypatch: pytest.MonkeyPatch) 
         (200, {"article": {"id": 7}}, True),
         # A sign-in or landing page served with 200.
         (200, {"something": "else"}, False),
+        (200, {"article": None}, False),
+        (200, [1, 2], False),
         (302, {}, False),
         (403, {}, False),
     ],
 )
-def test_is_article_public(
-    status_code: int, payload: dict[str, Any], expected: bool
-) -> None:
+def test_is_article_public(status_code: int, payload: Any, expected: bool) -> None:
     with patch(
-        "onyx.connectors.zendesk.source_operations.requests.get",
+        "onyx.connectors.zendesk.source_operations.requests.Session.get",
         return_value=_response(status_code, payload),
     ) as get:
         assert _gateway().is_article_public(article_id=7) is expected
