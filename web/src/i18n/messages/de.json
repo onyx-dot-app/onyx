@@ -1484,11 +1484,11 @@
       },
       "browser": {
         "title": "Browser",
-        "description": "Erlauben Sie dem Agenten, in seiner Sandbox einen Webbrowser zu verwenden. Benutzer können ihn im Chatbereich beobachten und die Steuerung übernehmen."
+        "description": "Erlauben Sie dem Agenten, einen Webbrowser zu verwenden. Benutzer können ihn im Chatbereich beobachten."
       },
       "chromeBrowser": {
         "title": "Chrome des Benutzers verwenden",
-        "description": "Chats dürfen Tabs verwenden, die Benutzer mit der Onyx-Erweiterung aus ihrem eigenen Chrome freigeben. Seitentext geht an Onyx und den Modellanbieter."
+        "description": "Chats dürfen das eigene Chrome des Benutzers über die Onyx-Erweiterung verwenden. Onyx fragt den Benutzer, bevor es eine Website verwendet. Seitentext geht an Onyx und den Modellanbieter."
       }
     },
     "codeInterpreter": {
@@ -13894,26 +13894,15 @@
       },
       "connect": {
         "title": "Chrome verbinden",
-        "description": "Installieren Sie die Onyx-Erweiterung in Chrome und melden Sie sich dort bei Onyx an. Dann kann dieser Chat die Tabs verwenden, die Sie freigeben."
+        "description": "Installieren Sie die Onyx-Erweiterung in Chrome und melden Sie sich dort bei Onyx an. Dann kann dieser Chat Ihr Chrome verwenden."
       },
-      "share": {
-        "title": "Chrome-Tabs mit diesem Chat teilen",
-        "description": "Onyx kann die gewählten Tabs lesen und darin als Sie klicken und tippen. Seitentext geht an Onyx und seinen KI-Modellanbieter. Chrome fragt, welche Tabs Sie teilen.",
-        "action": "Tabs teilen"
+      "idle": {
+        "title": "Ihr Chrome ist bereit",
+        "description": "Wenn der Agent Ihr Chrome verwendet, sehen Sie ihm hier zu. Onyx fragt Sie, bevor es eine Website verwendet."
       },
-      "pending": {
-        "title": "In Chrome bestätigen",
-        "description": "Chrome zeigt ein Fenster, in dem Sie Tabs und Websites wählen. Bestätigen Sie dort.",
-        "again": "Erneut anfragen"
-      },
-      "denied": {
-        "title": "Sie haben keine Tabs geteilt"
-      },
-      "shared": {
-        "title": "{count, plural, one {Dieser Chat verwendet # Tab in Ihrem Chrome} other {Dieser Chat verwendet # Tabs in Ihrem Chrome}}",
-        "description": "Verfolgen Sie die Aktionen in Ihrem eigenen Tab. Die Freigabe endet um {until}.",
-        "sites": "Websites: {sites}",
-        "humanControl": "Sie verwenden diesen Tab. Der Agent wartet, bis Sie aufhören.",
+      "using": {
+        "title": "Ihr Chrome wird verwendet",
+        "humanControl": "Sie verwenden diesen Tab",
         "stop": "Stoppen"
       }
     }
@@ -16397,6 +16386,12 @@
         "disabledTooltip": "Die Suchoberfläche ist deaktiviert und kann nur von einem Administrator aktiviert werden.",
         "searchOption": "Suche",
         "title": "Standard-App-Modus"
+      },
+      "defaultBrowser": {
+        "chromeOption": "Ihr Chrome",
+        "description": "Der Browser, den der Agent in neuen Chats verwendet. Ihr Chrome benötigt die Onyx-Erweiterung; ohne sie verwenden Chats den Sandbox-Browser.",
+        "sandboxOption": "Sandbox-Browser",
+        "title": "Standardbrowser"
       },
       "defaultModel": {
         "description": "Dieses Modell wird von {appName} standardmäßig in Ihren Chats verwendet.",

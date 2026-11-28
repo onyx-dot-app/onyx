@@ -489,15 +489,14 @@ export function useChatBrowserTabs({
   };
 }
 
-// The chat's Chrome state changes in Chrome (an approval, a stop), so the
+// The chat's Chrome state changes in Chrome (a bind, a stop), so the
 // panel polls it while it shows, and the chat reads it once otherwise
 const CHROME_POLL_MS = 2_000;
 
 /**
  * The chat's use of the user's own Chrome; no fetch for a null chat. It
- * polls while `polling`, while a share request waits and while the chat
- * shares tabs, so a share that starts or ends anywhere shows soon. A failed
- * fetch retries.
+ * polls while `polling` and while the chat has Chrome access, so access that
+ * starts or ends anywhere shows soon. A failed fetch retries.
  */
 export function useChromeBrowserState(
   sessionId: string | null,
@@ -507,10 +506,7 @@ export function useChromeBrowserState(
     sessionId === null ? null : SWR_KEYS.chatChromeBrowser(sessionId),
     errorHandlingFetcher,
     {
-      refreshInterval: (data) =>
-        polling || data?.grant || data?.request === "pending"
-          ? CHROME_POLL_MS
-          : 0,
+      refreshInterval: (data) => (polling || data?.grant ? CHROME_POLL_MS : 0),
       errorRetryInterval: CHROME_POLL_MS,
     }
   );

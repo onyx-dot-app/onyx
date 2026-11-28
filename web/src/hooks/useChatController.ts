@@ -65,6 +65,7 @@ import {
 import { useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { getExtensionContext } from "@/lib/extension/utils";
+import { getChromeContext } from "@/lib/extension/chromeContext";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
@@ -1148,6 +1149,8 @@ export default function useChatController({
           deepResearch,
           origin: messageOrigin,
           additionalContext,
+          chromeContext:
+            extensionContext === "side_panel" ? getChromeContext() : null,
           llmOverrides: isMultiModel
             ? selectedModels!.map((m) => ({
                 model_provider: m.name,

@@ -718,6 +718,41 @@ export default function ChatPreferencesSettings() {
             </InputHorizontal>
           </Tooltip>
         )}
+
+        {settings.chrome_browser_available && (
+          <InputHorizontal
+            title={t("chats.defaultBrowser.title")}
+            description={t("chats.defaultBrowser.description")}
+            center
+            withLabel
+            fillInput
+          >
+            <InputSingleSelect
+              value={user?.preferences.default_browser ?? "SANDBOX"}
+              onValueChange={(value) => {
+                // SAFETY: the options are "SANDBOX" and "CHROME".
+                const browser = value as "SANDBOX" | "CHROME";
+                void updatePreferences(
+                  { default_browser: browser },
+                  "/api/user/default-browser"
+                );
+              }}
+              defaultOption="SANDBOX"
+              placeholder={tInputSelect("placeholder.fallback")}
+              aria-label={t("chats.defaultBrowser.title")}
+              options={[
+                {
+                  value: "SANDBOX",
+                  title: t("chats.defaultBrowser.sandboxOption"),
+                },
+                {
+                  value: "CHROME",
+                  title: t("chats.defaultBrowser.chromeOption"),
+                },
+              ]}
+            />
+          </InputHorizontal>
+        )}
       </SettingsSection>
 
       <SettingsSection title={t("voice.title")}>

@@ -163,14 +163,14 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   );
   // A tab change that the panel makes itself leaves focus where it is
   const insideChangeRef = useRef(false);
-  // While the user shares Chrome with the chat, its browser tools drive
-  // Chrome, so the panel shows Chrome in place of the sandbox's browser
+  // While the chat uses the user's Chrome, its browser tools drive Chrome,
+  // so the panel shows Chrome in place of the sandbox's browser
   const chrome = useChromeBrowserState(
     chromeAvailable ? sessionId : null,
     open && state.chromeOpen
   );
   // A refused refresh (Chrome turned off, or the user's access) ends the
-  // share in the panel; a transient failure keeps the last state
+  // access in the panel; a transient failure keeps the last state
   const refused =
     chrome.error !== undefined &&
     chrome.error.status >= 400 &&
@@ -721,7 +721,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                   id={panelContentDomId(RIGHT_PANEL_CHROME_TAB)}
                   role="tabpanel"
                   aria-labelledby={panelTabDomId(RIGHT_PANEL_CHROME_TAB)}
-                  className="absolute inset-0 overflow-y-auto"
+                  className="absolute inset-0"
                 >
                   <ChromeBrowserPanel
                     key={sessionId}

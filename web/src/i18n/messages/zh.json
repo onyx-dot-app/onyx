@@ -1484,11 +1484,11 @@
       },
       "browser": {
         "title": "浏览器",
-        "description": "允许智能体在其沙盒中使用网页浏览器。用户可以在聊天面板中观看并接管控制。"
+        "description": "允许智能体使用网页浏览器。用户可以在聊天面板中观看。"
       },
       "chromeBrowser": {
         "title": "使用用户的 Chrome",
-        "description": "允许聊天使用用户通过 Onyx 扩展从自己的 Chrome 共享的标签页。页面文本会发送给 Onyx 和模型提供商。"
+        "description": "允许聊天通过 Onyx 扩展使用用户自己的 Chrome。Onyx 在使用每个网站前会询问用户。页面文本会发送给 Onyx 和模型提供商。"
       }
     },
     "codeInterpreter": {
@@ -13894,26 +13894,15 @@
       },
       "connect": {
         "title": "连接你的 Chrome",
-        "description": "在 Chrome 中安装 Onyx 扩展并在其中登录 Onyx。之后此聊天即可使用你共享的标签页。"
+        "description": "在 Chrome 中安装 Onyx 扩展并在其中登录 Onyx。之后此聊天即可使用你的 Chrome。"
       },
-      "share": {
-        "title": "与此聊天共享 Chrome 标签页",
-        "description": "Onyx 可以读取你选择的标签页，并以你的身份点击和输入。页面文本会发送给 Onyx 及其 AI 模型提供商。Chrome 会询问要共享哪些标签页。",
-        "action": "共享标签页"
+      "idle": {
+        "title": "你的 Chrome 已就绪",
+        "description": "智能体使用你的 Chrome 时，你可以在这里观看。Onyx 在使用每个网站前会先询问你。"
       },
-      "pending": {
-        "title": "在 Chrome 中批准",
-        "description": "Chrome 会显示一个窗口，用于选择标签页和网站。请在那里批准。",
-        "again": "再次请求"
-      },
-      "denied": {
-        "title": "你没有共享标签页"
-      },
-      "shared": {
-        "title": "{count, plural, other {此聊天正在使用你 Chrome 中的 # 个标签页}}",
-        "description": "在你自己的标签页中查看操作。共享将于 {until} 结束。",
-        "sites": "网站：{sites}",
-        "humanControl": "你正在使用此标签页。代理会等到你停止操作。",
+      "using": {
+        "title": "正在使用你的 Chrome",
+        "humanControl": "你正在使用此标签页",
         "stop": "停止"
       }
     }
@@ -16397,6 +16386,12 @@
         "disabledTooltip": "搜索界面已禁用，只有管理员才能启用。",
         "searchOption": "搜索",
         "title": "默认应用模式"
+      },
+      "defaultBrowser": {
+        "chromeOption": "你的 Chrome",
+        "description": "智能体在新聊天中使用的浏览器。你的 Chrome 需要 Onyx 扩展；没有扩展时，聊天会使用沙盒浏览器。",
+        "sandboxOption": "沙盒浏览器",
+        "title": "默认浏览器"
       },
       "defaultModel": {
         "description": "{appName} 会在您的对话中默认使用此模型。",

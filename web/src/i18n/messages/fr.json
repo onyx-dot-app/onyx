@@ -1484,11 +1484,11 @@
       },
       "browser": {
         "title": "Navigateur",
-        "description": "Autorisez l'agent à utiliser un navigateur web dans son bac à sable. Les utilisateurs peuvent le regarder et en prendre le contrôle dans le panneau du chat."
+        "description": "Autorisez l'agent à utiliser un navigateur web. Les utilisateurs peuvent le regarder dans le panneau du chat."
       },
       "chromeBrowser": {
         "title": "Utiliser le Chrome de l'utilisateur",
-        "description": "Permet aux chats d'utiliser les onglets que les utilisateurs partagent depuis leur propre Chrome avec l'extension Onyx. Le texte des pages est envoyé à Onyx et au fournisseur du modèle."
+        "description": "Permet aux chats d'utiliser le propre Chrome de l'utilisateur avec l'extension Onyx. Onyx demande à l'utilisateur avant d'utiliser chaque site. Le texte des pages est envoyé à Onyx et au fournisseur du modèle."
       }
     },
     "codeInterpreter": {
@@ -13894,26 +13894,15 @@
       },
       "connect": {
         "title": "Connecter votre Chrome",
-        "description": "Installez l'extension Onyx dans Chrome et connectez-vous à Onyx. Ce chat pourra ensuite utiliser les onglets que vous partagez."
+        "description": "Installez l'extension Onyx dans Chrome et connectez-vous à Onyx. Ce chat pourra ensuite utiliser votre Chrome."
       },
-      "share": {
-        "title": "Partager des onglets Chrome avec ce chat",
-        "description": "Onyx peut lire les onglets choisis, et y cliquer et saisir du texte en votre nom. Le texte des pages est envoyé à Onyx et à son fournisseur de modèles d'IA. Chrome vous demande quels onglets partager.",
-        "action": "Partager des onglets"
+      "idle": {
+        "title": "Votre Chrome est prêt",
+        "description": "Quand l'agent utilise votre Chrome, vous le regardez ici. Onyx vous demande avant d'utiliser chaque site."
       },
-      "pending": {
-        "title": "Approuvez dans Chrome",
-        "description": "Chrome affiche une fenêtre pour choisir les onglets et les sites. Approuvez-la.",
-        "again": "Redemander"
-      },
-      "denied": {
-        "title": "Vous n'avez pas partagé d'onglets"
-      },
-      "shared": {
-        "title": "{count, plural, one {Ce chat utilise # onglet de votre Chrome} other {Ce chat utilise # onglets de votre Chrome}}",
-        "description": "Suivez les actions dans votre propre onglet. Le partage se termine à {until}.",
-        "sites": "Sites : {sites}",
-        "humanControl": "Vous utilisez cet onglet. L'agent attend que vous ayez terminé.",
+      "using": {
+        "title": "Utilisation de votre Chrome",
+        "humanControl": "Vous utilisez cet onglet",
         "stop": "Arrêter"
       }
     }
@@ -16397,6 +16386,12 @@
         "disabledTooltip": "L'interface de recherche est désactivée et ne peut être activée que par un administrateur.",
         "searchOption": "Recherche",
         "title": "Mode d'application par défaut"
+      },
+      "defaultBrowser": {
+        "chromeOption": "Votre Chrome",
+        "description": "Le navigateur que l'agent utilise dans les nouveaux chats. Votre Chrome a besoin de l'extension Onyx ; sans elle, les chats utilisent le navigateur du bac à sable.",
+        "sandboxOption": "Navigateur du bac à sable",
+        "title": "Navigateur par défaut"
       },
       "defaultModel": {
         "description": "Ce modèle sera utilisé par défaut par {appName} dans vos chats.",

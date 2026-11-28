@@ -1484,11 +1484,11 @@
       },
       "browser": {
         "title": "Navegador",
-        "description": "Permite que o agente use um navegador web na sandbox. Os usuários podem acompanhar e assumir o controle no painel do chat."
+        "description": "Permite que o agente use um navegador web. Os usuários podem acompanhá-lo no painel do chat."
       },
       "chromeBrowser": {
         "title": "Usar o Chrome do usuário",
-        "description": "Permite que os chats usem abas que os usuários compartilham do próprio Chrome com a extensão do Onyx. O texto da página vai para o Onyx e para o provedor do modelo."
+        "description": "Permite que os chats usem o próprio Chrome do usuário por meio da extensão do Onyx. O Onyx pergunta ao usuário antes de usar cada site. O texto da página vai para o Onyx e para o provedor do modelo."
       }
     },
     "codeInterpreter": {
@@ -13894,26 +13894,15 @@
       },
       "connect": {
         "title": "Conecte seu Chrome",
-        "description": "Instale a extensão do Onyx no Chrome e entre no Onyx por lá. Depois, este chat poderá usar as abas que você compartilhar."
+        "description": "Instale a extensão do Onyx no Chrome e entre no Onyx por lá. Depois, este chat poderá usar o seu Chrome."
       },
-      "share": {
-        "title": "Compartilhar abas do Chrome com este chat",
-        "description": "O Onyx pode ler as abas que você escolher e clicar e digitar nelas como você. O texto da página vai para o Onyx e para o provedor de modelos de IA. O Chrome pergunta quais abas compartilhar.",
-        "action": "Compartilhar abas"
+      "idle": {
+        "title": "Seu Chrome está pronto",
+        "description": "Quando o agente usar o seu Chrome, você o acompanha aqui. O Onyx pergunta antes de usar cada site."
       },
-      "pending": {
-        "title": "Aprove no Chrome",
-        "description": "O Chrome mostra uma janela para escolher as abas e os sites. Aprove por lá.",
-        "again": "Pedir novamente"
-      },
-      "denied": {
-        "title": "Você não compartilhou abas"
-      },
-      "shared": {
-        "title": "{count, plural, one {Este chat usa # aba do seu Chrome} other {Este chat usa # abas do seu Chrome}}",
-        "description": "Acompanhe as ações na sua própria aba. O compartilhamento termina às {until}.",
-        "sites": "Sites: {sites}",
-        "humanControl": "Você está usando esta aba. O agente espera até você parar.",
+      "using": {
+        "title": "Usando o seu Chrome",
+        "humanControl": "Você está usando esta aba",
         "stop": "Parar"
       }
     }
@@ -16397,6 +16386,12 @@
         "disabledTooltip": "A interface de pesquisa está desativada e só pode ser ativada por um administrador.",
         "searchOption": "Pesquisa",
         "title": "Modo padrão do aplicativo"
+      },
+      "defaultBrowser": {
+        "chromeOption": "Seu Chrome",
+        "description": "O navegador que o agente usa em novos chats. O seu Chrome precisa da extensão do Onyx; sem ela, os chats usam o navegador da sandbox.",
+        "sandboxOption": "Navegador da sandbox",
+        "title": "Navegador padrão"
       },
       "defaultModel": {
         "description": "Este modelo será usado pelo {appName} por padrão nos seus chats.",

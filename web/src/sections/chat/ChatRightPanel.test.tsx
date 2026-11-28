@@ -1712,10 +1712,58 @@ function jsonResponse(body: object): Response {
   });
 }
 
+/** Shows a reply that waits for approval of each of `tools`. */
+function showApprovals(tools: string[]) {
+  const user: Message = {
+    nodeId: 1,
+    messageId: 1,
+    type: "user",
+    message: "Look it up",
+    files: [],
+    packets: [],
+    toolCall: null,
+    parentNodeId: null,
+    latestChildNodeId: 2,
+    childrenNodeIds: [2],
+  };
+  const reply: Message = {
+    nodeId: 2,
+    messageId: 2,
+    type: "assistant",
+    message: "",
+    files: [],
+    packets: tools.map((tool) => ({
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: PacketType.TOOL_APPROVAL_REQUEST,
+        approval_id: tool,
+        tool_call_id: `call-${tool}`,
+        tool_name: tool,
+        display_name: tool,
+        arguments: {},
+        agent_name: null,
+      },
+    })),
+    toolCall: null,
+    parentNodeId: 1,
+    latestChildNodeId: null,
+    childrenNodeIds: [],
+  };
+  useChatSessionStore.getState().updateSessionMessageTree(
+    "session",
+    new Map([
+      [1, user],
+      [2, reply],
+    ])
+  );
+}
+
 describe("the user's Chrome", () => {
   const originalWebSocket = globalThis.WebSocket;
   // The chat's Chrome state that the panel fetches
   let grant: { expires_at: number } | null = null;
+  // The DELETE calls that stop the chat's use of Chrome
+  let stopCalls = 0;
 
   beforeEach(() => {
     mockChromeAvailable = true;
@@ -1727,22 +1775,34 @@ describe("the user's Chrome", () => {
       value: FakeSocket,
     });
     jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
-    jest.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      jsonResponse({
+    stopCalls = 0;
+    jest.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "DELETE") {
+        stopCalls += 1;
+        grant = null;
+      }
+      return jsonResponse({
         installations: [{ installation_id: "i1" }],
-        request: null,
         grant:
           grant === null
             ? null
             : {
                 tabs: [
-                  { id: "1", title: "Wiki", url: "https://wiki.example/" },
+                  {
+                    id: "1",
+                    title: "Wiki",
+                    url: "https://wiki.example/",
+                    origin: "https://wiki.example",
+                    controller: "agent",
+                  },
                 ],
+                current: "1",
                 origins: ["https://wiki.example"],
+                side_panel: false,
                 ...grant,
               },
-      })
-    );
+      });
+    });
   });
   afterEach(() => {
     mockChromeAvailable = false;
@@ -1763,9 +1823,7 @@ describe("the user's Chrome", () => {
     grant = { expires_at: Date.now() / 1000 + 600 };
     renderChat([[REPORT]]);
     await openChrome();
-    expect(
-      await screen.findByText("This chat uses 1 tab in your Chrome")
-    ).toBeVisible();
+    expect(await screen.findByText("Using your Chrome")).toBeVisible();
 
     act(() => openBrowserInChat("session"));
     await waitFor(() => expect(panel().browserOpen).toBe(false));
@@ -1781,7 +1839,7 @@ describe("the user's Chrome", () => {
     grant = { expires_at: Date.now() / 1000 + 600 };
     renderChat([[REPORT]]);
     await openChrome();
-    await screen.findByText("This chat uses 1 tab in your Chrome");
+    await screen.findByText("Using your Chrome");
 
     // The share ends before the next fetch
     const later = Date.now() + 601_000;
@@ -1802,11 +1860,7 @@ describe("the user's Chrome", () => {
     grant = { expires_at: Date.now() / 1000 + 600 };
     await openChrome();
     // The open tab polls; its next fetch sees the share
-    await screen.findByText(
-      "This chat uses 1 tab in your Chrome",
-      {},
-      { timeout: 5000 }
-    );
+    await screen.findByText("Using your Chrome", {}, { timeout: 5000 });
     expect(panel().browserOpen).toBe(true);
     expect(screen.getByRole("tab", { name: "Browser" })).toBeInTheDocument();
 
@@ -1821,14 +1875,44 @@ describe("the user's Chrome", () => {
   test("My Chrome opened first does not mark the chat's files as seen", async () => {
     renderChat([[REPORT]]);
     update({ type: "openChrome" });
-    await screen.findByText("Share Chrome tabs with this chat");
+    await screen.findByText("Your Chrome is ready");
     expect(panel().seenInitialized).toBe(false);
+  });
+
+  test("Stop ends the chat's use of Chrome", async () => {
+    grant = { expires_at: Date.now() / 1000 + 600 };
+    renderChat([[REPORT]]);
+    await openChrome();
+    await screen.findByText("Using your Chrome");
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(stopCalls).toBe(1));
+    expect(await screen.findByText("Your Chrome is ready")).toBeVisible();
+  });
+
+  test("a pending site approval shows over the idle state, and a tool that is not a browser tool does not", async () => {
+    renderChat([[REPORT]]);
+    act(() => showApprovals(["browser_navigate", "web_search"]));
+    await openChrome();
+    await screen.findByText("Your Chrome is ready");
+
+    const overlay = await screen.findByTestId("chrome-site-approvals");
+    expect(
+      within(overlay).getByRole("button", {
+        name: "Approval requested: browser_navigate",
+      })
+    ).toBeVisible();
+    expect(
+      within(overlay).queryByRole("button", {
+        name: "Approval requested: web_search",
+      })
+    ).toBeNull();
   });
 
   test("My Chrome closes when the workspace turns it off", async () => {
     const view = renderChat([[REPORT]]);
     await openChrome();
-    await screen.findByText("Share Chrome tabs with this chat");
+    await screen.findByText("Your Chrome is ready");
 
     mockChromeAvailable = false;
     view.rerender(<Chat replies={[[REPORT]]} />);

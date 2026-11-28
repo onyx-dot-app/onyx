@@ -1484,11 +1484,11 @@
       },
       "browser": {
         "title": "Browser",
-        "description": "Let the agent use a web browser in its sandbox. Users can watch it and take control in the chat panel."
+        "description": "Let the agent use a web browser. Users can watch it in the chat panel."
       },
       "chromeBrowser": {
         "title": "Use the User's Chrome",
-        "description": "Let chats use tabs that users share from their own Chrome with the Onyx extension. Page text goes to Onyx and the model provider."
+        "description": "Let chats use the user's own Chrome through the Onyx extension. Onyx asks the user before it uses each site. Page text goes to Onyx and the model provider."
       }
     },
     "codeInterpreter": {
@@ -13894,26 +13894,15 @@
       },
       "connect": {
         "title": "Connect your Chrome",
-        "description": "Install the Onyx extension in Chrome and sign in to Onyx there. Then this chat can use the tabs that you share."
+        "description": "Install the Onyx extension in Chrome and sign in to Onyx there. Then this chat can use your Chrome."
       },
-      "share": {
-        "title": "Share Chrome tabs with this chat",
-        "description": "Onyx can read the tabs you pick and click and type in them, as you. Page text goes to Onyx and its AI model provider. Chrome asks you which tabs to share.",
-        "action": "Share Tabs"
+      "idle": {
+        "title": "Your Chrome is ready",
+        "description": "When the agent uses your Chrome, you watch it here. Onyx asks you before it uses each site."
       },
-      "pending": {
-        "title": "Approve in Chrome",
-        "description": "Chrome shows a window to pick the tabs and sites. Approve it there.",
-        "again": "Ask Again"
-      },
-      "denied": {
-        "title": "You did not share tabs"
-      },
-      "shared": {
-        "title": "{count, plural, one {This chat uses # tab in your Chrome} other {This chat uses # tabs in your Chrome}}",
-        "description": "Watch the actions in your own tab. The share ends at {until}.",
-        "sites": "Sites: {sites}",
-        "humanControl": "You are using this tab. The agent waits until you stop.",
+      "using": {
+        "title": "Using your Chrome",
+        "humanControl": "You are using this tab",
         "stop": "Stop"
       }
     }
@@ -16397,6 +16386,12 @@
         "disabledTooltip": "Search UI is disabled and can only be enabled by an admin.",
         "searchOption": "Search",
         "title": "Default App Mode"
+      },
+      "defaultBrowser": {
+        "chromeOption": "Your Chrome",
+        "description": "The browser that the agent uses in new chats. Your Chrome needs the Onyx extension; without it, chats use the sandbox browser.",
+        "sandboxOption": "Sandbox Browser",
+        "title": "Default Browser"
       },
       "defaultModel": {
         "description": "This model will be used by {appName} by default in your chats.",

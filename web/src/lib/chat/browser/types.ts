@@ -132,18 +132,24 @@ export type BrowserConnectionState =
 export interface ChromeBrowserState {
   // The user's Chrome installations that are connected now
   installations: { installation_id: string }[];
-  // A share request that waits in Chrome, or that the user denied
-  request: "pending" | "denied" | null;
   grant: {
     tabs: {
       id: string;
+      // Empty unless the tab is on an allowed site
       title: string;
       url: string;
+      // The tab's site, or an empty string when unknown
+      origin: string;
       // "human" while the user's own input holds the tab
       controller: "agent" | "human";
     }[];
+    // The id of the tab that the agent uses now
+    current: string | null;
+    // The sites that the chat may use now
     origins: string[];
     // Seconds since the epoch
     expires_at: number;
+    // The chat belongs to the extension side panel's window
+    side_panel: boolean;
   } | null;
 }

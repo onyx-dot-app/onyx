@@ -1484,11 +1484,11 @@
       },
       "browser": {
         "title": "브라우저",
-        "description": "에이전트가 샌드박스에서 웹 브라우저를 사용하도록 허용합니다. 사용자는 채팅 패널에서 이를 지켜보고 제어권을 가져올 수 있습니다."
+        "description": "에이전트가 웹 브라우저를 사용하도록 허용합니다. 사용자는 채팅 패널에서 이를 지켜볼 수 있습니다."
       },
       "chromeBrowser": {
         "title": "사용자의 Chrome 사용",
-        "description": "사용자가 Onyx 확장 프로그램으로 자신의 Chrome에서 공유한 탭을 채팅에서 사용할 수 있습니다. 페이지 텍스트는 Onyx와 모델 제공업체로 전송됩니다."
+        "description": "Onyx 확장 프로그램을 통해 채팅이 사용자의 Chrome을 사용할 수 있게 합니다. Onyx는 각 사이트를 사용하기 전에 사용자에게 묻습니다. 페이지 텍스트는 Onyx와 모델 제공업체로 전송됩니다."
       }
     },
     "codeInterpreter": {
@@ -13894,26 +13894,15 @@
       },
       "connect": {
         "title": "Chrome 연결",
-        "description": "Chrome에 Onyx 확장 프로그램을 설치하고 그곳에서 Onyx에 로그인하세요. 그러면 이 채팅에서 공유한 탭을 사용할 수 있습니다."
+        "description": "Chrome에 Onyx 확장 프로그램을 설치하고 그곳에서 Onyx에 로그인하세요. 그러면 이 채팅에서 내 Chrome을 사용할 수 있습니다."
       },
-      "share": {
-        "title": "이 채팅과 Chrome 탭 공유",
-        "description": "Onyx는 선택한 탭을 읽고 사용자로서 클릭하고 입력할 수 있습니다. 페이지 텍스트는 Onyx와 AI 모델 제공업체로 전송됩니다. 공유할 탭은 Chrome에서 묻습니다.",
-        "action": "탭 공유"
+      "idle": {
+        "title": "Chrome이 준비되었습니다",
+        "description": "에이전트가 내 Chrome을 사용하면 여기에서 지켜볼 수 있습니다. Onyx는 각 사이트를 사용하기 전에 먼저 묻습니다."
       },
-      "pending": {
-        "title": "Chrome에서 승인하세요",
-        "description": "Chrome에 탭과 사이트를 선택하는 창이 표시됩니다. 그곳에서 승인하세요.",
-        "again": "다시 요청"
-      },
-      "denied": {
-        "title": "탭을 공유하지 않았습니다"
-      },
-      "shared": {
-        "title": "{count, plural, other {이 채팅은 Chrome 탭 #개를 사용합니다}}",
-        "description": "작업은 내 탭에서 확인하세요. 공유는 {until}에 끝납니다.",
-        "sites": "사이트: {sites}",
-        "humanControl": "이 탭을 사용 중입니다. 사용을 멈출 때까지 에이전트가 기다립니다.",
+      "using": {
+        "title": "Chrome 사용 중",
+        "humanControl": "이 탭을 사용 중입니다",
         "stop": "중지"
       }
     }
@@ -16397,6 +16386,12 @@
         "disabledTooltip": "검색 UI가 비활성화되어 있으며 관리자만 활성화할 수 있습니다.",
         "searchOption": "검색",
         "title": "기본 앱 모드"
+      },
+      "defaultBrowser": {
+        "chromeOption": "내 Chrome",
+        "description": "새 채팅에서 에이전트가 사용하는 브라우저입니다. 내 Chrome을 쓰려면 Onyx 확장 프로그램이 필요하며, 없으면 채팅은 샌드박스 브라우저를 사용합니다.",
+        "sandboxOption": "샌드박스 브라우저",
+        "title": "기본 브라우저"
       },
       "defaultModel": {
         "description": "{appName}가 채팅에서 기본으로 사용하는 모델입니다.",

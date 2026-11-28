@@ -45,15 +45,6 @@ export async function clearBrowserData(sessionId: string): Promise<void> {
     throw new Error(`Clearing browser data failed: ${response.status}`);
 }
 
-/** Asks the user's Chrome to show its window to share tabs with the chat. */
-export async function requestChromeShare(sessionId: string): Promise<void> {
-  const response = await fetch(browserRoute(sessionId, "chrome"), {
-    method: "POST",
-  });
-  if (!response.ok)
-    throw new Error(`Sharing Chrome failed: ${response.status}`);
-}
-
 /** Ends the chat's use of the user's Chrome. */
 export async function stopChromeShare(sessionId: string): Promise<void> {
   const response = await fetch(browserRoute(sessionId, "chrome"), {

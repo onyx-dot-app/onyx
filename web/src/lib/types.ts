@@ -39,6 +39,8 @@ export interface UserPreferences {
   language: Locale | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+  // The browser that the agent uses in new chats
+  default_browser: "SANDBOX" | "CHROME";
   interface_font: InterfaceFont;
   response_font: ResponseFont;
   motion: Motion;

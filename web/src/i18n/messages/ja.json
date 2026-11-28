@@ -1484,11 +1484,11 @@
       },
       "browser": {
         "title": "ブラウザー",
-        "description": "エージェントがサンドボックス内でウェブブラウザーを使えるようにします。ユーザーはチャットパネルでその様子を見たり、操作を引き継いだりできます。"
+        "description": "エージェントがウェブブラウザーを使えるようにします。ユーザーはチャットパネルでその様子を見られます。"
       },
       "chromeBrowser": {
         "title": "ユーザーの Chrome を使用",
-        "description": "Onyx 拡張機能でユーザーが自分の Chrome から共有したタブをチャットで使えるようにします。ページのテキストは Onyx とモデルプロバイダーに送信されます。"
+        "description": "Onyx 拡張機能を通じて、チャットでユーザー自身の Chrome を使えるようにします。Onyx はサイトを使う前にユーザーに確認します。ページのテキストは Onyx とモデルプロバイダーに送信されます。"
       }
     },
     "codeInterpreter": {
@@ -13894,26 +13894,15 @@
       },
       "connect": {
         "title": "Chrome を接続",
-        "description": "Chrome に Onyx 拡張機能をインストールし、そこで Onyx にサインインしてください。その後、このチャットは共有したタブを使用できます。"
+        "description": "Chrome に Onyx 拡張機能をインストールし、そこで Onyx にサインインしてください。その後、このチャットはあなたの Chrome を使用できます。"
       },
-      "share": {
-        "title": "このチャットと Chrome のタブを共有",
-        "description": "Onyx は選択したタブを読み取り、あなたとしてクリックや入力ができます。ページのテキストは Onyx と AI モデルプロバイダーに送信されます。共有するタブは Chrome で選択します。",
-        "action": "タブを共有"
+      "idle": {
+        "title": "Chrome の準備ができました",
+        "description": "エージェントがあなたの Chrome を使うと、ここで様子を見られます。Onyx は各サイトを使う前に確認します。"
       },
-      "pending": {
-        "title": "Chrome で承認してください",
-        "description": "Chrome にタブとサイトを選ぶウィンドウが表示されます。そこで承認してください。",
-        "again": "再度リクエスト"
-      },
-      "denied": {
-        "title": "タブは共有されませんでした"
-      },
-      "shared": {
-        "title": "{count, plural, other {このチャットは Chrome のタブを # 個使用しています}}",
-        "description": "操作は自分のタブで確認できます。共有は {until} に終了します。",
-        "sites": "サイト: {sites}",
-        "humanControl": "このタブを使用中です。操作をやめるまでエージェントは待機します。",
+      "using": {
+        "title": "Chrome を使用中",
+        "humanControl": "このタブを操作中です",
         "stop": "停止"
       }
     }
@@ -16397,6 +16386,12 @@
         "disabledTooltip": "検索 UI は無効です。管理者のみが有効にできます。",
         "searchOption": "検索",
         "title": "デフォルトのアプリモード"
+      },
+      "defaultBrowser": {
+        "chromeOption": "あなたの Chrome",
+        "description": "新しいチャットでエージェントが使うブラウザーです。Chrome の利用には Onyx 拡張機能が必要です。拡張機能がない場合、チャットはサンドボックスブラウザーを使います。",
+        "sandboxOption": "サンドボックスブラウザー",
+        "title": "既定のブラウザー"
       },
       "defaultModel": {
         "description": "{appName} はチャットでこのモデルをデフォルトで使用します。",
