@@ -58,6 +58,7 @@ import {
   CustomizeEmpty,
   CustomizeGroup,
   CustomizeRowActions,
+  openOnSingleClick,
   StatusFilter,
 } from "@/sections/customize/CustomizeList";
 import { skillIcon } from "@/sections/customize/skillIcon";
@@ -175,11 +176,13 @@ function PluginRow({
             : undefined
       }
       aria-label={t("skills.open", { name: entry.name })}
-      onClick={() => navigation.go(pluginHref(entry.id, undefined, panel))}
+      onClick={openOnSingleClick(() =>
+        navigation.go(pluginHref(entry.id, undefined, panel))
+      )}
       rightChildren={
         <CustomizeRowActions
           turnOn={
-            !enabled && canToggle
+            (!enabled || busy) && canToggle
               ? {
                   label: t("skills.menu.turnOn"),
                   disabled: busy,

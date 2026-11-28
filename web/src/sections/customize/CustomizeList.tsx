@@ -1,6 +1,6 @@
 "use client";
 
-import { Children, type ReactNode } from "react";
+import { Children, type MouseEventHandler, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   Badge,
@@ -55,6 +55,17 @@ export function CustomizeGroup({ title, children }: CustomizeGroupProps) {
       </Section>
     </Section>
   );
+}
+
+/** Opens a row on a single click only. A row action such as Turn on can
+ * leave under the pointer, so the second click of a double-click lands on
+ * the row and must not open it. */
+export function openOnSingleClick(
+  open: () => void
+): MouseEventHandler<HTMLElement> {
+  return (event) => {
+    if (event.detail <= 1) open();
+  };
 }
 
 interface CustomizeRowActionsProps {

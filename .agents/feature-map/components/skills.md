@@ -19,7 +19,9 @@
   tag Off, Required, Pending review or Unpublished changes, the date, Turn
   on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
   skill (`/app/customize/skills/new`); GitHub skills come in through a
-  marketplace ([[#github-marketplaces]]). A custom skill
+  marketplace ([[#github-marketplaces]]). A row opens on
+  a single click only, so the second click of a double-click on Turn on does
+  not open it (`sections/customize/CustomizeList.tsx:openOnSingleClick`). A custom skill
   opens at `/app/customize/skills/[id]`; a built-in opens a preview. A custom
   skill's icon is a themed glyph picked from its name and description
   (`sections/customize/skillIcon.tsx`). The Admin Panel lists custom skills
