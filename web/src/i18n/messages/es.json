@@ -434,6 +434,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jira_service_management": {
+          "description": "Atlassian service desk requests"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },
@@ -3281,6 +3284,49 @@
             "comment_email_blacklist": {
               "label": "Lista negra de correos de comentarios",
               "description": "Suele ser útil para ignorar ciertos bots. Añade los correos de los usuarios cuyos comentarios NO deben indexarse."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Configure which Jira Service Management content to index. You can index everything or specify a particular service desk or project.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "service_desk": {
+                  "label": "Service Desk"
+                },
+                "project": {
+                  "label": "Project"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexes every request the account can read",
+              "description": "Onyx indexes all requests in every service desk that the selected account can read. To index fewer, choose another tab."
+            },
+            "service_desk_id": {
+              "label": "Service Desk ID",
+              "description": "The numeric ID of a specific service desk to index (e.g., '3')."
+            },
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of a specific project to index (e.g., 'SD'). Requests are listed from the service desk linked to that project."
+            },
+            "public_comments_only": {
+              "label": "Public Comments Only",
+              "description": "Only index comments marked public in Jira Service Management. Turn off to index internal comments too."
+            },
+            "comment_email_blacklist": {
+              "label": "Comment Email Blacklist",
+              "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
             }
           }
         },
