@@ -1,5 +1,6 @@
 """Unit tests for the usage limit policies, their windows and enforcement."""
 
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, MagicMock, patch
 
@@ -301,6 +302,14 @@ class TestCheckLlmCostLimitForProvider:
 _START = datetime(2026, 11, 25, 14, 7, tzinfo=timezone.utc)  # a Wednesday afternoon
 
 
+@pytest.fixture(autouse=True)
+def _empty_trial_start_warnings() -> Generator[None, None, None]:
+    """Every test starts with no recorded warnings and leaves none behind:
+    period_for records one whenever the trial start is missing."""
+    with patch.dict(usage_limits._trial_start_warned_at, {}, clear=True):
+        yield
+
+
 class TestPeriodFor:
     def test_calendar_week_runs_monday_to_monday(self) -> None:
         now = datetime(2026, 11, 27, 9, 0, tzinfo=timezone.utc)
@@ -526,7 +535,6 @@ class TestPlaygroundOverrides:
 
 class TestMissingTrialStartWarning:
     def test_warns_once_an_hour_per_tenant(self) -> None:
-        usage_limits._trial_start_warned_at.clear()
         with (
             patch.object(usage_limits, "tenant_trial_start_fn", return_value=None),
             patch.object(usage_limits, "logger") as log,
