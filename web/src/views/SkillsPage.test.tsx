@@ -912,8 +912,8 @@ describe("SkillsPage preference toggles", () => {
 
   it("confirms a conflict reported by the server", async () => {
     const user = setupUser();
-    const conflict = Object.assign(new Error("A conflict exists"), {
-      errorCode: "SKILL_NAME_CONFLICT",
+    const conflict = new FetchError("A conflict exists", 409, {
+      error_code: "SKILL_NAME_CONFLICT",
     });
     mockSetSkillEnabled
       .mockRejectedValueOnce(conflict)

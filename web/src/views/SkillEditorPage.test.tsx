@@ -1,3 +1,4 @@
+import { FetchError } from "@/lib/fetcher";
 import type { ComponentProps } from "react";
 import type ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import type SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
@@ -17,7 +18,6 @@ import SkillEditorPage from "@/views/SkillEditorPage";
 import type { SkillEditableDetail } from "@/lib/skills/types";
 import { toast } from "@opal/layouts";
 import messages from "@/i18n/messages/en.json";
-import { FetchError } from "@/lib/fetcher";
 
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockUploadUserSkillFiles = jest.fn();
@@ -418,8 +418,8 @@ describe("SkillEditorPage", () => {
 
   it("requires confirmation before retrying a same-name creation disabled", async () => {
     const user = setupUser();
-    const conflict = Object.assign(new Error("Name conflict"), {
-      errorCode: "SKILL_NAME_CONFLICT",
+    const conflict = new FetchError("Name conflict", 409, {
+      error_code: "SKILL_NAME_CONFLICT",
     });
     const created = {
       id: "created-id",
@@ -525,8 +525,8 @@ describe("SkillEditorPage", () => {
   it("keeps the confirmation open when disabled creation fails", async () => {
     const user = setupUser();
     const consoleError = jest.spyOn(console, "error").mockImplementation();
-    const conflict = Object.assign(new Error("Name conflict"), {
-      errorCode: "SKILL_NAME_CONFLICT",
+    const conflict = new FetchError("Name conflict", 409, {
+      error_code: "SKILL_NAME_CONFLICT",
     });
     const retry = deferred<SkillEditableDetail>();
     mockCreateCustomSkillFromEditor

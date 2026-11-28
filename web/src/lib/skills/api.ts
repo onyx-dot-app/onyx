@@ -6,7 +6,7 @@
  * them to `toast.error` directly.
  */
 
-import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
+import { errorHandlingFetchWith, FetchError } from "@/lib/fetcher";
 import type {
   PluginUploadPreview,
   PluginUploadTarget,
@@ -22,32 +22,60 @@ import type {
   SkillSharePermission,
   SkillInstallationPolicy,
 } from "@/lib/skills/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
-async function skillsFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    let errorCode: string | undefined;
-    let info: ErrorResponseBody | null = null;
-    let detail = `Request failed (${res.status})`;
-    try {
-      const body = await res.json();
-      info = body;
-      if (typeof body?.error_code === "string") errorCode = body.error_code;
-      if (typeof body?.detail === "string") detail = body.detail;
-      else if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
-        detail = body.detail[0].msg;
-      }
-    } catch {
-      // Use the generic status message.
-    }
-    throw Object.assign(new FetchError(detail, res.status, info), {
-      errorCode,
-    });
+type HttpMethod = "POST" | "PUT" | "PATCH" | "DELETE";
+
+interface SkillEnabledRequest {
+  enabled: boolean;
+  replace_conflict: boolean;
+}
+
+interface SkillOwnershipTransfer {
+  new_owner_user_id: string;
+  name?: string;
+}
+
+interface SkillBaseVersionRequest {
+  base_version_id: string;
+}
+
+interface OrganizationLibraryDefaultAccessRequest {
+  installation_policy: OrganizationLibraryDefaultPolicy;
+}
+
+type SkillRequestBody =
+  | FormData
+  | BulkSkillRequest
+  | SkillEnabledRequest
+  | PatchCustomSkillInput
+  | SkillShareUpdatePayload
+  | SkillOwnershipTransfer
+  | SkillBaseVersionRequest
+  | OrganizationLibraryDefaultAccessRequest;
+
+function send<T>(
+  url: string,
+  method: HttpMethod,
+  body?: SkillRequestBody
+): Promise<T> {
+  if (body === undefined) return errorHandlingFetchWith<T>(url, { method });
+  if (body instanceof FormData) {
+    return errorHandlingFetchWith<T>(url, { method, body });
   }
-  if (res.status === 204) {
-    return undefined as T;
-  }
-  return await res.json();
+  return errorHandlingFetchWith<T>(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function customSkillUrl(skillId: string): string {
+  return `${SWR_KEYS.userSkills}/custom/${skillId}`;
+}
+
+function hasErrorCode(error: unknown, errorCode: string): boolean {
+  return error instanceof FetchError && error.info?.error_code === errorCode;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,10 +89,7 @@ export async function uploadSkillBundles(
   const form = new FormData();
   for (const bundle of bundles) form.append("bundles", bundle);
   if (sharing) form.append("sharing", JSON.stringify(sharing));
-  return skillsFetch<GitHubSkillsImportResult>("/api/skills/custom/batch", {
-    method: "POST",
-    body: form,
-  });
+  return send(`${SWR_KEYS.userSkills}/custom/batch`, "POST", form);
 }
 
 export type BulkSkillRequest = {
@@ -87,11 +112,11 @@ export async function bulkUpdateSkills(
   for (let offset = 0; offset < request.skill_ids.length; offset += batchSize) {
     const skill_ids = request.skill_ids.slice(offset, offset + batchSize);
     try {
-      const batch = await skillsFetch<BulkSkillResult>("/api/skills/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...request, skill_ids }),
-      });
+      const batch = await send<BulkSkillResult>(
+        `${SWR_KEYS.userSkills}/bulk`,
+        "POST",
+        { ...request, skill_ids }
+      );
       result.succeeded.push(...batch.succeeded);
       result.failed.push(...batch.failed);
     } catch (error) {
@@ -122,10 +147,11 @@ export async function inspectPluginUpload(
   saveAsNew: boolean,
   name?: string
 ): Promise<PluginUploadPreview> {
-  return skillsFetch<PluginUploadPreview>("/api/skills/plugins/inspect", {
-    method: "POST",
-    body: pluginUploadForm(bundle, saveAsNew, name),
-  });
+  return send(
+    `${SWR_KEYS.userSkills}/plugins/inspect`,
+    "POST",
+    pluginUploadForm(bundle, saveAsNew, name)
+  );
 }
 
 export interface PluginUploadResult {
@@ -141,10 +167,11 @@ export async function savePluginUpload(
   saveAsNew: boolean,
   name?: string
 ): Promise<PluginUploadResult> {
-  return skillsFetch<PluginUploadResult>("/api/skills/plugins", {
-    method: "POST",
-    body: pluginUploadForm(bundle, saveAsNew, name),
-  });
+  return send(
+    `${SWR_KEYS.userSkills}/plugins`,
+    "POST",
+    pluginUploadForm(bundle, saveAsNew, name)
+  );
 }
 
 export interface CreateCustomSkillInput {
@@ -167,18 +194,11 @@ export async function createCustomSkillFromEditor(
   if (input.sharing) form.append("sharing", JSON.stringify(input.sharing));
   if (upload) form.append("upload", upload);
 
-  return skillsFetch<SkillEditableDetail>("/api/skills/custom/editor", {
-    method: "POST",
-    body: form,
-  });
+  return send(`${SWR_KEYS.userSkills}/custom/editor`, "POST", form);
 }
 
 export function isSkillNameConflict(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    "errorCode" in error &&
-    error.errorCode === "SKILL_NAME_CONFLICT"
-  );
+  return hasErrorCode(error, "SKILL_NAME_CONFLICT");
 }
 
 /** The skills that a turn-on would turn off, from a name-conflict error. */
@@ -200,11 +220,7 @@ export function takenPluginName(error: unknown): string | null {
 }
 
 export function isSkillVersionStale(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    "errorCode" in error &&
-    error.errorCode === "PLUGIN_VERSION_STALE"
-  );
+  return hasErrorCode(error, "PLUGIN_VERSION_STALE");
 }
 
 export interface PatchCustomSkillInput {
@@ -220,10 +236,9 @@ export async function setSkillEnabled(
   enabled: boolean,
   replaceConflict = false
 ): Promise<Skill> {
-  return skillsFetch<Skill>(`/api/skills/${skillId}/enabled`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled, replace_conflict: replaceConflict }),
+  return send(`${SWR_KEYS.userSkill(skillId)}/enabled`, "PUT", {
+    enabled,
+    replace_conflict: replaceConflict,
   });
 }
 
@@ -256,13 +271,7 @@ export async function uploadUserSkillFiles(
   const form = new FormData();
   form.append("upload", upload);
   if (baseVersionId) form.append("base_version_id", baseVersionId);
-  return skillsFetch<SkillEditableDetail>(
-    `/api/skills/custom/${skillId}/files`,
-    {
-      method: "POST",
-      body: form,
-    }
-  );
+  return send(`${customSkillUrl(skillId)}/files`, "POST", form);
 }
 
 export async function inspectSkillBundle(
@@ -270,10 +279,7 @@ export async function inspectSkillBundle(
 ): Promise<SkillBundleContents> {
   const form = new FormData();
   form.append("upload", upload);
-  return skillsFetch<SkillBundleContents>("/api/skills/custom/bundle/inspect", {
-    method: "POST",
-    body: form,
-  });
+  return send(`${SWR_KEYS.userSkills}/custom/bundle/inspect`, "POST", form);
 }
 
 export async function removeUserSkillFile(
@@ -283,9 +289,9 @@ export async function removeUserSkillFile(
 ): Promise<SkillEditableDetail> {
   const params = new URLSearchParams({ path });
   if (baseVersionId) params.set("base_version_id", baseVersionId);
-  return skillsFetch<SkillEditableDetail>(
-    `/api/skills/custom/${skillId}/files?${params.toString()}`,
-    { method: "DELETE" }
+  return send(
+    `${customSkillUrl(skillId)}/files?${params.toString()}`,
+    "DELETE"
   );
 }
 
@@ -293,36 +299,21 @@ export async function patchUserSkill(
   skillId: string,
   patch: PatchCustomSkillInput
 ): Promise<CustomSkill> {
-  return skillsFetch<CustomSkill>(`/api/skills/custom/${skillId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
+  return send(customSkillUrl(skillId), "PATCH", patch);
 }
 
 export async function updateSkillShares(
   skillId: string,
   payload: SkillShareUpdatePayload
 ): Promise<CustomSkill> {
-  return skillsFetch<CustomSkill>(`/api/skills/custom/${skillId}/share`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  return send(SWR_KEYS.skillSharing(skillId), "PATCH", payload);
 }
 
 export async function transferSkillOwnership(
   skillId: string,
-  payload: { new_owner_user_id: string; name?: string }
+  payload: SkillOwnershipTransfer
 ): Promise<CustomSkill> {
-  return skillsFetch<CustomSkill>(
-    `/api/skills/custom/${skillId}/transfer-ownership`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }
-  );
+  return send(`${customSkillUrl(skillId)}/transfer-ownership`, "POST", payload);
 }
 
 export async function restoreSkillVersion(
@@ -330,14 +321,9 @@ export async function restoreSkillVersion(
   versionId: string,
   baseVersionId: string
 ): Promise<SkillEditableDetail> {
-  return skillsFetch<SkillEditableDetail>(
-    `/api/skills/custom/${skillId}/versions/${versionId}/restore`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ base_version_id: baseVersionId }),
-    }
-  );
+  return send(`${SWR_KEYS.skillVersion(skillId, versionId)}/restore`, "POST", {
+    base_version_id: baseVersionId,
+  });
 }
 
 /** Publish the current version: a first publish, or a publish update. Under
@@ -346,10 +332,8 @@ export async function publishSkill(
   skillId: string,
   baseVersionId: string
 ): Promise<CustomSkill> {
-  return skillsFetch<CustomSkill>(`/api/skills/custom/${skillId}/publish`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ base_version_id: baseVersionId }),
+  return send(`${customSkillUrl(skillId)}/publish`, "POST", {
+    base_version_id: baseVersionId,
   });
 }
 
@@ -358,28 +342,21 @@ export async function reviewSkillVersion(
   versionId: string,
   decision: "approve" | "deny"
 ): Promise<CustomSkill> {
-  return skillsFetch<CustomSkill>(
-    `/api/skills/custom/${skillId}/versions/${versionId}/${decision}`,
-    { method: "POST" }
+  return send(
+    `${SWR_KEYS.skillVersion(skillId, versionId)}/${decision}`,
+    "POST"
   );
 }
 
 export async function deleteUserSkill(skillId: string): Promise<void> {
-  await skillsFetch<void>(`/api/skills/custom/${skillId}`, {
-    method: "DELETE",
-  });
+  await send<null>(customSkillUrl(skillId), "DELETE");
 }
 
 /** Set the install setting of every published skill with no own setting. */
 export async function setOrganizationLibraryDefaultAccess(
   policy: OrganizationLibraryDefaultPolicy
 ): Promise<OrganizationLibraryDefaultAccess> {
-  return skillsFetch<OrganizationLibraryDefaultAccess>(
-    "/api/skills/organization-library/default-access",
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ installation_policy: policy }),
-    }
-  );
+  return send(SWR_KEYS.organizationLibraryDefaultAccess, "PUT", {
+    installation_policy: policy,
+  });
 }

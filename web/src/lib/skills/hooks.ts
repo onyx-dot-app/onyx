@@ -684,12 +684,14 @@ export function usePluginDelete({
       );
       return true;
     } catch (failure) {
+      const fallback =
+        noun === "plugin" ? pluginCopy("failed") : skillCopy("deleteFailed");
       toast.error(
-        failure instanceof Error && failure.message
-          ? failure.message
-          : noun === "plugin"
-            ? pluginCopy("failed")
-            : skillCopy("deleteFailed")
+        failure instanceof FetchError
+          ? (fetchErrorDetail(failure) ?? fallback)
+          : failure instanceof Error && failure.message
+            ? failure.message
+            : fallback
       );
       return false;
     } finally {

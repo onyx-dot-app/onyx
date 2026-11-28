@@ -1,3 +1,4 @@
+import { FetchError } from "@/lib/fetcher";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
 import type { SkillVersion } from "@/lib/skills/types";
@@ -81,8 +82,8 @@ function renderTab(
 }
 
 function staleError(): Error {
-  return Object.assign(new Error("stale"), {
-    errorCode: "PLUGIN_VERSION_STALE",
+  return new FetchError("stale", 409, {
+    error_code: "PLUGIN_VERSION_STALE",
   });
 }
 
