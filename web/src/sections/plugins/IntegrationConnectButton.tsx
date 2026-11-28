@@ -7,10 +7,14 @@ import { toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgKey } from "@opal/icons";
 import { useSWRConfig } from "swr";
-import { connectAction, needsAdmin } from "@/lib/integrations/connect";
-import { useIntegrationConnect } from "@/lib/integrations/hooks";
-import { deleteUserConnection } from "@/lib/integrations/svc";
+import {
+  connectAction,
+  connectWithOAuth,
+  needsAdmin,
+} from "@/lib/integrations/connect";
+import { deleteUserConnection, startUserOAuth } from "@/lib/integrations/svc";
 import type { MemberIntegration } from "@/lib/integrations/types";
+import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import IntegrationCredentialsModal from "@/sections/plugins/IntegrationCredentialsModal";
 
@@ -40,20 +44,9 @@ export default function IntegrationConnectButton({
 }: IntegrationConnectButtonProps) {
   const t = useTranslations("plugins.member.connection");
   const { mutate } = useSWRConfig();
-  const [disconnecting, setDisconnecting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
   const connectRef = useRef<HTMLSpanElement>(null);
-  const signIn = useIntegrationConnect(integration, {
-    returnPath,
-    onConnected,
-    onRedirect,
-    onConnectFailed: () => {
-      onConnectFailed?.();
-      window.requestAnimationFrame(() =>
-        connectRef.current?.querySelector("button")?.focus()
-      );
-    },
-  });
-  const busy = signIn.busy || disconnecting;
   const { state } = integration.status;
   const action = allowConnect ? connectAction(integration) : null;
   const askAdmin = !action && allowConnect && needsAdmin(integration);
@@ -65,18 +58,56 @@ export default function IntegrationConnectButton({
     integration.auth_mode === "individual";
   const name = integration.name;
 
+  async function refresh() {
+    await mutate(SWR_KEYS.integrations);
+  }
+
+  async function connected() {
+    toast.success(t("connected", { name }));
+    await refresh();
+    onConnected?.();
+  }
+
+  async function connect() {
+    if (integration.auth_method === "api_key") {
+      setCredentialsOpen(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await connectWithOAuth(
+        (path) => startUserOAuth(integration.id, path),
+        returnPath,
+        onRedirect
+      );
+      if (result === "connected") await connected();
+    } catch (error) {
+      if (!isSilentOAuthOutcome(error))
+        toast.error(
+          oauthFailureDetail(error)?.description ??
+            (error instanceof Error && error.message
+              ? error.message
+              : t("failed"))
+        );
+      onConnectFailed?.();
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function disconnect() {
-    setDisconnecting(true);
+    setBusy(true);
     try {
       await deleteUserConnection(integration.id);
       toast.success(t("disconnected", { name }));
-      await mutate(SWR_KEYS.integrations);
+      await refresh();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("disconnectFailed")
       );
     } finally {
-      setDisconnecting(false);
+      setBusy(false);
     }
   }
 
@@ -88,12 +119,12 @@ export default function IntegrationConnectButton({
             key="connect"
             size="md"
             prominence={action === "reconnect" ? "primary" : "secondary"}
-            icon={signIn.busy ? IconLoader : SvgKey}
+            icon={busy ? IconLoader : SvgKey}
             disabled={busy}
             aria-label={t(`${action}.ariaLabel`, { name })}
             onClick={(event) => {
               event.stopPropagation();
-              void signIn.connect();
+              void connect();
             }}
           >
             {t(`${action}.label`)}
@@ -119,11 +150,20 @@ export default function IntegrationConnectButton({
           {t("disconnect.label")}
         </Button>
       )}
-      {signIn.credentialsOpen && (
+      {credentialsOpen && (
         <IntegrationCredentialsModal
           integration={integration}
-          onClose={signIn.closeCredentials}
-          onConnected={signIn.credentialsConnected}
+          onClose={() => {
+            setCredentialsOpen(false);
+            onConnectFailed?.();
+            window.requestAnimationFrame(() =>
+              connectRef.current?.querySelector("button")?.focus()
+            );
+          }}
+          onConnected={() => {
+            setCredentialsOpen(false);
+            void connected();
+          }}
         />
       )}
     </>

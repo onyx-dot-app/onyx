@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import {
@@ -18,15 +18,12 @@ import {
   setIntegrationEnabled,
   setIntegrationInstallationPolicy,
 } from "@/lib/integrations/svc";
-import { connectAction } from "@/lib/integrations/connect";
-import { useIntegrationConnect } from "@/lib/integrations/hooks";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Permission } from "@/lib/types";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButton";
-import IntegrationCredentialsModal from "@/sections/plugins/IntegrationCredentialsModal";
 import ShareIntegrationModal from "@/sections/plugins/ShareIntegrationModal";
 
 /** Why the user cannot use an integration, or null when the user can. */
@@ -47,58 +44,16 @@ export function useIntegrationStateCopy() {
   };
 }
 
-const PENDING_TURN_ON_KEY = "onyx:integration-pending-turn-on";
-
-/** The integration whose sign-in left this tab to turn it on. */
-function readPendingTurnOn(): number | null {
-  try {
-    const id = window.sessionStorage.getItem(PENDING_TURN_ON_KEY);
-    return id ? Number(id) : null;
-  } catch {
-    return null;
-  }
-}
-
-function storePendingTurnOn(integrationId: number | null): void {
-  try {
-    if (integrationId === null)
-      window.sessionStorage.removeItem(PENDING_TURN_ON_KEY);
-    else window.sessionStorage.setItem(PENDING_TURN_ON_KEY, `${integrationId}`);
-  } catch {}
-}
-
 interface IntegrationSwitchProps {
   integration: MemberIntegration;
-  /** Where the OAuth callback returns when no waiting tab closes it. */
-  returnPath: string;
 }
 
-/** The user's on/off switch of an integration. On means on everywhere.
- * Turning on an integration that needs a sign-in starts the sign-in first,
- * and the switch stays off when the user cancels it. */
-export function IntegrationSwitch({
-  integration,
-  returnPath,
-}: IntegrationSwitchProps) {
+/** The user's on/off switch of an integration. On means on everywhere. */
+export function IntegrationSwitch({ integration }: IntegrationSwitchProps) {
   const t = useTranslations("integrations.memberState");
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const required = integration.access.installation_policy === "REQUIRED";
-
-  const signIn = useIntegrationConnect(integration, {
-    returnPath,
-    onConnected: () => void change(true),
-    // The sign-in leaves this page. Turn the integration on when it comes
-    // back connected, so a cancelled sign-in leaves the switch off.
-    onRedirect: () => storePendingTurnOn(integration.id),
-  });
-
-  useEffect(() => {
-    if (readPendingTurnOn() !== integration.id) return;
-    storePendingTurnOn(null);
-    if (connectAction(integration) === null && !integration.access.user_enabled)
-      void change(true);
-  }, [integration]);
 
   async function change(enabled: boolean) {
     setBusy(true);
@@ -112,11 +67,6 @@ export function IntegrationSwitch({
     } finally {
       setBusy(false);
     }
-  }
-
-  function toggle(enabled: boolean) {
-    if (enabled && connectAction(integration) !== null) void signIn.connect();
-    else void change(enabled);
   }
 
   return (
@@ -133,18 +83,11 @@ export function IntegrationSwitch({
           <InputSwitch
             aria-label={t("switch.label", { name: integration.name })}
             checked={integration.access.user_enabled}
-            disabled={busy || signIn.busy || required}
-            onCheckedChange={toggle}
+            disabled={busy || required}
+            onCheckedChange={(checked) => void change(checked)}
           />
         </Section>
       </Tooltip>
-      {signIn.credentialsOpen && (
-        <IntegrationCredentialsModal
-          integration={integration}
-          onClose={signIn.closeCredentials}
-          onConnected={signIn.credentialsConnected}
-        />
-      )}
     </Section>
   );
 }
@@ -191,7 +134,7 @@ export function IntegrationStateControl({
           returnPath={returnPath}
         />
       )}
-      <IntegrationSwitch integration={integration} returnPath={returnPath} />
+      <IntegrationSwitch integration={integration} />
     </Section>
   );
 }

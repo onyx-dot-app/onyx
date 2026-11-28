@@ -28,9 +28,6 @@ jest.mock("@opal/navigation", () => ({
   loadPage: jest.fn(),
 }));
 jest.mock("@/lib/integrations/hooks", () => ({
-  ...jest.requireActual<typeof import("@/lib/integrations/hooks")>(
-    "@/lib/integrations/hooks"
-  ),
   useAgentChatIntegrations: () => ({
     integrationIds: mockIntegrations.map((integration) => integration.id),
     integrations: mockIntegrations,
