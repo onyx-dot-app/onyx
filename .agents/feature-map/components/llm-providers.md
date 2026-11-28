@@ -176,9 +176,10 @@ read at startup. Tenant provisioning
 offered models, picks that default, and skips Vertex, whose cost is not counted
 toward the spend limit. On every auto-update sync, the playground re-applies
 the rule to each provider's models
-(`backend/onyx/llm/well_known_providers/auto_update_service.py:_apply_playground_rule`):
-a model hidden on release appears once it qualifies, and a chat default that
-stops qualifying is replaced by the provider's playground default. Craft's fallback
+(`backend/onyx/llm/well_known_providers/auto_update_service.py:_offered_on_playground`):
+a model hidden on release appears once it qualifies, and a retired one stays
+hidden. A chat default that stops qualifying is then replaced by the first
+provider's playground default (`_replace_unoffered_chat_default`). Craft's fallback
 uses the same default, and `llm/factory.py:llm_from_provider` refuses a model on Onyx's
 keys the rule does not offer. Cloud is unchanged.
 

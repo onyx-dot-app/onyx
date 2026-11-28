@@ -430,3 +430,63 @@ def test_playground_sync_keeps_a_retired_model_hidden(
         "gpt-a": True,
         "gpt-retired": False,
     }
+
+
+@pytest.mark.usefixtures("restore_chat_default")
+def test_playground_sync_takes_a_replacement_default_from_another_provider(
+    db_session: Session, provider_name: str
+) -> None:
+    """The default's own provider offers nothing any more, so the replacement
+    comes from another provider the rule manages."""
+    other_name = f"{provider_name}-other"
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-pricey": True},
+    )
+    other = _create_provider(
+        db_session,
+        other_name,
+        LlmProviderNames.ANTHROPIC,
+        is_auto_mode=True,
+        models={"claude-cheap": True},
+    )
+    try:
+        update_default_model(
+            db_session=db_session,
+            provider_id=provider.id,
+            model="gpt-pricey",
+            flow_type=LLMModelFlowType.CHAT,
+        )
+        catalogs = {
+            LlmProviderNames.OPENAI: ["gpt-pricey"],
+            LlmProviderNames.ANTHROPIC: ["claude-cheap"],
+        }
+        with patch(_CATALOG_PATH, side_effect=lambda name: catalogs[name]):
+            sync_auto_update_providers(db_session)
+        with (
+            patch(_CATALOG_PATH, side_effect=lambda name: catalogs[name]),
+            patch(f"{_SERVICE}.IS_PLAYGROUND", True),
+            patch(
+                f"{_SERVICE}.is_offered_on_playground",
+                side_effect=lambda _provider, name, _rec: name == "claude-cheap",
+            ),
+            patch(
+                f"{_SERVICE}.playground_default_model",
+                side_effect=lambda _provider, _rec, candidates: (
+                    next(iter(candidates)) if candidates else None
+                ),
+            ),
+        ):
+            sync_auto_update_providers(db_session)
+
+        default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        assert default_model is not None
+        assert default_model.llm_provider_id == other.id
+        assert default_model.name == "claude-cheap"
+        assert _visibility(db_session, provider_name) == {"gpt-pricey": False}
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, other_name)

@@ -103,13 +103,16 @@ def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
 
     recommendations = get_recommendations()
     results: dict[str, int] = {}
+    # Per provider, the models the playground rule offers, when it applied.
+    offered_by_provider: dict[int, set[str]] = {}
     for provider in providers:
         catalog = fetch_latest_models_for_provider(provider.provider)
         changes = _sync_catalog(db_session, provider, recommendations, catalog)
         if IS_PLAYGROUND:
-            changes += _apply_playground_rule(
-                db_session, provider, recommendations, catalog
-            )
+            offered = _offered_on_playground(provider, recommendations, catalog)
+            if offered is not None:
+                offered_by_provider[provider.id] = offered
+                changes += set_model_visibility(db_session, provider, offered)
         if changes:
             results[str(provider.id)] = changes
             logger.info(
@@ -117,6 +120,10 @@ def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
                 changes,
                 provider.name or provider.provider,
             )
+    if IS_PLAYGROUND:
+        _replace_unoffered_chat_default(
+            db_session, providers, recommendations, offered_by_provider
+        )
     return results
 
 
@@ -158,55 +165,70 @@ def _sync_catalog(
     return changes
 
 
-def _apply_playground_rule(
-    db_session: Session,
+def _offered_on_playground(
     provider: LLMProvider,
     recommendations: LLMRecommendations,
     catalog: list[str] | None,
-) -> int:
-    """On the playground, show exactly the models the price rule offers. The
-    rule owns visibility there, since playground admins cannot change models.
-    Rechecked on every sync, so a model hidden on release appears once the
-    recommended list includes it, and a model that stops qualifying is hidden.
+) -> set[str] | None:
+    """The provider's models the playground shows: exactly those its price
+    rule offers. The rule owns visibility there, since playground admins cannot
+    change models. Rechecked on every sync, so a model hidden on release
+    appears once the recommended list includes it, and a model that stops
+    qualifying is hidden.
 
-    If the tenant's chat default is on this provider and no longer offered, it
-    is first replaced by the provider's playground default, so chat keeps
-    working. The old model is then hidden like any other unoffered model.
-    Only models in the lab's current catalog are shown: a retired model kept
-    hidden because an agent still uses it stays hidden. Without a catalog, this
-    run changes nothing. Returns the number of changes."""
+    Only models in the lab's current catalog count: a retired model kept
+    hidden because an agent still uses it stays hidden. None without a
+    catalog, so that run changes nothing."""
     if catalog is None:
-        return 0
+        return None
     available = set(catalog)
-    offered = {
+    return {
         model.name
         for model in provider.model_configurations
         if model.name in available
         and is_offered_on_playground(provider.provider, model.name, recommendations)
     }
-    changes = 0
+
+
+def _replace_unoffered_chat_default(
+    db_session: Session,
+    providers: list[LLMProvider],
+    recommendations: LLMRecommendations,
+    offered_by_provider: dict[int, set[str]],
+) -> None:
+    """If the tenant's chat default is on a provider the rule manages and no
+    longer offered, replace it with the playground default of the first
+    provider that has one, so chat keeps working. The guard refuses the old
+    model, which the rule has already hidden."""
     chat_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
-    if (
-        chat_default is not None
-        and chat_default.llm_provider_id == provider.id
-        and chat_default.name not in offered
-    ):
+    if chat_default is None:
+        return
+    offered = offered_by_provider.get(chat_default.llm_provider_id)
+    if offered is None or chat_default.name in offered:
+        return
+    for provider in providers:
+        candidates = offered_by_provider.get(provider.id)
+        if not candidates:
+            continue
         replacement = playground_default_model(
-            provider.provider, recommendations, offered
+            provider.provider, recommendations, candidates
         )
-        if replacement is not None and replacement in offered:
+        if replacement is not None:
             update_default_model(
                 db_session=db_session,
                 provider_id=provider.id,
                 model=replacement,
                 flow_type=LLMModelFlowType.CHAT,
             )
-            changes += 1
-        else:
-            logger.error(
-                "Chat default %s is not offered on the playground and provider "
-                "'%s' has no replacement",
+            logger.info(
+                "Replaced chat default %s, which the playground no longer offers, "
+                "with %s",
                 chat_default.name,
-                provider.name or provider.provider,
+                replacement,
             )
-    return changes + set_model_visibility(db_session, provider, offered)
+            return
+    logger.error(
+        "Chat default %s is not offered on the playground and no provider has "
+        "a replacement",
+        chat_default.name,
+    )
