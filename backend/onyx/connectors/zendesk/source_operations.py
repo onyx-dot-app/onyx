@@ -6,7 +6,7 @@ token. Requests authenticate as `<email>/token`.
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any, ClassVar
 
 import requests
@@ -26,11 +26,14 @@ from onyx.connectors.source_operations import (
     source_operation,
 )
 from onyx.connectors.zendesk.models import (
+    ZendeskCustomRole,
     ZendeskGroup,
+    ZendeskMembership,
     ZendeskOrganization,
     ZendeskPageResponse,
     ZendeskTicketPage,
     ZendeskUser,
+    ZendeskUserSegment,
 )
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder
@@ -38,6 +41,8 @@ from onyx.utils.retry_wrapper import retry_builder
 MAX_PAGE_SIZE = 30  # Zendesk API maximum
 # Zendesk's maximum for comment listings.
 _COMMENT_PAGE_SIZE = 100
+# Zendesk's maximum for cursor-paged listings of users, memberships and the like.
+_LISTING_PAGE_SIZE = 100
 # Upper bound on how long we'll honor a server-provided Retry-After.
 _MAX_RETRY_AFTER_SLEEP_SECONDS = 60
 
@@ -202,6 +207,7 @@ class ZendeskSourceOperations(SourceOperations):
         capabilities=(
             CredentialCapability.INDEXING,
             CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
         ),
         consumes=OperationConsumes.CREDENTIAL,
     )
@@ -224,18 +230,13 @@ class ZendeskSourceOperations(SourceOperations):
     ) -> dict[str, str]:
         """Help Center content tag names by id."""
         content_tags: dict[str, str] = {}
-        params: dict[str, Any] = {"page[size]": page_size}
-        pages: int = 0
-        while True:
-            data = self._request("guide/content_tags", params)
-            pages += 1
-            for tag in data.get("records", []):
+        pages = self._cursor_pages("guide/content_tags", "records", page_size=page_size)
+        for page_number, page in enumerate(pages, start=1):
+            for tag in page:
                 content_tags[tag["id"]] = tag["name"]
-            if not data.get("meta", {}).get("has_more", False) or (
-                max_pages is not None and pages >= max_pages
-            ):
-                return content_tags
-            params["page[after]"] = next_cursor(data["meta"], params.get("page[after]"))
+            if max_pages is not None and page_number >= max_pages:
+                break
+        return content_tags
 
     @source_operation(
         capabilities=(
@@ -332,14 +333,15 @@ class ZendeskSourceOperations(SourceOperations):
     )
     def list_ticket_comments(self, *, ticket_id: str | int) -> list[dict[str, Any]]:
         """Every comment of one ticket, internal notes included."""
-        comments: list[dict[str, Any]] = []
-        params: dict[str, Any] = {"page[size]": _COMMENT_PAGE_SIZE}
-        while True:
-            data = self._request(f"tickets/{ticket_id}/comments", params)
-            comments.extend(data.get("comments", []))
-            if not data.get("meta", {}).get("has_more", False):
-                return comments
-            params["page[after]"] = next_cursor(data["meta"], params.get("page[after]"))
+        return [
+            comment
+            for page in self._cursor_pages(
+                f"tickets/{ticket_id}/comments",
+                "comments",
+                page_size=_COMMENT_PAGE_SIZE,
+            )
+            for comment in page
+        ]
 
     @source_operation(
         capabilities=(CredentialCapability.DOC_PERMISSION_SYNC,),
@@ -368,3 +370,128 @@ class ZendeskSourceOperations(SourceOperations):
         raise ZendeskRequestError(
             response.status_code, "the anonymous article read failed"
         )
+
+    def _cursor_pages(
+        self,
+        endpoint: str,
+        key: str,
+        params: dict[str, Any] | None = None,
+        page_size: int = _LISTING_PAGE_SIZE,
+    ) -> Iterator[list[dict[str, Any]]]:
+        """Each page of a cursor-paged listing. A page without its items fails,
+        since an empty listing would empty groups or read as deletions."""
+        page_params: dict[str, Any] = {"page[size]": page_size, **(params or {})}
+        while True:
+            data = self._request(endpoint, page_params)
+            if key not in data:
+                raise ZendeskRequestError(None, f"{endpoint} answered without {key}")
+            yield data[key]
+            if not data.get("meta", {}).get("has_more", False):
+                return
+            page_params["page[after]"] = next_cursor(
+                data["meta"], page_params.get("page[after]")
+            )
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def iterate_users(self, *, staff_only: bool = False) -> Iterator[list[ZendeskUser]]:
+        """Pages of users. staff_only lists agents and admins only."""
+        params: dict[str, Any] = {"role[]": ["agent", "admin"]} if staff_only else {}
+        for page in self._cursor_pages("users", "users", params):
+            yield [ZendeskUser.model_validate(user) for user in page]
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def iterate_organizations(self) -> Iterator[list[ZendeskOrganization]]:
+        for page in self._cursor_pages("organizations", "organizations"):
+            yield [ZendeskOrganization.model_validate(org) for org in page]
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def iterate_organization_memberships(
+        self, *, user_id: int | None = None
+    ) -> Iterator[list[ZendeskMembership]]:
+        """Every organization membership, or one user's."""
+        endpoint: str = (
+            f"users/{user_id}/organization_memberships"
+            if user_id is not None
+            else "organization_memberships"
+        )
+        for page in self._cursor_pages(endpoint, "organization_memberships"):
+            yield [
+                ZendeskMembership(
+                    user_id=membership["user_id"],
+                    container_id=membership["organization_id"],
+                )
+                for membership in page
+            ]
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def iterate_group_memberships(self) -> Iterator[list[ZendeskMembership]]:
+        for page in self._cursor_pages("group_memberships", "group_memberships"):
+            yield [
+                ZendeskMembership(
+                    user_id=membership["user_id"], container_id=membership["group_id"]
+                )
+                for membership in page
+            ]
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_custom_roles(self) -> list[ZendeskCustomRole] | None:
+        """Custom roles, or None on plans without them. The caller checks that
+        the token is an admin's, so a 403 here means the plan lacks them."""
+        try:
+            data = self._request("custom_roles", {})
+        except InsufficientPermissionsError:
+            return None
+        except ZendeskRequestError as e:
+            if e.status_code == 404:
+                return None
+            raise
+        roles: list[ZendeskCustomRole] = []
+        for role in data["custom_roles"]:
+            configuration: dict[str, Any] = role.get("configuration") or {}
+            roles.append(
+                ZendeskCustomRole(
+                    id=role["id"],
+                    ticket_access=configuration.get("ticket_access"),
+                    forum_access=configuration.get("forum_access"),
+                )
+            )
+        return roles
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def iterate_organization_users(
+        self, *, organization_id: int
+    ) -> Iterator[list[ZendeskUser]]:
+        """Pages of one organization's users."""
+        for page in self._cursor_pages(
+            f"organizations/{organization_id}/users", "users"
+        ):
+            yield [ZendeskUser.model_validate(user) for user in page]
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_user_segments(self) -> list[ZendeskUserSegment]:
+        return [
+            ZendeskUserSegment.model_validate(segment)
+            for page in self._cursor_pages("help_center/user_segments", "user_segments")
+            for segment in page
+        ]

@@ -28,6 +28,7 @@ from ee.onyx.external_permissions.youtrack.capability_checks import (
 )
 from ee.onyx.external_permissions.zendesk.capability_checks import (
     build_zendesk_doc_permission_sync_checks,
+    build_zendesk_group_sync_checks,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
@@ -103,6 +104,7 @@ _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
     DocumentSource.YOUTRACK: build_youtrack_group_sync_checks(),
     DocumentSource.AZURE_DATALAKE: build_azure_datalake_group_sync_checks(),
     DocumentSource.EGNYTE: build_egnyte_group_sync_checks(),
+    DocumentSource.ZENDESK: build_zendesk_group_sync_checks(),
 }
 
 

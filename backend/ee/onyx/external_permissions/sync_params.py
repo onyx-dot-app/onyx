@@ -33,6 +33,8 @@ from ee.onyx.configs.app_configs import (
     TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY,
     YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY,
     YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY,
+    ZENDESK_PERMISSION_DOC_SYNC_FREQUENCY,
+    ZENDESK_PERMISSION_GROUP_SYNC_FREQUENCY,
     ZOOM_PERMISSION_DOC_SYNC_FREQUENCY,
     ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY,
 )
@@ -167,6 +169,18 @@ def _load_egnyte_group_sync() -> GroupSyncFuncType:
     from ee.onyx.external_permissions.egnyte.group_sync import egnyte_group_sync
 
     return egnyte_group_sync
+
+
+def _load_zendesk_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.zendesk.doc_sync import zendesk_doc_sync
+
+    return zendesk_doc_sync
+
+
+def _load_zendesk_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.zendesk.group_sync import zendesk_group_sync
+
+    return zendesk_group_sync
 
 
 def _load_github_doc_sync() -> DocSyncFuncType:
@@ -507,6 +521,20 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY,
             group_sync_func=_lazy_group_sync(_load_youtrack_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.ZENDESK: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=ZENDESK_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_zendesk_doc_sync),
+            # Indexing with permissions sets each article's and ticket's access.
+            initial_index_should_sync=True,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=ZENDESK_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_zendesk_group_sync),
+            # The groups depend on the pair's content type and options.
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),

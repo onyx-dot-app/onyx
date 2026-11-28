@@ -17,6 +17,10 @@ class ZendeskUser(BaseModel):
     role: str | None = None
     custom_role_id: int | None = None
     suspended: bool = False
+    # Set on agents without a custom role: null (all tickets), "groups",
+    # "organization", "assigned" or "requested".
+    ticket_restriction: str | None = None
+    tags: list[str] = []
 
     @property
     def is_staff(self) -> bool:
@@ -42,6 +46,43 @@ class ZendeskOrganization(BaseModel):
     id: int
     # Whether the organization's end users can read each other's tickets.
     shared_tickets: bool = False
+    tags: list[str] = []
+
+
+class ZendeskTicketAccess(StrEnum):
+    """A custom role's `configuration.ticket_access`."""
+
+    ALL = "all"
+    GROUPS = "within-groups"
+    GROUPS_AND_PUBLIC_GROUPS = "within-groups-and-public-groups"
+    ORGANIZATION = "within-organization"
+    ASSIGNED = "assigned-only"
+
+
+class ZendeskCustomRole(BaseModel):
+    id: int
+    # A ZendeskTicketAccess value; unknown values grant nothing.
+    ticket_access: str | None = None
+    # "full" makes the role a Guide manager, who reads every article.
+    forum_access: str | None = None
+
+
+class ZendeskMembership(BaseModel):
+    """A user's membership in a group or an organization."""
+
+    user_id: int
+    container_id: int
+
+
+class ZendeskUserSegment(BaseModel):
+    id: int
+    # "signed_in_users" or "staff".
+    user_type: str
+    tags: list[str] = []
+    or_tags: list[str] = []
+    organization_ids: list[int] = []
+    group_ids: list[int] = []
+    added_user_ids: list[int] = []
 
 
 class ZendeskPageResponse(BaseModel):

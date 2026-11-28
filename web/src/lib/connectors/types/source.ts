@@ -109,6 +109,7 @@ export const validAutoSyncSources = [
   ValidSources.YouTrack,
   ValidSources.AzureDatalake,
   ValidSources.Egnyte,
+  ValidSources.Zendesk,
 ] as const;
 
 // Create a type from the array elements

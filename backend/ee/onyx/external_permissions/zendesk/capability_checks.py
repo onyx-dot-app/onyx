@@ -1,6 +1,6 @@
-"""Named permission sync checks for Zendesk. The doc sync needs an admin's
-token: only admins read the ticket export, every restricted article, and the
-emails of the users a ticket names."""
+"""Named permission sync checks for Zendesk. Both syncs need an admin's
+token: only admins read the ticket export, every restricted article, the
+emails of the users a ticket names, and every user and membership."""
 
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
@@ -59,6 +59,8 @@ class _ArticleAccessCheck(CapabilityCheck[ZendeskConnectorConfig]):
             check_id="zendesk_article_access",
             display_name="Article visibility is readable",
             requires_connector_instance=False,
+            # Waits for the content type.
+            requires_connector_config=True,
             remediation=_ADMIN_REMEDIATION,
         )
 
@@ -85,6 +87,8 @@ class _TicketAccessCheck(CapabilityCheck[ZendeskConnectorConfig]):
             check_id="zendesk_ticket_access",
             display_name="Ticket users and comments are readable",
             requires_connector_instance=False,
+            # Waits for the content type.
+            requires_connector_config=True,
             remediation=_ADMIN_REMEDIATION,
         )
 
@@ -132,4 +136,94 @@ def build_zendesk_doc_permission_sync_checks() -> list[CapabilityCheck]:
         _AdminCheck(CredentialCapability.DOC_PERMISSION_SYNC),
         _ArticleAccessCheck(),
         _TicketAccessCheck(),
+    ]
+
+
+class _UsersCheck(CapabilityCheck[ZendeskConnectorConfig]):
+    config_class = ZendeskConnectorConfig
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="zendesk_users",
+            display_name="Users' emails and roles are readable",
+            requires_connector_instance=False,
+            remediation=_ADMIN_REMEDIATION,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        gateway: ZendeskSourceOperations = gateway_from_context(context)
+        users: list[ZendeskUser] = probe(
+            lambda: next(gateway.iterate_users(staff_only=True), []),
+            "The token cannot list users.",
+        )
+        # The token's own user is staff, so none at all means Zendesk hides
+        # emails from this token, and every group would be empty.
+        if not any(user.email for user in users):
+            raise InsufficientPermissionsError(
+                f"Zendesk shows no user emails to this token. {_ADMIN_REMEDIATION}"
+            )
+
+
+class _MembershipsCheck(CapabilityCheck[ZendeskConnectorConfig]):
+    config_class = ZendeskConnectorConfig
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="zendesk_memberships",
+            display_name="Roles, organizations and group memberships are readable",
+            requires_connector_instance=False,
+            remediation=_ADMIN_REMEDIATION,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        gateway: ZendeskSourceOperations = gateway_from_context(context)
+
+        def read_first_pages() -> None:
+            gateway.list_custom_roles()
+            next(gateway.iterate_group_memberships(), None)
+            next(gateway.iterate_organization_memberships(), None)
+            organizations = next(gateway.iterate_organizations(), [])
+            if organizations:
+                next(
+                    gateway.iterate_organization_users(
+                        organization_id=organizations[0].id
+                    ),
+                    None,
+                )
+
+        probe(read_first_pages, "The token cannot read memberships.")
+
+
+class _UserSegmentsCheck(CapabilityCheck[ZendeskConnectorConfig]):
+    config_class = ZendeskConnectorConfig
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="zendesk_user_segments",
+            display_name="Help Center user segments are readable",
+            requires_connector_instance=False,
+            # Waits for the content type.
+            requires_connector_config=True,
+            remediation=_ADMIN_REMEDIATION,
+        )
+
+    def applies(self, form_state: FormState[ZendeskConnectorConfig]) -> bool:
+        return form_state.config.content_type == ZendeskContentType.ARTICLES
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        probe(
+            gateway_from_context(context).list_user_segments,
+            "The token cannot read user segments.",
+        )
+
+
+def build_zendesk_group_sync_checks() -> list[CapabilityCheck]:
+    return [
+        _AdminCheck(CredentialCapability.EXTERNAL_GROUP_SYNC),
+        _UsersCheck(),
+        _MembershipsCheck(),
+        _UserSegmentsCheck(),
     ]

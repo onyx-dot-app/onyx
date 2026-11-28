@@ -96,6 +96,7 @@ from onyx.connectors.youtrack.models import (
     YouTrackUser,
 )
 from onyx.connectors.zendesk.models import (
+    ZendeskOrganization,
     ZendeskPageResponse,
     ZendeskTicketPage,
     ZendeskUser,
@@ -379,6 +380,15 @@ def _configure_zendesk_spy(spy: MagicMock) -> None:
     )
     spy.list_ticket_comments.return_value = []
     spy.is_article_public.return_value = False
+    spy.iterate_users.side_effect = lambda **_kwargs: iter(
+        [[ZendeskUser(id=1, email="a@example.com", role="admin")]]
+    )
+    spy.list_custom_roles.return_value = []
+    spy.iterate_group_memberships.side_effect = lambda: iter([[]])
+    spy.iterate_organization_memberships.side_effect = lambda **_kwargs: iter([[]])
+    spy.iterate_organizations.side_effect = lambda: iter([[ZendeskOrganization(id=1)]])
+    spy.iterate_organization_users.side_effect = lambda **_kwargs: iter([[]])
+    spy.list_user_segments.return_value = []
 
 
 def _configure_azure_datalake_spy(spy: MagicMock) -> None:

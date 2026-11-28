@@ -193,6 +193,20 @@ EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 )
 
 #####
+# Zendesk
+#####
+# In seconds, default 6 hours. A run reads the ticket export (1,000 tickets per
+# request) or every article, plus each ticket's comments with grant_end_users.
+ZENDESK_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("ZENDESK_PERMISSION_DOC_SYNC_FREQUENCY") or 6 * 60 * 60
+)
+# In seconds, default 6 hours. A run reads every user (100 per request) and
+# every group and organization membership.
+ZENDESK_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("ZENDESK_PERMISSION_GROUP_SYNC_FREQUENCY") or 6 * 60 * 60
+)
+
+#####
 # Azure Data Lake Storage
 #####
 
