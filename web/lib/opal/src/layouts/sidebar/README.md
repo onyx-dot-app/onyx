@@ -40,24 +40,24 @@ Sidebar entry point. Handles three viewport sizes:
 | ---------- | ----------- | ------- | ------------------------------------------------ |
 | `foldable` | `boolean`   | `false` | Enable fold/unfold (and ⌘E / Ctrl+E) on desktop  |
 | `rail`     | `ReactNode` | —       | A `SidebarLayouts.Rail` shown before the sidebar |
-| `brand`    | `ReactNode` | —       | With `rail`: a `Header` with `logo` and `wordmark` above both |
 | `children` | `ReactNode` | —       | `Header`, `Body`, `Footer`, `Section`, `Divider` |
 
 With a `rail`, the sidebar always folds, and folding hides it fully while the
 rail stays. Folded: the desktop column and the small-screen spacer are as wide
 as the rail (`--sidebar-width-folded`); on mobile the rail and the sidebar
 slide out together. Tabs in the rail are always folded: icons with label
-tooltips. The `brand` row spans the rail and the sidebar, so the mark and the
-wordmark stay together. Folded, it keeps only the mark, and hover shows the
-fold button in its place. Under a rail, `Header` takes no branding and shows
-only its pinned content.
+tooltips. Under a rail, `Header` shows the `logo` and the `wordmark` together
+with no fold button: the rail holds it.
 
 ### `SidebarLayouts.Rail`
 
-A thin column of window tabs below the brand row, passed to `Root` as `rail`.
+A thin column of window tabs, passed to `Root` as `rail`. Its top corner is
+the fold button while the sidebar is open. Folded, the corner shows the `logo`
+mark, and hover or keyboard focus shows the open button in its place.
 
 | Prop       | Type        | Default | Description                                       |
 | ---------- | ----------- | ------- | ------------------------------------------------- |
+| `logo`     | `ReactNode` | —       | The logo mark, shown while folded                 |
 | `footer`   | `ReactNode` | —       | Bottom items                                      |
 | `children` | `ReactNode` | —       | Window tabs: `SidebarTab`s with an icon and label |
 

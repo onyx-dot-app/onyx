@@ -11,13 +11,15 @@ import {
   SvgSettings,
   SvgSliders,
 } from "@opal/icons";
-import { AccountPopover } from "@/lib/app/components";
+import { AccountPopover, SidebarLogoMark } from "@/lib/app/components";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { getFirstPermittedAdminRoute } from "@/lib/permissions/utils";
 import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
 import { sidebarWindow } from "@/lib/sidebar/utils";
 import { useUser } from "@/providers/UserProvider";
 import { useChatShortcutActions } from "@/lib/shortcuts/hooks";
+
+const RAIL_LOGO_SIZE_PX = 28;
 
 interface AppRailProps {
   /** Opens the Craft intro from the account menu, where Craft is enabled. */
@@ -36,6 +38,7 @@ export default function AppRail({ onShowBuildIntro }: AppRailProps) {
 
   return (
     <SidebarLayouts.Rail
+      logo={<SidebarLogoMark size={RAIL_LOGO_SIZE_PX} />}
       footer={
         <>
           {hasAdminAccess && (

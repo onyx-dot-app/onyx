@@ -522,17 +522,25 @@ export default function AppSidebar() {
             }
           />
         }
-        brand={<BrandedSidebarHeader />}
       >
         {activeWindow === "agents" ? (
-          <AgentsSidebarContent sensors={sensors} />
+          <>
+            <BrandedSidebarHeader />
+            <AgentsSidebarContent sensors={sensors} />
+          </>
         ) : activeWindow === "customize" ? (
-          <CustomizeSidebarContent />
+          <>
+            <BrandedSidebarHeader />
+            <CustomizeSidebarContent />
+          </>
         ) : activeWindow === "settings" ? (
-          <SettingsSidebarContent />
+          <>
+            <BrandedSidebarHeader />
+            <SettingsSidebarContent />
+          </>
         ) : (
           <>
-            <SidebarLayouts.Header>
+            <BrandedSidebarHeader>
               <div data-testid="AppSidebar/new-session">
                 <SidebarTab
                   icon={SvgEditBig}
@@ -622,7 +630,7 @@ export default function AppSidebar() {
                   {t("appSidebar.scheduledTasks.label")}
                 </SidebarTab>
               </div>
-            </SidebarLayouts.Header>
+            </BrandedSidebarHeader>
 
             <SidebarLayouts.Body scrollKey="app-sidebar">
               <>
