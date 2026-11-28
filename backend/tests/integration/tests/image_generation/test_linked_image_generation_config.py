@@ -21,7 +21,7 @@ from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 CHAT_MODEL = "gpt-5.4-mini"
-IMAGE_MODEL = "gpt-image-2"
+IMAGE_MODEL = "gpt-image-2.5-flare"
 
 
 @pytest.fixture(scope="module")

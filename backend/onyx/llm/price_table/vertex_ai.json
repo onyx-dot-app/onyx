@@ -2,6 +2,7 @@
   "aliases": {
     "claude-fable-5": "claude-fable-5@default",
     "claude-fable-5-1": "claude-fable-5-1@default",
+    "claude-fable-5-2": "claude-fable-5-2@default",
     "claude-haiku-4-5": "claude-haiku-4-5@20251001",
     "claude-haiku-5-5": "claude-haiku-5-5@default",
     "claude-opus-4": "claude-opus-4@20250514",
@@ -64,6 +65,37 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-01",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "claude-fable-5-2@default": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 10,
+        "input": 8,
+        "output": 40
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5.2",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-09",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -232,6 +264,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -607,6 +640,23 @@
       "temperature": true,
       "tool_call": true
     },
+    "deep-research-preview-04-2026": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "deep-research-preview-04-2026"
+    },
     "deep-research-pro-preview-12-2025": {
       "cost": {
         "cache_read": 0.19999999999999998,
@@ -700,6 +750,36 @@
       "temperature": true,
       "tool_call": true
     },
+    "deepseek-ai/deepseek-v4.1-flash-1017-maas": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "status": "beta",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "gemini-2.5-computer-use-preview-10-2025": {
       "cost": {
         "input": 1.25,
@@ -762,11 +842,11 @@
       "cost": {
         "image": 0.039,
         "input": 0.3,
-        "output": 30
+        "output": 2.5
       },
-      "family": "gemini-flash",
+      "family": "nano-banana",
       "limit": {
-        "context": 32768,
+        "context": 65536,
         "output": 32768
       },
       "modalities": {
@@ -784,7 +864,8 @@
       "name": "Nano Banana",
       "open_weights": false,
       "reasoning": false,
-      "release_date": "2025-08-26",
+      "release_date": "2025-10-02",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -817,7 +898,7 @@
       "name": "Gemini 2.5 Flash-Lite",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2025-06-17",
+      "release_date": "2025-07-22",
       "status": "deprecated",
       "structured_output": true,
       "temperature": true,
@@ -897,7 +978,7 @@
         "input": 0.5,
         "output": 10
       },
-      "family": "gemini-flash",
+      "family": "gemini-tts-flash",
       "limit": {
         "context": 32768,
         "input": 8192,
@@ -999,7 +1080,7 @@
         "input": 1,
         "output": 20
       },
-      "family": "gemini-pro",
+      "family": "gemini-tts-pro",
       "limit": {
         "context": 32768,
         "input": 8192,
@@ -1063,9 +1144,9 @@
         "image": 0.134,
         "image_input": 0.0011,
         "input": 2,
-        "output": 120
+        "output": 12
       },
-      "family": "gemini-pro",
+      "family": "nano-banana-pro",
       "limit": {
         "context": 65536,
         "output": 32768
@@ -1137,9 +1218,9 @@
         "image": 0.0672,
         "image_input": 0.00056,
         "input": 0.5,
-        "output": 60
+        "output": 3
       },
-      "family": "gemini-flash",
+      "family": "nano-banana",
       "limit": {
         "context": 131072,
         "output": 32768
@@ -1220,9 +1301,9 @@
         "image": 0.0336,
         "image_input": 0.00028,
         "input": 0.25,
-        "output": 30
+        "output": 1.5
       },
-      "family": "gemini-flash-lite",
+      "family": "nano-banana-lite",
       "limit": {
         "context": 65536,
         "output": 4096
@@ -1557,6 +1638,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-13",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1619,7 +1701,7 @@
       "name": "gemini-3.8-flash-cyber",
       "reasoning": true,
       "structured_output": true,
-      "tool_call": false
+      "tool_call": true
     },
     "gemini-3.8-flash-lite-tts": {
       "cost": {
@@ -1717,13 +1799,167 @@
       "structured_output": true,
       "tool_call": true
     },
+    "gemini-4-carbon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 2,
+        "input_audio": 2,
+        "output": 10
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Carbon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-10",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gemini-4-carbon-cyber-permissive": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 4.0,
+        "output": 20.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-4-carbon-cyber-permissive",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gemini-4-hydrogen": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "input": 1.5,
+        "input_audio": 1.5,
+        "output": 7.5
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Hydrogen",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-12",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gemini-4-neon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "input": 3,
+        "input_audio": 3,
+        "output": 15
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Neon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-18",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gemini-4-neon-cyber-permissive": {
+      "cost": {
+        "cache_read": 0.15,
+        "input": 3.0,
+        "output": 15.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-4-neon-cyber-permissive",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "gemini-embedding-001": {
       "attachment": false,
       "cost": {
         "input": 0.15,
         "output": 0
       },
-      "family": "gemini",
+      "family": "gemini-embedding",
       "limit": {
         "context": 2048,
         "output": 1
@@ -1740,7 +1976,7 @@
       "name": "Gemini Embedding 001",
       "open_weights": false,
       "reasoning": false,
-      "release_date": "2025-05-20",
+      "release_date": "2025-07-14",
       "temperature": false,
       "tool_call": false
     },
@@ -1809,9 +2045,9 @@
         "image": 0.0336,
         "image_input": 0.00168,
         "input": 1.5,
-        "output": 30
+        "output": 7.5
       },
-      "family": "gemini-flash",
+      "family": "nano-banana",
       "limit": {
         "context": 131072,
         "output": 32768
@@ -2209,7 +2445,7 @@
         "output": 0.0
       },
       "limit": {
-        "context": 2048
+        "context": 32
       },
       "mode": "embedding",
       "name": "multimodalembedding"
@@ -2221,7 +2457,7 @@
         "output": 0.0
       },
       "limit": {
-        "context": 2048
+        "context": 32
       },
       "mode": "embedding",
       "name": "multimodalembedding@001"
@@ -2525,7 +2761,7 @@
         "output": 3.0
       },
       "limit": {
-        "context": 65536,
+        "context": 131072,
         "output": 32768
       },
       "mode": "image_generation",
@@ -2824,24 +3060,8 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.2,
-        "context_over_200k": {
-          "cache_read": 0.4,
-          "input": 2.5,
-          "output": 5
-        },
         "input": 1.25,
-        "output": 2.5,
-        "tiers": [
-          {
-            "cache_read": 0.4,
-            "input": 2.5,
-            "output": 5,
-            "tier": {
-              "size": 200000,
-              "type": "context"
-            }
-          }
-        ]
+        "output": 2.5
       },
       "family": "grok",
       "limit": {
