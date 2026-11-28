@@ -7,8 +7,17 @@ export interface Packet {
   obj: PacketType;
 }
 
+/** A resumed stream's position after the packets before it. */
+export interface StreamCursor {
+  stream_id: number;
+  next_cursor: number;
+  replay_complete: boolean;
+}
+
 export type PacketType =
   | MessageResponseIDInfo
+  | UserMessagePacket
+  | ReplayEnd
   | MessageStart
   | MessageDelta
   | CitationInfo
@@ -28,6 +37,10 @@ export type PacketType =
   | DeepResearchPlanStart
   | ResearchAgentStart
   | IntermediateReportStart
+  | ToolApprovalRequest
+  | ToolApprovalResolved
+  | ToolQuestionRequest
+  | ToolQuestionResolved
   | Stop
   | OverallStop
   | ErrorPacket;
@@ -36,6 +49,21 @@ export interface MessageResponseIDInfo {
   type?: "message_response_id_info"; // Optional for backend compatibility
   user_message_id: number | null;
   reserved_assistant_message_id: number;
+}
+
+/** A question the turn accepted; `id` is not the saved message id. */
+export interface UserMessagePacket {
+  type: "user_message";
+  id: string;
+  message: string;
+}
+
+/**
+ * Ends the replayed prefix of a stream that continues a suspended response;
+ * the packets after it are live.
+ */
+export interface ReplayEnd {
+  type: "replay_end";
 }
 
 export interface MessageStart {
@@ -138,8 +166,116 @@ export interface IntermediateReportStart {
   type: "intermediate_report_start";
 }
 
+/** A tool call waits for the user's decision. */
+export interface ToolApprovalRequest {
+  type: "tool_approval_request";
+  approval_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  display_name: string;
+  arguments: Record<string, unknown>;
+  // The subagent that asks; null or absent for the root agent's own requests
+  agent_name?: string | null;
+  // False when the card must not offer "Approve for this chat"
+  can_approve_for_chat?: boolean;
+  // An app request of a command: the card offers "Approve for this command"
+  // in place of "Approve for this chat"
+  can_approve_for_command?: boolean;
+  // The app of such a request
+  app_name?: string | null;
+  // When a command's request expires; set only for a command's requests
+  expires_at?: string | null;
+}
+
+export interface ToolApprovalResolved {
+  type: "tool_approval_resolved";
+  approval_id: string;
+  // approved | approved_for_chat | approved_for_command | rejected | disabled |
+  // cancelled;
+  // anything else is ignored
+  outcome: string;
+}
+
+export interface ToolQuestionOption {
+  label: string;
+  // What the choice means or changes
+  description: string;
+}
+
+export interface ToolQuestion {
+  id: string;
+  // A short label, at most 12 characters
+  header: string;
+  question: string;
+  options: ToolQuestionOption[];
+}
+
+/**
+ * The user's answer to one question: its chosen options, in the question's
+ * order, a note, or both. This card chooses at most one option, which also
+ * answers a multi-select question.
+ */
+export interface ToolQuestionAnswer {
+  question_id: string;
+  option_labels: string[];
+  user_note?: string | null;
+}
+
+/** A question call of the root agent waits for the user's answers. */
+export interface ToolQuestionRequest {
+  type: "tool_question_request";
+  question_request_id: string;
+  tool_call_id: string;
+  questions: ToolQuestion[];
+}
+
+/**
+ * How a question call ended: answered on its card (`answers`), by a message
+ * that the user typed in the chat (`message`), or cancelled.
+ */
+export interface ToolQuestionResolved {
+  type: "tool_question_resolved";
+  question_request_id: string;
+  // answered | cancelled; anything else is ignored
+  outcome: string;
+  answered_via?: "card" | "message" | null;
+  answers?: ToolQuestionAnswer[] | null;
+  message?: string | null;
+}
+
+/** A running stream and the responses it writes. */
+export interface ChatStream {
+  stream_id: number;
+  response_ids: number[];
+}
+
+export interface ApprovalDecisionResponse {
+  decision: "APPROVED" | "REJECTED";
+  // "POLICY": the action policy disabled the tool, so the approval rejected it.
+  // "COMMAND_GRANT": approved for the rest of a VM command.
+  decided_via: string;
+  // The stream that continues the response; null while other requests still
+  // wait, or for a background agent's request, which continues without one
+  continuation: ChatStream | null;
+}
+
+/** The body of a question request's answers: card answers or a typed message. */
+export type QuestionAnswersRequest =
+  | { answers: ToolQuestionAnswer[] }
+  | { message: string };
+
+export interface QuestionAnswersResponse {
+  // The stream that continues the response; null while other requests or
+  // questions of the response still wait
+  continuation: ChatStream | null;
+}
+
+/** The stream's last packet. */
 export interface Stop {
   type: "stop";
+  // "awaiting_user": the response waits for the user's decisions or answers
+  // and continues on a new stream after them
+  stop_reason?: string | null;
 }
 
 export interface OverallStop {
@@ -165,6 +301,38 @@ export interface ChatSession {
   created_at: string;
   updated_at: string;
   messages: Message[];
+}
+
+/** The fields of `/chat/get-chat-session` that the widget reads. */
+export interface ChatSessionDetail {
+  messages: {
+    message_id: number;
+    message_type: string;
+    // The question an assistant message answers
+    parent_message?: number | null;
+    // The child on the selected branch; the load returns every branch
+    latest_child_message?: number | null;
+  }[];
+  // One replay packet list for each assistant message, in message order
+  packets: Packet[][];
+  // The status's `approvals_version` for the requests this load shows
+  approvals_version?: string;
+}
+
+/** The fields of `/chat/chat-session/{id}/status` that the widget reads. */
+export interface ChatSessionStatus {
+  is_processing: boolean;
+  // Background agents run, their queued work waits, or a decided agent
+  // waits to resume; an agent that waits for a decision does not count
+  has_active_subagents: boolean;
+  // Queued input or unread root results can start a turn; a paused queue
+  // cannot
+  has_startable_input: boolean;
+  // The newest response on the selected branch
+  latest_response_id: number | null;
+  current_stream: ChatStream | null;
+  // Changes when a request of the chat opens, is decided or is removed
+  approvals_version: string | null;
 }
 
 export interface SendMessageRequest {

@@ -2,21 +2,30 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.connector_manage_access import (
+    assert_groups_have_no_global_manage_grant,
+    fetch_managed_cc_pair_roles_for_group,
+    lock_cc_pairs_for_manage_access__no_commit,
+    write_manage_rows__no_commit,
+)
 from ee.onyx.db.document_set import set_document_set_group_membership__no_commit
 from ee.onyx.db.persona import update_persona_access
 from ee.onyx.db.user_group import (
     add_users_to_user_group,
+    assert_cc_pairs_attachable_to_group,
     assert_group_membership_survives_deletion,
     fetch_user_group,
     fetch_user_group_for_snapshot,
+    fetch_user_group_member_counts,
+    fetch_user_group_member_ids,
     fetch_user_groups,
     fetch_user_groups_for_user,
     insert_user_group,
-    make_group_manager,
     prepare_user_group_for_deletion,
     rename_user_group,
-    revoke_group_manager,
+    set_group_manager__no_commit,
     set_group_permissions_bulk__no_commit,
+    set_user_group_data_access_cc_pairs,
     set_user_group_incognito,
     update_user_group,
 )
@@ -24,13 +33,17 @@ from ee.onyx.db.user_group import delete_user_group as db_delete_user_group
 from ee.onyx.server.user_group.models import (
     AddUsersToUserGroupRequest,
     BulkSetPermissionsRequest,
+    GroupManagedCCPairsUpdateRequest,
+    ManagedCCPairEntry,
     MinimalUserGroupSnapshot,
     SetGroupManagerRequest,
     UpdateGroupAgentsRequest,
     UpdateGroupDocumentSetsRequest,
     UserGroup,
     UserGroupCreate,
+    UserGroupDataAccessCCPairs,
     UserGroupIncognitoUpdate,
+    UserGroupMemberCounts,
     UserGroupRename,
     UserGroupUpdate,
 )
@@ -48,24 +61,32 @@ from onyx.auth.scoped_permissions import (
     assert_manages_group,
     assert_within_scope,
     get_scoped_groups,
+    get_visible_user_group_ids,
     manages_group,
 )
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS, OnyxCeleryPriority, OnyxCeleryTask
+from onyx.db.connector_credential_pair import CCPairAccessLevel
 from onyx.db.document_set import (
     get_document_sets_by_ids,
     get_group_ids_for_document_sets,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission, PermissionAuthority
+from onyx.db.enums import ConnectorManageRole, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user, get_personas_by_ids
-from onyx.db.user_group import assert_group_config_is_editable
+from onyx.db.user_group import (
+    assert_group_config_is_editable,
+    assert_group_permissions_editable,
+    group_permission_toggles_allowed,
+)
+from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
+from onyx.skills.push import enqueue_skill_push
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -79,10 +100,18 @@ logger = setup_logger()
 
 router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 
+# A group manager can give a group only a role they hold on the pair themselves.
+_ACCESS_LEVEL_TO_GIVE_ROLE: dict[ConnectorManageRole, CCPairAccessLevel] = {
+    ConnectorManageRole.EDITOR: CCPairAccessLevel.EDIT,
+    ConnectorManageRole.OPERATOR: CCPairAccessLevel.OPERATE,
+}
+
 
 @router.get("/admin/user-group")
 def list_user_groups(
     include_default: bool = False,
+    # False sends member counts without member lists, which are large in big orgs.
+    include_users: bool = True,
     user: User = Depends(
         require_permission(Permission.READ_USER_GROUPS, allow_scope=True)
     ),
@@ -100,23 +129,33 @@ def list_user_groups(
     )
     is_user_groups_admin = has_global_permission(user, Permission.MANAGE_USER_GROUPS)
     is_full_admin = has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
-    restrict_to_group_ids = (
-        None
-        if has_global_permission(user, Permission.READ_USER_GROUPS)
-        else managed_group_ids
-    )
     user_groups = fetch_user_groups(
         db_session,
         only_up_to_date=False,
         eager_load_for_snapshot=True,
         include_default=include_default,
-        restrict_to_group_ids=restrict_to_group_ids,
+        restrict_to_group_ids=get_visible_user_group_ids(user, db_session),
+        include_users=include_users,
+    )
+    member_counts = (
+        None
+        if include_users
+        else fetch_user_group_member_counts(
+            db_session, [user_group.id for user_group in user_groups]
+        )
     )
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
         UserGroup.from_model(
             user_group,
             mask_credential_prefix=mask_credential_prefix,
+            member_counts=(
+                None
+                if member_counts is None
+                else member_counts.get(
+                    user_group.id, UserGroupMemberCounts(total=0, active=0)
+                )
+            ),
             permissions=user_group_permissions(
                 can_manage=manages_group(
                     user,
@@ -127,6 +166,7 @@ def list_user_groups(
                 is_user_groups_admin=is_user_groups_admin,
                 is_full_admin=is_full_admin,
                 is_default=user_group.is_default,
+                permission_toggles_allowed=group_permission_toggles_allowed(user_group),
             ),
         )
         for user_group in user_groups
@@ -164,6 +204,7 @@ def get_user_group(
                 user, Permission.FULL_ADMIN_PANEL_ACCESS
             ),
             is_default=user_group.is_default,
+            permission_toggles_allowed=group_permission_toggles_allowed(user_group),
         ),
     )
 
@@ -173,8 +214,33 @@ def list_minimal_user_groups(
     include_default: bool = False,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    manageable_for: Permission | None = None,
 ) -> list[MinimalUserGroupSnapshot]:
-    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
+    """``manageable_for``: only the groups whose shares the user can change
+    with that permission. A scoped manager gets the groups they manage, and a
+    user without the permission gets none."""
+    if manageable_for is not None and not (
+        Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user)
+        or has_global_permission(user, manageable_for)
+    ):
+        managed = (
+            get_scoped_groups(user, db_session, manageable_for)
+            if has_permission(user, manageable_for) is PermissionAuthority.SCOPED
+            else set()
+        )
+        return [
+            MinimalUserGroupSnapshot.from_model(user_group)
+            for user_group in fetch_user_groups(
+                db_session, only_up_to_date=False, include_default=include_default
+            )
+            if user_group.id in managed
+        ]
+    # An organization-wide skill or action manager sets the access of any
+    # group, so it picks from every group.
+    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user) or any(
+        has_global_permission(user, permission)
+        for permission in (Permission.MANAGE_PLUGINS, Permission.MANAGE_ACTIONS)
+    ):
         user_groups = fetch_user_groups(
             db_session,
             only_up_to_date=False,
@@ -228,9 +294,7 @@ def set_user_group_permissions(
     group = fetch_user_group(db_session, user_group_id)
     if group is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
-    assert_group_config_is_editable(
-        db_session, user_group_id, "change the permissions of"
-    )
+    assert_group_permissions_editable(group, request.permissions)
 
     non_toggleable = [p for p in request.permissions if p in NON_TOGGLEABLE_PERMISSIONS]
     if non_toggleable:
@@ -292,6 +356,7 @@ def create_user_group(
             "cc_pair_ids": list(user_group.cc_pair_ids),
         },
     )
+    enqueue_skill_push(user_group.user_ids)
 
     return UserGroup.from_model(
         db_user_group,
@@ -378,18 +443,130 @@ def patch_user_group(
     ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
+    # The write takes this lock again; holding it from the roster read stops a
+    # concurrent membership write from landing between the read and the write.
+    lock_group_membership(db_session)
+    members_before = fetch_user_group_member_ids(db_session, user_group_id)
     try:
-        return UserGroup.from_model(
-            update_user_group(
-                db_session=db_session,
-                user=user,
-                user_group_id=user_group_id,
-                user_group_update=user_group_update,
-            ),
-            mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        db_user_group = update_user_group(
+            db_session=db_session,
+            user=user,
+            user_group_id=user_group_id,
+            user_group_update=user_group_update,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    enqueue_skill_push(
+        members_before ^ fetch_user_group_member_ids(db_session, user_group_id)
+    )
+    return UserGroup.from_model(
+        db_user_group,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
+
+
+@router.put("/admin/user-group/{user_group_id}/data-access-cc-pairs")
+def set_user_group_data_access_cc_pairs_endpoint(
+    user_group_id: int,
+    request: UserGroupDataAccessCCPairs,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> UserGroupDataAccessCCPairs:
+    """Sets the private and restricted connectors whose documents the group's
+    members may read."""
+    try:
+        cc_pair_ids = set_user_group_data_access_cc_pairs(
+            db_session=db_session,
+            user=user,
+            user_group_id=user_group_id,
+            cc_pair_ids=set(request.cc_pair_ids),
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    return UserGroupDataAccessCCPairs(cc_pair_ids=sorted(cc_pair_ids))
+
+
+@router.put("/admin/user-group/{user_group_id}/managed-cc-pairs")
+def set_group_managed_cc_pairs(
+    user_group_id: int,
+    request: GroupManagedCCPairsUpdateRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> list[ManagedCCPairEntry]:
+    """Replace the connectors this group manages, and its role on each. Authorized
+    as a group edit: the caller manages the group, and a scoped manager may only
+    attach (or re-role) pairs within their managed scope."""
+    # GATE 2: before any read, so a non-manager can't confirm the group exists.
+    assert_manages_group(user, db_session, group_id=user_group_id)
+    if fetch_user_group(db_session, user_group_id) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    assert_group_config_is_editable(db_session, user_group_id, "give connectors to")
+
+    requested = {entry.cc_pair_id: entry.role for entry in request.cc_pairs}
+    current = fetch_managed_cc_pair_roles_for_group(db_session, user_group_id)
+    found_cc_pair_ids = lock_cc_pairs_for_manage_access__no_commit(
+        db_session, current.keys() | requested.keys()
+    )
+    if missing := sorted(requested.keys() - found_cc_pair_ids):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"Connector(s) {missing} not found"
+        )
+    # Re-read under the lock, so a concurrent write is diffed rather than overwritten.
+    current = fetch_managed_cc_pair_roles_for_group(db_session, user_group_id)
+
+    upserts = {
+        cc_pair_id: role
+        for cc_pair_id, role in requested.items()
+        if current.get(cc_pair_id) is not role
+    }
+    if upserts:
+        assert_groups_have_no_global_manage_grant(db_session, [user_group_id])
+    for role, access_level in _ACCESS_LEVEL_TO_GIVE_ROLE.items():
+        assert_cc_pairs_attachable_to_group(
+            db_session,
+            user,
+            user_group_id,
+            cc_pair_ids={
+                cc_pair_id
+                for cc_pair_id, upsert_role in upserts.items()
+                if upsert_role is role
+            },
+            access_level=access_level,
+        )
+    write_manage_rows__no_commit(
+        db_session,
+        upserts={
+            (user_group_id, cc_pair_id): role for cc_pair_id, role in upserts.items()
+        },
+        deletes=[
+            (user_group_id, cc_pair_id)
+            for cc_pair_id in current.keys() - requested.keys()
+        ],
+    )
+    db_session.commit()
+
+    emit_audit_event(
+        AuditAction.USER_GROUP_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="user_group",
+        resource_id=user_group_id,
+        extra={
+            "managed_cc_pairs": {
+                str(cc_pair_id): role.value for cc_pair_id, role in requested.items()
+            }
+        },
+    )
+    return [
+        ManagedCCPairEntry(cc_pair_id=cc_pair_id, role=role)
+        for cc_pair_id, role in sorted(
+            fetch_managed_cc_pair_roles_for_group(db_session, user_group_id).items()
+        )
+    ]
 
 
 @router.post("/admin/user-group/{user_group_id}/add-users")
@@ -401,18 +578,26 @@ def add_users(
     ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
+    # The write takes this lock again; holding it from the roster read stops a
+    # concurrent membership write from landing between the read and the write.
+    lock_group_membership(db_session)
+    members_before = fetch_user_group_member_ids(db_session, user_group_id)
     try:
-        return UserGroup.from_model(
-            add_users_to_user_group(
-                db_session=db_session,
-                user=user,
-                user_group_id=user_group_id,
-                user_ids=add_users_request.user_ids,
-            ),
-            mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        db_user_group = add_users_to_user_group(
+            db_session=db_session,
+            user=user,
+            user_group_id=user_group_id,
+            user_ids=add_users_request.user_ids,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    enqueue_skill_push(
+        fetch_user_group_member_ids(db_session, user_group_id) - members_before
+    )
+    return UserGroup.from_model(
+        db_user_group,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
 
 
 @router.delete("/admin/user-group/{user_group_id}")
@@ -427,12 +612,14 @@ def delete_user_group(
     # Deletion drops every membership, so capture the roster before it runs.
     existing = fetch_user_group(db_session, user_group_id)
     group_name = existing.name if existing else None
-    member_ids = [str(member.id) for member in existing.users] if existing else []
+    member_uuids = [member.id for member in existing.users] if existing else []
+    member_ids = [str(member_id) for member_id in member_uuids]
 
     try:
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    enqueue_skill_push(member_uuids)
 
     emit_audit_event(
         AuditAction.USER_GROUP_DELETE,
@@ -633,10 +820,12 @@ def set_group_manager(
     )
 
     try:
-        if request.is_manager:
-            make_group_manager(db_session, request.user_id, user_group_id)
-        else:
-            revoke_group_manager(db_session, request.user_id, user_group_id)
+        set_group_manager__no_commit(
+            db_session,
+            user_id=request.user_id,
+            group_id=user_group_id,
+            is_manager=request.is_manager,
+        )
     except ValueError as e:
         # Target isn't a member of the group (a manager is always a member).
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))

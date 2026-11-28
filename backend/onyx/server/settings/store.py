@@ -7,7 +7,6 @@ from onyx.configs.app_configs import (
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_USER_KNOWLEDGE,
     DISABLE_VECTOR_DB,
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
     HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
     ONYX_QUERY_HISTORY_TYPE,
@@ -16,6 +15,10 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import KV_SETTINGS_KEY, OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.server.playground import (
+    PlaygroundRestrictedFeature,
+    is_restricted_in_playground,
+)
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
@@ -46,6 +49,11 @@ def settings_write_lock() -> Iterator[None]:
         logger=logger,
     ):
         yield
+
+
+def resolve_user_language(stored_language: str | None) -> str:
+    """The stored language wins, else the workspace default."""
+    return stored_language or load_settings().default_language.value
 
 
 def load_settings(raise_on_error: bool = False) -> Settings:
@@ -81,6 +89,13 @@ def load_settings(raise_on_error: bool = False) -> Settings:
         anonymous_user_enabled = False
 
     settings.anonymous_user_enabled = anonymous_user_enabled
+
+    # Restricted on the playground whatever is stored, so the gateway and the
+    # anonymous login refuse and the web app shows the switches off.
+    if is_restricted_in_playground(PlaygroundRestrictedFeature.ANONYMOUS_ACCESS):
+        settings.anonymous_user_enabled = False
+    if is_restricted_in_playground(PlaygroundRestrictedFeature.LLM_GATEWAY):
+        settings.llm_gateway_enabled = False
     if settings.query_history_type is None:
         settings.query_history_type = ONYX_QUERY_HISTORY_TYPE
 
@@ -88,7 +103,7 @@ def load_settings(raise_on_error: bool = False) -> Settings:
         settings.user_knowledge_enabled = False
 
     settings.show_extra_connectors = SHOW_EXTRA_CONNECTORS
-    settings.opensearch_indexing_enabled = ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+    settings.opensearch_indexing_enabled = True
     settings.hide_query_history_from_admin_panel = HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL
 
     # Resolve context-aware defaults for token threshold.
@@ -119,6 +134,26 @@ def load_settings(raise_on_error: bool = False) -> Settings:
         settings.user_file_max_upload_size_mb = MAX_ALLOWED_UPLOAD_SIZE_MB
 
     return settings
+
+
+def load_browser_enabled() -> bool:
+    """The `browser_enabled` setting. False when the settings cannot be read,
+    so a read error never turns on a browser that an admin turned off."""
+    try:
+        return load_settings(raise_on_error=True).browser_enabled
+    except Exception:
+        logger.exception("Could not load the browser setting; the browser is off")
+        return False
+
+
+def clear_chat_retention() -> None:
+    """Stops the retention task from deleting chats. Raises if the stored
+    settings cannot be read, so a failed read never passes for cleared."""
+    with settings_write_lock():
+        settings: Settings = load_settings(raise_on_error=True)
+        if settings.maximum_chat_retention_days is not None:
+            settings.maximum_chat_retention_days = None
+            store_settings(settings)
 
 
 def store_settings(settings: Settings) -> None:

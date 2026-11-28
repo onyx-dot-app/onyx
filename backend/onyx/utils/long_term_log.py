@@ -1,7 +1,7 @@
 import json
 import os
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +75,7 @@ class LongTermLogger:
 
             file_path = (
                 category_path
-                / f"{datetime.now().strftime(_LOG_FILE_NAME_TIMESTAMP_FORMAT)}.json"
+                / f"{datetime.now(UTC).astimezone().strftime(_LOG_FILE_NAME_TIMESTAMP_FORMAT)}.json"
             )
             with open(file_path, "w+") as f:
                 # default allows us to "ignore" unserializable objects
@@ -111,12 +111,12 @@ class LongTermLogger:
             try:
                 file_time = datetime.strptime(
                     file.stem, _LOG_FILE_NAME_TIMESTAMP_FORMAT
-                )
+                ).astimezone()
 
                 # Skip if outside time range
-                if start_time and file_time < start_time:
+                if start_time and file_time < start_time.astimezone():
                     continue
-                if end_time and file_time > end_time:
+                if end_time and file_time > end_time.astimezone():
                     continue
 
                 results.append(json.loads(file.read_text()))

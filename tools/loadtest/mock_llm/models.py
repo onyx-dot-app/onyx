@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 ################################################
 # Request
@@ -41,6 +41,19 @@ class ChatMessage(BaseModel):
     tool_call_id: str | None = None
 
 
+def content_text(content: str | list[Any] | None) -> str | None:
+    """Text of message content: a plain string, or the first text part of a
+    list of content parts (multimodal content, or parts that carry cache
+    markers)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                return str(part.get("text", ""))
+    return None
+
+
 class ToolFunctionDefinition(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -56,6 +69,10 @@ class ToolDefinition(BaseModel):
     function: ToolFunctionDefinition
 
 
+class StreamOptions(BaseModel):
+    include_usage: bool = False
+
+
 class ChatCompletionRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -65,8 +82,9 @@ class ChatCompletionRequest(BaseModel):
     tools: list[ToolDefinition] | None = None
     # "auto" | "none" | "required" | {"type": "function", "function": {...}}
     tool_choice: str | dict[str, Any] | None = None
-    max_tokens: int | None = None
-    max_completion_tokens: int | None = None
+    max_tokens: int | None = Field(default=None, ge=1)
+    max_completion_tokens: int | None = Field(default=None, ge=1)
+    stream_options: StreamOptions | None = None
 
     @property
     def effective_max_tokens(self) -> int | None:
@@ -87,6 +105,7 @@ class Usage(BaseModel):
 class AssistantMessage(BaseModel):
     role: Literal["assistant"] = "assistant"
     content: str | None = None
+    reasoning_content: str | None = None
     tool_calls: list[ToolCall] | None = None
 
 
@@ -125,6 +144,7 @@ class StreamToolCall(BaseModel):
 class ChunkDelta(BaseModel):
     role: str | None = None
     content: str | None = None
+    reasoning_content: str | None = None
     tool_calls: list[StreamToolCall] | None = None
 
 
@@ -140,3 +160,4 @@ class ChatCompletionChunk(BaseModel):
     created: int
     model: str
     choices: list[ChunkChoice]
+    usage: Usage | None = None

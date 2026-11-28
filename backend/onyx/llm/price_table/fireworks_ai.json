@@ -1,0 +1,1514 @@
+{
+  "aliases": {},
+  "models": {
+    "accounts/fireworks/models/SSD-1B": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/SSD-1B"
+    },
+    "accounts/fireworks/models/deepseek-v4p1-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/ember-1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "input": 3,
+        "output": 15
+      },
+      "family": "ember",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Ember-1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/fireworks-asr-large": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "audio_transcription",
+      "name": "accounts/fireworks/models/fireworks-asr-large"
+    },
+    "accounts/fireworks/models/fireworks-asr-v2": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "audio_transcription",
+      "name": "accounts/fireworks/models/fireworks-asr-v2"
+    },
+    "accounts/fireworks/models/flux-1-dev-fp8": {
+      "cost": {
+        "input": 0.0005,
+        "output": 0.0005
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/flux-1-dev-fp8"
+    },
+    "accounts/fireworks/models/flux-1-schnell-fp8": {
+      "cost": {
+        "input": 0.00035,
+        "output": 0.00035
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/flux-1-schnell-fp8"
+    },
+    "accounts/fireworks/models/flux-kontext-max": {
+      "cost": {
+        "input": 0.08,
+        "output": 0.08
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/flux-kontext-max"
+    },
+    "accounts/fireworks/models/flux-kontext-pro": {
+      "cost": {
+        "input": 0.04,
+        "output": 0.04
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/flux-kontext-pro"
+    },
+    "accounts/fireworks/models/glm-5p3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.26,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048573,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM 5.3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/glm-5p3-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.15,
+        "output": 0.5
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 1048573,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM 5.3 Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/hy4-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.003,
+        "input": 0.07,
+        "output": 0.281
+      },
+      "family": "hy-flash",
+      "limit": {
+        "context": 524288,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Hy4 flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-11-16",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/inkling-2-mini": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.5
+      },
+      "family": "inkling-mini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Inkling 2 Mini",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-11-20",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/inkling-2-small": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.3,
+        "output": 1
+      },
+      "family": "inkling-small",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Inkling 2 Small",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-11-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/japanese-stable-diffusion-xl": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/japanese-stable-diffusion-xl"
+    },
+    "accounts/fireworks/models/kimi-k3": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "input": 3,
+        "output": 15
+      },
+      "family": "kimi",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/kimi-k3p1-pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3.1 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/minimax-m3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.06,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "minimax-m",
+      "limit": {
+        "context": 512000,
+        "output": 512000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "MiniMax-M3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/minimax-m3p1-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "minimax-m-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 512000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "MiniMax-M3.1-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-19",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/muse-spark-open": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.25,
+        "output": 4.25
+      },
+      "family": "muse-spark",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Muse Spark Open",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/nemotron-3-ultra-nvfp4": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.12,
+        "input": 0.6,
+        "output": 2.4
+      },
+      "family": "nemotron-ultra",
+      "limit": {
+        "context": 262144,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Nemotron 3 Ultra 550B A55B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-04",
+      "status": "deprecated",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.01,
+        "input": 0.05,
+        "output": 0.2
+      },
+      "family": "nemotron-lightning",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Nemotron 3.5 Lightning 30B A3B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-11",
+      "status": "deprecated",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/playground-v2-1024px-aesthetic": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/playground-v2-1024px-aesthetic"
+    },
+    "accounts/fireworks/models/playground-v2-5-1024px-aesthetic": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/playground-v2-5-1024px-aesthetic"
+    },
+    "accounts/fireworks/models/qwen3-embedding-0p6b": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "embedding",
+      "name": "accounts/fireworks/models/qwen3-embedding-0p6b"
+    },
+    "accounts/fireworks/models/qwen3-embedding-4b": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "embedding",
+      "name": "accounts/fireworks/models/qwen3-embedding-4b"
+    },
+    "accounts/fireworks/models/qwen3-embedding-8b": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "embedding",
+      "name": "accounts/fireworks/models/qwen3-embedding-8b"
+    },
+    "accounts/fireworks/models/qwen3-reranker-0p6b": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "rerank",
+      "name": "accounts/fireworks/models/qwen3-reranker-0p6b"
+    },
+    "accounts/fireworks/models/qwen3-reranker-4b": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "rerank",
+      "name": "accounts/fireworks/models/qwen3-reranker-4b"
+    },
+    "accounts/fireworks/models/qwen3-reranker-8b": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 40960,
+        "output": 40960
+      },
+      "mode": "rerank",
+      "name": "accounts/fireworks/models/qwen3-reranker-8b"
+    },
+    "accounts/fireworks/models/qwen3p8-2p4t-a95b": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.25,
+        "input": 2,
+        "output": 6
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3.8 2.4T A95B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/qwen3p8-max": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.25,
+        "input": 2,
+        "output": 6
+      },
+      "family": "qwen-max",
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Qwen3.8 Max",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-03",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/qwen4-max": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "input": 1.5,
+        "output": 4.5
+      },
+      "family": "qwen-max",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Qwen4 Max",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-16",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/rune": {
+      "cost": {
+        "cache_read": 0.008400000000000001,
+        "input": 0.041999999999999996,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "decisions",
+      "name": "accounts/fireworks/models/rune"
+    },
+    "accounts/fireworks/models/stable-diffusion-xl-1024-v1-0": {
+      "cost": {
+        "input": 0.00013,
+        "output": 0.00013
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "image_generation",
+      "name": "accounts/fireworks/models/stable-diffusion-xl-1024-v1-0"
+    },
+    "accounts/fireworks/models/ultramarine-1-flash-us": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.15,
+        "output": 0.5
+      },
+      "family": "ultramarine",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Ultramarine 1 Flash",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-12",
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/deepseek-flash-latest": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek Flash Latest",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-flex": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.003,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017 Flex",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.003,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017 Spot",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.024,
+        "input": 1.2,
+        "output": 4.8
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017 Ultra-fast",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-us": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.009,
+        "input": 0.45,
+        "output": 1.8
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017 (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-spot": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.003,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash Spot",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-us": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.009,
+        "input": 0.45,
+        "output": 1.8
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/glm-5p3-fast": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.39,
+        "input": 2.1,
+        "output": 6.6
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048572,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM 5.3 Fast",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/glm-5p3-flash-flex": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.075,
+        "output": 0.25
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 1048573,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM 5.3 Flash Flex",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/glm-5p3-flex": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.13,
+        "input": 0.7,
+        "output": 2.2
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048573,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM 5.3 Flex",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/glm-5p3-spot": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.13,
+        "input": 0.7,
+        "output": 2.2
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048573,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM 5.3 Spot",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/glm-5p3-us": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.39,
+        "input": 2.1,
+        "output": 6.6
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048573,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM 5.3 (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/glm-fast-latest": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.39,
+        "input": 2.1,
+        "output": 6.6
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048572,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM 5.3 Fast (Latest)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/glm-flash-latest": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.15,
+        "output": 0.5
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 1048573,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM Flash Latest (GLM 5.3 Flash)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/glm-latest": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.26,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048573,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GLM Latest",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/kimi-fast-latest": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.45,
+        "input": 4.5,
+        "output": 22.5
+      },
+      "family": "kimi",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi Fast Latest",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/kimi-k3-fast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.45,
+        "input": 4.5,
+        "output": 22.5
+      },
+      "family": "kimi",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3 Fast",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/kimi-k3-spot": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.21,
+        "input": 2.1,
+        "output": 10.5
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3 Spot",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "status": "deprecated",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/kimi-k3-us": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.45,
+        "input": 4.5,
+        "output": 22.5
+      },
+      "family": "kimi",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3 (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/kimi-k3p1-pro-ultrafast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "input": 5,
+        "output": 25
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3.1 Pro Ultra-fast",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/kimi-k3p1-pro-us": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.25,
+        "input": 2.5,
+        "output": 12.5
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3.1 Pro (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/kimi-latest": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi Latest (Kimi K3.1 Pro)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/minimax-latest": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.06,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "minimax-m",
+      "limit": {
+        "context": 512000,
+        "output": 512000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "MiniMax Latest",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/qwen-max-latest": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.25,
+        "input": 2,
+        "output": 6
+      },
+      "family": "qwen-max",
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Qwen Max Latest (Qwen3.8 Max)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-03",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/rune": {
+      "cost": {
+        "cache_read": 0.008400000000000001,
+        "input": 0.041999999999999996,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "evaluation",
+      "name": "accounts/fireworks/routers/rune"
+    }
+  },
+  "models_dev_providers": [
+    "fireworks-ai"
+  ]
+}

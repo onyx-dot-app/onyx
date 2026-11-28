@@ -4,14 +4,19 @@ import "@opal/layouts/inputs/styles.css";
 import { useContext } from "react";
 import { useField, FormikContext } from "formik";
 import type {
-  ColorTypes,
   IconFunctionComponent,
   RichStr,
   WithoutStyles,
 } from "@opal/types";
-import { Text, Divider, type TagProps } from "@opal/components";
+import type { ContentColor } from "@opal/layouts/content/components";
+import { Text, Divider, type BadgeProps } from "@opal/components";
+import { isRichStr } from "@opal/components/text/InlineMarkdown";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { Content, ContentAction, Section } from "@opal/layouts";
+import {
+  InputRowProvider,
+  useRowHover,
+} from "@opal/components/inputs/disabled";
 
 // ---------------------------------------------------------------------------
 // Label
@@ -40,6 +45,49 @@ function Label({ label, disabled, ref, ...props }: LabelProps) {
 }
 
 // ---------------------------------------------------------------------------
+// InputRow
+// ---------------------------------------------------------------------------
+
+interface InputRowProps {
+  withLabel: boolean;
+  fieldName?: string;
+  disabled: boolean;
+  disabledTooltip?: string | RichStr;
+  hovered: boolean;
+  /** The layout's content `Section`. */
+  children: React.ReactElement;
+}
+
+/**
+ * A layout's outer frame: the row context for the input inside, and the
+ * `<label>` when `withLabel`.
+ */
+function InputRow({
+  withLabel,
+  fieldName,
+  disabled,
+  disabledTooltip,
+  hovered,
+  children,
+}: InputRowProps) {
+  return (
+    <InputRowProvider
+      disabled={disabled}
+      disabledTooltip={disabledTooltip}
+      hovered={hovered}
+    >
+      {withLabel ? (
+        <Label label={fieldName} disabled={disabled}>
+          {children}
+        </Label>
+      ) : (
+        children
+      )}
+    </InputRowProvider>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Shared types
 // ---------------------------------------------------------------------------
 
@@ -55,15 +103,44 @@ interface InputLayoutProps {
    */
   withLabel?: boolean | string;
 
+  /**
+   * Disables the row: the input inside it is disabled too, and the row's text
+   * dims.
+   */
   disabled?: boolean;
+  /**
+   * Why the row is disabled. While `disabled`, the input inside shows it as
+   * its tooltip, in place of its own `tooltip`.
+   */
+  disabledTooltip?: string | RichStr;
   /** Ref forwarded to the inner content `Section`. */
   ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
   title: string | RichStr;
-  /** Tag rendered inline beside the title (passed through to Content). */
-  tag?: TagProps;
+  /** Badge rendered inline beside the title (passed through to Content). */
+  tag?: BadgeProps;
   description?: string | RichStr;
   suffix?: "optional" | (string & {});
+  /**
+   * A message under the input, for inputs outside Formik: an `error` (red)
+   * or a `warning` (amber). An `error` wins over a `warning`, and either
+   * replaces the Formik message for `withLabel`'s field.
+   */
+  error?: string | RichStr;
+  warning?: string | RichStr;
+}
+
+interface InputMessageProps {
+  error?: string | RichStr;
+  warning?: string | RichStr;
+  fieldName?: string;
+}
+
+/** The message under an input: an explicit error or warning, else Formik's. */
+function InputMessage({ error, warning, fieldName }: InputMessageProps) {
+  if (error) return <InputErrorText type="error">{error}</InputErrorText>;
+  if (warning) return <InputErrorText type="warning">{warning}</InputErrorText>;
+  return fieldName ? <FormikInputError name={fieldName} /> : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,71 +149,96 @@ interface InputLayoutProps {
 
 interface VerticalProps extends InputLayoutProps {
   subDescription?: string | RichStr;
-  /** Optional text or markdown rendered at the top-right of the label row. */
-  topRight?: string | RichStr;
+  /**
+   * Content at the right of the title row. Text or markdown renders as
+   * secondary text; any other node renders as given, e.g. a button.
+   */
+  rightChildren?: string | RichStr | React.ReactNode;
 }
 
 function Vertical({
   withLabel: withLabelProp = false,
-  disabled,
+  disabled = false,
+  disabledTooltip,
   ref,
   children,
   subDescription,
-  topRight,
+  rightChildren,
   title,
   tag,
   description,
   suffix,
+  error,
+  warning,
 }: VerticalProps) {
+  const rowHover = useRowHover();
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
-  const titleRow = topRight ? (
+  const titleRow = rightChildren ? (
     <ContentAction
+      font="main-ui-action"
       title={title}
       description={description}
       suffix={suffix}
-      tag={tag}
-      sizePreset="main-ui"
-      variant="section"
+      badge={tag}
       width="full"
       padding={0}
       rightChildren={
-        <Text font="secondary-body" color="text-03" as="p">
-          {topRight}
-        </Text>
+        typeof rightChildren === "string" || isRichStr(rightChildren) ? (
+          <Text font="secondary-body" color="text-03" as="p">
+            {rightChildren}
+          </Text>
+        ) : (
+          rightChildren
+        )
       }
       center
     />
   ) : (
     <Content
+      font="main-ui-action"
       title={title}
       description={description}
       suffix={suffix}
-      tag={tag}
-      sizePreset="main-ui"
-      variant="section"
+      badge={tag}
     />
   );
 
   const content = (
-    <Section ref={ref} gap={1} alignItems="start">
+    <Section
+      ref={ref}
+      gap={1}
+      alignItems="start"
+      className="opal-input-layout"
+      data-disabled={disabled || undefined}
+      // The row's hover opens the input's tooltip (`disabledTooltip`).
+      onPointerEnter={rowHover.onPointerEnter}
+      onPointerLeave={rowHover.onPointerLeave}
+    >
       {titleRow}
       {children}
-      {fieldName && <FormikInputError name={fieldName} />}
+      <InputMessage error={error} warning={warning} fieldName={fieldName} />
       {subDescription && (
-        <Text font="secondary-body" color="text-03">
-          {subDescription}
-        </Text>
+        <div className="opal-input-sub-description">
+          <Text font="secondary-body" color="text-03">
+            {subDescription}
+          </Text>
+        </div>
       )}
     </Section>
   );
 
-  if (!withLabelProp) return content;
   return (
-    <Label label={fieldName} disabled={disabled}>
+    <InputRow
+      withLabel={Boolean(withLabelProp)}
+      fieldName={fieldName}
+      disabled={disabled}
+      disabledTooltip={disabledTooltip}
+      hovered={rowHover.hovered}
+    >
       {content}
-    </Label>
+    </InputRow>
   );
 }
 
@@ -166,7 +268,8 @@ interface HorizontalProps extends InputLayoutProps {
 
 function Horizontal({
   withLabel: withLabelProp = false,
-  disabled,
+  disabled = false,
+  disabledTooltip,
   ref,
   children,
   center,
@@ -177,20 +280,31 @@ function Horizontal({
   suffix,
   responsive,
   fillInput,
+  error,
+  warning,
 }: HorizontalProps) {
+  const rowHover = useRowHover();
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
-    <Section ref={ref} gap={1} alignItems="start">
+    <Section
+      ref={ref}
+      gap={1}
+      alignItems="start"
+      className="opal-input-layout"
+      data-disabled={disabled || undefined}
+      // The row's hover opens the input's tooltip (`disabledTooltip`).
+      onPointerEnter={rowHover.onPointerEnter}
+      onPointerLeave={rowHover.onPointerLeave}
+    >
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         suffix={suffix}
-        tag={tag}
-        sizePreset="main-ui"
-        variant="section"
+        badge={tag}
         width="full"
         padding={0}
         center={center}
@@ -198,15 +312,20 @@ function Horizontal({
         fillRight={fillInput}
         rightChildren={children}
       />
-      {fieldName && <FormikInputError name={fieldName} />}
+      <InputMessage error={error} warning={warning} fieldName={fieldName} />
     </Section>
   );
 
-  if (!withLabelProp) return content;
   return (
-    <Label label={fieldName} disabled={disabled}>
+    <InputRow
+      withLabel={Boolean(withLabelProp)}
+      fieldName={fieldName}
+      disabled={disabled}
+      disabledTooltip={disabledTooltip}
+      hovered={rowHover.hovered}
+    >
       {content}
-    </Label>
+    </InputRow>
   );
 }
 
@@ -264,16 +383,16 @@ function InputErrorText({
   ref,
 }: InputErrorTextProps) {
   const Icon = type === "error" ? SvgXOctagon : SvgAlertCircle;
-  const color: ColorTypes = type === "error" ? "danger" : "warning";
+  const color: ContentColor = type === "error" ? "error" : "warning";
 
   return (
     <div ref={ref} className="px-1">
       <Content
-        sizePreset="secondary"
-        variant="body"
+        font="secondary-body"
         icon={Icon}
         title={children}
         color={color}
+        titleColor="text-03"
         role="alert"
       />
     </div>

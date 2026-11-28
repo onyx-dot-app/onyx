@@ -7,21 +7,22 @@ from collections import defaultdict
 from collections.abc import Generator
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_user_files
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DEFAULT_BOOST, NotificationType
 from onyx.connectors.models import ConnectorStopSignal, Document
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import Persona, UserFile
+from onyx.db.models import UserFile
 from onyx.db.notification import create_notification
 from onyx.db.user_file import (
     fetch_chunk_counts_for_user_files,
     fetch_persona_ids_for_user_files,
+    fetch_user_files_with_assistant_files,
     fetch_user_project_ids_for_user_files,
+    lock_user_file_statuses_nowait,
 )
 from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
@@ -30,6 +31,7 @@ from onyx.indexing.models import (
     DocAwareChunk,
     DocMetadataAwareIndexChunk,
     IndexChunk,
+    IndexingBatchAdapter,
     UpdatableChunkData,
 )
 from onyx.llm.factory import get_default_llm
@@ -54,13 +56,8 @@ def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> b
     """Acquire locks for the specified user files, skipping any being deleted."""
     # Convert to UUIDs for the DB comparison
     user_file_uuid_list = [UUID(user_file_id) for user_file_id in user_file_ids]
-    stmt = (
-        select(UserFile.id, UserFile.status)
-        .where(UserFile.id.in_(user_file_uuid_list))
-        .with_for_update(nowait=True)
-    )
     # will raise exception if any of the documents are already locked
-    rows = db_session.execute(stmt).all()
+    rows = lock_user_file_statuses_nowait(db_session, user_file_uuid_list)
 
     # make sure we found every document
     if len(rows) != len(set(user_file_ids)):
@@ -75,7 +72,8 @@ def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> b
     return True
 
 
-class UserFileIndexingAdapter:
+class UserFileIndexingAdapter(IndexingBatchAdapter):
+    index_attempt_metadata = None
     connector_id: int | None = None
     credential_id: int | None = None
 
@@ -88,6 +86,8 @@ class UserFileIndexingAdapter:
         documents: list[Document],
         ignore_time_skip: bool,  # noqa: ARG002
         index_to_secondary: bool,  # noqa: ARG002
+        force_update: bool = False,  # noqa: ARG002
+        skip_document_row_writes: bool = False,  # noqa: ARG002
     ) -> DocumentBatchPrepareContext:
         return DocumentBatchPrepareContext(
             updatable_docs=documents,
@@ -256,20 +256,24 @@ class UserFileIndexingAdapter:
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,
+        failed_document_ids: set[str],
     ) -> None:
-        assert isinstance(enrichment, UserFileChunkEnricher)
+        if not isinstance(enrichment, UserFileChunkEnricher):
+            raise TypeError("User file indexing requires a UserFileChunkEnricher")
         if index_to_secondary:
             # Secondary (reindex-port) write: chunks are written; the PRESENT pass owns the
             # terminal side-effects (status/chunk_count/plaintext/notifications) — leave them.
             return
-        user_file_ids = [doc.id for doc in context.updatable_docs]
+        # A failed write left the old chunks in place, so the file is not
+        # complete. Marking it so would also tell its owner it is ready, and
+        # the caller's own failure handling cannot take a notification back.
+        indexed_ids = [
+            doc.id
+            for doc in context.updatable_docs
+            if doc.id not in failed_document_ids
+        ]
 
-        user_files = (
-            db_session.query(UserFile)
-            .options(selectinload(UserFile.assistants).selectinload(Persona.user_files))
-            .filter(UserFile.id.in_(user_file_ids))
-            .all()
-        )
+        user_files = fetch_user_files_with_assistant_files(db_session, indexed_ids)
         for user_file in user_files:
             # don't update the status if the user file is being deleted
             if user_file.status != UserFileStatus.DELETING:
@@ -291,13 +295,15 @@ class UserFileIndexingAdapter:
         # NOTE: this creates its own session to avoid committing the overall
         # transaction.
         for user_file_id, raw_text in enrichment.user_file_id_to_raw_text.items():
+            if user_file_id in failed_document_ids:
+                continue
             store_user_file_plaintext(
                 user_file_id=UUID(user_file_id),
                 plaintext_content=raw_text,
             )
 
 
-class UserFileChunkEnricher:
+class UserFileChunkEnricher(ChunkEnrichmentContext):
     """Pre-computed metadata for per-chunk enrichment of user-uploaded files."""
 
     def __init__(

@@ -21,25 +21,24 @@ from ee.onyx.server.license.api import router as license_router
 from ee.onyx.server.log_export.api import router as log_export_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
 from ee.onyx.server.middleware.license_enforcement import (
-    add_license_enforcement_middleware,
+    license_enforcement_middleware,
 )
 from ee.onyx.server.middleware.tenant_tracking import (
-    add_api_server_tenant_id_middleware,
+    tenant_id_middleware,
 )
-from ee.onyx.server.middleware.tier_gate import add_tier_gate_middleware
+from ee.onyx.server.middleware.tier_gate import tier_gate_middleware
 from ee.onyx.server.oauth.api import router as ee_oauth_router
 from ee.onyx.server.query_and_chat.query_backend import basic_router as ee_query_router
 from ee.onyx.server.query_and_chat.search_backend import router as search_router
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
 from ee.onyx.server.scim.api import register_scim_exception_handlers, scim_router
+from ee.onyx.server.security.api import router as security_router
 from ee.onyx.server.seeding import seed_db
+from ee.onyx.server.service_status.api import router as service_status_router
+from ee.onyx.server.spending_limits.api import router as spending_limits_router
 from ee.onyx.server.tenants.api import router as tenants_router
-from ee.onyx.server.token_rate_limits.api import (
-    router as token_rate_limit_settings_router,
-)
 from ee.onyx.server.user_group.api import router as user_group_router
-from ee.onyx.utils.encryption import test_encryption
 from onyx.auth.users import auth_backend, create_onyx_oauth_router
 from onyx.configs.app_configs import (
     GOOGLE_LOGIN_BASE_SCOPES,
@@ -59,7 +58,7 @@ from onyx.main import lifespan as lifespan_base
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import IS_PLAYGROUND, MULTI_TENANT
 
 logger = setup_logger()
 
@@ -83,8 +82,6 @@ def get_application() -> FastAPI:
     # Anything after the server startup will be running ee version
     global_version.set_ee()
 
-    test_encryption()
-
     application = get_application_base(lifespan_override=lifespan)
 
     # Register tier_gate FIRST so it becomes the innermost middleware: Starlette
@@ -92,15 +89,14 @@ def get_application() -> FastAPI:
     # AFTER tenant_tracking has populated CURRENT_TENANT_ID_CONTEXTVAR.
     # Tier gate attaches in both modes; get_tier() resolves per deployment
     # internally. Reads the unified PATH_PREFIX_MIN_TIER map.
-    add_tier_gate_middleware(application, logger)
+    application.add_middleware(tier_gate_middleware, logger=logger)
 
     if MULTI_TENANT:
-        add_api_server_tenant_id_middleware(application, logger)
+        application.add_middleware(tenant_id_middleware, logger=logger)
     else:
         # License enforcement middleware for self-hosted deployments only
-        # Checks LICENSE_ENFORCEMENT_ENABLED at runtime (can be toggled without restart)
         # MT deployments use control plane gating via is_tenant_gated() instead
-        add_license_enforcement_middleware(application, logger)
+        application.add_middleware(license_enforcement_middleware, logger=logger)
 
     if MULTI_TENANT:
         # For Google OAuth, refresh tokens are requested by:
@@ -149,20 +145,21 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(
         application, enterprise_settings_admin_router
     )
-    # Token rate limit settings
-    include_router_with_global_prefix_prepended(
-        application, token_rate_limit_settings_router
-    )
+    # Spending limit settings
+    include_router_with_global_prefix_prepended(application, spending_limits_router)
+    include_router_with_global_prefix_prepended(application, service_status_router)
     include_router_with_global_prefix_prepended(application, enterprise_settings_router)
     include_router_with_global_prefix_prepended(application, usage_export_router)
     # Admin log export
     include_router_with_global_prefix_prepended(application, log_export_router)
+    include_router_with_global_prefix_prepended(application, security_router)
     # License management
     include_router_with_global_prefix_prepended(application, license_router)
 
-    # Unified billing API - always registered in EE.
-    # Each endpoint is protected by admin permission checks.
-    include_router_with_global_prefix_prepended(application, billing_router)
+    # Unified billing API. Each endpoint is protected by admin permission checks.
+    # Not mounted on the playground, which has no Stripe.
+    if not IS_PLAYGROUND:
+        include_router_with_global_prefix_prepended(application, billing_router)
 
     if MULTI_TENANT:
         # Tenant management

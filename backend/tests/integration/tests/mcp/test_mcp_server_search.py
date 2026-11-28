@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 from collections.abc import Awaitable, Callable
+from contextlib import ExitStack
 from typing import Any
 
 import pytest
@@ -18,14 +19,17 @@ from onyx.db.enums import AccessType, Permission
 from tests.integration.common_utils.constants import MCP_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import (
+    DocumentManager,
+    IngestionManager,
+)
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
 
 # Constants
 MCP_SEARCH_TOOL = "search_indexed_documents"
@@ -157,7 +161,7 @@ def test_mcp_document_search_flow(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group permissions are Enterprise-only",
 )
 def test_mcp_search_respects_acl_filters(
@@ -171,8 +175,8 @@ def test_mcp_search_respects_acl_filters(
     privileged_user = UserManager.create(name="mcp-acl-user-b")
 
     api_key = APIKeyManager.create(user_performing_action=admin_user)
-    restricted_cc_pair = CCPairManager.create_from_scratch(
-        access_type=AccessType.PRIVATE,
+    user_group = UserGroupManager.create(
+        user_ids=[privileged_user.id],
         user_performing_action=admin_user,
     )
     # A second, public source so the blocked user has *some* visible source —
@@ -182,9 +186,9 @@ def test_mcp_search_respects_acl_filters(
         user_performing_action=admin_user,
     )
 
-    user_group = UserGroupManager.create(
-        user_ids=[privileged_user.id],
-        cc_pair_ids=[restricted_cc_pair.id],
+    restricted_cc_pair = CCPairManager.create_from_scratch(
+        access_type=AccessType.PRIVATE,
+        data_access=[user_group.id],
         user_performing_action=admin_user,
     )
     UserGroupManager.wait_for_sync(
@@ -421,3 +425,105 @@ def test_mcp_search_scopes_to_agent(
         in_scope_content in (doc.get("content") or "")
         for doc in scoped_pat_payload["results"]
     )
+
+
+def _pat_headers_with_cleanup(
+    cleanup: ExitStack,
+    user: DATestUser,
+    name: str,
+    scopes: list[Permission] | None = None,
+) -> dict[str, str]:
+    pat = PATManager.create(
+        name=name, expiration_days=7, user_performing_action=user, scopes=scopes
+    )
+    cleanup.callback(PATManager.revoke, pat.id, user)
+    return {"Authorization": f"Bearer {pat.token}"}
+
+
+def _cc_pair_cleanup(cc_pair: DATestCCPair, user: DATestUser) -> None:
+    CCPairManager.pause_cc_pair(cc_pair=cc_pair, user_performing_action=user)
+    CCPairManager.delete(cc_pair=cc_pair, user_performing_action=user)
+
+
+def test_mcp_query_metadata_counts_and_lists_documents(
+    admin_user: DATestUser,
+) -> None:
+    """The metadata tool reaches the Postgres query layer through the API."""
+    with ExitStack() as cleanup:
+        _query_metadata_counts_and_lists_documents(admin_user, cleanup)
+
+
+def _query_metadata_counts_and_lists_documents(
+    admin_user: DATestUser, cleanup: ExitStack
+) -> None:
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+    cleanup.callback(APIKeyManager.delete, api_key, admin_user)
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    cleanup.callback(_cc_pair_cleanup, cc_pair, admin_user)
+    tag = os.urandom(4).hex()
+    doc = DocumentManager.seed_doc_with_content(
+        cc_pair, f"metadata query {tag}", api_key, document_id=f"mcp-meta-{tag}"
+    )
+    cleanup.callback(IngestionManager.delete, doc.id, api_key)
+    headers = _pat_headers_with_cleanup(cleanup, admin_user, "mcp-query-metadata")
+
+    async def _action(session: ClientSession) -> list[CallToolResult]:
+        await session.initialize()
+        tools = await session.list_tools()
+        assert "query_metadata" in {tool.name for tool in tools.tools}
+        return [
+            await session.call_tool(
+                "query_metadata",
+                {"table": "document", "title_contains": [doc.id], "count": True},
+            ),
+            await session.call_tool(
+                "query_metadata", {"table": "document", "title_contains": [doc.id]}
+            ),
+            await session.call_tool(
+                "query_metadata",
+                {"table": "document", "count": True, "order_by": "title_asc"},
+            ),
+        ]
+
+    count_result, listing_result, rejected_result = _run_with_mcp_session(
+        headers, _action
+    )
+    assert _extract_tool_payload(count_result)["result"].startswith(
+        "1 matching documents"
+    )
+    assert f"Test Document {doc.id}" in _extract_tool_payload(listing_result)["result"]
+    assert (
+        "only to document listings" in _extract_tool_payload(rejected_result)["error"]
+    )
+
+
+def test_mcp_query_metadata_needs_read_chat_for_chat_history(
+    admin_user: DATestUser,
+) -> None:
+    """A token with read:search only gets no chat history."""
+    with ExitStack() as cleanup:
+        headers = _pat_headers_with_cleanup(
+            cleanup,
+            admin_user,
+            "mcp-query-metadata-search-only",
+            scopes=[Permission.READ_SEARCH],
+        )
+        _query_chat_history_with_search_only_token(headers)
+
+
+def _query_chat_history_with_search_only_token(headers: dict[str, str]) -> None:
+
+    async def _action(session: ClientSession) -> list[CallToolResult]:
+        await session.initialize()
+        return [
+            await session.call_tool(
+                "query_metadata", {"table": "chat_session", "count": True}
+            ),
+            await session.call_tool(
+                "query_metadata", {"table": "document", "count": True}
+            ),
+        ]
+
+    chat_result, document_result = _run_with_mcp_session(headers, _action)
+    assert "read:chat" in _extract_tool_payload(chat_result)["error"]
+    assert "matching documents" in _extract_tool_payload(document_result)["result"]

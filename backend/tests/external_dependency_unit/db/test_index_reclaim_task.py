@@ -19,15 +19,15 @@ from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
-    EmbeddingPrecision,
     IndexModelStatus,
     IndexReclaimStatus,
+    PortAttemptStatus,
 )
 from onyx.db.models import ConnectorCredentialPair, PortAttempt, SearchSettings
 from onyx.db.port_attempt import (
     create_port_attempt,
-    mark_port_canceled,
     mark_port_in_progress,
+    mark_port_terminal,
 )
 from onyx.db.search_settings import (
     create_search_settings,
@@ -52,7 +52,6 @@ def _saved_settings(index_name: str | None = None) -> SavedSearchSettings:
         passage_prefix="",
         provider_type=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         index_name=index_name or f"test_reclaim_task_{uuid4().hex[:8]}",
         enable_contextual_rag=False,
     )
@@ -422,7 +421,7 @@ def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_ret
 
         # The port acks the cancel -> terminal. Now the reclaim drops the real index,
         # marks RECLAIMED, and the guard clears (retry unblocked).
-        mark_port_canceled(db_session, attempt.id)
+        mark_port_terminal(db_session, attempt.id, PortAttemptStatus.CANCELED)
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
         db_session.refresh(ss)
         assert ss.reclaim_status == IndexReclaimStatus.RECLAIMED

@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Literal
 from urllib.parse import parse_qsl, urlencode
 from uuid import UUID
 
@@ -23,16 +24,21 @@ from websockets.exceptions import ConnectionClosed
 
 from onyx.auth.users import current_user_from_websocket_cookie, optional_user
 from onyx.cache.factory import get_cache_backend
-from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.enums import SharingScope
-from onyx.db.models import User
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
     get_webapp_access_async,
     get_webapp_target_async,
 )
+from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.enums import SharingScope
+from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.preview_activity import mark_preview_activity
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.nextjs_dev import webapp_base_path
 from onyx.utils.logger import setup_logger
+
+HmrEndpoint = Literal["hmr", "webpack-hmr"]
 
 logger = setup_logger()
 
@@ -137,12 +143,12 @@ async def _get_sandbox_url(session_id: UUID) -> str:
         target = await get_webapp_target_async(db_session, session_id)
 
     if target is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
     sandbox_id, nextjs_port = target
     if nextjs_port is None:
-        raise HTTPException(status_code=503, detail="Session port not allocated")
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, "Session port not allocated")
     if sandbox_id is None:
-        raise HTTPException(status_code=404, detail="Sandbox not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Sandbox not found")
 
     url = get_sandbox_manager().get_webapp_url(sandbox_id, nextjs_port)
     cache.set(key, url, ex=_SANDBOX_URL_TTL)
@@ -193,10 +199,10 @@ async def _proxy_request(
         response = await client.send(req, stream=True)
     except httpx.TimeoutException:
         logger.error("Timeout while proxying request to %s", target_url)
-        raise HTTPException(status_code=504, detail="Gateway timeout")
+        raise OnyxError(OnyxErrorCode.GATEWAY_TIMEOUT, "Gateway timeout")
     except httpx.RequestError as e:
         logger.error("Error proxying request to %s: %s", target_url, e)
-        raise HTTPException(status_code=502, detail="Bad gateway")
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, "Bad gateway")
 
     # aclose() is idempotent: one guarded finally covers every exit except a
     # successful StreamingResponse handoff, which passes ownership to _aiter_and_close.
@@ -243,13 +249,13 @@ def _webapp_hmr_query_string(query_string: str) -> str:
 
 
 def _webapp_hmr_websocket_url(
-    session_id: UUID, base_url: str, query_string: str
+    session_id: UUID, base_url: str, query_string: str, endpoint: HmrEndpoint
 ) -> str:
     scheme = "wss" if base_url.startswith("https://") else "ws"
     host_and_path = base_url.split("://", 1)[1].rstrip("/")
     target_url = (
         f"{scheme}://{host_and_path}/"
-        f"{_webapp_next_path(session_id, '_next/webpack-hmr')}"
+        f"{_webapp_next_path(session_id, f'_next/{endpoint}')}"
     )
     hmr_query_string = _webapp_hmr_query_string(query_string)
     if hmr_query_string:
@@ -282,9 +288,13 @@ async def _pump_upstream_to_webapp(
             await websocket.send_bytes(message)
 
 
-async def _proxy_webapp_hmr_websocket(session_id: UUID, websocket: WebSocket) -> None:
+async def _proxy_webapp_hmr_websocket(
+    session_id: UUID, websocket: WebSocket, endpoint: HmrEndpoint
+) -> None:
     base_url = await _get_sandbox_url(session_id)
-    upstream_url = _webapp_hmr_websocket_url(session_id, base_url, websocket.url.query)
+    upstream_url = _webapp_hmr_websocket_url(
+        session_id, base_url, websocket.url.query, endpoint
+    )
     logger.debug("Proxying websocket to: %s", upstream_url)
 
     try:
@@ -331,12 +341,12 @@ async def _check_webapp_access(session_id: UUID, user: User | None) -> None:
         access = await get_webapp_access_async(db_session, session_id)
 
     if access is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
     if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Authentication required")
     sharing_scope, owner_id = access
     if sharing_scope == SharingScope.PRIVATE and owner_id != user.id:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     cache.set(
         _webapp_access_cache_key(session_id, user.id), b"1", ex=_WEBAPP_ACCESS_TTL
@@ -370,13 +380,21 @@ async def get_webapp(
 ) -> StreamingResponse | Response:
     try:
         await _check_webapp_access(session_id, user)
-    except HTTPException as e:
+    except (HTTPException, OnyxError) as e:
         if e.status_code == 401:
             return RedirectResponse(url="/auth/login", status_code=302)
         raise
     try:
+        mark_preview_activity(session_id)
+    except Exception:
+        logger.warning(
+            "Failed to record preview activity for session %s",
+            session_id,
+            exc_info=True,
+        )
+    try:
         return await _proxy_request(path, request, session_id)
-    except HTTPException as e:
+    except (HTTPException, OnyxError) as e:
         if e.status_code in (502, 503, 504):
             # Cached URL may point at a dead/recreated pod; drop it to force re-resolve.
             get_cache_backend().delete(_sandbox_url_cache_key(session_id))
@@ -384,15 +402,16 @@ async def get_webapp(
         raise
 
 
-@public_build_router.websocket("/sessions/{session_id}/webapp/_next/webpack-hmr")
+@public_build_router.websocket("/sessions/{session_id}/webapp/_next/{hmr_endpoint}")
 async def websocket_webapp_hmr(
     session_id: UUID,
+    hmr_endpoint: HmrEndpoint,
     websocket: WebSocket,
     user: User = Depends(current_user_from_websocket_cookie),
 ) -> None:
     try:
         await _check_webapp_access(session_id, user)
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise WebSocketException(code=1008)
 
-    await _proxy_webapp_hmr_websocket(session_id, websocket)
+    await _proxy_webapp_hmr_websocket(session_id, websocket, hmr_endpoint)

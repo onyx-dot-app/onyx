@@ -6,14 +6,15 @@ import { useSettings } from "@/lib/settings/hooks";
 import {
   Card,
   type DateRange,
-  InputSingleSelect,
+  InputSingleComboBox,
   MessageCard,
   Table,
   Text,
-  createTableColumns,
+  type TableColumn,
 } from "@opal/components";
 import { SvgCpu, SvgX } from "@opal/icons";
-import { PageLoader, Section } from "@opal/layouts";
+import { Section } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { useSystemUsage } from "@/lib/usage/hooks";
 import type { SystemUsageCategory } from "@/lib/usage/systemUsage";
@@ -26,8 +27,6 @@ const OTHER_CATEGORY = "other";
 const IMAGE_SUMMARIZATION_FLOW = "image_summarization";
 const CONTEXTUAL_RAG_DOC_SUMMARY_FLOW = "contextual_rag_doc_summary";
 const CONTEXTUAL_RAG_CHUNK_CONTEXT_FLOW = "contextual_rag_chunk_context";
-const KG_DOCUMENT_CLASSIFICATION_FLOW = "kg_document_classification";
-const KG_DEEP_EXTRACTION_FLOW = "kg_deep_extraction";
 
 interface SystemUsageRow extends UsageExportTotals {
   category: string;
@@ -56,10 +55,6 @@ function categoryLabel(category: string, t: SystemUsageTranslate): string {
       return t("categories.contextualRagDocumentSummary.label");
     case CONTEXTUAL_RAG_CHUNK_CONTEXT_FLOW:
       return t("categories.contextualRagChunkContext.label");
-    case KG_DOCUMENT_CLASSIFICATION_FLOW:
-      return t("categories.kgDocumentClassification.label");
-    case KG_DEEP_EXTRACTION_FLOW:
-      return t("categories.kgDeepExtraction.label");
     case UNATTRIBUTED_CATEGORY:
       return t("categories.unattributed.label");
     case OTHER_CATEGORY:
@@ -99,22 +94,24 @@ function filterCategory(
   };
 }
 
-const tc = createTableColumns<SystemUsageRow>();
-
-function buildColumns(t: SystemUsageTranslate) {
+function buildColumns(t: SystemUsageTranslate): TableColumn<SystemUsageRow>[] {
   return [
-    tc.qualifier({ content: "icon", getContent: () => SvgCpu }),
-    tc.column("category", {
-      header: t("table.columns.category.header"),
+    { kind: "qualifier", content: "icon", icon: () => SvgCpu },
+    {
+      kind: "data",
+      field: "category",
+      title: t("table.columns.category.header"),
       weight: 40,
       cell: (value) => (
         <Text font="main-ui-body" color="text-05">
           {categoryLabel(value, t)}
         </Text>
       ),
-    }),
-    tc.column("cost_cents", {
-      header: t("table.columns.spend.header"),
+    },
+    {
+      kind: "data",
+      field: "cost_cents",
+      title: t("table.columns.spend.header"),
       weight: 18,
       alignment: "right",
       cell: (value) => (
@@ -122,9 +119,11 @@ function buildColumns(t: SystemUsageTranslate) {
           {formatCost(value)}
         </Text>
       ),
-    }),
-    tc.column("total_tokens", {
-      header: t("table.columns.tokens.header"),
+    },
+    {
+      kind: "data",
+      field: "total_tokens",
+      title: t("table.columns.tokens.header"),
       weight: 18,
       alignment: "right",
       cell: (value) => (
@@ -132,9 +131,11 @@ function buildColumns(t: SystemUsageTranslate) {
           {formatTokens(value)}
         </Text>
       ),
-    }),
-    tc.column("input_tokens", {
-      header: t("table.columns.input.header"),
+    },
+    {
+      kind: "data",
+      field: "input_tokens",
+      title: t("table.columns.input.header"),
       weight: 12,
       alignment: "right",
       cell: (value) => (
@@ -142,9 +143,11 @@ function buildColumns(t: SystemUsageTranslate) {
           {formatTokens(value)}
         </Text>
       ),
-    }),
-    tc.column("output_tokens", {
-      header: t("table.columns.output.header"),
+    },
+    {
+      kind: "data",
+      field: "output_tokens",
+      title: t("table.columns.output.header"),
       weight: 12,
       alignment: "right",
       cell: (value) => (
@@ -152,7 +155,7 @@ function buildColumns(t: SystemUsageTranslate) {
           {formatTokens(value)}
         </Text>
       ),
-    }),
+    },
   ];
 }
 
@@ -208,7 +211,7 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
 
   const header = (
     <Section alignItems="stretch" gap={0.125} height="fit">
-      <Text font="heading-h3">{t("panel.title")}</Text>
+      <Text font="heading-section">{t("panel.title")}</Text>
       <Text font="secondary-body" color="text-03">
         {usage
           ? t("panel.description", {
@@ -258,19 +261,23 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
             <Text font="secondary-body" color="text-03">
               {t("summary.spend.label")}
             </Text>
-            <Text font="heading-h3">{formatCost(totalCostCents, locale)}</Text>
+            <Text font="heading-section">
+              {formatCost(totalCostCents, locale)}
+            </Text>
           </Section>
           <Section alignItems="start" gap={0.125} width="fit" height="fit">
             <Text font="secondary-body" color="text-03">
               {t("summary.tokens.label")}
             </Text>
-            <Text font="heading-h3">{formatTokens(totalTokens, locale)}</Text>
+            <Text font="heading-section">
+              {formatTokens(totalTokens, locale)}
+            </Text>
           </Section>
           <Section alignItems="start" gap={0.125} width="fit" height="fit">
             <Text font="secondary-body" color="text-03">
               {t("summary.unattributed.label")}
             </Text>
-            <Text font="heading-h3">
+            <Text font="heading-section">
               {formatCost(unattributedCostCents, locale)}
             </Text>
           </Section>
@@ -287,15 +294,15 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
       >
         {models.length > 0 && (
           <Section width={12} height="fit">
-            <InputSingleSelect
+            <InputSingleComboBox
               value={model}
               onValueChange={setModel}
               placeholder={t("filters.allModels.label")}
               options={[
-                { value: ALL_FILTER, label: t("filters.allModels.label") },
+                { value: ALL_FILTER, title: t("filters.allModels.label") },
                 ...models.map((option) => ({
                   value: option,
-                  label: option,
+                  title: option,
                 })),
               ]}
             />
@@ -303,15 +310,15 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
         )}
         {providers.length > 0 && (
           <Section width={12} height="fit">
-            <InputSingleSelect
+            <InputSingleComboBox
               value={provider}
               onValueChange={setProvider}
               placeholder={t("filters.allProviders.label")}
               options={[
-                { value: ALL_FILTER, label: t("filters.allProviders.label") },
+                { value: ALL_FILTER, title: t("filters.allProviders.label") },
                 ...providers.map((option) => ({
                   value: option,
-                  label: option,
+                  title: option,
                 })),
               ]}
             />
@@ -321,7 +328,7 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
 
       <Table
         key={`${model}-${provider}`}
-        data={rows}
+        items={rows}
         columns={columns}
         getRowId={(row) => row.category}
         initialSorting={[{ id: "cost_cents", desc: true }]}

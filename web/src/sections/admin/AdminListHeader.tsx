@@ -21,6 +21,10 @@ interface AdminListHeaderProps {
   onAction?: () => void;
   /** Label for the action button. Omit (with onAction) to hide it. */
   actionLabel?: string;
+  /** Ref to the search input, e.g. for a "/" hotkey that focuses it. */
+  inputRef?: React.Ref<HTMLInputElement>;
+  /** Key handler on the search input, e.g. to move into the list. */
+  onSearchKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
 /**
@@ -59,6 +63,8 @@ export default function AdminListHeader({
   emptyStateText,
   onAction,
   actionLabel,
+  inputRef,
+  onSearchKeyDown,
 }: AdminListHeaderProps) {
   const t = useTranslations("admin.shared");
   // Pin the button to its label width — the flexible sibling (search input /
@@ -77,10 +83,9 @@ export default function AdminListHeader({
       <Card rounding={4} border="solid">
         <div className="flex flex-row items-center justify-between gap-3">
           <Content
+            font="main-ui-body"
             title={emptyStateText}
-            sizePreset="main-ui"
-            variant="body"
-            color="muted"
+            titleColor="text-03"
             width="fit"
           />
           {actionButton}
@@ -93,10 +98,13 @@ export default function AdminListHeader({
     <div className="flex flex-row gap-3 items-center px-2 pb-3">
       <InputTypeIn
         variant="internal"
-        searchIcon
+        icon="search"
+        clearButton
         placeholder={placeholder ?? t("listHeader.search.placeholder")}
+        ref={inputRef}
         value={searchQuery}
         onChange={(e) => onSearchQueryChange(e.target.value)}
+        onKeyDown={onSearchKeyDown}
       />
       {actionButton}
     </div>

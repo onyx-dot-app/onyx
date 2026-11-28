@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.cache.factory import get_cache_backend
-from onyx.db.enums import ApprovalDecision, GatedAppKind
+from onyx.db.enums import ApprovalDecision
 from onyx.sandbox_proxy.approval_cache import (
     _wake_key,
     announce_approval,
@@ -124,21 +124,18 @@ def test_cached_session_grants_cover_requires_every_action() -> None:
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     session_id = uuid4()
     approval_id = uuid4()
-    kind = GatedAppKind.EXTERNAL_APP
-    target_id = 42
+    integration_id = 42
 
     assert not cached_session_grants_cover(
         session_id=session_id,
-        kind=kind,
-        target_id=target_id,
+        integration_id=integration_id,
         action_types=["slack.chat.post"],
         cache=cache,
     )
 
     cache_session_grant_actions(
         session_id=session_id,
-        kind=kind,
-        target_id=target_id,
+        integration_id=integration_id,
         action_types=["slack.chat.post"],
         source_approval_id=approval_id,
         cache=cache,
@@ -146,23 +143,20 @@ def test_cached_session_grants_cover_requires_every_action() -> None:
 
     assert cached_session_grants_cover(
         session_id=session_id,
-        kind=kind,
-        target_id=target_id,
+        integration_id=integration_id,
         action_types=["slack.chat.post"],
         cache=cache,
     )
     assert not cached_session_grants_cover(
         session_id=session_id,
-        kind=kind,
-        target_id=target_id,
+        integration_id=integration_id,
         action_types=["slack.chat.post", "slack.files.upload"],
         cache=cache,
     )
-    # A different catalog (MCP) at the same numeric id must not satisfy the grant.
+    # Another integration must not satisfy the grant.
     assert not cached_session_grants_cover(
         session_id=session_id,
-        kind=GatedAppKind.MCP_SERVER,
-        target_id=target_id,
+        integration_id=integration_id + 1,
         action_types=["slack.chat.post"],
         cache=cache,
     )

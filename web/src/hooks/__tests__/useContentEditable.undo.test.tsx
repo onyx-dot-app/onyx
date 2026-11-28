@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react";
+import { act, render } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import { useRef } from "react";
 import {
@@ -408,5 +408,104 @@ describe("pushBoundedSnapshot", () => {
       pushBoundedSnapshot(stack, snap(1));
     }
     expect(stack.length).toBe(MAX_UNDO_ENTRIES);
+  });
+});
+
+describe("token deletion history", () => {
+  it("preserves redo when a stale token cannot be deleted", () => {
+    render(<Harness />);
+    act(() => api.setMessage("before"));
+    act(() => api.setMessage("after"));
+    undo();
+    expect(input().textContent).toBe("before");
+    act(() => {
+      expect(api.deleteToken({ before: "/stale", after: "" })).toBe(false);
+    });
+    redo();
+    expect(input().textContent).toBe("after");
+  });
+
+  it("restores the pre-deletion text and caret on undo", () => {
+    render(<Harness />);
+    act(() => api.setMessage("Prompt /pptx"));
+    caretAtTextOffset(12);
+    act(() => {
+      expect(api.deleteToken({ before: "/pptx", after: "" })).toBe(true);
+    });
+    expect(input().textContent).toBe("Prompt ");
+    undo();
+    expect(input().textContent).toBe("Prompt /pptx");
+    expect(flatCaret()).toBe(12);
+    redo();
+    expect(input().textContent).toBe("Prompt ");
+  });
+});
+
+describe("paste tile edits", () => {
+  it("updates the tile's accessible name with its text", () => {
+    render(<Harness pasteTilesEnabled />);
+    act(() => api.pasteText("first line\nb\nc\nd\ne"));
+    const tile = input().querySelector<HTMLElement>("[data-rich-tile]")!;
+    expect(tile).toHaveAttribute(
+      "aria-label",
+      "Pasted text: first line, 5 lines"
+    );
+
+    act(() =>
+      api.handleTileClick({
+        target: tile,
+      } as unknown as React.MouseEvent<HTMLDivElement>)
+    );
+    act(() => api.updateTileText("edited\nx"));
+
+    expect(tile).toHaveAttribute("aria-label", "Pasted text: edited, 2 lines");
+  });
+});
+
+describe("paste over a selection", () => {
+  it("replaces a selected draft that holds a matching tile", () => {
+    render(<Harness pasteTilesEnabled />);
+    const longText = "line1\nline2\nline3\nline4\nline5";
+    typeText("note ");
+    act(() => api.pasteText(longText));
+    act(() => {
+      const range = document.createRange();
+      range.selectNodeContents(input());
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    });
+
+    act(() => api.pasteText(longText));
+
+    expect(api.message).toBe(longText);
+    expect(input().querySelectorAll("[data-rich-tile]")).toHaveLength(1);
+  });
+
+  it("Enter after a paste over a selected tile opens no editor", () => {
+    render(<Harness pasteTilesEnabled />);
+    const longText = "line1\nline2\nline3\nline4\nline5";
+    act(() => api.pasteText(longText));
+    const key = (name: string) =>
+      ({
+        key: name,
+        shiftKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+        preventDefault: () => {},
+        nativeEvent: { isComposing: false },
+      }) as unknown as React.KeyboardEvent<HTMLDivElement>;
+    act(() => {
+      api.handleTileKeyDown(key("ArrowLeft"));
+    });
+
+    act(() => api.pasteText(longText));
+    act(() => {
+      api.handleTileKeyDown(key("Enter"));
+    });
+
+    expect(api.tilePopover).toBeNull();
+    expect(input().querySelectorAll("[data-rich-tile]")).toHaveLength(1);
   });
 });

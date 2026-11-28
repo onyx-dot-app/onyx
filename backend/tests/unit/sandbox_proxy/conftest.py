@@ -10,23 +10,40 @@
 
 from __future__ import annotations
 
+import asyncio
+import datetime as dt
+import ssl
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
+import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 from mitmproxy import http
+from mitmproxy.tools.dump import DumpMaster
 
-from onyx.db.enums import EndpointPolicy, GatedAppKind
+from onyx.cache.interface import CacheBackend
+from onyx.db.enums import ActionPolicy, IntegrationKind
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
     MatchedAction,
 )
-from onyx.sandbox_proxy.addons.gate import _IdentityResolver
-from onyx.sandbox_proxy.credential_injection import CredentialResolver, InjectionContext
-from onyx.sandbox_proxy.identity import (
-    ResolvedSandbox,
-    SandboxIdentity,
+from onyx.integrations.models import ApiShape, UsableIntegrationIds
+from onyx.sandbox_proxy.credential_injection import CredentialResolver
+from onyx.sandbox_proxy.models import InjectionContext
+from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    CraftMCPTarget,
+    IntegrationMatchTarget,
+)
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    SandboxIdentityResolver,
     SandboxIPLookup,
 )
 
@@ -77,6 +94,17 @@ class StaticLookup(SandboxIPLookup):
         return None
 
 
+def mcp_targets(*endpoints: CraftMCPTarget) -> tuple[IntegrationMatchTarget, ...]:
+    return tuple(
+        IntegrationMatchTarget(
+            integration_id=endpoint.server_id,
+            kind=IntegrationKind.MCP,
+            endpoint=endpoint,
+        )
+        for endpoint in endpoints
+    )
+
+
 def make_resolved_sandbox(
     *,
     user_id: UUID | None = None,
@@ -100,6 +128,7 @@ def make_flow(
     peername: tuple[str, int] | None = ("10.0.0.1", 12345),
     raw_content: bytes | None = b"{}",
     port: int = 443,
+    scheme: str = "https",
     method: str = "POST",
     path_components: tuple[str, ...] = (),
     conn_id: str = "conn-default",
@@ -107,12 +136,14 @@ def make_flow(
     headers: dict[str, str] | None = None,
 ) -> http.HTTPFlow:
     flow = MagicMock(spec=http.HTTPFlow)
+    flow.id = str(uuid4())
     flow.client_conn = MagicMock()
     flow.client_conn.peername = peername
     flow.client_conn.id = conn_id
     flow.request = MagicMock()
     flow.request.host = host
     flow.request.port = port
+    flow.request.scheme = scheme
     flow.request.method = method
     flow.request.path_components = path_components
     flow.request.raw_content = raw_content
@@ -128,8 +159,8 @@ def make_flow(
     return flow
 
 
-class StubResolver(_IdentityResolver):
-    """`_IdentityResolver` stub with canned returns (resolves sandbox + session)."""
+class StubResolver(SandboxIdentityResolver):
+    """`SandboxIdentityResolver` stub with canned returns (resolves sandbox + session)."""
 
     def __init__(
         self,
@@ -138,11 +169,13 @@ class StubResolver(_IdentityResolver):
         sandbox_exc: Exception | None = None,
         session_by_id: UUID | None = None,
         session_by_id_exc: Exception | None = None,
+        chat_session: UUID | None = None,
     ) -> None:
         self._sandbox = sandbox
         self._sandbox_exc = sandbox_exc
         self._session_by_id = session_by_id
         self._session_by_id_exc = session_by_id_exc
+        self._chat_session = chat_session
         self.resolve_sandbox_calls = 0
         self.resolve_session_by_id_calls: list[tuple[UUID, UUID, str]] = []
 
@@ -165,6 +198,14 @@ class StubResolver(_IdentityResolver):
         if self._session_by_id_exc is not None:
             raise self._session_by_id_exc
         return self._session_by_id
+
+    def resolve_chat_session(
+        self,
+        session_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> UUID | None:
+        return self._chat_session
 
 
 class RecordingCredentialResolver(CredentialResolver):
@@ -208,7 +249,7 @@ def make_matched_actions(
     display_name: str = "Post a message",
     description: str = "Post a message to a channel or conversation.",
     payload: dict[str, Any] | None = None,
-    policy: EndpointPolicy = EndpointPolicy.ASK,
+    policy: ActionPolicy = ActionPolicy.ASK,
     external_app_id: int = 42,
     app_name: str = "Slack",
 ) -> AllMatchedActions:
@@ -223,7 +264,98 @@ def make_matched_actions(
             ),
         ),
         target=GatedTarget(
-            kind=GatedAppKind.EXTERNAL_APP, id=external_app_id, app_name=app_name
+            integration_id=external_app_id,
+            kind=IntegrationKind.API,
+            app_name=app_name,
+            api_shape=ApiShape.PRESET,
         ),
         payload=payload if payload is not None else {},
     )
+
+
+async def wait_for_proxy_listener(master: DumpMaster, task: asyncio.Task[None]) -> int:
+    """Return the assigned port after mitmproxy starts its listener."""
+    for _ in range(100):
+        if task.done():
+            await task
+            pytest.fail("Proxy exited before listening")
+        listeners: list[tuple[str, int]] = list(
+            master.addons.get("proxyserver").listen_addrs()
+        )
+        if listeners:
+            return listeners[0][1]
+        await asyncio.sleep(0.05)
+    pytest.fail("Proxy did not bind")
+
+
+class NoMatchedRequest(RequestEvaluator):
+    def evaluate(
+        self,
+        request: http.Request,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        session_tag: UUID | None = None,  # noqa: ARG002
+    ) -> AllMatchedActions | None:
+        return None
+
+
+def unused_cache(_tenant_id: str) -> CacheBackend:
+    raise AssertionError("Off-catalog requests do not use the approval cache")
+
+
+@pytest.fixture
+def mcp_ssrf_settings(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Allow test loopback servers through the real SSRF address checks."""
+    from onyx.server.security.models import SSRFProtectionLevel
+
+    settings = MagicMock(ssrf_protection_level=SSRFProtectionLevel.DISABLED)
+
+    def read_settings(*, allow_fallback: bool = True) -> MagicMock:
+        assert not allow_fallback
+        return settings
+
+    monkeypatch.setattr(
+        "onyx.sandbox_proxy.destination_policy.get_security_settings", read_settings
+    )
+    return settings
+
+
+def make_tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Path]:
+    key: rsa.RSAPrivateKey = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048
+    )
+    subject: x509.Name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
+    now: dt.datetime = dt.datetime.now(dt.timezone.utc)
+    certificate: x509.Certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - dt.timedelta(minutes=1))
+        .not_valid_after(now + dt.timedelta(days=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False
+        )
+        .sign(key, hashes.SHA256())
+    )
+    cert_path: Path = tmp_path / "upstream.crt"
+    key_path: Path = tmp_path / "upstream.key"
+    cert_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    context: ssl.SSLContext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert_path, key_path)
+    return context, cert_path
+
+
+def usable_ids(*integration_ids: int) -> UsableIntegrationIds:
+    """Integrations that the user turned on and can see."""
+    ids = frozenset(integration_ids)
+    return UsableIntegrationIds(on=ids, accessible=ids)

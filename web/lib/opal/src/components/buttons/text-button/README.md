@@ -15,14 +15,14 @@ slots).
 
 ```
 Interactive.Stateless              <- always variant="default" / prominence="tertiary"; disabled, href, onClick
-  └─ <Link> / <button>             <- .opal-text-label.interactive-foreground, no height/rounding/padding/border
+  └─ <NavLink> / <button>          <- .opal-text-label.interactive-foreground, no height/rounding/padding/border
        └─ <Text font={font} color="inherit" as="p">
 ```
 
 - **No separate surface component.** `Button` needs `Interactive.Container` because it
   has to _discover_ `href`/`disabled`/etc. from Radix `Slot`-injected props (it's a
   generic primitive reused by many callers). `TextButton` already has `href`/`target`/
-  `disabled` in scope as its own props, so it renders `<Link>`/`<button>` directly as
+  `disabled` in scope as its own props, so it renders `<NavLink>`/`<button>` directly as
   `Interactive.Stateless`'s single child. Radix `Slot` auto-merges `className` (joins
   both), `style` (merges objects), and event handlers (chains them) onto that element —
   everything else falls through untouched — so no manual prop-merging is needed.
@@ -41,14 +41,16 @@ Interactive.Stateless              <- always variant="default" / prominence="ter
 
 ## Props
 
-| Prop       | Type                | Default          | Description                                                                              |
-| ---------- | ------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
-| `font`     | `TextFont`          | `"main-ui-body"` | Font preset, same as `Text`'s `font` prop                                                |
-| `nowrap`   | `boolean`           | `true`           | Prevent text wrapping (defaults `true`, unlike `Text`, since buttons don't usually wrap) |
-| `children` | `string \| RichStr` | —                | Label text (required)                                                                    |
-| `href`     | `string`            | —                | URL; renders as a link                                                                   |
-| `target`   | `string`            | —                | Anchor target (e.g. `"_blank"`). Only meaningful with `href`                             |
-| `disabled` | `boolean`           | `false`          | Applies disabled styling + suppresses clicks/navigation                                  |
+| Prop       | Type                             | Default          | Description                                                                              |
+| ---------- | -------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
+| `font`     | `TextFont`                       | `"main-ui-body"` | Font preset, same as `Text`'s `font` prop                                                |
+| `nowrap`   | `boolean`                        | `true`           | Prevent text wrapping (defaults `true`, unlike `Text`, since buttons don't usually wrap) |
+| `children` | `string \| RichStr \| RichNodes` | —                | Label text (required); `richNodes()` for inline elements such as `<bdi>`                 |
+| `href`     | `string`                         | —                | URL; renders as a link                                                                   |
+| `target`   | `string`                         | —                | Anchor target (e.g. `"_blank"`). Only meaningful with `href`                             |
+| `disabled` | `boolean`                        | `false`          | Applies disabled styling + suppresses clicks/navigation                                  |
+
+`passive` keeps resting colors and removes hover and pressed styles. Click handlers remain enabled.
 
 ## Usage
 

@@ -15,6 +15,7 @@ from mcp.shared.auth import (
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.connection_models import access_token_fingerprint
 from onyx.server.features.mcp import oauth
 from onyx.utils.url import SSRFException
 
@@ -55,23 +56,50 @@ class _MemoryTokenStorage:
         self.client_info = client_info
 
 
-class _RecordingAuthorizationStorage(oauth.OnyxTokenStorage):
+class _RecordingAuthorizationStorage(oauth.IntegrationTokenStorage):
     def __init__(
         self,
         token_endpoint_auth_method: Literal[
             "client_secret_post", "client_secret_basic"
         ] = "client_secret_post",
     ) -> None:
-        super().__init__(connection_config_id=101)
         self.tokens: OAuthToken | None = None
         self.client_info = _client_information(
             token_endpoint_auth_method=token_endpoint_auth_method
         )
         self.persisted_client_information: OAuthClientInformationFull | None = None
 
+    @property
+    def refresh_lock_name(self) -> str:
+        return "test-refresh-lock"
+
+    def bind_oauth_context(self, context: oauth.OAuthContext) -> None:
+        del context
+
+    async def get_tokens(self) -> OAuthToken | None:
+        return self.tokens
+
+    async def get_client_info(self) -> OAuthClientInformationFull | None:
+        return self.client_info
+
+    async def set_client_info(self, info: OAuthClientInformationFull) -> None:
+        self.client_info = info
+
     async def set_tokens(self, tokens: OAuthToken) -> None:
         del tokens
         raise AssertionError("authorization must persist registration with its tokens")
+
+    async def set_refreshed_tokens(
+        self, tokens: OAuthToken, redeemed_refresh_token: str | None
+    ) -> bool:
+        del tokens, redeemed_refresh_token
+        raise AssertionError("no refresh in these tests")
+
+    async def discard_persisted_tokens(
+        self, redeemed_refresh_token: str | None
+    ) -> bool:
+        del redeemed_refresh_token
+        return False
 
     async def set_authorization_result(
         self,
@@ -101,6 +129,7 @@ def _provider(
             "connection_config_id": 101,
             "transport": "STREAMABLE_HTTP",
             "oauth_provider_mode": "AUTO_DISCOVERY",
+            "oauth_cimd_enabled": True,
         },
         authorization_request_handler=authorization_request_handler,
     )
@@ -427,5 +456,47 @@ def test_noninteractive_provider_requires_reconnection() -> None:
     with pytest.raises(
         oauth.MCPReauthenticationRequired,
         match="Please reconnect to the server through Onyx",
-    ):
+    ) as error:
         asyncio.run(run())
+    assert error.value.rejected_token_fingerprint is None
+
+
+@pytest.mark.parametrize(
+    ("status", "www_authenticate", "token_rejected"),
+    [
+        (401, 'Bearer error="invalid_token"', True),
+        (403, 'Bearer error="insufficient_scope", scope="files:write"', False),
+    ],
+)
+def test_reauthentication_says_whether_the_server_rejected_the_stored_token(
+    status: int, www_authenticate: str, token_rejected: bool
+) -> None:
+    storage = _MemoryTokenStorage()
+    storage.tokens = OAuthToken(access_token="stored-token", token_type="Bearer")
+    provider = _provider(storage)
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/mcp":
+            return _authorization_required_response(request)
+        assert request.headers["Authorization"] == "Bearer stored-token"
+        return httpx.Response(
+            status,
+            headers={
+                "WWW-Authenticate": f"{www_authenticate}, "
+                'resource_metadata="https://mcp.example.com/'
+                '.well-known/oauth-protected-resource/mcp"'
+            },
+            request=request,
+        )
+
+    async def run() -> None:
+        async with httpx.AsyncClient(
+            auth=provider, transport=httpx.MockTransport(respond)
+        ) as client:
+            await client.get("https://mcp.example.com/mcp")
+
+    with pytest.raises(oauth.MCPReauthenticationRequired) as error:
+        asyncio.run(run())
+    assert error.value.rejected_token_fingerprint == (
+        access_token_fingerprint("stored-token") if token_rejected else None
+    )

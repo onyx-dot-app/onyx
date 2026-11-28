@@ -1,10 +1,31 @@
 import pickle
 import shutil
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any, BinaryIO
 
+from onyx.connectors.models import Document
 from onyx.indexing.models import IndexChunk
+
+
+def _document_ref(index: int) -> Document:
+    """Stands in a batch file for the source document at `index`. Only the
+    store that wrote the file can resolve it."""
+    raise RuntimeError(
+        f"Bug: document reference {index} was loaded outside its ChunkBatchStore."
+    )
+
+
+class _ChunkUnpickler(pickle.Unpickler):
+    def __init__(self, file: BinaryIO, documents: list[Document]) -> None:
+        super().__init__(file)
+        self._documents = documents
+
+    def find_class(self, module: str, name: str) -> Any:
+        if module == _document_ref.__module__ and name == _document_ref.__name__:
+            return self._documents.__getitem__
+        return super().find_class(module, name)
 
 
 class ChunkBatchStore:
@@ -12,6 +33,10 @@ class ChunkBatchStore:
 
     Owns the temp directory lifetime and provides save/load/stream/scrub
     operations.
+
+    A batch file holds a reference in place of each chunk's source document,
+    and the store keeps the document in memory. A file that held the document
+    would repeat a large document in each batch that holds one of its chunks.
 
     Use as a context manager to ensure cleanup::
 
@@ -25,6 +50,9 @@ class ChunkBatchStore:
 
     def __init__(self) -> None:
         self._tmpdir: Path | None = None
+        # The list keeps each document alive, so its id() stays unique.
+        self._documents: list[Document] = []
+        self._document_index: dict[int, int] = {}
 
     # -- context manager -----------------------------------------------------
 
@@ -36,23 +64,46 @@ class ChunkBatchStore:
         if self._tmpdir is not None:
             shutil.rmtree(self._tmpdir, ignore_errors=True)
             self._tmpdir = None
+        self._documents = []
+        self._document_index = {}
 
     @property
     def _dir(self) -> Path:
-        assert self._tmpdir is not None, "ChunkBatchStore used outside context manager"
+        if self._tmpdir is None:
+            raise RuntimeError("ChunkBatchStore used outside context manager")
         return self._tmpdir
 
     # -- storage primitives --------------------------------------------------
 
+    def _reduce_document(
+        self, document: Document
+    ) -> tuple[Callable[..., Any], tuple[int]]:
+        index = self._document_index.get(id(document))
+        if index is None:
+            index = len(self._documents)
+            self._documents.append(document)
+            self._document_index[id(document)] = index
+        return _document_ref, (index,)
+
+    def _dump(self, chunks: list[IndexChunk], batch_file: Path) -> None:
+        with open(batch_file, "wb") as f:
+            pickler = pickle.Pickler(f)
+            # The table matches exact classes, so list each class in use.
+            pickler.dispatch_table = dict.fromkeys(
+                {type(chunk.source_document) for chunk in chunks},
+                self._reduce_document,
+            )
+            pickler.dump(chunks)
+
     def save(self, chunks: list[IndexChunk], batch_idx: int) -> None:
         """Serialize a batch of embedded chunks to disk."""
-        with open(self._dir / f"batch_{batch_idx}{self._EXT}", "wb") as f:
-            pickle.dump(chunks, f)
+        self._dump(chunks, self._dir / f"batch_{batch_idx}{self._EXT}")
 
     def _load(self, batch_file: Path) -> list[IndexChunk]:
         """Deserialize a batch of embedded chunks from a file."""
         with open(batch_file, "rb") as f:
-            return pickle.load(f)  # noqa: S301 — reads back files this process itself wrote in save()
+            # Reads back files this process itself wrote in save().
+            return _ChunkUnpickler(f, self._documents).load()
 
     def _batch_files(self) -> list[Path]:
         """Return batch files sorted by numeric index."""
@@ -85,5 +136,4 @@ class ChunkBatchStore:
                 c for c in batch_chunks if c.source_document.id not in failed_doc_ids
             ]
             if len(cleaned) != len(batch_chunks):
-                with open(batch_file, "wb") as f:
-                    pickle.dump(cleaned, f)
+                self._dump(cleaned, batch_file)

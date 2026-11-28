@@ -1,13 +1,15 @@
 import os
+import threading
 from abc import ABC, abstractmethod
 from copy import copy
 
 from tokenizers import Encoding, Tokenizer
 
-from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
+from onyx.configs.model_configs import DEFAULT_TOKENIZER_MODEL
 from onyx.context.search.models import InferenceChunk
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
+from shared_configs.embedding_models import get_local_model_spec
 from shared_configs.enums import EmbeddingProvider
 
 TRIM_SEP_PAT = "\n... {n} tokens removed...\n"
@@ -69,7 +71,21 @@ class TiktokenTokenizer(BaseTokenizer):
 
 class HuggingFaceTokenizer(BaseTokenizer):
     def __init__(self, model_name: str):
-        self.encoder: Tokenizer = Tokenizer.from_pretrained(model_name)
+        # Registry models load at their pinned revision, the same one the model
+        # server and the image bake use. Any other name keeps the plain call.
+        local_model_spec = get_local_model_spec(model_name)
+        revision = local_model_spec.hf_revision if local_model_spec else None
+        self.encoder: Tokenizer = (
+            Tokenizer.from_pretrained(model_name)
+            if revision is None
+            else Tokenizer.from_pretrained(model_name, revision=revision)
+        )
+        # Some tokenizer.json files enable truncation or fixed-length padding
+        # (thenlper/gte-small: both at 128). Callers count and split tokens,
+        # so encodes must cover the whole text and nothing more. The model
+        # server truncates embedding input with its own tokenizer.
+        self.encoder.no_truncation()
+        self.encoder.no_padding()
 
     def _safer_encode(self, string: str) -> Encoding:
         """
@@ -96,15 +112,25 @@ class HuggingFaceTokenizer(BaseTokenizer):
 
 
 _TOKENIZER_CACHE: dict[tuple[EmbeddingProvider | None, str | None], BaseTokenizer] = {}
+# One load at a time. A load takes about 250 MB, and the threads of a cold
+# worker all miss the cache at the same moment.
+_TOKENIZER_LOAD_LOCK = threading.RLock()
 
 
 def _check_tokenizer_cache(
     model_provider: EmbeddingProvider | None, model_name: str | None
 ) -> BaseTokenizer:
-    global _TOKENIZER_CACHE
     id_tuple = (model_provider, model_name)
 
-    if id_tuple not in _TOKENIZER_CACHE:
+    cached = _TOKENIZER_CACHE.get(id_tuple)
+    if cached is not None:
+        return cached
+
+    with _TOKENIZER_LOAD_LOCK:
+        cached = _TOKENIZER_CACHE.get(id_tuple)
+        if cached is not None:
+            return cached
+
         tokenizer = None
 
         if model_name:
@@ -113,13 +139,12 @@ def _check_tokenizer_cache(
         if not tokenizer:
             logger.info(
                 "Falling back to default embedding model tokenizer: %s",
-                DOCUMENT_ENCODER_MODEL,
+                DEFAULT_TOKENIZER_MODEL,
             )
             tokenizer = _get_default_tokenizer()
 
         _TOKENIZER_CACHE[id_tuple] = tokenizer
-
-    return _TOKENIZER_CACHE[id_tuple]
+        return tokenizer
 
 
 def _try_initialize_tokenizer(
@@ -128,17 +153,22 @@ def _try_initialize_tokenizer(
     tokenizer: BaseTokenizer | None = None
 
     if model_provider is not None:
-        # Try using TiktokenTokenizer first if model_provider exists
-        try:
-            tokenizer = TiktokenTokenizer(model_name)
-            logger.info("Initialized TiktokenTokenizer for: %s", model_name)
-            return tokenizer
-        except Exception as tiktoken_error:
-            logger.debug(
-                "TiktokenTokenizer not available for model %s: %s",
-                model_name,
-                tiktoken_error,
-            )
+        # Try using TiktokenTokenizer first if model_provider exists. Bifrost
+        # IDs like "openai/text-embedding-3-small" also try the bare model name.
+        candidates: list[str] = [model_name]
+        if model_provider == EmbeddingProvider.BIFROST:
+            candidates.append(model_name.split("/")[-1])
+        for candidate in dict.fromkeys(candidates):
+            try:
+                tokenizer = TiktokenTokenizer(candidate)
+                logger.info("Initialized TiktokenTokenizer for: %s", candidate)
+                return tokenizer
+            except Exception as tiktoken_error:
+                logger.debug(
+                    "TiktokenTokenizer not available for model %s: %s",
+                    candidate,
+                    tiktoken_error,
+                )
     else:
         # If no provider specified, try HuggingFaceTokenizer
         try:
@@ -163,7 +193,9 @@ def _get_default_tokenizer() -> BaseTokenizer:
     """Lazy-load the default tokenizer to avoid loading it at module import time."""
     global _DEFAULT_TOKENIZER
     if _DEFAULT_TOKENIZER is None:
-        _DEFAULT_TOKENIZER = HuggingFaceTokenizer(DOCUMENT_ENCODER_MODEL)
+        with _TOKENIZER_LOAD_LOCK:
+            if _DEFAULT_TOKENIZER is None:
+                _DEFAULT_TOKENIZER = HuggingFaceTokenizer(DEFAULT_TOKENIZER_MODEL)
     return _DEFAULT_TOKENIZER
 
 
@@ -253,7 +285,8 @@ def tokenizer_trim_middle(
     sep_str = TRIM_SEP_PAT.format(n=len(tokens) - desired_length)
     sep_tokens = tokenizer.encode(sep_str)
     slice_size = (desired_length - len(sep_tokens)) // 2
-    assert slice_size > 0, "Slice size is not positive, desired length is too short"
+    if slice_size <= 0:
+        raise ValueError("Slice size is not positive, desired length is too short")
     return (
         tokenizer.decode(tokens[:slice_size])
         + sep_str

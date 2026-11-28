@@ -1,22 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.permissions import require_permission
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_accessible_documents_for_hierarchy_node_paginated
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.hierarchy import (
+    get_accessible_hierarchy_node,
     get_accessible_hierarchy_nodes_for_source,
     search_accessible_hierarchy_nodes,
 )
 from onyx.db.models import User
-from onyx.db.opensearch_migration import get_opensearch_retrieval_state
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.hierarchy.constants import (
     DOCUMENT_PAGE_SIZE,
     HIERARCHY_NODE_DOCUMENTS_PATH,
+    HIERARCHY_NODE_PATH,
     HIERARCHY_NODE_SEARCH_LIMIT,
     HIERARCHY_NODES_LIST_PATH,
     HIERARCHY_NODES_PREFIX,
@@ -35,30 +37,7 @@ from onyx.server.features.hierarchy.models import (
     HierarchyNodeSummary,
 )
 
-OPENSEARCH_NOT_ENABLED_MESSAGE = "Per-source knowledge selection is coming soon in v3.0! OpenSearch indexing must be enabled to use this feature."
-
-MIGRATION_STATUS_MESSAGE = (
-    "Our records indicate that the transition to OpenSearch is still in progress. "
-    "OpenSearch retrieval is necessary to use this feature. "
-    "You can still use Document Sets, though! "
-    "If you would like to manually switch to OpenSearch, "
-    'Go to the "Document Index Migration" section in the Admin panel.'
-)
-
 router = APIRouter(prefix=HIERARCHY_NODES_PREFIX)
-
-
-def _require_opensearch(db_session: Session) -> None:
-    if not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
-        raise HTTPException(
-            status_code=403,
-            detail=OPENSEARCH_NOT_ENABLED_MESSAGE,
-        )
-    if not get_opensearch_retrieval_state(db_session):
-        raise HTTPException(
-            status_code=403,
-            detail=MIGRATION_STATUS_MESSAGE,
-        )
 
 
 def _get_user_access_info(user: User, db_session: Session) -> tuple[str, list[str]]:
@@ -71,7 +50,6 @@ def list_accessible_hierarchy_nodes(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodesResponse:
-    _require_opensearch(db_session)
     user_email, external_group_ids = _get_user_access_info(user, db_session)
     nodes = get_accessible_hierarchy_nodes_for_source(
         db_session=db_session,
@@ -99,7 +77,6 @@ def list_accessible_hierarchy_node_documents(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodeDocumentsResponse:
-    _require_opensearch(db_session)
     user_email, external_group_ids = _get_user_access_info(user, db_session)
     cursor = documents_request.cursor
     sort_field = documents_request.sort_field
@@ -156,7 +133,6 @@ def search_hierarchy_nodes(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodeSearchResponse:
-    _require_opensearch(db_session)
     user_email, external_group_ids = _get_user_access_info(user, db_session)
     nodes = search_accessible_hierarchy_nodes(
         db_session=db_session,
@@ -178,4 +154,27 @@ def search_hierarchy_nodes(
             )
             for node in nodes
         ]
+    )
+
+
+# Registered after the fixed paths so that "/search" does not match it.
+@router.get(HIERARCHY_NODE_PATH)
+def get_hierarchy_node(
+    node_id: int,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> HierarchyNodeSearchSummary:
+    user_email, external_group_ids = _get_user_access_info(user, db_session)
+    node = get_accessible_hierarchy_node(
+        db_session, node_id, user_email, external_group_ids, user_id=user.id
+    )
+    # An inaccessible node looks the same as a missing one.
+    if node is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Hierarchy node not found")
+    return HierarchyNodeSearchSummary(
+        id=node.id,
+        title=node.display_name,
+        link=node.link,
+        parent_id=node.parent_id,
+        source=node.source,
     )

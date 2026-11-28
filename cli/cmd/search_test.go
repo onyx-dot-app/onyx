@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +17,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/testutil"
 	"github.com/spf13/cobra"
 )
 
@@ -65,8 +69,10 @@ func TestBuildSearchRequest(t *testing.T) {
 		agentIDSet       bool
 		defaultAgentID   int
 		noQueryExpansion bool
+		documentSets     []string
 
-		wantSources []string
+		wantSources      []string
+		wantDocumentSets []string
 		// wantDaysAgo is the expected "N days ago" cutoff; buildSearchRequest
 		// converts this to an ISO timestamp ~N*24h before now, asserted
 		// within a 10s tolerance below.
@@ -141,6 +147,20 @@ func TestBuildSearchRequest(t *testing.T) {
 			defaultAgentID: 0,
 			wantPersonaID:  nil,
 		},
+		{
+			name:             "document_sets_kept_verbatim_and_blank_dropped",
+			query:            "test query",
+			documentSets:     []string{" Engineering Wiki ", "", "  ", "Sales"},
+			wantDocumentSets: []string{" Engineering Wiki ", "Sales"},
+		},
+		{
+			name:             "document_sets_skip_default_agent",
+			query:            "test query",
+			documentSets:     []string{"Engineering Wiki"},
+			defaultAgentID:   7,
+			wantDocumentSets: []string{"Engineering Wiki"},
+			wantPersonaID:    nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -148,6 +168,7 @@ func TestBuildSearchRequest(t *testing.T) {
 			req := buildSearchRequest(searchFlags{
 				query:            tt.query,
 				sources:          tt.sources,
+				documentSets:     tt.documentSets,
 				days:             tt.days,
 				daysSet:          tt.daysSet,
 				agentID:          tt.agentID,
@@ -209,6 +230,10 @@ func TestBuildSearchRequest(t *testing.T) {
 				if *req.PersonaID != *tt.wantPersonaID {
 					t.Errorf("PersonaID = %d, want %d", *req.PersonaID, *tt.wantPersonaID)
 				}
+			}
+
+			if !slices.Equal(req.DocumentSets, tt.wantDocumentSets) {
+				t.Errorf("DocumentSets = %v, want %v", req.DocumentSets, tt.wantDocumentSets)
 			}
 
 			// SkipQueryExpansion
@@ -825,5 +850,62 @@ func TestClampError(t *testing.T) {
 		if !strings.HasPrefix(long.Error(), strings.TrimSuffix(got, " … (truncated)")) {
 			t.Errorf("%s: clamped message is not a prefix of the original", name)
 		}
+	}
+}
+
+func TestSearch_DocumentSetSentToServer(t *testing.T) {
+	var got models.SearchRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"results":[]}`))
+	}))
+	defer srv.Close()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("ONYX_SERVER_URL", srv.URL)
+	t.Setenv("ONYX_PAT", "test-pat")
+
+	ios, _, _ := testutil.TestIOStreams()
+	cmd := newSearchCmd(ios)
+	cmd.SetArgs([]string{"--document-set", "Engineering Wiki", "--document-set", "Sales, EMEA", "--document-set", "HR", "query"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	want := []string{"Engineering Wiki", "Sales, EMEA", "HR"}
+	if !slices.Equal(got.DocumentSets, want) {
+		t.Errorf("document_sets = %v, want %v", got.DocumentSets, want)
+	}
+}
+
+func TestSearch_DocumentSetFlagValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "with_agent_id", args: []string{"--document-set", "Wiki", "--agent-id", "3", "query"}},
+		{name: "with_agent_name", args: []string{"--document-set", "Wiki", "--agent-name", "Support", "query"}},
+		{name: "empty_name", args: []string{"--document-set", " ", "query"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Errorf("unexpected request to %s", r.URL.Path)
+			}))
+			defer srv.Close()
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("ONYX_SERVER_URL", srv.URL)
+			t.Setenv("ONYX_PAT", "test-pat")
+
+			ios, _, _ := testutil.TestIOStreams()
+			cmd := newSearchCmd(ios)
+			cmd.SetArgs(tt.args)
+			err := cmd.Execute()
+			var exitErr *exitcodes.ExitError
+			if !errors.As(err, &exitErr) || exitErr.Code != exitcodes.BadRequest {
+				t.Fatalf("err = %v, want a BadRequest exit error", err)
+			}
+		})
 	}
 }

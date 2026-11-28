@@ -1,15 +1,16 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import {
   forwardRef,
   memo,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import BaseInputBar, {
@@ -24,15 +25,21 @@ import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
 import UserLibraryModal from "@/app/craft/components/UserLibraryModal";
 import { useEscapeInterrupt } from "@/hooks/useEscapeInterrupt";
-import useSlashPicker from "@/hooks/useSlashPicker";
 import {
   useUploadFilesContext,
   type BuildFile,
 } from "@/app/craft/contexts/UploadFilesContext";
+import { useUser } from "@/providers/UserProvider";
+import { clearDraft, draftKey, useDraft } from "@/hooks/useDraft";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
-import { useCraftMcpServers } from "@/lib/tools/hooks";
+import { useCraftMcpServers } from "@/lib/mcp/hooks";
+import type { CaretText } from "@/lib/contentEditable";
+import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
+import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import {
+  CRAFT_PICKER_TRIGGER,
+  filterPickerSections,
   pickerEntryConnectionPath,
   pickerEntryKey,
   pickerEntryPromptPrefix,
@@ -41,7 +48,8 @@ import {
 } from "@/lib/skills/picker";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchLibraryTree } from "@/app/craft/services/apiServices";
-import type { QueuedMessage } from "@/app/app/interfaces";
+import type { QueuedMessage } from "@/app/app/types";
+import { customizeTabHref } from "@/lib/customize/paths";
 
 export interface CraftInputBarHandle {
   reset: () => void;
@@ -50,14 +58,19 @@ export interface CraftInputBarHandle {
 }
 
 export interface CraftInputBarProps {
-  onSubmit: (message: string, files: BuildFile[]) => void;
+  /** URL session identity; null identifies the New Session draft. */
+  sessionId?: string | null;
+  onSubmit: (
+    message: string,
+    files: BuildFile[]
+  ) => boolean | void | Promise<boolean | void>;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
   sandboxInitializing?: boolean;
   noBottomRounding?: boolean;
   queuedMessages?: readonly QueuedMessage[];
-  onQueueMessage?: (text: string, files: BuildFile[]) => void;
+  onQueueMessage?: (text: string, files: BuildFile[]) => boolean | void;
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
@@ -78,6 +91,7 @@ const CraftInputBar = memo(
   forwardRef<CraftInputBarHandle, CraftInputBarProps>(
     (
       {
+        sessionId = null,
         onSubmit,
         isRunning,
         disabled = false,
@@ -97,8 +111,34 @@ const CraftInputBar = memo(
       const t = useTranslations("craft.inputBar");
       const entryMenuT = useTranslations("craft.entryMenu");
       const baseRef = useRef<BaseInputBarHandle>(null);
+      const { user } = useUser();
+      const userId = user?.id;
+      const storageKey = draftKey(
+        "craft",
+        `${userId ?? "signed-out"}:${sessionId ?? "new"}`
+      );
+      const { draft, loaded, save } = useDraft<string>({
+        key: storageKey,
+        debounceMs: 0,
+      });
+      const saveDraft = useCallback(
+        (text: string) => {
+          if (userId) save(text);
+        },
+        [userId, save]
+      );
+      const restoredKeyRef = useRef<string | null>(null);
+      useEffect(() => {
+        if (!userId) {
+          restoredKeyRef.current = null;
+          return;
+        }
+        if (!loaded || restoredKeyRef.current === storageKey) return;
+        restoredKeyRef.current = storageKey;
+        if (typeof draft === "string") baseRef.current?.setMessage(draft);
+      }, [draft, loaded, storageKey, userId]);
       const fileInputRef = useRef<HTMLInputElement>(null);
-      const router = useRouter();
+      const navigation = useNavigation();
 
       const {
         currentMessageFiles,
@@ -109,11 +149,27 @@ const CraftInputBar = memo(
       } = useUploadFilesContext();
 
       const { data: skillsData } = useUserSkills();
+      const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
+        useChatSkills({ builtIns: false });
       const { data: appsData } = useUserExternalApps();
       const { data: craftMcpData } = useCraftMcpServers();
+      const skillOmissions = useBuildSessionStore((state) =>
+        sessionId ? state.sessions.get(sessionId)?.skillOmissions : null
+      );
       const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData, craftMcpData?.mcp_servers),
-        [skillsData, appsData, craftMcpData]
+        () =>
+          toPickerSections(
+            {
+              builtins: skillsData?.builtins,
+              customs: chatSkills.skills,
+              omittedPluginIds: new Set(
+                skillOmissions?.skills.map((skill) => skill.plugin_id)
+              ),
+            },
+            appsData,
+            craftMcpData
+          ),
+        [skillsData, chatSkills, skillOmissions, appsData, craftMcpData]
       );
 
       const { data: libraryTree, mutate: mutateLibrary } = useSWR(
@@ -142,7 +198,7 @@ const CraftInputBar = memo(
         (entry: PickerEntry) => {
           const connectionPath = pickerEntryConnectionPath(entry);
           if (connectionPath) {
-            router.push(connectionPath);
+            navigation.go(connectionPath);
             return;
           }
           setActiveEntries((prev) =>
@@ -153,7 +209,7 @@ const CraftInputBar = memo(
               : [...prev, entry]
           );
         },
-        [router]
+        [navigation]
       );
 
       const removeEntry = useCallback((entryKey: string) => {
@@ -162,9 +218,18 @@ const CraftInputBar = memo(
         );
       }, []);
 
-      const slashPicker = useSlashPicker({
-        inputRef: baseRef,
-        onSelect: addEntry,
+      const pickEntry = useCallback(
+        (entry: PickerEntry, token: CaretText) => {
+          baseRef.current?.deleteToken(token);
+          addEntry(entry);
+        },
+        [addEntry]
+      );
+      const slashPicker = useEntryPicker({
+        trigger: CRAFT_PICKER_TRIGGER,
+        entries: pickerSections,
+        filter: filterPickerSections,
+        onSelect: pickEntry,
       });
 
       const interruptible = !!onInterrupt && isRunning;
@@ -206,26 +271,34 @@ const CraftInputBar = memo(
       );
 
       const handleSubmit = useCallback(
-        (message: string) => {
-          onSubmit(
+        async (message: string) => {
+          const accepted = await onSubmit(
             withEntryPrefixes(message, activeEntries),
             currentMessageFiles
           );
-          setActiveEntries([]);
-          clearFiles({ suppressRefetch: true });
+          if (accepted === false) return false;
+          // Navigation can unmount this input before the handoff completes.
+          clearDraft(storageKey);
+          if (baseRef.current) {
+            setActiveEntries([]);
+            clearFiles();
+          }
+          return true;
         },
-        [activeEntries, currentMessageFiles, onSubmit, clearFiles]
+        [activeEntries, currentMessageFiles, onSubmit, clearFiles, storageKey]
       );
 
       const handleQueueMessage = useCallback(
         (message: string) => {
-          if (!onQueueMessage) return;
-          onQueueMessage(
+          if (!onQueueMessage) return false;
+          const accepted = onQueueMessage(
             withEntryPrefixes(message, activeEntries),
             currentMessageFiles
           );
+          if (accepted === false) return false;
           setActiveEntries([]);
-          clearFiles({ suppressRefetch: true });
+          clearFiles();
+          return true;
         },
         [activeEntries, currentMessageFiles, onQueueMessage, clearFiles]
       );
@@ -248,8 +321,8 @@ const CraftInputBar = memo(
             {
               onAttachFiles: () => fileInputRef.current?.click(),
               onSelectEntry: addEntry,
-              onBrowseSkills: () => router.push("/craft/v1/skills"),
-              onBrowseApps: () => router.push("/craft/v1/apps"),
+              onBrowseSkills: () => navigation.go(customizeTabHref("skills")),
+              onBrowseApps: () => navigation.go("/craft/v1/apps"),
               libraryFiles,
               // Defer the modal until the + popover finishes closing, else it paints over it.
               onManageLibrary: () =>
@@ -257,7 +330,7 @@ const CraftInputBar = memo(
             },
             entryMenuT
           ),
-        [pickerSections, addEntry, libraryFiles, router, entryMenuT]
+        [pickerSections, addEntry, libraryFiles, navigation, entryMenuT]
       );
 
       const bottomLeftSlot = (
@@ -292,6 +365,8 @@ const CraftInputBar = memo(
             }}
           />
           <BaseInputBar
+            key={storageKey}
+            onContentChange={saveDraft}
             ref={baseRef}
             onSubmit={handleSubmit}
             isRunning={isRunning}
@@ -312,15 +387,17 @@ const CraftInputBar = memo(
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}
-            onSelectionChange={slashPicker.onSelectionChange}
+            onFocus={onChatSkillsFocus}
           />
           <EntryPickerPopover
             open={slashPicker.open}
             anchorRect={slashPicker.anchorRect}
             query={slashPicker.query}
-            sections={pickerSections}
+            sections={slashPicker.sections}
             onSelect={slashPicker.onSelect}
-            onClose={slashPicker.onClose}
+            onEscape={slashPicker.onEscape}
+            onDismiss={slashPicker.reset}
+            trigger={CRAFT_PICKER_TRIGGER}
           />
           {entryInfo && (
             <EntryInfoPopover

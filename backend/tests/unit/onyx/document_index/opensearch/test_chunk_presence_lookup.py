@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )

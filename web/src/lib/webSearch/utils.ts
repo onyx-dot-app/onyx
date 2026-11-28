@@ -3,7 +3,8 @@ import {
   SvgExa,
   SvgFirecrawl,
   SvgGoogle,
-  SvgSearxng,
+  SvgParallel,
+  SvgSearXNG,
   SvgSerper,
   SvgTavily,
 } from "@opal/logos";
@@ -55,13 +56,25 @@ export const SEARCH_PROVIDER_DETAILS: Record<
   searxng: {
     label: "SearXNG",
     subtitle: "SearXNG",
-    logo: SvgSearxng,
+    logo: SvgSearXNG,
   },
   tavily: {
     label: "Tavily",
     subtitle: "Tavily AI",
     apiKeyUrl: "https://app.tavily.com/home",
     logo: SvgTavily,
+  },
+  firecrawl: {
+    label: "Firecrawl",
+    subtitle: "Firecrawl Search",
+    apiKeyUrl: "https://www.firecrawl.dev/app/api-keys",
+    logo: SvgFirecrawl,
+  },
+  parallel: {
+    label: "Parallel",
+    subtitle: "Parallel Search API",
+    apiKeyUrl: "https://platform.parallel.ai",
+    logo: SvgParallel,
   },
 };
 
@@ -121,6 +134,11 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     requiresApiKey: true,
     requiredConfigKeys: [],
   },
+  firecrawl: {
+    requiresApiKey: true,
+    requiredConfigKeys: ["base_url"],
+  },
+  parallel: { requiresApiKey: true, requiredConfigKeys: [] },
 };
 
 const DEFAULT_SEARCH_CAPABILITIES: SearchProviderCapabilities = {
@@ -379,8 +397,16 @@ export function getSearchConfigField(
   if (providerType === "searxng") {
     return {
       title: t("configFields.searxngBaseUrl.label"),
-      placeholder: "https://your-searxng-instance.com",
+      placeholder: t("configFields.searxngBaseUrl.placeholder"),
       subDescription: markdown(t("configFields.searxngBaseUrl.description")),
+    };
+  }
+  if (providerType === "firecrawl") {
+    return {
+      title: t("configFields.firecrawlBaseUrl.label"),
+      placeholder: t("configFields.firecrawlBaseUrl.searchPlaceholder"),
+      defaultValue: "https://api.firecrawl.dev/v2/search",
+      subDescription: t("configFields.firecrawlBaseUrl.description"),
     };
   }
   return undefined;
@@ -393,7 +419,7 @@ export function getContentConfigField(
   if (providerType === "firecrawl") {
     return {
       title: t("configFields.firecrawlBaseUrl.label"),
-      placeholder: "https://api.firecrawl.dev/v2/scrape",
+      placeholder: t("configFields.firecrawlBaseUrl.scrapePlaceholder"),
       defaultValue: "https://api.firecrawl.dev/v2/scrape",
       subDescription: t("configFields.firecrawlBaseUrl.description"),
     };

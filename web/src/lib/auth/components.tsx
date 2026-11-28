@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation, NavLink } from "@opal/navigation";
 import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useSessionWatcher } from "@/lib/auth/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import { Modal } from "@opal/components";
@@ -16,7 +16,6 @@ import { basicLogin, basicSignup } from "@/lib/users/svc";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "@/lib/auth/svc";
-import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
 import { LOGIN_PATH, loginPath } from "@/lib/auth/paths";
 import {
@@ -45,7 +44,7 @@ const SESSION_END_MESSAGE_KEYS = {
 
 export function AuthenticationShell({ children }: AuthenticationShellProps) {
   const t = useTranslations("auth");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { sessionEnded, sessionEndReason } = useSessionWatcher();
 
   function handleLogin() {
@@ -60,7 +59,7 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
     }
     // Round-trip the current location through login (OAuth `next` / SAML
     // RelayState) so the post-login redirect lands back here.
-    router.push(
+    navigation.go(
       loginPath({
         next:
           window.location.pathname +
@@ -139,6 +138,7 @@ interface SignInButtonProps {
 
 export function SignInButton({ authorizeUrl }: SignInButtonProps) {
   const t = useTranslations("auth");
+  const navigation = useNavigation();
   const { getCaptchaToken, isCaptchaEnabled } = useCaptcha();
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -148,7 +148,7 @@ export function SignInButton({ authorizeUrl }: SignInButtonProps) {
     setIsVerifying(true);
     // Stays true on the success branch so the button remains disabled until
     // the browser actually begins unloading for the OAuth redirect — prevents
-    // a double-click window between `window.location.href = ...` and unload.
+    // a double-click window between `navigation.load(...)` and unload.
     let navigating = false;
     try {
       const token = await getCaptchaToken("oauth");
@@ -158,7 +158,7 @@ export function SignInButton({ authorizeUrl }: SignInButtonProps) {
       }
       await verifyCaptchaForOAuth(token);
       navigating = true;
-      window.location.href = authorizeUrl;
+      navigation.load(authorizeUrl);
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));
     } finally {
@@ -243,11 +243,11 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
     <div className="flex flex-col gap-1">
       {rules.map((rule) => (
         <Content
+          font="secondary-body"
           key={rule.label}
-          sizePreset="secondary"
-          variant="body"
           icon={rule.met ? SvgCheckCircle : SvgXCircle}
-          color={rule.met ? "success" : "muted"}
+          color={rule.met ? "success" : "default"}
+          titleColor="text-03"
           title={rule.label}
         />
       ))}
@@ -294,6 +294,7 @@ export function EmailPasswordForm({
 
   const { user, authTypeMetadata } = useUser();
   const { getCaptchaToken } = useCaptcha();
+  const navigation = useNavigation();
 
   const validationSchema = useMemo(() => {
     let passwordSchema = Yup.string();
@@ -390,7 +391,7 @@ export function EmailPasswordForm({
           // Best-effort: the account already exists, so redirect regardless.
           console.warn("requestEmailVerification failed:", e);
         }
-        window.location.href = "/auth/waiting-on-verification";
+        navigation.load("/auth/waiting-on-verification");
         return;
       }
     }
@@ -404,9 +405,9 @@ export function EmailPasswordForm({
 
     if (loginResponse.ok) {
       const validatedNextUrl = validateInternalRedirect(nextUrl);
-      window.location.href =
-        validatedNextUrl ??
-        `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
+      navigation.load(
+        validatedNextUrl ?? `/app${isSignup && !isJoin ? "?new_team=true" : ""}`
+      );
     } else {
       const errorBody: FastApiUsersErrorBody = await loginResponse
         .json()
@@ -457,7 +458,7 @@ export function EmailPasswordForm({
                 <InputVertical
                   title={t("emailPasswordForm.password.label")}
                   withLabel="password"
-                  topRight={
+                  rightChildren={
                     NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED &&
                     !isSignup &&
                     !errors.email &&
@@ -478,7 +479,6 @@ export function EmailPasswordForm({
                   <PasswordInputTypeInField
                     name="password"
                     placeholder={t("emailPasswordForm.password.placeholder")}
-                    mask="native"
                     data-testid="password"
                     autoComplete={
                       isSignup ? "new-password" : "current-password"
@@ -500,14 +500,14 @@ export function EmailPasswordForm({
             </AuthLayouts.Submit>
 
             {user?.is_anonymous_user && (
-              <Link
+              <NavLink
                 href="/app"
                 className="text-xs text-action-selection-05 cursor-pointer text-center w-full font-medium mx-auto"
               >
                 <span className="hover:border-b hover:border-dotted hover:border-action-selection-05">
                   {t("emailPasswordForm.continueAsGuest.label")}
                 </span>
-              </Link>
+              </NavLink>
             )}
           </AuthLayouts.FormBody>
         );

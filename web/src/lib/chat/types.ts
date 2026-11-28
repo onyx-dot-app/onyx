@@ -1,0 +1,180 @@
+import type { ChatStream, FileDescriptor, Message } from "@/app/app/types";
+import type { LLMOverride } from "@/app/app/services/lib";
+import type { ToolQuestionAnswer } from "@/app/app/services/streamingModels";
+import type { ProjectFile } from "@/lib/projects/types";
+
+/** A chat skill the user picked with `@`, by name. */
+export interface SkillMention {
+  type: "skill";
+  name: string;
+}
+
+/** What the user tagged in a message with `@`. Mirrors `Mention` in
+ * `backend/onyx/chat/mention_models.py`: each kind is one member of the union
+ * on `type`, and skills are the only kind. */
+export type Mention = SkillMention;
+
+/** The most distinct mentions one message can send. Mirrors
+ * `MAX_MENTIONS_PER_MESSAGE` in `backend/onyx/chat/mention_models.py`. */
+export const MAX_MENTIONS_PER_MESSAGE = 20;
+
+/** A picked skill at the version the user ran when its question was
+ * accepted. */
+export interface RecordedSkillMention extends SkillMention {
+  version_id: string;
+}
+
+/** A mention as its question's turn resolved it. Mirrors `RecordedMention`
+ * in `backend/onyx/chat/mention_models.py`. */
+export type RecordedMention = RecordedSkillMention;
+
+/** A mention as a question holds it: one per picked tile, with `index`, where
+ * its `@name` starts in the message. A mention known only from the server,
+ * such as a recorded or queued one, has no `index`. The server gets each
+ * mention once, without `index` (`lib/chat/mentions.ts:requestMentions`). */
+export type ComposedMention = Mention & { index?: number };
+
+/** A mention at a known place in its message. */
+export type PlacedMention = Mention & { index: number };
+
+/** A question as the user wrote it: its text and what the user tagged in it.
+ * Mentions come only from the `@` menu; the text holds an `@name` for each,
+ * and plain `@name` text mentions nothing. */
+export interface ComposedMessage {
+  message: string;
+  mentions: ComposedMention[];
+}
+
+/** A question that did not reach the server, to put back in the composer. */
+export interface UnsentMessage extends ComposedMessage {
+  files: ProjectFile[];
+  /** The sent question that an unsent edit replaces. */
+  messageIdToResend?: number;
+}
+
+/** A sent question that the user edits in the composer. */
+export interface MessageEdit extends ComposedMessage {
+  messageId: number;
+  files: FileDescriptor[];
+}
+
+/** Composer choices that a queued or interrupting message's turn starts with. */
+export interface PendingTurnSettings {
+  deepResearch: boolean;
+  /** Null uses the chat's saved model. */
+  llmOverride: LLMOverride | null;
+}
+
+export interface PendingChatMessage {
+  id: string;
+  message: string;
+  delivery: "send" | "queue" | "interrupt";
+  target_response_id: number | null;
+  deep_research: boolean;
+  llm_override: LLMOverride | null;
+  mentions: Mention[];
+}
+
+export interface ChatHistoryPage {
+  messageTree: Map<number, Message>;
+  hasOlderMessages: boolean;
+}
+
+export interface ChatSessionStatus {
+  is_processing: boolean;
+  current_stream: ChatStream | null;
+  has_active_subagents: boolean;
+  /** Pending input can start a run now; false while the queue is paused. */
+  has_startable_input: boolean;
+  latest_response_id: number | null;
+  /** Changes when any approval request or question of the chat session
+   * opens or resolves, on any branch, a reply's or a background
+   * subagent's. */
+  approvals_version: string;
+}
+
+/** A run's outcome, as the server's `RunStatus`. */
+export type RunStatus =
+  | "running"
+  | "suspended"
+  | "complete"
+  | "limit"
+  | "cancelled"
+  | "error";
+
+/** A background agent that the chat's selected branch started. */
+export interface ChatSubagent {
+  id: string;
+  /** The agent tree path, such as `/root/researcher`. */
+  path: string;
+  /** Null before its first run starts. */
+  status: RunStatus | null;
+  stopped_by_user: boolean;
+  /** When its current or latest run started, as an ISO date. */
+  started_at: string | null;
+  /** Its current or latest run; another branch's run has another id. */
+  latest_run_id: number | null;
+  /** The live stream of its running response, while it runs. */
+  stream_id: number | null;
+  /** The tool that its running response last called. */
+  activity_tool: string | null;
+  /** The model of its current or latest run. */
+  model: string | null;
+  /** How long its latest run worked, once saved. */
+  duration_seconds: number | null;
+}
+
+/** The chat's background agents, as `useChatSubagents` gives them. */
+export interface ChatSubagents {
+  agents: ChatSubagent[];
+  /** A list has been read from the server, not only from the cache. */
+  loaded: boolean;
+  /** Stops the agent and the agents below it. */
+  stopAgent: (agentId: string) => Promise<void>;
+}
+
+export interface ChatSessionQueue {
+  /** False for incognito and anonymous chats, which have no server queue. */
+  enabled: boolean;
+  messages: PendingChatMessage[];
+  error: string | null;
+  /** A pending-message request is in flight. */
+  busy: boolean;
+  needsResponseSelection: boolean;
+  /**
+   * A queued or interrupting message's turn starts as Deep Research when
+   * `deepResearch` is set, with `llmOverride` as its model and the SKILL.md
+   * files of its mentioned skills after its question. A `send` gives its
+   * mentions to the running response.
+   */
+  submit: (
+    composed: ComposedMessage,
+    delivery: PendingChatMessage["delivery"],
+    turn: PendingTurnSettings
+  ) => Promise<boolean>;
+  withdraw: (id: string) => Promise<PendingChatMessage | null>;
+  interrupt: (id: string) => Promise<void>;
+}
+
+/** The card's answers to a question request's questions, or text that the
+ * user typed in the chat instead, which answers every question of the
+ * response that waits. */
+export type QuestionAnswersBody =
+  | { answers: ToolQuestionAnswer[] }
+  | { message: string };
+
+export interface QuestionAnswersResponse {
+  question_request_id: string;
+  /** The stream that continues the response, when it runs. */
+  continuation: ChatStream | null;
+}
+
+export interface ApprovalDecisionResponse {
+  approval_id: string;
+  decision: "APPROVED" | "REJECTED";
+  // "POLICY": the action policy disabled the tool, so the approval rejected it.
+  // "COMMAND_GRANT": approved for the rest of a VM command.
+  decided_via: "USER" | "SESSION_GRANT" | "POLICY" | "COMMAND_GRANT";
+  /** The stream that continues the suspended response, when it runs. */
+  continuation: ChatStream | null;
+}

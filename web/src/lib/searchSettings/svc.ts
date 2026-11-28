@@ -2,14 +2,22 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import type { Settings } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  CCPairAccessMode,
+  CCPairIdsBackfillStatus,
   EmbeddingModelSpec,
   EmbeddingProviderName,
-  ImageProcessingSettings,
   ReindexErrorRow,
   SavedSearchSettings,
   SwitchoverType,
+  VectorQuantization,
+  type VertexEmbeddingConfig,
 } from "@/lib/searchSettings/types";
 import { isCloudBased } from "@/lib/searchSettings";
+
+/** Mirrors backend `TestEmbeddingResponse`. */
+interface TestEmbeddingResponse {
+  dimension: number;
+}
 
 interface TestEmbeddingArgs {
   provider_type: string;
@@ -18,6 +26,7 @@ interface TestEmbeddingArgs {
   apiUrl: string | null;
   apiVersion: string | null;
   deploymentName: string | null;
+  vertexConfig?: VertexEmbeddingConfig | null;
 }
 
 export async function testEmbedding({
@@ -27,10 +36,8 @@ export async function testEmbedding({
   apiUrl,
   apiVersion,
   deploymentName,
+  vertexConfig,
 }: TestEmbeddingArgs) {
-  const testModelName =
-    provider_type === "openai" ? "text-embedding-3-small" : modelName;
-
   return await fetch("/api/admin/embedding/test-embedding", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,9 +45,10 @@ export async function testEmbedding({
       provider_type: provider_type,
       api_key: apiKey,
       api_url: apiUrl,
-      model_name: testModelName,
+      model_name: modelName,
       api_version: apiVersion,
       deployment_name: deploymentName,
+      vertex_config: vertexConfig,
     }),
   });
 }
@@ -53,23 +61,34 @@ export async function testEmbedding({
  * `apiVersion` and `deploymentName` are Azure-specific — backend's
  * `CloudEmbeddingProviderCreationRequest` accepts them as optional, and
  * non-Azure providers should pass `null`.
+ *
+ * Returns the vector length of the test embedding, or `null` when no test ran.
+ * `alwaysTest` runs the test even when the stored key is kept, for providers
+ * whose model is free text (Bifrost). The test embeds with `modelName`, which
+ * must not be empty.
  */
 export async function connectEmbeddingProvider({
   providerType,
   apiKey,
   apiUrl,
-  modelName = "",
+  modelName,
   apiVersion,
   deploymentName,
+  vertexConfig,
+  alwaysTest = false,
 }: {
   providerType: string;
   apiKey: string | null;
   apiUrl: string;
-  modelName?: string;
+  modelName: string;
   apiVersion: string | null;
   deploymentName: string | null;
-}): Promise<void> {
-  if (apiKey !== null) {
+  vertexConfig?: VertexEmbeddingConfig | null;
+  alwaysTest?: boolean;
+}): Promise<number | null> {
+  const useWorkloadIdentity = vertexConfig?.auth_method === "workload_identity";
+  let dimension: number | null = null;
+  if (alwaysTest || apiKey !== null || vertexConfig != null) {
     const testResponse = await testEmbedding({
       provider_type: providerType,
       modelName,
@@ -77,26 +96,32 @@ export async function connectEmbeddingProvider({
       apiUrl,
       apiVersion,
       deploymentName,
+      vertexConfig,
     });
 
     if (!testResponse.ok) {
       const err: ErrorResponseBody = await testResponse.json();
       throw new Error(err.detail ?? "Embedding test failed");
     }
+    const result: TestEmbeddingResponse = await testResponse.json();
+    dimension = result.dimension;
   }
 
-  const body: Record<string, unknown> = {
+  // A null input preserves the stored key, except when switching to Workload
+  // Identity, which explicitly clears the credential.
+  const body = {
     provider_type: providerType,
     api_url: apiUrl,
     api_version: apiVersion,
     deployment_name: deploymentName,
     is_default_provider: false,
     is_configured: true,
+    vertex_config: vertexConfig,
+    api_key_changed: apiKey !== null || useWorkloadIdentity,
+    ...((apiKey !== null || useWorkloadIdentity) && {
+      api_key: useWorkloadIdentity ? null : apiKey,
+    }),
   };
-  // Explicit, so the backend never has to infer intent from the masked value:
-  // null means the admin left the stored key alone.
-  body.api_key_changed = apiKey !== null;
-  if (apiKey !== null) body.api_key = apiKey;
 
   const saveResponse = await fetch(SWR_KEYS.embeddingProviders, {
     method: "PUT",
@@ -108,6 +133,7 @@ export async function connectEmbeddingProvider({
     const err: ErrorResponseBody = await saveResponse.json();
     throw new Error(err.detail ?? "Failed to save provider");
   }
+  return dimension;
 }
 
 /**
@@ -185,6 +211,7 @@ interface SetNewSearchSettingsArgs {
   switchoverType: SwitchoverType;
   enableContextualRag: boolean;
   contextualRagModelConfigurationId: number | null;
+  vectorQuantization: VectorQuantization;
   // The server recomputes this set itself and rejects the reindex if its own set contains
   // a cc_pair the admin never acknowledged.
   acknowledgedWontPortCcPairIds: number[];
@@ -196,12 +223,14 @@ export async function setNewSearchSettings({
   switchoverType,
   enableContextualRag,
   contextualRagModelConfigurationId,
+  vectorQuantization,
   acknowledgedWontPortCcPairIds,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
-  // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
-  // under the frontend's EmbeddingProviderName for UI grouping (icon,
-  // docs link), but the backend expects provider_type=null for them.
+  // (openai/cohere/voyage/google/litellm/azure/bifrost/openai_compatible).
+  // Self-hosted models live under the frontend's EmbeddingProviderName for UI
+  // grouping (icon, docs link), but the backend expects provider_type=null
+  // for them.
   const providerType = isCloudBased(providerName) ? providerName : null;
 
   return await fetch("/api/search-settings/set-new-search-settings", {
@@ -210,6 +239,7 @@ export async function setNewSearchSettings({
     body: JSON.stringify({
       model_name: model.modelName,
       model_dim: model.modelDim,
+      reduced_dimension: model.reducedDimension ?? null,
       normalize: model.normalize,
       query_prefix: model.queryPrefix,
       passage_prefix: model.passagePrefix,
@@ -220,6 +250,7 @@ export async function setNewSearchSettings({
       multipass_indexing: false,
       enable_contextual_rag: enableContextualRag,
       contextual_rag_model_configuration_id: contextualRagModelConfigurationId,
+      vector_quantization: vectorQuantization,
       switchover_type: switchoverType,
       acknowledged_wont_port_cc_pair_ids: acknowledgedWontPortCcPairIds,
     }),
@@ -227,8 +258,9 @@ export async function setNewSearchSettings({
 }
 
 /**
- * Switches the Contextual Retrieval LLM on the current index. Contextual
- * Retrieval must already be enabled; all other settings must stay unchanged.
+ * Changes Contextual Retrieval on the current index without a re-index: on
+ * with a model, a different model, or off. All other settings must stay
+ * unchanged.
  */
 export async function updateInferenceSettings(
   settings: SavedSearchSettings
@@ -240,70 +272,18 @@ export async function updateInferenceSettings(
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Image processing
-// ═══════════════════════════════════════════════════════════════════════════
-
-interface EnableImageProcessingArgs {
-  modelConfigurationId: number;
-  maxSizeMb: number;
-}
-
-/**
- * A failed image processing request. `detail` is the server's reason when
- * the body carried one, else null; the caller chooses a translated fallback.
- */
-export class ImageProcessingRequestError extends Error {
-  constructor(
-    readonly status: number,
-    readonly detail: string | null
-  ) {
-    super(detail ?? `Image processing request failed with status ${status}`);
-    this.name = "ImageProcessingRequestError";
-  }
-}
-
-async function throwOnError(response: Response): Promise<void> {
-  if (response.ok) return;
-  let detail: string | null = null;
-  try {
-    const body: unknown = await response.json();
-    if (
-      typeof body === "object" &&
-      body !== null &&
-      "detail" in body &&
-      typeof body.detail === "string"
-    ) {
-      detail = body.detail;
-    }
-  } catch (error) {
-    // A non-JSON body (a proxy page, a truncated response) is worth a trace.
-    console.error("Image processing error response was not JSON:", error);
-  }
-  throw new ImageProcessingRequestError(response.status, detail);
-}
-
-/** Turns image processing on with this model, or repoints it. */
-export async function enableImageProcessing({
-  modelConfigurationId,
-  maxSizeMb,
-}: EnableImageProcessingArgs): Promise<ImageProcessingSettings> {
-  const response = await fetch(SWR_KEYS.imageProcessingSettings, {
+/** Sets the search access mode. Returns the updated backfill status. */
+export async function updateCCPairAccessMode(
+  mode: CCPairAccessMode
+): Promise<CCPairIdsBackfillStatus> {
+  const response = await fetch("/api/search-settings/cc-pair-access-mode", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model_configuration_id: modelConfigurationId,
-      max_size_mb: maxSizeMb,
-    }),
+    body: JSON.stringify({ mode }),
   });
-  await throwOnError(response);
-  return (await response.json()) as ImageProcessingSettings;
-}
-
-/** Turns image processing off. */
-export async function disableImageProcessing(): Promise<void> {
-  const response = await fetch(SWR_KEYS.imageProcessingSettings, {
-    method: "DELETE",
-  });
-  await throwOnError(response);
+  if (!response.ok) {
+    const err: ErrorResponseBody = await response.json();
+    throw new Error(err.detail ?? "Failed to update the search access mode");
+  }
+  return response.json();
 }

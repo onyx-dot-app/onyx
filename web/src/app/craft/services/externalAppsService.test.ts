@@ -1,56 +1,19 @@
-import {
-  createCustomExternalApp,
-  disconnectUserFromApp,
-  updateExternalApp,
-} from "@/app/craft/services/externalAppsService";
+import { postConnectAppDecision } from "@/app/craft/services/externalAppsService";
 
-describe("createCustomExternalApp", () => {
+describe("externalAppsService", () => {
   beforeEach(() => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: 17 }),
-    });
+    global.fetch = jest.fn().mockResolvedValue({ ok: true });
   });
 
-  it("creates gateway configuration as JSON without a skill bundle", async () => {
-    const input = {
-      name: "Acme CRM",
-      upstream_url_patterns: ["https://api.acme.test/*"],
-      auth_template: { Authorization: "Bearer {api_key}" },
-      organization_credentials: { api_key: "secret" },
-    };
-
-    await createCustomExternalApp(input);
-
-    expect(global.fetch).toHaveBeenCalledWith("/api/build/admin/apps/custom", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-  });
-
-  it("disconnects through the credential deletion endpoint", async () => {
-    await disconnectUserFromApp(17);
-
+  it("posts the connect decision for the parked request", async () => {
+    await postConnectAppDecision("request-1", "connected");
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/build/apps/17/credentials",
-      { method: "DELETE" }
+      "/api/build/apps/connect/request-1/decision",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: "connected" }),
+      }
     );
-  });
-
-  it("sends one complete custom-skill association replacement", async () => {
-    await updateExternalApp(17, {
-      name: "Acme CRM",
-      associated_skill_ids: ["skill-a", "skill-b"],
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith("/api/build/admin/apps/17", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "Acme CRM",
-        associated_skill_ids: ["skill-a", "skill-b"],
-      }),
-    });
   });
 });

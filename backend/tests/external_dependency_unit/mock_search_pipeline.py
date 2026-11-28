@@ -12,9 +12,10 @@ from onyx.context.search.models import (
     InferenceChunk,
     PersonaSearchInfo,
     SearchDoc,
+    UserAccessFilters,
 )
 from onyx.db.models import SearchSettings, User
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.llm.interfaces import LLM
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
@@ -49,6 +50,10 @@ class MockInternalSearchResult(BaseModel):
     source_type: DocumentSource
     semantic_identifier: str
     chunk_ind: int
+    content: str = ""
+    # The document's stored file; tests that set it patch
+    # populate_file_ids_on_sections, since the mocked pipeline has no rows.
+    file_id: str | None = None
 
     def to_inference_chunk(self) -> InferenceChunk:
         return InferenceChunk(
@@ -58,7 +63,7 @@ class MockInternalSearchResult(BaseModel):
             title=self.semantic_identifier,
             chunk_id=self.chunk_ind,
             blurb="",
-            content="",
+            content=self.content,
             source_links=None,
             image_file_id=None,
             section_continuation=False,
@@ -70,6 +75,7 @@ class MockInternalSearchResult(BaseModel):
             doc_summary="",
             chunk_context="",
             updated_at=None,
+            file_id=self.file_id,
         )
 
     def to_search_doc(self) -> SearchDoc:
@@ -181,10 +187,6 @@ def use_mock_search_pipeline(
             return_value=[],
         ),
         patch(
-            "onyx.tools.tool_runner.run_functions_tuples_in_parallel",
-            new=run_functions_tuples_sequential,
-        ),
-        patch(
             "onyx.db.connector.check_connectors_exist",
             new=mock_check_connectors_exist,
         ),
@@ -207,7 +209,7 @@ def use_mock_search_pipeline(
         ),
         patch(
             "onyx.tools.tool_implementations.search.search_tool.build_access_filters_for_user",
-            return_value=[],
+            return_value=UserAccessFilters(access_control_list=[], cc_pair_access=None),
         ),
         patch(
             "onyx.tools.tool_implementations.search.search_tool.get_current_search_settings",

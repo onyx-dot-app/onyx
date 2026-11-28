@@ -7,6 +7,7 @@ the rule-matching layer.
 """
 
 import json
+from collections.abc import Iterable
 
 from graphql import (
     FieldNode,
@@ -20,33 +21,36 @@ from graphql import parse as parse_graphql
 from graphql.language import SelectionSetNode
 
 
-def parse_invocations(body: bytes | None) -> list[tuple[str, str]]:
-    """``(operation_type, root_field)`` pairs invoked by a GraphQL request body.
+def document_invocations(
+    queries: Iterable[str | None],
+) -> list[list[tuple[str, str]]]:
+    """The ``(operation_type, root_field)`` pairs of each GraphQL document. A
+    missing or unparsable ``query`` gives an empty list, so such a request
+    matches no GraphQL rule."""
+    return [
+        operation_invocations(query) if query is not None else [] for query in queries
+    ]
 
-    Handles a single GraphQL POST body or a batched array of them. Returns an
-    empty list if the body isn't JSON / isn't a GraphQL request / can't be
-    parsed — such a request simply matches no GraphQL rule.
-    """
+
+def request_queries(body: bytes | None) -> list[str | None]:
+    """The ``query`` of each GraphQL document in a body, single or batched.
+    None stands for a document with no string ``query``, or for a body that
+    is not JSON."""
     if not body:
         return []
     try:
         payload = json.loads(body)
     except (ValueError, TypeError):
-        return []
-
+        return [None]
     documents = payload if isinstance(payload, list) else [payload]
-    invocations: list[tuple[str, str]] = []
+    queries: list[str | None] = []
     for document in documents:
-        if not isinstance(document, dict):
-            continue
-        query = document.get("query")
-        if not isinstance(query, str):
-            continue
-        invocations.extend(_operation_invocations(query))
-    return invocations
+        query = document.get("query") if isinstance(document, dict) else None
+        queries.append(query if isinstance(query, str) else None)
+    return queries
 
 
-def _operation_invocations(query: str) -> list[tuple[str, str]]:
+def operation_invocations(query: str) -> list[tuple[str, str]]:
     """``(operation_type, root_field)`` for every root field of every operation
     in a GraphQL document. Fragment spreads and inline fragments at the top
     level are resolved so a field can't be hidden from matching inside a

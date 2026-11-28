@@ -1,4 +1,7 @@
-from collections.abc import Callable
+import asyncio
+import gc
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -16,6 +19,7 @@ from onyx.auth.oauth_refresher import (
     get_oauth_accounts_requiring_refresh_token,
     refresh_oauth_token,
 )
+from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import OAuthAccount
 from onyx.utils.sensitive import make_mock_sensitive_value
@@ -215,15 +219,12 @@ async def _run_coalesced_refreshes(
     db_session: MagicMock,
     user_manager: MagicMock,
     on_refresh: Callable[[MagicMock, MagicMock], None],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncMock:
     """Runs check_and_refresh_oauth_tokens for both users so the second reaches
-    the per-user lock while the first is parked inside refresh_oauth_token.
+    the user lock while the first is parked inside refresh_oauth_token.
     `on_refresh(user, account)` models what a completed refresh persists."""
     import asyncio as _asyncio
 
-    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS_GUARD", None)
     refresh_started = _asyncio.Event()
     release_refresh = _asyncio.Event()
 
@@ -256,7 +257,6 @@ async def _run_coalesced_refreshes(
 @pytest.mark.asyncio
 async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
     mock_user_manager: MagicMock,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two concurrent refreshes for the same user trigger only one IdP POST.
 
@@ -282,7 +282,7 @@ async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
         refreshed_account.expires_at = now_timestamp + 3600
 
     mock_refresh = await _run_coalesced_refreshes(
-        (user, user), db_session, mock_user_manager, refreshed, monkeypatch
+        (user, user), db_session, mock_user_manager, refreshed
     )
     assert mock_refresh.call_count == 1
 
@@ -290,7 +290,6 @@ async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
 @pytest.mark.asyncio
 async def test_coalesced_refresh_updates_stale_oidc_expiry(
     mock_user_manager: MagicMock,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The coroutine that skips its refresh still leaves with a live oidc_expiry.
 
@@ -336,7 +335,7 @@ async def test_coalesced_refresh_updates_stale_oidc_expiry(
 
     first_user, second_user = _request_user(), _request_user()
     mock_refresh = await _run_coalesced_refreshes(
-        (first_user, second_user), db_session, mock_user_manager, refreshed, monkeypatch
+        (first_user, second_user), db_session, mock_user_manager, refreshed
     )
     assert mock_refresh.call_count == 1
     assert first_user.oidc_expiry == second_user.oidc_expiry
@@ -378,6 +377,47 @@ async def test_failed_oidc_expiry_reload_is_logged_not_raised(
 
     mock_refresh.assert_called_once()
     assert "Could not reload oidc_expiry" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_lock_wait_timeout_reloads_oidc_expiry(
+    mock_user_manager: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A request that cannot get the refresh lock still re-reads oidc_expiry,
+    which the holder of the lock may have renewed."""
+    now_timestamp = datetime.now(timezone.utc).timestamp()
+    renewed = datetime.fromtimestamp(now_timestamp + 3600, tz=timezone.utc)
+    account = MagicMock(spec=OAuthAccount)
+    account.oauth_name = "openid"
+    account.refresh_token = "rt"
+    account.expires_at = now_timestamp - 30
+    user = MagicMock()
+    user.id = "lock-timeout-user"
+    user.email = "lock-timeout@example.com"
+    user.oauth_accounts = [account]
+    user.oidc_expiry = datetime.fromtimestamp(now_timestamp - 30, tz=timezone.utc)
+
+    @asynccontextmanager
+    async def _contended(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
+        raise CacheLockAcquisitionError("held elsewhere")
+        yield
+
+    async def reread(obj: MagicMock, attribute_names: list[str] | None = None) -> None:
+        if attribute_names == ["oidc_expiry"]:
+            obj.oidc_expiry = renewed
+
+    monkeypatch.setattr(oauth_refresher, "async_cache_shared_lock", _contended)
+    db_session = MagicMock()
+    db_session.refresh = AsyncMock(side_effect=reread)
+
+    with patch(
+        "onyx.auth.oauth_refresher.refresh_oauth_token", AsyncMock()
+    ) as mock_refresh:
+        await check_and_refresh_oauth_tokens(user, db_session, mock_user_manager)
+
+    mock_refresh.assert_not_called()
+    assert user.oidc_expiry == renewed
 
 
 @pytest.mark.asyncio
@@ -461,10 +501,6 @@ async def test_resolve_token_endpoint_openid_via_discovery(
 ) -> None:
     """For OIDC ("openid"), the token endpoint is read from the discovery doc."""
     monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
-    # Reset the locks so they get created in the current test's event loop;
-    # without this, a prior test's lock could be bound to a different loop.
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS_GUARD", None)
     monkeypatch.setattr(
         oauth_refresher,
         "OPENID_CONFIG_URL",
@@ -507,8 +543,6 @@ async def test_resolve_token_endpoint_openid_cache_ttl_expiry(
     """An expired cache entry triggers a fresh discovery fetch."""
     import time as _time
 
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS_GUARD", None)
     monkeypatch.setattr(
         oauth_refresher,
         "OPENID_CONFIG_URL",
@@ -574,8 +608,6 @@ async def test_resolve_token_endpoint_openid_invalid_json(
 ) -> None:
     """A non-JSON discovery body degrades to None instead of crashing."""
     monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS_GUARD", None)
     monkeypatch.setattr(
         oauth_refresher,
         "OPENID_CONFIG_URL",
@@ -616,8 +648,6 @@ async def test_resolve_token_endpoint_openid_concurrent_fetches_coalesce(
     import asyncio as _asyncio
 
     monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS_GUARD", None)
     monkeypatch.setattr(
         oauth_refresher,
         "OPENID_CONFIG_URL",
@@ -910,3 +940,42 @@ async def test_resolve_context_null_row_config_returns_none(
 
     context = await _resolve_refresh_context(MagicMock(), "keycloak")
     assert context is None
+
+
+def test_discovery_under_contention_works_on_each_new_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_url = "https://idp.example.com/.well-known/openid-configuration"
+
+    async def slow_get(*_args: Any, **_kwargs: Any) -> MagicMock:
+        await asyncio.sleep(0.01)  # test-flakes: allow keep the lock held
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"token_endpoint": "https://idp.example.com/t"}
+        return response
+
+    mock_client = AsyncMock()
+    mock_client.get.side_effect = slow_get
+
+    async def two_concurrent_discoveries() -> list[str | None]:
+        oauth_refresher._OIDC_TOKEN_ENDPOINT_CACHE.pop(config_url, None)
+        return list(
+            await asyncio.gather(
+                oauth_refresher._get_oidc_token_endpoint(config_url),
+                oauth_refresher._get_oidc_token_endpoint(config_url),
+            )
+        )
+
+    monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
+    with patch("onyx.auth.oauth_refresher.httpx.AsyncClient") as client_class_mock:
+        client_class_mock.return_value.__aenter__.return_value = mock_client
+        for _ in range(2):
+            assert asyncio.run(two_concurrent_discoveries()) == [
+                "https://idp.example.com/t",
+                "https://idp.example.com/t",
+            ]
+    # A used lock refers to its loop; a lock kept here would keep the loop.
+    gc.collect()
+    assert all(
+        len(locks) == 0 for locks in oauth_refresher._OIDC_DISCOVERY_LOCKS.values()
+    )

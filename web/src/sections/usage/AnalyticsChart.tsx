@@ -2,7 +2,8 @@ import React from "react";
 import { useLocale } from "next-intl";
 import { Card, EmptyMessageCard, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
-import { PageLoader, Section } from "@opal/layouts";
+import { Section } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import type { RichStr } from "@opal/types";
 import AreaChart from "@/refresh-components/AreaChart";
 import { formatCalendarDay } from "@/lib/dateUtils";
@@ -186,7 +187,7 @@ export function AnalyticsChart({
             width="full"
             height="fit"
           >
-            <Text font="heading-h3">{title}</Text>
+            <Text font="heading-section">{title}</Text>
             <Text font="secondary-body" color="text-03">
               {description}
             </Text>

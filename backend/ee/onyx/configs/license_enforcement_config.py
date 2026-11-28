@@ -76,6 +76,7 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     "/admin/chat-session-history": Tier.BUSINESS,
     "/admin/query-history": Tier.BUSINESS,
     "/admin/usage-report": Tier.BUSINESS,
+    "/admin/service-status": Tier.BUSINESS,  # OpenSearch cluster status
     "/analytics/admin": Tier.BUSINESS,  # query/user/onyxbot/persona analytics
     "/admin/api-key": Tier.BUSINESS,  # service-account keys (no user-bound variant)
     "/admin/enterprise-settings": Tier.BUSINESS,  # admin writes; public /enterprise-settings stays open
@@ -85,7 +86,7 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     "/admin/enterprise-settings/custom-analytics-script": Tier.ENTERPRISE,  # JS injection
     "/admin/enterprise-settings/scim": Tier.ENTERPRISE,  # SCIM token mgmt
     "/manage/admin/standard-answer": Tier.ENTERPRISE,
-    "/admin/token-rate-limits": Tier.ENTERPRISE,
+    "/admin/spending-limits": Tier.ENTERPRISE,
     "/admin/hooks": Tier.ENTERPRISE,  # outbound webhooks
     "/admin/log-export": Tier.ENTERPRISE,  # deployment-wide log export
     "/analytics": Tier.ENTERPRISE,  # non-admin analytics (e.g. assistant stats)

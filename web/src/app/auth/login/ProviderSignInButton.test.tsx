@@ -17,6 +17,14 @@ const OKTA: SSOProviderOption = {
 const IDP_URL = "http://localhost/#idp-authorize?state=signed";
 const AUTHORIZE_URL = "http://localhost/api/auth/oidc/okta/authorize";
 
+// The button navigates with full page loads only; the router is never used.
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({}),
+}));
+
 function jsonResponse(status: number, body: unknown): Response {
   return {
     ok: status >= 200 && status < 300,

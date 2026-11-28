@@ -11,7 +11,7 @@ from pathlib import Path
 _PPTX_SKILL_DIR = Path(__file__).parents[4] / "onyx" / "skills" / "builtin" / "pptx"
 
 _SCRIPT_REF_RE = re.compile(
-    r"(?:\.opencode/skills/pptx/)?(scripts/[\w./-]+\.(?:py|js))"
+    r"(?:/var/lib/onyx/skills/pptx/)?(scripts/[\w./-]+\.(?:py|js))"
 )
 
 

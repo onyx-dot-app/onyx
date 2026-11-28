@@ -72,6 +72,7 @@ class SearchDocWithContent(SearchDoc):
                 link=chunk.source_links[0] if chunk.source_links else None,
                 blurb=chunk.blurb,
                 source_type=chunk.source_type,
+                source_types=chunk.source_types,
                 boost=chunk.boost,
                 hidden=chunk.hidden,
                 metadata=chunk.metadata,

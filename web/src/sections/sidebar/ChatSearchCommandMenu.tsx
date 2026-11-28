@@ -1,29 +1,36 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import type { Route } from "next";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useQueryController } from "@/providers/QueryControllerProvider";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { useHotkey } from "@opal/hooks";
+import { Section, useSidebarState } from "@opal/layouts";
+import useBrowserInfo from "@/hooks/useBrowserInfo";
+import { CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
+import { useChatShortcutActions } from "@/lib/shortcuts/hooks";
+import { formatHotkey, isModalOpen } from "@/lib/shortcuts/utils";
 import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";
-import { useProjects } from "@/lib/projects/hooks";
-import { useCreateModal } from "@opal/components";
-import { CreateProjectModal } from "@/lib/projects/components";
+import { Text } from "@opal/components";
 import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
-import Text from "@/refresh-components/texts/Text";
 import useChatSearchOptimistic from "@/lib/sidebar/hooks";
 import {
   SvgEditBig,
-  SvgFolder,
-  SvgFolderPlus,
   SvgBubbleText,
   SvgArrowUpDown,
   SvgKeystroke,
+  SvgSidebar,
+  SvgCpu,
+  SvgChevronUp,
+  SvgChevronDown,
+  SvgSearch,
 } from "@opal/icons";
-import TextSeparator from "@/refresh-components/TextSeparator";
+import { openChatFind, useChatFindStore } from "@/lib/chatFind/store";
+import type { IconFunctionComponent } from "@opal/types";
 
 /**
  * Dynamic footer that shows contextual action labels based on highlighted item type
@@ -58,11 +65,12 @@ interface ChatSearchCommandMenuProps {
   trigger: (open: () => void, isOpen: boolean) => React.ReactNode;
 }
 
-interface FilterableProject {
-  id: number;
+interface ShortcutAction {
+  value: string;
+  icon: IconFunctionComponent;
   label: string;
-  description: string | null;
-  time: string;
+  hotkey: string;
+  run: () => void;
 }
 
 export default function ChatSearchCommandMenu({
@@ -72,28 +80,24 @@ export default function ChatSearchCommandMenu({
   const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
-  const [activeFilter, setActiveFilter] = useState<
-    "all" | "chats" | "projects"
-  >("all");
-  const [initialProjectName, setInitialProjectName] = useState<
-    string | undefined
-  >();
+  const [activeFilter, setActiveFilter] = useState<"all" | "chats">("all");
   const appPosition = useAppPosition();
-  const router = useRouter();
-
-  // Data hooks
-  const { projects } = useProjects();
-  const createProjectModal = useCreateModal();
+  const { state } = useQueryController();
+  const showingSearch =
+    state.phase === "searching" ||
+    state.phase === "search-results" ||
+    (appPosition.isNewSession() &&
+      state.phase === "idle" &&
+      state.appMode === "search");
 
   // Constants for preview limits
   const PREVIEW_CHATS_LIMIT = 4;
-  const PREVIEW_PROJECTS_LIMIT = 3;
 
   // Determine if we should enable optimistic search (when searching or viewing chats filter)
   const shouldUseOptimisticSearch =
     searchValue.trim().length > 0 || activeFilter === "chats";
 
-  // Use optimistic search hook for chat sessions (includes fallback from useChatSessions + useProjects)
+  // Use optimistic search hook for chat sessions
   const {
     results: filteredChats,
     isSearching,
@@ -105,27 +109,6 @@ export default function ChatSearchCommandMenu({
     enabled: shouldUseOptimisticSearch,
   });
 
-  // Transform and filter projects (sorted by latest first)
-  const filteredProjects = useMemo<FilterableProject[]>(() => {
-    const projectList = projects
-      .map((project) => ({
-        id: project.id,
-        label: project.name,
-        description: project.description,
-        time: project.created_at,
-      }))
-      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-
-    if (!searchValue.trim()) return projectList;
-
-    const term = searchValue.toLowerCase();
-    return projectList.filter(
-      (project) =>
-        project.label.toLowerCase().includes(term) ||
-        project.description?.toLowerCase().includes(term)
-    );
-  }, [projects, searchValue]);
-
   // Compute displayed items based on filter state
   const displayedChats = useMemo(() => {
     if (activeFilter === "all" && !searchValue.trim()) {
@@ -134,20 +117,10 @@ export default function ChatSearchCommandMenu({
     return filteredChats;
   }, [filteredChats, activeFilter, searchValue]);
 
-  const displayedProjects = useMemo(() => {
-    if (activeFilter === "all" && !searchValue.trim()) {
-      return filteredProjects.slice(0, PREVIEW_PROJECTS_LIMIT);
-    }
-    return filteredProjects;
-  }, [filteredProjects, activeFilter, searchValue]);
-
   // Header filters for showing active filter as a chip
   const headerFilters = useMemo(() => {
     if (activeFilter === "chats") {
       return [{ id: "chats", label: t("chatSearch.sessionsFilter.label") }];
-    }
-    if (activeFilter === "projects") {
-      return [{ id: "projects", label: t("chatSearch.projectsFilter.label") }];
     }
     return [];
   }, [activeFilter, t]);
@@ -156,46 +129,29 @@ export default function ChatSearchCommandMenu({
     setActiveFilter("all");
   }, []);
 
-  // Navigation handlers
-  const handleNewSession = useCallback(() => {
-    router.push("/app");
-    setOpen(false);
-  }, [router]);
-
-  const handleChatSelect = useCallback(
-    (chatId: string) => {
-      appPosition.openChat(chatId);
-      setOpen(false);
-    },
-    [appPosition]
-  );
-
-  const handleProjectSelect = useCallback(
-    (projectId: number) => {
-      appPosition.openProject(projectId);
-      setOpen(false);
-    },
-    [appPosition]
-  );
-
-  const handleNewProject = useCallback(
-    (initialName?: string) => {
-      setInitialProjectName(initialName);
-      setOpen(false);
-      createProjectModal.toggle(true);
-    },
-    [createProjectModal]
-  );
-
-  const handleOpen = useCallback(() => setOpen(true), []);
-
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const handleOpenChange = useCallback((newOpen: boolean) => {
-    setOpen(newOpen);
-    if (!newOpen) {
+    if (newOpen) {
+      const focused = document.activeElement;
+      restoreFocusRef.current = focused instanceof HTMLElement ? focused : null;
+    } else {
       setSearchValue("");
       setActiveFilter("all");
     }
+    setOpen(newOpen);
   }, []);
+
+  const handleOpen = useCallback(
+    () => handleOpenChange(true),
+    [handleOpenChange]
+  );
+  const handleChatSelect = useCallback(
+    (chatId: string) => {
+      appPosition.openChat(chatId);
+      handleOpenChange(false);
+    },
+    [appPosition, handleOpenChange]
+  );
 
   const handleEmptyBackspace = useCallback(() => {
     if (activeFilter !== "all") {
@@ -203,25 +159,116 @@ export default function ChatSearchCommandMenu({
       setActiveFilter("all");
     } else {
       // No filter active, close the menu
-      setOpen(false);
+      handleOpenChange(false);
     }
-  }, [activeFilter]);
+  }, [activeFilter, handleOpenChange]);
 
   const hasSearchValue = searchValue.trim().length > 0;
+
+  useHotkey(CHAT_SHORTCUTS.commandPalette, () => handleOpenChange(!open), {
+    whileTyping: true,
+    shouldHandle: () => open || !isModalOpen(),
+  });
+
+  const { isMac } = useBrowserInfo();
+  const { setFolded } = useSidebarState();
+  const shortcutActions = useChatShortcutActions();
+  const keyNames = {
+    ctrl: t("chatSearch.keys.ctrl"),
+    alt: t("chatSearch.keys.alt"),
+    shift: t("chatSearch.keys.shift"),
+  };
+  const shortcutLabel = (hotkey: string) =>
+    formatHotkey(hotkey, isMac, keyNames);
+
+  // Actions run after the menu has returned focus, so a popover they open
+  // does not close at once.
+  const afterCloseRef = useRef<(() => void) | null>(null);
+  const handleCloseAutoFocus = (event: Event) => {
+    const target = restoreFocusRef.current;
+    restoreFocusRef.current = null;
+    if (target?.isConnected) {
+      event.preventDefault();
+      target.focus();
+    }
+    const action = afterCloseRef.current;
+    afterCloseRef.current = null;
+    action?.();
+  };
+
+  // Only a chat whose find bar has mounted can open it.
+  const findAvailable = useChatFindStore((state) => state.mounted > 0);
+  const shortcutItems: ShortcutAction[] = [
+    {
+      value: "new-session",
+      icon: SvgEditBig,
+      label: t("chatSearch.newSession.label"),
+      hotkey: CHAT_SHORTCUTS.newChat,
+      run: shortcutActions.newChat,
+    },
+    {
+      value: "toggle-sidebar",
+      icon: SvgSidebar,
+      label: t("chatSearch.shortcuts.toggleSidebar.label"),
+      hotkey: CHAT_SHORTCUTS.toggleSidebar,
+      run: () => setFolded((folded) => !folded),
+    },
+    {
+      value: "change-model",
+      icon: SvgCpu,
+      label: t("chatSearch.shortcuts.changeModel.label"),
+      hotkey: CHAT_SHORTCUTS.openModelPicker,
+      run: shortcutActions.toggleModelPicker,
+    },
+    {
+      value: "previous-chat",
+      icon: SvgChevronUp,
+      label: t("chatSearch.shortcuts.previousChat.label"),
+      hotkey: CHAT_SHORTCUTS.previousChat,
+      run: shortcutActions.previousChat,
+    },
+    {
+      value: "next-chat",
+      icon: SvgChevronDown,
+      label: t("chatSearch.shortcuts.nextChat.label"),
+      hotkey: CHAT_SHORTCUTS.nextChat,
+      run: shortcutActions.nextChat,
+    },
+    ...(findAvailable
+      ? [
+          {
+            value: "find-in-chat",
+            icon: SvgSearch,
+            label: t("chatSearch.shortcuts.findInChat.label"),
+            hotkey: CHAT_SHORTCUTS.find,
+            run: openChatFind,
+          },
+        ]
+      : []),
+  ];
+  const searchTerm = searchValue.trim().toLowerCase();
+  const visibleShortcutItems =
+    activeFilter === "all"
+      ? shortcutItems.filter(
+          (item) =>
+            !(showingSearch && item.value === "change-model") &&
+            item.label.toLowerCase().includes(searchTerm)
+        )
+      : [];
 
   return (
     <>
       {trigger(handleOpen, open)}
 
       <CommandMenu open={open} onOpenChange={handleOpenChange}>
-        <CommandMenu.Content>
+        <CommandMenu.Content onCloseAutoFocus={handleCloseAutoFocus}>
           <CommandMenu.Header
             placeholder={t("chatSearch.searchInput.placeholder")}
             value={searchValue}
             onValueChange={setSearchValue}
             filters={headerFilters}
             onFilterRemove={handleFilterRemove}
-            onClose={() => setOpen(false)}
+            onClose={() => handleOpenChange(false)}
             onEmptyBackspace={handleEmptyBackspace}
           />
 
@@ -232,163 +279,91 @@ export default function ChatSearchCommandMenu({
                 : t("chatSearch.list.empty.text")
             }
           >
-            {/* New Session action - always visible in "all" filter, even during search */}
-            {activeFilter === "all" && (
-              <CommandMenu.Action
-                value="new-session"
-                icon={SvgEditBig}
-                onSelect={handleNewSession}
-                defaultHighlight={!hasSearchValue}
-              >
-                {t("chatSearch.newSession.label")}
-              </CommandMenu.Action>
-            )}
-
-            {/* Recent Sessions section - show if filter is 'all' or 'chats' */}
-            {(activeFilter === "all" || activeFilter === "chats") &&
-              displayedChats.length > 0 && (
-                <>
-                  {searchValue.trim().length === 0 && (
-                    <CommandMenu.Filter
-                      value="recent-sessions"
-                      onSelect={() => setActiveFilter("chats")}
-                      isApplied={
-                        activeFilter === "chats" ||
-                        filteredChats.length <= PREVIEW_CHATS_LIMIT
-                      }
-                    >
-                      {activeFilter === "chats"
-                        ? t("chatSearch.recentFilter.label")
-                        : t("chatSearch.recentSessionsFilter.label")}
-                    </CommandMenu.Filter>
-                  )}
-                  {displayedChats.map((chat) => (
-                    <CommandMenu.Item
-                      key={chat.id}
-                      value={`chat-${chat.id}`}
-                      icon={SvgBubbleText}
-                      rightContent={({ isHighlighted }) =>
-                        isHighlighted ? (
-                          <Text figureKeystroke text02>
-                            ↵
-                          </Text>
-                        ) : (
-                          <Text
-                            secondaryBody
-                            text03
-                            data-testid="command-menu-timestamp"
-                          >
-                            {timeAgo(chat.time, locale)}
-                          </Text>
-                        )
-                      }
-                      onSelect={() => handleChatSelect(chat.id)}
-                    >
-                      {highlightMatch(chat.label, searchValue)}
-                    </CommandMenu.Item>
-                  ))}
-                  {/* Infinite scroll sentinel and loading indicator for chats */}
-                  {activeFilter === "chats" && hasMore && (
-                    <div ref={sentinelRef} className="h-1" aria-hidden="true" />
-                  )}
-                  {activeFilter === "chats" &&
-                    (isLoadingMore || isSearching) && (
-                      <div className="flex justify-center items-center py-3">
-                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-solid border-text-04 border-t-text-02" />
-                      </div>
-                    )}
-                </>
-              )}
-
-            {/* Projects section - show if filter is 'all' or 'projects' */}
-            {(activeFilter === "all" || activeFilter === "projects") && (
+            {displayedChats.length > 0 && (
               <>
-                <CommandMenu.Filter
-                  value="projects"
-                  onSelect={() => setActiveFilter("projects")}
-                  isApplied={
-                    activeFilter === "projects" ||
-                    filteredProjects.length <= PREVIEW_PROJECTS_LIMIT
-                  }
-                >
-                  {t("chatSearch.projectsFilter.label")}
-                </CommandMenu.Filter>
-                {/* New Project action - shown after Projects filter when no search term */}
-                {!hasSearchValue && activeFilter === "all" && (
-                  <CommandMenu.Action
-                    value="new-project"
-                    icon={SvgFolderPlus}
-                    onSelect={() => handleNewProject()}
+                {searchValue.trim().length === 0 && (
+                  <CommandMenu.Filter
+                    value="recent-sessions"
+                    onSelect={() => setActiveFilter("chats")}
+                    isApplied={
+                      activeFilter === "chats" ||
+                      filteredChats.length <= PREVIEW_CHATS_LIMIT
+                    }
                   >
-                    {t("chatSearch.newProject.label")}
-                  </CommandMenu.Action>
+                    {activeFilter === "chats"
+                      ? t("chatSearch.recentFilter.label")
+                      : t("chatSearch.recentSessionsFilter.label")}
+                  </CommandMenu.Filter>
                 )}
-                {displayedProjects.map((project) => (
+                {displayedChats.map((chat) => (
                   <CommandMenu.Item
-                    key={project.id}
-                    value={`project-${project.id}`}
-                    icon={SvgFolder}
+                    key={chat.id}
+                    value={`chat-${chat.id}`}
+                    icon={SvgBubbleText}
                     rightContent={({ isHighlighted }) =>
                       isHighlighted ? (
-                        <Text figureKeystroke text02>
+                        <Text font="figure-keystroke" color="text-02">
                           ↵
                         </Text>
                       ) : (
                         <Text
-                          secondaryBody
-                          text03
+                          font="secondary-body"
+                          color="text-03"
                           data-testid="command-menu-timestamp"
                         >
-                          {timeAgo(project.time, locale)}
+                          {timeAgo(chat.time, locale) ?? ""}
                         </Text>
                       )
                     }
-                    onSelect={() => handleProjectSelect(project.id)}
+                    onSelect={() => handleChatSelect(chat.id)}
                   >
-                    {highlightMatch(project.label, searchValue)}
+                    {highlightMatch(chat.label, searchValue)}
                   </CommandMenu.Item>
                 ))}
+                {/* Infinite scroll sentinel and loading indicator for chats */}
+                {activeFilter === "chats" && hasMore && (
+                  <div ref={sentinelRef} className="h-1" aria-hidden="true" />
+                )}
+                {activeFilter === "chats" && (isLoadingMore || isSearching) && (
+                  <Section
+                    flexDirection="row"
+                    justifyContent="center"
+                    alignItems="center"
+                    height="fit"
+                    padding={3}
+                  >
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-solid border-text-04 border-t-text-02" />
+                  </Section>
+                )}
               </>
             )}
 
-            {/* Create New Project with search term - shown at bottom when searching */}
-            {hasSearchValue &&
-              (activeFilter === "all" || activeFilter === "projects") && (
-                <CommandMenu.Action
-                  value="create-project-with-name"
-                  icon={SvgFolderPlus}
-                  onSelect={() => handleNewProject(searchValue.trim())}
-                >
-                  {t.rich("chatSearch.createNamedProject.label", {
-                    projectName: searchValue.trim(),
-                    name: (chunks) => (
-                      <span className="text-text-05">{chunks}</span>
-                    ),
-                  })}
-                </CommandMenu.Action>
-              )}
-
-            {/* No more results divider - shown when no results for the active filter */}
-            {((activeFilter === "chats" && displayedChats.length === 0) ||
-              (activeFilter === "projects" && displayedProjects.length === 0) ||
-              (activeFilter === "all" &&
-                displayedChats.length === 0 &&
-                displayedProjects.length === 0)) && (
-              <TextSeparator
-                text={t("chatSearch.noMoreResults.text")}
-                className="mt-auto mb-2"
-              />
+            {visibleShortcutItems.length > 0 && (
+              <>
+                <CommandMenu.Filter value="shortcuts" isApplied>
+                  {t("chatSearch.shortcuts.title")}
+                </CommandMenu.Filter>
+                {visibleShortcutItems.map((item) => (
+                  <CommandMenu.Action
+                    key={item.value}
+                    value={item.value}
+                    icon={item.icon}
+                    shortcut={shortcutLabel(item.hotkey)}
+                    onSelect={() => {
+                      afterCloseRef.current = item.run;
+                    }}
+                    defaultHighlight={hasSearchValue}
+                  >
+                    {item.label}
+                  </CommandMenu.Action>
+                ))}
+              </>
             )}
           </CommandMenu.List>
 
           <DynamicFooter />
         </CommandMenu.Content>
       </CommandMenu>
-
-      {/* Project creation modal */}
-      <createProjectModal.Provider>
-        <CreateProjectModal initialProjectName={initialProjectName} />
-      </createProjectModal.Provider>
     </>
   );
 }

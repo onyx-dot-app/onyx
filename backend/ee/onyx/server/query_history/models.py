@@ -8,7 +8,16 @@ from onyx.auth.users import get_display_email
 from onyx.background.task_utils import extract_task_id_from_query_history_report_name
 from onyx.configs.constants import MessageType, QAFeedbackType, SessionType
 from onyx.db.enums import TaskStatus
-from onyx.db.models import ChatMessage, ChatSession, FileRecord, TaskQueueState
+from onyx.db.models import (
+    AcceptedChatInputRecord,
+    ChatMessage,
+    ChatSession,
+    FileRecord,
+    TaskQueueState,
+)
+
+# Messages that clients do not display as conversation turns.
+HIDDEN_MESSAGE_TYPES = frozenset({MessageType.SYSTEM, MessageType.AGENT_RESULTS})
 
 
 class AbridgedSearchDoc(BaseModel):
@@ -27,6 +36,8 @@ class MessageSnapshot(BaseModel):
     feedback_type: QAFeedbackType | None
     feedback_text: str | None
     time_created: datetime
+    # Messages a response accepted while it ran, in model order.
+    accepted_inputs: list[AcceptedChatInputRecord] = []
 
     @classmethod
     def build(cls, message: ChatMessage) -> "MessageSnapshot":
@@ -64,6 +75,17 @@ class MessageSnapshot(BaseModel):
             feedback_type=feedback_type,
             feedback_text=feedback_text,
             time_created=message.time_sent,
+            accepted_inputs=[
+                AcceptedChatInputRecord.model_validate(
+                    accepted.model_dump(
+                        include=set(AcceptedChatInputRecord.model_fields)
+                    )
+                )
+                for item in sorted(
+                    message.response_items, key=lambda item: item.step_index
+                )
+                for accepted in item.inputs
+            ],
         )
 
 
@@ -134,7 +156,7 @@ class ChatSessionMinimal(BaseModel):
                 [
                     message
                     for message in chat_session.messages
-                    if message.message_type != MessageType.SYSTEM
+                    if message.message_type not in HIDDEN_MESSAGE_TYPES
                 ]
             ),
         )
@@ -157,6 +179,7 @@ class QuestionAnswerPairSnapshot(BaseModel):
     # e.g. the first message pair in the chat_session is 1, the second is 2, etc.
     message_pair_num: int
     user_message: str
+    accepted_inputs: list[AcceptedChatInputRecord]
     ai_response: str
     retrieved_documents: list[AbridgedSearchDoc]
     feedback_type: QAFeedbackType | None
@@ -171,26 +194,30 @@ class QuestionAnswerPairSnapshot(BaseModel):
         cls,
         chat_session_snapshot: ChatSessionSnapshot,
     ) -> list["QuestionAnswerPairSnapshot"]:
-        message_pairs: list[tuple[MessageSnapshot, MessageSnapshot]] = [
-            (
-                chat_session_snapshot.messages[ind - 1],
-                chat_session_snapshot.messages[ind],
-            )
-            for ind in range(1, len(chat_session_snapshot.messages), 2)
-        ]
+        # Each answer pairs with the user message before it. An automatic
+        # follow-up answers a hidden question, so it pairs with no user message.
+        message_pairs: list[tuple[MessageSnapshot | None, MessageSnapshot]] = []
+        question: MessageSnapshot | None = None
+        for message in chat_session_snapshot.messages:
+            if message.message_type == MessageType.USER:
+                question = message
+            elif message.message_type == MessageType.ASSISTANT:
+                message_pairs.append((question, message))
+                question = None
 
         return [
             cls(
                 chat_session_id=chat_session_snapshot.id,
                 message_pair_num=ind + 1,
-                user_message=user_message.message,
+                user_message=user_message.message if user_message else "",
+                accepted_inputs=ai_message.accepted_inputs,
                 ai_response=ai_message.message,
                 retrieved_documents=ai_message.documents,
                 feedback_type=ai_message.feedback_type,
                 feedback_text=ai_message.feedback_text,
                 persona_name=chat_session_snapshot.assistant_name,
                 user_email=get_display_email(chat_session_snapshot.user_email),
-                time_created=user_message.time_created,
+                time_created=(user_message or ai_message).time_created,
                 flow_type=chat_session_snapshot.flow_type,
             )
             for ind, (user_message, ai_message) in enumerate(message_pairs)
@@ -201,6 +228,10 @@ class QuestionAnswerPairSnapshot(BaseModel):
             "chat_session_id": str(self.chat_session_id),
             "message_pair_num": str(self.message_pair_num),
             "user_message": self.user_message,
+            "accepted_inputs": "\n\n".join(
+                f"[{accepted.source.value}] {accepted.content}"
+                for accepted in self.accepted_inputs
+            ),
             "ai_response": self.ai_response,
             "retrieved_documents": "|".join(
                 [
@@ -234,15 +265,14 @@ class QueryHistoryExport(BaseModel):
         )
         start, end = start_end.split("_")
 
-        if not task_queue_state.start_time:
-            raise RuntimeError("The start time of the task must always be present")
-
         return cls(
             task_id=task_queue_state.task_id,
             status=task_queue_state.status,
             start=datetime.fromisoformat(start),
             end=datetime.fromisoformat(end),
-            start_time=task_queue_state.start_time,
+            # start_time moves when the job starts or fails. The request time
+            # is the register time.
+            start_time=task_queue_state.register_time,
         )
 
     @classmethod

@@ -1,0 +1,47 @@
+import {
+  SvgActions,
+  SvgAlertCircle,
+  SvgCheckCircle,
+  SvgBrain,
+  SvgCpu,
+  SvgEdit,
+  SvgFileText,
+  SvgGlobe,
+  SvgImage,
+  SvgLoader,
+  SvgMessageCircle,
+  SvgSearch,
+  SvgSparkle,
+  SvgStop,
+  SvgTerminal,
+} from "@opal/icons";
+import type { IconFunctionComponent, IconProps } from "@opal/types";
+import { cn } from "@opal/utils";
+
+function SpinningLoader({ className, ...props }: IconProps) {
+  return <SvgLoader {...props} className={cn(className, "animate-spin")} />;
+}
+
+/** The rail's step icons, one per kind of step, shared by chat and Craft. */
+export const STEP_ICONS = {
+  thinking: SvgBrain,
+  execute: SvgTerminal,
+  search: SvgSearch,
+  webSearch: SvgGlobe,
+  fetch: SvgGlobe,
+  edit: SvgEdit,
+  read: SvgFileText,
+  tool: SvgActions,
+  image: SvgImage,
+  agent: SvgCpu,
+  skill: SvgSparkle,
+  /** An approval or a question that waited for the user. */
+  request: SvgMessageCircle,
+  done: SvgCheckCircle,
+  /** Replaces the kind's icon while the step runs. */
+  running: SpinningLoader,
+  /** Replaces the kind's icon when the step failed. */
+  failed: SvgAlertCircle,
+  /** Replaces the kind's icon when the user stopped the step. */
+  stopped: SvgStop,
+} as const satisfies Record<string, IconFunctionComponent>;

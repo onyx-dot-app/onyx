@@ -41,6 +41,7 @@ case "$1 $2" in
   "run view") case "$*" in *"--json jobs"*) key=run-jobs ;; *) key=run-view ;; esac ;;
   "workflow run") key=workflow-run ;;
   "pr list") key=pr-list ;;
+  "variable get") key=variable-get ;;
   *) exit 0 ;;
 esac
 n=$(( $(cat "$d/$key.count" 2>/dev/null || echo 0) + 1 ))
@@ -56,14 +57,20 @@ cat "$d/$key.$n.err" >&2
 exit "$(cat "$d/$key.$n.code")"
 `
 
+// deployTestInternalRepo stands in for the internal infra repo in tests.
+const deployTestInternalRepo = "example-org/infra-repo"
+
 // deployNewFakeGH puts a fake gh first on PATH. The keys of replies are
 // "run-list", "run-view" (a single run), "run-jobs" (a run's jobs),
-// "workflow-run" and "pr-list".
+// "workflow-run", "pr-list" and "variable-get". The internal infra repo
+// resolves to deployTestInternalRepo through its env override, so tests make
+// no variable lookup unless they clear it.
 func deployNewFakeGH(t *testing.T, replies map[string][]deployGHReply) *deployFakeGH {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake gh is a shell script")
 	}
+	t.Setenv(cloudDeploymentRepoEnv, deployTestInternalRepo)
 	dir := t.TempDir()
 	for key, list := range replies {
 		for i, reply := range list {

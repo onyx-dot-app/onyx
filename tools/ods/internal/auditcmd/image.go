@@ -10,9 +10,13 @@ import (
 
 // AuditImageOptions holds options for the `ods audit image` command.
 type AuditImageOptions struct {
-	Format    string
-	FailOn    string
-	IgnoreURL string
+	SBOMOnly        bool
+	Format          string
+	FailOn          string
+	IgnoreURL       string
+	UpdatePolicyURL string
+	Strict          bool
+	SBOMs           []string
 }
 
 // newAuditImageCommand creates the `ods audit image` subcommand.
@@ -49,7 +53,12 @@ how it gates deploys.`,
 	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format(s), comma-separated: text, json, sarif (e.g. sarif,text)")
 	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
+	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "Fail when the scan extracts no packages from the image")
 
+	cmd.Flags().StringSliceVar(&opts.SBOMs, "sbom", nil, "Required supplemental SBOM paths inside the image (scanned with Grype)")
+
+	cmd.Flags().StringVar(&opts.UpdatePolicyURL, "update-policy", "", "Update policy for supplemental packages; enables freshness checks")
+	cmd.Flags().BoolVar(&opts.SBOMOnly, "sbom-only", false, "Scan only the required supplemental inventories")
 	return cmd
 }
 
@@ -60,17 +69,24 @@ func runAuditImage(ref string, opts *AuditImageOptions, stdout, stderr io.Writer
 	}
 
 	result, err := audit.RunImage(audit.ImageOptions{
-		Image:     ref,
-		Format:    opts.Format,
-		FailOn:    failOn,
-		IgnoreURL: opts.IgnoreURL,
-		Stdout:    stdout,
-		Stderr:    stderr,
+		SBOMOnly:        opts.SBOMOnly,
+		Image:           ref,
+		UpdatePolicyURL: opts.UpdatePolicyURL,
+		SBOMs:           opts.SBOMs,
+		Format:          opts.Format,
+		FailOn:          failOn,
+		IgnoreURL:       opts.IgnoreURL,
+		Strict:          opts.Strict,
+		Stdout:          stdout,
+		Stderr:          stderr,
 	})
 	if err != nil {
 		return failf("Image audit failed: %v", err)
 	}
 
+	if result.BlockingUpdates() > 0 {
+		return failf("%d package update deadlines failed", result.BlockingUpdates())
+	}
 	if len(result.Blocking) > 0 {
 		return &blockingError{count: len(result.Blocking), failOn: failOn}
 	}

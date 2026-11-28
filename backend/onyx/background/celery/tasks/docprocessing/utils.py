@@ -1,14 +1,14 @@
-import time
-from datetime import datetime, timezone
-
-from redis.exceptions import LockError
-from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT, DocumentSource
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import InputType
+from onyx.db.cc_pair_run_resolution import get_resolution_times
+from onyx.db.connector_edit_requests import get_reindex_request_backoff
+from onyx.db.connector_event_inbox import event_pair_has_work
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
+    CCPairRunKind,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
@@ -17,109 +17,21 @@ from onyx.db.index_attempt import (
     get_last_attempt_for_cc_pair,
     get_recent_attempts_for_cc_pair,
 )
-from onyx.db.models import ConnectorCredentialPair, SearchSettings
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    IndexAttempt,
+    SearchSettings,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_pool import redis_lock_dump
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE = 5
-
-
-class IndexingCallbackBase(IndexingHeartbeatInterface):
-    PARENT_CHECK_INTERVAL = 60
-
-    def __init__(
-        self,
-        parent_pid: int,
-        redis_connector: RedisConnector,
-        redis_lock: RedisLock,
-        redis_client: TenantRedisClient,
-        timeout_seconds: int | None = None,
-    ):
-        super().__init__()
-        self.parent_pid = parent_pid
-        self.redis_connector: RedisConnector = redis_connector
-        self.redis_lock: RedisLock = redis_lock
-        self.redis_client = redis_client
-        self.started: datetime = datetime.now(timezone.utc)
-        self.redis_lock.reacquire()
-
-        self.last_tag: str = f"{self.__class__.__name__}.__init__"
-        self.last_lock_reacquire: datetime = datetime.now(timezone.utc)
-        self.last_lock_monotonic = time.monotonic()
-
-        self.last_parent_check = time.monotonic()
-        self.start_monotonic = time.monotonic()
-        self.timeout_seconds = timeout_seconds
-
-    def should_stop(self) -> bool:
-        # Check if the associated indexing attempt has been cancelled
-        # TODO: Pass index_attempt_id to the callback and check cancellation using the db
-        if bool(self.redis_connector.stop.fenced):
-            return True
-
-        # Check if the task has exceeded its timeout
-        # NOTE: Celery's soft_time_limit does not work with thread pools,
-        # so we must enforce timeouts internally.
-        if self.timeout_seconds is not None:
-            elapsed = time.monotonic() - self.start_monotonic
-            if elapsed > self.timeout_seconds:
-                logger.warning(
-                    "IndexingCallback Docprocessing - task timeout exceeded: elapsed=%ss timeout=%ss cc_pair=%s",
-                    format(elapsed, ".0f"),
-                    self.timeout_seconds,
-                    self.redis_connector.cc_pair_id,
-                )
-                return True
-
-        return False
-
-    def progress(self, tag: str, amount: int) -> None:  # noqa: ARG002
-        """Amount isn't used yet."""
-
-        # rkuo: this shouldn't be necessary yet because we spawn the process this runs inside
-        # with daemon=True. It seems likely some indexing tasks will need to spawn other processes
-        # eventually, which daemon=True prevents, so leave this code in until we're ready to test it.
-
-        # if self.parent_pid:
-        #     # check if the parent pid is alive so we aren't running as a zombie
-        #     now = time.monotonic()
-        #     if now - self.last_parent_check > IndexingCallback.PARENT_CHECK_INTERVAL:
-        #         try:
-        #             # this is unintuitive, but it checks if the parent pid is still running
-        #             os.kill(self.parent_pid, 0)
-        #         except Exception:
-        #             logger.exception("IndexingCallback - parent pid check exceptioned")
-        #             raise
-        #         self.last_parent_check = now
-
-        try:
-            current_time = time.monotonic()
-            if current_time - self.last_lock_monotonic >= (
-                CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4
-            ):
-                self.redis_lock.reacquire()
-                self.last_lock_reacquire = datetime.now(timezone.utc)
-                self.last_lock_monotonic = time.monotonic()
-
-            self.last_tag = tag
-        except LockError:
-            logger.exception(
-                "%s - lock.reacquire exceptioned: lock_timeout=%s start=%s last_tag=%s last_reacquired=%s now=%s",
-                self.__class__.__name__,
-                self.redis_lock.timeout,
-                self.started,
-                self.last_tag,
-                self.last_lock_reacquire,
-                datetime.now(timezone.utc),
-            )
-
-            redis_lock_dump(self.redis_lock, self.redis_client)
-            raise
+# How long an event pair waits after a failed attempt before the next run.
+EVENT_PAIR_RETRY_AFTER_FAILURES_SECONDS = 300
 
 
 # NOTE: we're in the process of removing all fences from indexing; this will
@@ -146,29 +58,97 @@ class IndexingCallback(IndexingHeartbeatInterface):
 # handled by validate_active_indexing_attempts in the main indexing tasks module.
 
 
-def is_in_repeated_error_state(
-    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
-) -> bool:
-    """Checks if the cc pair / search setting combination is in a repeated error state."""
-    # if the connector doesn't have a refresh_freq, a single failed attempt is enough
-    number_of_failed_attempts_in_a_row_needed = (
-        NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
-        if cc_pair.connector.refresh_freq is not None
-        else 1
+def failures_before_repeated_error_state(connector: Connector) -> int:
+    """How many failed attempts in a row flag a pair. A connector without a
+    refresh_freq does not retry on its own, so one failure is enough."""
+    if connector.refresh_freq is None:
+        return 1
+    return NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
+
+
+def repeated_error_alert(
+    connector_name: str, source: str, failures_needed: int
+) -> tuple[str, str]:
+    """The flagged connector alert's title and description."""
+    if failures_needed == 1:
+        return (
+            f"Connector '{connector_name}' has failed",
+            f"The {source} connector failed and has been flagged. "
+            "Check its indexing history and credentials.",
+        )
+    return (
+        f"Connector '{connector_name}' has entered repeated error state",
+        f"The {source} connector has failed repeatedly and has been flagged. "
+        "Check its indexing history and credentials.",
     )
 
+
+def _failed_streak(
+    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
+) -> list[IndexAttempt]:
+    """The pair's latest attempts under the search settings when enough of them
+    in a row failed to flag it, else none."""
+    failures_needed = failures_before_repeated_error_state(cc_pair.connector)
     most_recent_index_attempts = get_recent_attempts_for_cc_pair(
         cc_pair_id=cc_pair.id,
         search_settings_id=search_settings_id,
-        limit=number_of_failed_attempts_in_a_row_needed,
+        limit=failures_needed,
         db_session=db_session,
     )
-    return len(
-        most_recent_index_attempts
-    ) >= number_of_failed_attempts_in_a_row_needed and all(
-        attempt.status == IndexingStatus.FAILED
+    if len(most_recent_index_attempts) < failures_needed or any(
+        attempt.status != IndexingStatus.FAILED
         for attempt in most_recent_index_attempts
+    ):
+        return []
+    return most_recent_index_attempts
+
+
+def is_in_repeated_error_state(
+    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
+) -> bool:
+    """Whether the beat flags the pair: its failed streak holds no failure an
+    admin resolved, so resolving the latest one keeps the flag down."""
+    streak = _failed_streak(cc_pair, search_settings_id, db_session)
+    if not streak:
+        return False
+    resolved = get_resolution_times(
+        db_session, [(CCPairRunKind.INDEXING, attempt.id) for attempt in streak]
     )
+    return not resolved
+
+
+def _is_reindex_request_due(
+    cc_pair_id: int, search_settings_id: int, db_session: Session
+) -> bool:
+    """A pending re-index request is due at once. After failed attempts it
+    waits for a capped exponential backoff, and then retries."""
+    backoff = get_reindex_request_backoff(db_session, cc_pair_id, search_settings_id)
+    if backoff is None:
+        return True
+    if get_db_current_time(db_session) < backoff.retry_after:
+        return False
+    logger.warning(
+        "Retrying a full re-index request after failed attempts: "
+        "cc_pair=%s failure_count=%s",
+        cc_pair_id,
+        backoff.failure_count,
+    )
+    return True
+
+
+def _event_pair_is_due(
+    cc_pair: ConnectorCredentialPair,
+    last_index_attempt: IndexAttempt,
+    db_session: Session,
+) -> bool:
+    """An event pair runs when its inbox has work, not on a poll interval.
+    After a failed attempt it waits a fixed backoff before the next run."""
+    if not event_pair_has_work(db_session, cc_pair.id):
+        return False
+    if last_index_attempt.status != IndexingStatus.FAILED:
+        return True
+    since_last = get_db_current_time(db_session) - last_index_attempt.time_updated
+    return since_last.total_seconds() >= EVENT_PAIR_RETRY_AFTER_FAILURES_SECONDS
 
 
 def should_index(
@@ -191,10 +171,9 @@ def should_index(
         search_settings_id=search_settings_instance.id,
         db_session=db_session,
     )
-    all_recent_errored = is_in_repeated_error_state(
-        cc_pair=cc_pair,
-        search_settings_id=search_settings_instance.id,
-        db_session=db_session,
+    # Retries back off on the raw failed streak, so a resolve does not speed them up.
+    all_recent_errored = bool(
+        _failed_streak(cc_pair, search_settings_instance.id, db_session)
     )
 
     # uncomment for debugging
@@ -208,6 +187,10 @@ def should_index(
     # don't kick off indexing for `NOT_APPLICABLE` sources
     if connector.source == DocumentSource.NOT_APPLICABLE:
         # print(f"Not indexing cc_pair={cc_pair.id}: NOT_APPLICABLE source")
+        return False
+
+    # User Library files are stored directly; there is no connector to fetch with.
+    if connector.source == DocumentSource.CRAFT_FILE:
         return False
 
     # User can still manually create single indexing attempts via the UI for the
@@ -279,10 +262,24 @@ def should_index(
         if cc_pair.indexing_trigger is not None:
             # if a manual indexing trigger is on the cc pair, honor it for live search settings
             return True
+        # The first attempt spends the trigger. A pending prune-after-reindex
+        # or full re-index request keeps the pair due until a full re-index
+        # succeeds, even without refresh_freq, with a backoff after failed
+        # attempts.
+        if (
+            cc_pair.prune_after_reindex_requested_at is not None
+            or cc_pair.full_reindex_requested_at is not None
+        ):
+            return _is_reindex_request_due(
+                cc_pair.id, search_settings_instance.id, db_session
+            )
 
     # if no attempt has ever occurred, we should index regardless of refresh_freq
     if not last_index_attempt:
         return True
+
+    if connector.input_type == InputType.EVENT:
+        return _event_pair_is_due(cc_pair, last_index_attempt, db_session)
 
     if connector.refresh_freq is None:
         # print(f"Not indexing cc_pair={cc_pair.id}: refresh_freq is None")

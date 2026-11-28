@@ -20,6 +20,70 @@ export function markdown(...lines: string[]): RichStr {
   return { __brand: "RichStr", raw: lines.join("\n") };
 }
 
+/**
+ * Title-cases an identifier in snake, kebab or camel case:
+ * `confluence_username` → "Confluence Username", `apiKey` → "Api Key".
+ */
+export function toTitleCase(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+// Common non-ISO-3166 codes → the ISO alpha-2 code whose regional-indicator
+// pair has a flag glyph ("UK" has none; the United Kingdom is "GB").
+const COUNTRY_CODE_ALIASES = new Map([["UK", "GB"]]);
+
+/**
+ * The flag emoji for a two-letter country code: `"fi"` → 🇫🇮. Returns `""`
+ * for anything that is not two letters, which would otherwise render junk.
+ */
+export function countryCodeToFlag(code: string | null | undefined): string {
+  if (!code || code.length !== 2) return "";
+  const upper = code.toUpperCase();
+  const normalized = COUNTRY_CODE_ALIASES.get(upper) ?? upper;
+  if (!/^[A-Z]{2}$/.test(normalized)) return "";
+  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
+  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
+  return String.fromCodePoint(first, second);
+}
+
+// Embedding, override and isolate controls, and the directional marks.
+const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069\u200E\u200F\u061C]/g;
+
+/**
+ * Text without its bidi controls, for display or parsing only.
+ *
+ * Bidi rule for untrusted text: strip the controls from paths and labels with
+ * this function, so they show their characters in their own order. Show all
+ * untrusted text in an element with a `dir` attribute, which isolates it so it
+ * cannot reorder the text around it: `dir="ltr"` for code and paths,
+ * `dir="auto"` for labels. Patches and errors are isolated but keep their
+ * exact characters. A label that is the only text of its own flex item has
+ * no neighbors to reorder, so it needs only the strip.
+ */
+export function stripBidiControls(text: string): string {
+  return text.replace(BIDI_CONTROLS, "");
+}
+
+/**
+ * Inline markdown for a code span holding any text, backticks included: the
+ * fence is one backtick longer than the longest run inside. Line breaks show
+ * as spaces, since a code span cannot cross a line. Use inside `markdown()`,
+ * e.g. `markdown(\`Read ${codeSpan(path)}\`)`.
+ */
+export function codeSpan(text: string): string {
+  const line = text.replace(/[\r\n]+/g, " ");
+  const longestRun = Math.max(
+    0,
+    ...(line.match(/`+/g) ?? []).map((run) => run.length)
+  );
+  const fence = "`".repeat(longestRun + 1);
+  return `${fence} ${line} ${fence}`;
+}
+
 export function escapeMarkdown(value: string): string {
   return value
     .replace(/[!-/:-@[-`{-~]/g, (character) => `&#${character.charCodeAt(0)};`)
@@ -109,4 +173,126 @@ export function noProp(
     event.stopPropagation();
     f?.(event);
   };
+}
+
+/**
+ * The nearest ancestor of `element` that scrolls vertically, or `null` when
+ * only the page does.
+ */
+export function findScrollParent(element: Element): Element | null {
+  let node: Element | null = element.parentElement;
+  while (node) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === "auto" || overflowY === "scroll") return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
+ * True when the OS asks for reduced motion or the app forces it with
+ * `data-motion="reduced"` on `<html>`, the attribute the `motion-reduce:` and
+ * `motion-safe:` variants (`_reference.css`) also read. False on the server.
+ */
+export function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    document.documentElement.dataset.motion === "reduced" ||
+    (typeof window.matchMedia === "function" &&
+      // A stubbed `matchMedia` (e.g. in tests) can return nothing.
+      window.matchMedia("(prefers-reduced-motion: reduce)")?.matches === true)
+  );
+}
+
+/** Where `smoothScroll` goes: to a scroll offset, or by a distance from here. */
+export type SmoothScrollTarget = { top: number } | { by: number };
+
+export interface SmoothScrollOptions {
+  /** How long the scroll takes, in ms. @default 300 */
+  duration?: number;
+}
+
+// Fast out, slow in, so the view settles gently on the target.
+function easeOutCubic(progress: number): number {
+  return 1 - (1 - progress) ** 3;
+}
+
+/**
+ * Smoothly scrolls `container` (`null` for the page) vertically, and resolves
+ * when the scroll ends, so a caller can act once the view has settled. Under
+ * reduced motion it jumps instead. A scroll that goes nowhere resolves at once.
+ */
+export function smoothScroll(
+  container: Element | null,
+  target: SmoothScrollTarget,
+  { duration = 300 }: SmoothScrollOptions = {}
+): Promise<void> {
+  const scroller: Element =
+    container ?? document.scrollingElement ?? document.documentElement;
+  const from = scroller.scrollTop;
+  const delta = "by" in target ? target.by : target.top - from;
+  if (Math.abs(delta) < 1) return Promise.resolve();
+  if (prefersReducedMotion() || duration <= 0) {
+    scroller.scrollTop = from + delta;
+    return Promise.resolve();
+  }
+  // Native smooth scrolling has no duration, so this steps it per frame.
+  return new Promise((resolve) => {
+    const start = performance.now();
+    function step(now: number) {
+      const progress = Math.min((now - start) / duration, 1);
+      scroller.scrollTop = from + delta * easeOutCubic(progress);
+      if (progress < 1) requestAnimationFrame(step);
+      else resolve();
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+/**
+ * `smoothScroll`s the nearest scroll parent of `element` until the element
+ * sits in the middle of the view, like `scrollIntoView({ block: "center" })`
+ * with an animation.
+ */
+export function smoothScrollToCenter(
+  element: Element,
+  options?: SmoothScrollOptions
+): Promise<void> {
+  const container: Element | null = findScrollParent(element);
+  const view = container?.getBoundingClientRect() ?? {
+    top: 0,
+    height: window.innerHeight,
+  };
+  const box: DOMRect = element.getBoundingClientRect();
+  return smoothScroll(
+    container,
+    { by: box.top + box.height / 2 - (view.top + view.height / 2) },
+    options
+  );
+}
+
+// Seeded randomness, for a component that picks its own variation.
+
+export type NonEmpty<T> = readonly [T, ...T[]];
+
+/**
+ * A pseudo-random generator seeded from a string. Seeded from `useId`, it
+ * gives each instance its own choice (e.g. a loader's shape), the same on the server and the client and
+ * on every render.
+ */
+export function seededRandom(seed: string): () => number {
+  let state = 2166136261;
+  for (let index = 0; index < seed.length; index++) {
+    state = Math.imul(state ^ seed.charCodeAt(index), 16777619);
+  }
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let value = Math.imul(state ^ (state >>> 15), 1 | state);
+    value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function pick<T>(items: NonEmpty<T>, random: () => number): T {
+  return items[Math.floor(random() * items.length)] ?? items[0];
 }

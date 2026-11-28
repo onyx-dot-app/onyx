@@ -11,7 +11,7 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/config"
 )
 
-const deployRunJSONFields = "--json databaseId,status,conclusion,url,event,headBranch"
+const deployRunJSONFields = "--json " + workflowRunJSONFields
 
 func TestResolveDeployTarget_prefersFlagsThenSavedConfig(t *testing.T) {
 	edge := func(c *config.Config) *string { return &c.DeployEdge.TargetWorkflow }
@@ -58,16 +58,6 @@ func TestResolveDeployTarget_prefersFlagsThenSavedConfig(t *testing.T) {
 				t.Fatalf("config must be unchanged, got %s", after)
 			}
 		})
-	}
-}
-
-func TestResolveDeployTarget_failsOnUnreadableConfig(t *testing.T) {
-	path := deployIsolateConfigAndAppData(t)
-	deployWriteFile(t, path, "{not json")
-
-	_, _, err := resolveDeployTarget("org/repo", "deploy.yml", func(c *config.Config) *string { return &c.DeployEdge.TargetWorkflow })
-	if err == nil || !strings.Contains(err.Error(), "Failed to load ods config") {
-		t.Fatalf("expected config load error, got %v", err)
 	}
 }
 
@@ -190,7 +180,7 @@ func TestWaitForNewRun_failures(t *testing.T) {
 		reply   deployGHReply
 		wantErr string
 	}{
-		{"no new run before the timeout", deployRuns(t, workflowRun{DatabaseID: 5}), "no new run appeared within 500ms"},
+		{"no new run before the timeout", deployRuns(t, workflowRun{DatabaseID: 5}), "no matching run appeared within 500ms"},
 		{"gh failure", deployGHFailure("rate limited"), "rate limited"},
 	}
 	for _, c := range cases {
@@ -271,52 +261,12 @@ func TestWaitForRunCompletion(t *testing.T) {
 	}
 }
 
-func TestDispatchWorkflow(t *testing.T) {
-	cases := []struct {
-		name     string
-		inputs   map[string]string
-		wantArgs string
-	}{
-		{"no inputs", nil, "workflow run deploy.yml -R org/repo"},
-		{"inputs become fields", map[string]string{"version_tag": "edge"}, "workflow run deploy.yml -R org/repo -f version_tag=edge"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			gh := deployNewFakeGH(t, map[string][]deployGHReply{"workflow-run": {{}}})
+func TestDispatchWorkflow_failureIncludesGhOutput(t *testing.T) {
+	deployNewFakeGH(t, map[string][]deployGHReply{"workflow-run": {deployGHFailure("HTTP 403: must have admin rights")}})
 
-			if err := dispatchWorkflow("org/repo", "deploy.yml", c.inputs); err != nil {
-				t.Fatalf("dispatchWorkflow: %v", err)
-			}
-			if calls := gh.calls(); !slices.Equal(calls, []string{c.wantArgs}) {
-				t.Fatalf("expected gh call %q, got %q", c.wantArgs, calls)
-			}
-		})
-	}
-
-	t.Run("failure includes gh output", func(t *testing.T) {
-		deployNewFakeGH(t, map[string][]deployGHReply{"workflow-run": {deployGHFailure("HTTP 403: must have admin rights")}})
-
-		err := dispatchWorkflow("org/repo", "deploy.yml", nil)
-		if err == nil || !strings.Contains(err.Error(), "gh workflow run failed") || !strings.Contains(err.Error(), "must have admin rights") {
-			t.Fatalf("expected dispatch failure with gh output, got %v", err)
-		}
-	})
-}
-
-func TestAnnounceDeploymentRun_printsTheTagsRunURL(t *testing.T) {
-	gh := deployNewFakeGH(t, map[string][]deployGHReply{
-		"run-list": {deployRuns(t, workflowRun{DatabaseID: 77, URL: "https://github.com/onyx-dot-app/onyx/actions/runs/77"})},
-	})
-	out := deployCaptureOutput(t)
-
-	announceDeploymentRun(deployFastPolling(), "v4.7.0-beta.1")
-
-	if got := out.printed(t); got != "https://github.com/onyx-dot-app/onyx/actions/runs/77\n" {
-		t.Fatalf("expected the run URL on stdout, got %q", got)
-	}
-	want := "run list -R onyx-dot-app/onyx --workflow deployment.yml --limit 5 " + deployRunJSONFields + " --event push --branch v4.7.0-beta.1"
-	if calls := gh.calls(); !slices.Equal(calls, []string{want}) {
-		t.Fatalf("expected gh call %q, got %q", want, calls)
+	err := dispatchWorkflow("org/repo", "deploy.yml", nil)
+	if err == nil || !strings.Contains(err.Error(), "gh workflow run failed") || !strings.Contains(err.Error(), "must have admin rights") {
+		t.Fatalf("expected dispatch failure with gh output, got %v", err)
 	}
 }
 

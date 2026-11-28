@@ -13,6 +13,7 @@ from onyx.tools.utils import explicit_tool_calling_supported
             "claude-haiku-4-5-20251001",
             True,
         ),
+        # Retired/absent from the catalog → no capability data → False.
         (
             LlmProviderNames.ANTHROPIC,
             "claude-3-sonnet-20240229",
@@ -23,7 +24,7 @@ from onyx.tools.utils import explicit_tool_calling_supported
             "amazon.titan-text-express-v1",
             False,
         ),
-        (LlmProviderNames.OPENAI, "gpt-4o", True),
+        (LlmProviderNames.OPENAI, "gpt-6-sol", True),
         (LlmProviderNames.OPENAI, "gpt-3.5-turbo-instruct", False),
     ],
 )

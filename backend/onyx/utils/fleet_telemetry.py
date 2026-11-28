@@ -1,0 +1,1166 @@
+"""Bounded, lossy fleet telemetry. Application threads never perform telemetry I/O."""
+
+import gzip
+import hashlib
+import json
+import math
+import os
+import random
+import re
+import threading
+import time
+import uuid
+from collections import deque
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
+from enum import Enum
+from functools import wraps
+from typing import Any, NamedTuple, ParamSpec, TypeVar
+
+import requests
+
+from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB, WEB_DOMAIN
+from onyx.configs.constants import OnyxCeleryQueues
+from onyx.connectors.models import DocumentTypeLabel
+from onyx.llm.constants import LlmProviderNames
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
+
+
+class DeploymentType(str, Enum):
+    STANDARD = "standard"
+    LITE = "lite"
+
+
+DEPLOYMENT_TYPE: DeploymentType = (
+    DeploymentType.LITE if DISABLE_VECTOR_DB else DeploymentType.STANDARD
+)
+
+_ENDPOINT: str = (
+    os.environ.get("ONYX_TELEMETRY_ENDPOINT") or "https://telemetry.onyx.app"
+).rstrip("/")
+# Every string value must be one short token. Spaces, slashes, and "@" cannot
+# pass, so free text, paths, URLs, and email addresses never leave the process.
+_TOKEN: re.Pattern[str] = re.compile(r"[A-Za-z0-9_.:+-]{1,128}\Z")
+_OPAQUE: re.Pattern[str] = re.compile(r"[A-Za-z0-9_.:-]{1,128}\Z")
+_VERSION: re.Pattern[str] = re.compile(
+    r"(?:v?\d{1,4}\.\d{1,4}(?:\.\d{1,4})?(?:[-.](?:cloud|beta|alpha|rc|dev|nightly|release)(?:[-.]?\d{1,8})?){0,3}|[a-f0-9]{7,40}|unknown|dev|nightly)\Z"
+)
+_COMMIT: re.Pattern[str] = re.compile(r"[a-f0-9]{7,40}\Z")
+# Labels the version pattern accepts that name no build; a commit says more.
+_FIXED_LABELS: frozenset[str] = frozenset({"nightly", "dev", "unknown"})
+# A build tag such as "dev-build-main-f9b2636" ends in its short commit.
+_TAG_COMMIT: re.Pattern[str] = re.compile(r"-([a-f0-9]{7,40})\Z")
+# The nightly tag ends in a date, which is also valid hex.
+_NIGHTLY_DATE_TAG: re.Pattern[str] = re.compile(r"nightly-latest-\d{8}")
+
+# Read from OnyxCeleryQueues, so a renamed queue needs no telemetry change.
+CELERY_QUEUES: tuple[str, ...] = tuple(
+    value
+    for key, value in vars(OnyxCeleryQueues).items()
+    if not key.startswith("_") and isinstance(value, str)
+)
+# Connector configuration keys exported only as reviewed booleans and numbers.
+SAFE_BOOLEAN_SETTINGS: tuple[str, ...] = (
+    "include_shared_drives",
+    "include_my_drives",
+    "include_files_shared_with_me",
+    "exclude_domain_link_only",
+    "include_shared",
+    "follow_shortcuts",
+    "only_org_public",
+    "continue_on_failure",
+    "include_attachments",
+    "include_calendar",
+    "include_bot_messages",
+    "channel_regex_enabled",
+    "exclude_channel_regex_enabled",
+    "index_recursively",
+    "recursive_index_enabled",
+    "include_mrs",
+    "include_issues",
+    "include_code_files",
+    "include_web_links",
+    "index_page_content",
+    "retrieve_task_comments",
+    "allow_images",
+    "include_inline_images",
+    "include_meeting_transcripts",
+    "include_meeting_chats",
+    "include_article",
+    "include_blog",
+    "include_wiki",
+    "include_forum",
+    "hide_user_info",
+    "european_residency",
+)
+SAFE_NUMBER_SETTINGS: tuple[str, ...] = (
+    "batch_size",
+    "num_threads",
+    "max_workers",
+    "recurse_depth",
+    "max_pages",
+    "cases_page_size",
+    "skip_doc_absolute_chars",
+    "calendar_past_days",
+    "calendar_future_days",
+    "experiment_row_lookback_days",
+)
+# Counts and flags derived from connector configuration.
+CONNECTOR_CONFIG_COUNTS: tuple[str, ...] = ("selection_count", "has_time_filter")
+# Scheduling and sync settings read from connector columns.
+CONNECTOR_ROW_SETTINGS: tuple[str, ...] = (
+    "refresh_seconds",
+    "prune_seconds",
+    "auto_sync_enabled",
+    "permission_sync_enabled",
+)
+
+
+class ToolKind(str, Enum):
+    """Fixed tool classes for query tool counts. Never a tool's own name."""
+
+    SEARCH = "search"
+    WEB_SEARCH = "web_search"
+    OPEN_URL = "open_url"
+    MCP = "mcp"
+    CUSTOM = "custom"
+    IMAGE = "image"
+    PYTHON = "python"
+    CODE_MODE = "code_mode"
+    SANDBOX = "sandbox"
+    OTHER = "other"
+
+
+class LoginFailure(str, Enum):
+    """The login method of a failed sign-in."""
+
+    PASSWORD = "password"
+    # The Google OAuth router configured by environment variables.
+    OAUTH = "oauth"
+    # The multi-provider OIDC router, which also serves Google provider rows.
+    OIDC = "oidc"
+    SAML = "saml"
+
+
+class MCPFailure(str, Enum):
+    """MCP server failures outside a tool call."""
+
+    DISCOVERY_AUTH = "discovery_auth"
+    DISCOVERY_TIMEOUT = "discovery_timeout"
+    DISCOVERY_ERROR = "discovery_error"
+    PROBE_UNREACHABLE = "probe_unreachable"
+    PROBE_BLOCKED = "probe_blocked"
+
+
+_TOOL_KINDS: frozenset[str] = frozenset(kind.value for kind in ToolKind)
+# The document types a corpus count can break down by.
+_DOCUMENT_TYPES: frozenset[str] = frozenset(label.value for label in DocumentTypeLabel)
+# Nested maps: their values must be numbers or booleans.
+_NESTED_FIELDS: dict[str, frozenset[str]] = {
+    "metadata": frozenset(
+        SAFE_BOOLEAN_SETTINGS
+        + SAFE_NUMBER_SETTINGS
+        + CONNECTOR_CONFIG_COUNTS
+        + CONNECTOR_ROW_SETTINGS
+    ),
+    "counters": frozenset(
+        {
+            "fetch_docs",
+            "fetch_errors",
+            "embed_chunks",
+            "embed_errors",
+            "write_chunks",
+            "write_errors",
+        }
+    ),
+    "expected_by_type": _DOCUMENT_TYPES,
+    "expected_bytes_by_type": _DOCUMENT_TYPES,
+    "tool_calls": _TOOL_KINDS,
+    "tool_failures": _TOOL_KINDS,
+    "login_failures": frozenset(failure.value for failure in LoginFailure),
+    "mcp_failures": frozenset(failure.value for failure in MCPFailure),
+    # Standard accounts by their question count in 7 days.
+    "users_by_queries_7d": frozenset({"q1", "q2_5", "q6_20", "q21_50", "q51_plus"}),
+    "agent_messages_7d": frozenset({"builtin", "custom"}),
+    # Provider types; any other provider counts as custom, never by its name.
+    "llm_providers": frozenset({*(name.value for name in LlmProviderNames), "custom"}),
+}
+# The keys each event type may carry. The fleet service checks the values.
+_FIELDS: dict[str, frozenset[str]] = {
+    "stage": frozenset(
+        {
+            "attempt_id",
+            "connector_id",
+            "cc_pair_id",
+            "connector_type",
+            "stage_name",
+            "event_count",
+            "total_duration_ms",
+            "min_duration_ms",
+            "max_duration_ms",
+            "m2_duration_ms",
+            "first_event_at",
+            "last_event_at",
+        }
+    ),
+    "license": frozenset({"license_present", "first_set_at"}),
+    "tenant_domain": frozenset({"domain", "first_signup_at"}),
+    "users": frozenset({"total", "active"}),
+    "feedback": frozenset({"feedback_id", "positive", "channel"}),
+    "query": frozenset(
+        {
+            "query_id",
+            "tool_usage",
+            "llm_cycles",
+            "channel",
+            "mode",
+            "outcome",
+            "first_answer_ms",
+            "time_to_results_ms",
+            "error_code",
+            "error_source",
+            "llm_provider",
+            "tool_calls",
+            "tool_failures",
+            "mcp_auth_failures",
+        }
+    ),
+    "connector": frozenset(
+        {
+            "connector_id",
+            "cc_pair_id",
+            "connector_type",
+            "state",
+            "doc_count",
+            "config_hash",
+            "metadata",
+            "last_success_at",
+            "last_permission_sync_at",
+            "last_group_sync_at",
+            "permission_sync_pending_since",
+            "permission_sync_seconds",
+            "group_sync_seconds",
+        }
+    ),
+    "attempt": frozenset(
+        {
+            "attempt_id",
+            "connector_id",
+            "cc_pair_id",
+            "connector_type",
+            "state",
+            "docs_indexed",
+            "chunks_indexed",
+            "total_batches",
+            "completed_batches",
+            "error_count",
+            "error_code",
+            "error_fingerprint",
+            "counters",
+            "counter_mode",
+            "stage",
+            "duration_ms",
+            "started_at",
+            "ended_at",
+            "last_progress_at",
+            "last_heartbeat_at",
+        }
+    ),
+    "job": frozenset(
+        {
+            "job_id",
+            "job_type",
+            "state",
+            "docs_processed",
+            "duration_ms",
+            "error_count",
+            "error_code",
+            "started_at",
+            "ended_at",
+            "entity_id",
+            "cc_pair_id",
+            "users_processed",
+            "groups_processed",
+            "memberships_synced",
+            "last_progress_at",
+            "last_heartbeat_at",
+        }
+    ),
+    "queue": frozenset({"queue", "depth", "shared"}),
+    "resource": frozenset(
+        {
+            "opensearch_status",
+            "opensearch_checked_at",
+            "opensearch_resource_checked_at",
+            "opensearch_resource_stale",
+            "opensearch_disk_pressure",
+            "opensearch_heap_pressure",
+            "opensearch_vector_pressure",
+            "opensearch_number_of_nodes",
+            "opensearch_number_of_data_nodes",
+            "opensearch_active_shards",
+            "opensearch_unassigned_shards",
+            "opensearch_initializing_shards",
+            "opensearch_relocating_shards",
+            "opensearch_number_of_pending_tasks",
+            "service_instance_id",
+            "memory_bytes",
+            "memory_limit_bytes",
+            "disk_bytes",
+            "disk_limit_bytes",
+            "cpu_cores",
+            "cpu_limit_cores",
+            "cpu_throttled_seconds",
+            "shared",
+        }
+    ),
+    "corpus": frozenset(
+        {
+            "attempt_id",
+            "cc_pair_id",
+            "connector_type",
+            "window_start",
+            "window_end",
+            "duration_ms",
+            "expected_docs",
+            "expected_partial",
+            "expected_by_type",
+            "expected_bytes_by_type",
+        }
+    ),
+    "runtime": frozenset({"service_instance_id", "reason"}),
+    "version": frozenset({"version"}),
+    "failure_counts": frozenset({"login_failures", "mcp_failures"}),
+    "usage": frozenset(
+        {
+            "active_users_1d",
+            "active_users_7d",
+            "active_users_30d",
+            "queries_7d",
+            "queries_30d",
+            "users_by_queries_7d",
+            "agent_messages_7d",
+            "agents_used_7d",
+            "uploads_7d",
+            "failed_uploads_7d",
+            "craft_sessions_7d",
+            "craft_sessions_total",
+        }
+    ),
+    "setup": frozenset(
+        {
+            "agents",
+            "llm_providers",
+            "mcp_servers",
+            "custom_actions",
+            "document_sets",
+            "slack_bots",
+            "sso_providers",
+            "sso_configured",
+        }
+    ),
+    # One completed ISO week; the service replaces the week on each send.
+    "usage_week": frozenset({"week_start", "queries", "sessions", "active_users"}),
+    "heartbeat": frozenset(
+        {
+            "deployment_type",
+            "has_indexed_connectors",
+            "dropped_events",
+            "recent_dropped_events",
+            "rejected_events",
+            "invalid_events",
+            "spool_events",
+            "source_errors",
+            "source_consecutive_errors",
+            "last_source_success_at",
+            "usage_errors",
+        }
+    ),
+}
+
+# Collection schedule. The fleet service cannot change it.
+COLLECTION_INTERVAL_SECONDS: int = 300
+QUEUE_INTERVAL_SECONDS: int = 600
+RESOURCE_INTERVAL_SECONDS: int = 300
+
+# Delivery bounds. The fleet service accepts up to 500 events per request.
+_BATCH_SIZE: int = 100
+_FLUSH_SECONDS: float = 2.0
+_MAX_BATCHES_PER_WAKEUP: int = 5
+_FINAL_FLUSH_SECONDS: float = 5.0
+# The service asks to send an event again when it could not store it yet. The
+# sender sends such an event at most this many more times.
+_MAX_RETRIES: int = 3
+# The retry code for events whose customer is over the service's ingress budget.
+_BUDGET_EXCEEDED: str = "customer_ingress_budget_exceeded"
+# Short-lived processes wait at most this long at exit for their final delivery.
+EXIT_FLUSH_SECONDS: float = 2.0
+# Indexing counter deltas are summed per attempt and stage for this long.
+_STAGE_WINDOW_SECONDS: float = 30.0
+_MAX_STAGE_KEYS: int = 256
+# Each failure count stops here within one window, so an attack cannot grow it without bound.
+MAX_FAILURE_COUNT: int = 100_000
+
+
+def fingerprint(value: str) -> str:
+    """A hex digest, so names and raw values never leave the process."""
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def is_valid_version(value: str) -> bool:
+    """Accept only bounded release tags, build hashes, and fixed version labels."""
+    return _VERSION.fullmatch(value) is not None
+
+
+def reported_version(raw: str) -> str:
+    """The version label for the fleet. Release tags pass as they are. Other
+    builds (nightly, edge, dev-build) report their short commit."""
+    if raw == "Development":
+        return "dev"
+    if is_valid_version(raw) and raw not in _FIXED_LABELS:
+        return raw
+    from onyx.server.settings.build_info import get_build_info
+
+    commit: str = (get_build_info().commit or "").lower()
+    if _COMMIT.fullmatch(commit):
+        return commit[:7]
+    tag_commit: re.Match[str] | None = _TAG_COMMIT.search(raw)
+    if tag_commit and not _NIGHTLY_DATE_TAG.fullmatch(raw):
+        return tag_commit.group(1)
+    if raw.startswith("nightly"):
+        return "nightly"
+    return raw if raw in _FIXED_LABELS else "unknown"
+
+
+def read_json_body(response: requests.Response, limit: int) -> Any:
+    """Parse an uncompressed JSON body of at most `limit` bytes. Raise otherwise.
+
+    Like json.loads, the result is unvalidated; callers check its structure."""
+    if response.headers.get("Content-Encoding", "identity") not in {"", "identity"}:
+        raise ValueError("Unsupported response encoding")
+    raw: bytes = response.raw.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError("Response exceeds limit")
+    return json.loads(raw)
+
+
+def _is_number(value: object) -> bool:
+    return isinstance(value, (bool, int, float)) and math.isfinite(value) and value >= 0
+
+
+def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    """Keep reviewed keys with numbers, booleans, or short tokens. Reject the rest."""
+    allowed: frozenset[str] | None = _FIELDS.get(event_type)
+    if allowed is None or not data.keys() <= allowed:
+        return None
+    safe: dict[str, Any] = {}
+    for key, value in data.items():
+        nested: frozenset[str] | None = _NESTED_FIELDS.get(key)
+        if nested is not None:
+            if not isinstance(value, dict) or not value.keys() <= nested:
+                return None
+            if not all(item is None or _is_number(item) for item in value.values()):
+                return None
+            safe[key] = dict(value)
+        elif (
+            value is None
+            or _is_number(value)
+            or (isinstance(value, str) and _TOKEN.fullmatch(value))
+        ):
+            safe[key] = value
+        else:
+            return None
+    return safe
+
+
+def deployment_key() -> str:
+    """The deployment's stable key. The fleet service takes it as a write credential."""
+    if MULTI_TENANT:
+        # Cloud has no instance-level key-value store. Its web domain names it.
+        return fingerprint("onyx-cloud:" + WEB_DOMAIN)
+    from onyx.db.fleet_enrollment import get_or_create_deployment_key
+
+    return get_or_create_deployment_key()
+
+
+def legacy_customer_uuid() -> str | None:
+    """The install ID that Onyx before v5 sent, so the service can link this deployment
+    to its pre-v5 records. None when there is none or it cannot be read."""
+    if MULTI_TENANT:
+        return None
+    try:
+        from onyx.db.fleet_enrollment import get_legacy_customer_uuid
+
+        return get_legacy_customer_uuid()
+    except Exception:
+        return None
+
+
+class FailureCounts:
+    """Failures outside queries, counted in memory under fixed keys.
+
+    The sender sends the counts with each heartbeat in one `failure_counts`
+    event, so a burst of failures never adds events."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        # A forked child gets a fresh lock and none of its parent's counts.
+        self._lock = threading.Lock()
+        self._counts: dict[LoginFailure | MCPFailure, int] = {}
+
+    def add(self, failure: LoginFailure | MCPFailure) -> None:
+        with self._lock:
+            self._counts[failure] = min(
+                self._counts.get(failure, 0) + 1, MAX_FAILURE_COUNT
+            )
+
+    def take(self) -> dict[str, Any] | None:
+        """The counts since the previous call; None when there were none."""
+        with self._lock:
+            counts, self._counts = self._counts, {}
+        login: dict[str, int] = {
+            key.value: value
+            for key, value in counts.items()
+            if isinstance(key, LoginFailure)
+        }
+        mcp: dict[str, int] = {
+            key.value: value
+            for key, value in counts.items()
+            if isinstance(key, MCPFailure)
+        }
+        data: dict[str, Any] = {
+            **({"login_failures": login} if login else {}),
+            **({"mcp_failures": mcp} if mcp else {}),
+        }
+        return data or None
+
+
+_failure_counts: FailureCounts = FailureCounts()
+os.register_at_fork(after_in_child=_failure_counts.reset)
+
+
+def count_failure(failure: LoginFailure | MCPFailure) -> None:
+    """Count one failure. No I/O; never raises."""
+    try:
+        if _client is not None:
+            _failure_counts.add(failure)
+    except Exception:
+        pass
+
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def count_login_failures(
+    method: LoginFailure,
+) -> Callable[[Callable[_P, Awaitable[_R]]], Callable[_P, Awaitable[_R]]]:
+    """Count each exception that a login handler raises, then raise it again."""
+
+    def decorate(handler: Callable[_P, Awaitable[_R]]) -> Callable[_P, Awaitable[_R]]:
+        @wraps(handler)
+        async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            try:
+                return await handler(*args, **kwargs)
+            except Exception:
+                count_failure(method)
+                raise
+
+        return wrapper
+
+    return decorate
+
+
+class _QueuedEvent(NamedTuple):
+    """An event that waits for the sender thread. A tuple, so emitters stay cheap."""
+
+    event_type: str
+    data: dict[str, Any]
+    tenant_id: str | None
+    occurred_at: float
+    event_id: str | None
+    service: str
+    revision: int
+
+
+class BoundedTelemetry:
+    """One daemon thread per process. A full queue sheds events; emitters never wait."""
+
+    def __init__(
+        self,
+        service: str = "api",
+        *,
+        report_process: bool = True,
+        capacity: int = 2048,
+    ) -> None:
+        self.service: str = service
+        self.capacity: int = capacity
+        # Short-lived processes deliver hook events only; their parent reports the process.
+        self.report_process: bool = report_process
+        self.pid: int = os.getpid()
+        # One ID for this process's runtime and resource events.
+        self.instance_id: str = fingerprint(f"{self.pid}:{os.uname().nodename}")
+        # deque append/popleft are thread-safe, so emitters take no lock.
+        self._queue: deque[_QueuedEvent] = deque()
+        self._stop: threading.Event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.sent: int = 0
+        self.dropped: int = 0
+        self.rejected: int = 0
+        self.invalid: int = 0
+        self._dropped_at_heartbeat: int = 0
+        self.failures: int = 0
+        self._blocked_until: float = 0.0
+        # The batch in flight. An outage keeps it for the next attempt.
+        self._pending: list[dict[str, Any]] = []
+        self._retries: int = 0
+        self._session: requests.Session | None = None
+        # The sender thread reads the key and enrolls before its first delivery.
+        self._key: str | None = None
+        # The pre-v5 install ID. "" after the service rejects it, so enrollment goes on without it.
+        self._legacy: str | None = None
+        self._customer: str | None = None
+        self._deployment: str | None = None
+        self._stage_sums: dict[tuple[str, ...], dict[str, Any]] = {}
+        self._last_stage_flush: float = time.monotonic()
+        # Source read counts that a collecting process adds to its heartbeat.
+        self.health: dict[str, Any] = {}
+
+    def emit(
+        self,
+        event_type: str,
+        data: dict[str, Any],
+        *,
+        tenant_id: str | None = None,
+        event_id: str | None = None,
+        occurred_at: float | None = None,
+        service: str | None = None,
+        revision: int = 0,
+    ) -> bool:
+        """No locks, thread creation, serialization, logging, network, disk, or database calls.
+
+        The service orders the states of one entity by `revision`, then by
+        `occurred_at`."""
+        try:
+            if self.pid != os.getpid() or self._stop.is_set():
+                return False
+            safe: dict[str, Any] | None = sanitize_data(event_type, data)
+            if safe is None:
+                self.invalid += 1
+                self.dropped += 1
+                return False
+            # Concurrent emitters can overshoot the capacity by at most one event each.
+            if len(self._queue) >= self.capacity:
+                self.dropped += 1
+                return False
+            self._queue.append(
+                _QueuedEvent(
+                    event_type=event_type,
+                    data=safe,
+                    tenant_id=tenant_id,
+                    occurred_at=occurred_at if occurred_at is not None else time.time(),
+                    event_id=event_id,
+                    service=service or self.service,
+                    revision=revision,
+                )
+            )
+            return True
+        except Exception:
+            self.dropped += 1
+            return False
+
+    def start(self) -> None:
+        self._thread = threading.Thread(
+            target=self._run, name="fleet-telemetry-sender", daemon=True
+        )
+        self._thread.start()
+
+    def close(self, flush_timeout: float = 0.0) -> None:
+        """Stop accepting events. The sender makes one bounded final delivery attempt;
+        callers wait for it at most `flush_timeout` seconds (default: not at all)."""
+        self._stop.set()
+        thread: threading.Thread | None = self._thread
+        if (
+            flush_timeout > 0
+            and thread is not None
+            and thread is not threading.current_thread()
+        ):
+            thread.join(flush_timeout)
+
+    @property
+    def closed(self) -> bool:
+        return self._stop.is_set()
+
+    @property
+    def customer_uuid(self) -> str | None:
+        """The ID that the fleet service assigned at enrollment. None until then."""
+        return self._customer
+
+    @property
+    def deployment_id(self) -> str | None:
+        """The deployment ID that the fleet service assigned. None until enrollment."""
+        return self._deployment
+
+    def _take_batch(self) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
+        for _ in range(_BATCH_SIZE):
+            try:
+                queued: _QueuedEvent = self._queue.popleft()
+            except IndexError:
+                break
+            try:
+                events.append(self._envelope(queued))
+            except Exception:
+                # One malformed entry is dropped without losing the rest of the batch.
+                self.dropped += 1
+        return events
+
+    def _envelope(self, queued: _QueuedEvent) -> dict[str, Any]:
+        if self._customer is None or self._deployment is None:
+            raise RuntimeError("Fleet enrollment is not complete")
+        customer: str = self._customer
+        scope: str | None = None
+        # Each Cloud tenant reports as its own customer inside this deployment.
+        # Shared events describe the whole deployment.
+        if MULTI_TENANT and queued.tenant_id and not queued.data.get("shared"):
+            scope = str(uuid.uuid5(uuid.NAMESPACE_X500, queued.tenant_id))
+            customer = str(uuid.uuid5(uuid.UUID(customer), scope))
+        return {
+            "schema_version": 2,
+            "event_id": queued.event_id or str(uuid.uuid4()),
+            "event_type": queued.event_type,
+            "occurred_at": datetime.fromtimestamp(
+                queued.occurred_at, timezone.utc
+            ).isoformat(),
+            "customer_uuid": customer,
+            "deployment_id": self._deployment,
+            **({"installation_scope": scope} if scope else {}),
+            "service": queued.service,
+            "is_cloud": MULTI_TENANT,
+            "revision": queued.revision,
+            "data": queued.data,
+        }
+
+    def flush_once(self, transport: Any = None) -> bool:
+        """Send one batch. True when it was delivered or nothing was due.
+
+        The service answers with how many events it accepted and rejected, and
+        which events to send again. The sender sends those again after a backoff,
+        at most `_MAX_RETRIES` times. It counts all other events as dropped.
+        """
+        if time.monotonic() < self._blocked_until:
+            return False
+        if not (self._pending or self._queue or self._stage_sums):
+            return True
+        retry_after: float = 0.0
+        try:
+            if transport is None:
+                if self._session is None:
+                    self._session = requests.Session()
+                transport = self._session.post
+            if self._deployment is None:
+                self._enroll(transport)
+            if not self._pending:
+                self._pending = self._sum_stages(self._take_batch())
+                # A new batch has used none of its retries.
+                self._retries = 0
+            if not self._pending:
+                return True
+            response: requests.Response = transport(
+                _ENDPOINT + "/v1/events",
+                headers={
+                    "Authorization": "Bearer " + str(self._key),
+                    "Content-Type": "application/json",
+                    "Accept-Encoding": "identity",
+                    "Content-Encoding": "gzip",
+                },
+                data=gzip.compress(
+                    json.dumps(
+                        {"events": self._pending}, separators=(",", ":")
+                    ).encode(),
+                    compresslevel=1,
+                    mtime=0,
+                ),
+                timeout=(1, 2),
+                allow_redirects=False,
+                stream=True,
+            )
+            with response:
+                if response.status_code == 401:
+                    # The service no longer knows the key. Enroll again.
+                    self._deployment = None
+                if response.status_code in {400, 413, 422}:
+                    # Sending the same batch again cannot succeed.
+                    self.rejected += len(self._pending)
+                    self.dropped += len(self._pending)
+                    self._pending = []
+                # Sent with 429, and with a reply that marks events over budget.
+                retry_after = _retry_after_seconds(response.headers.get("Retry-After"))
+                if not response.ok:
+                    raise RuntimeError("telemetry delivery failed")
+                result: Any = read_json_body(response, 65536)
+        except Exception:
+            # An outage keeps the batch and backs off.
+            self._back_off(retry_after)
+            return False
+        counts: dict[str, Any] = result if isinstance(result, dict) else {}
+        retry, throttled = self._retry_indexes(counts.get("results"))
+        sent: Any = counts.get("accepted")
+        rejected: Any = counts.get("rejected")
+        sent = sent if type(sent) is int else len(self._pending) - len(retry)
+        rejected = rejected if type(rejected) is int else 0
+        self.sent += sent
+        self.rejected += rejected
+        # Events over the service's ingress budget wait like a 429 outage: they stay
+        # pending without using a retry. The pending batch bounds them.
+        keep: set[int] = set(throttled)
+        if retry - throttled and self._retries < _MAX_RETRIES:
+            self._retries += 1
+            keep |= retry
+        if keep:
+            self.dropped += max(0, len(self._pending) - sent - len(keep))
+            self._pending = [
+                event for index, event in enumerate(self._pending) if index in keep
+            ]
+            self._back_off(retry_after)
+            return False
+        self.failures = 0
+        self.dropped += max(0, len(self._pending) - sent)
+        self._pending = []
+        return True
+
+    def _back_off(self, retry_after: float = 0.0) -> None:
+        self.failures = min(self.failures + 1, 8)
+        window: float = min(300, 2**self.failures)
+        # Jitter spreads the retries of processes that failed at the same time.
+        delay: float = window / 2 + random.uniform(0, window / 2)
+        self._blocked_until = time.monotonic() + max(delay, min(300.0, retry_after))
+
+    def _retry_indexes(self, results: Any) -> tuple[set[int], set[int]]:
+        """The batch positions the service asks to send again, and the subset it could
+        not take because their customer was over its ingress budget."""
+        retry: set[int] = set()
+        throttled: set[int] = set()
+        if not isinstance(results, list):
+            return retry, throttled
+        for row in results:
+            if (
+                isinstance(row, dict)
+                and row.get("status") == "retry"
+                and type(row.get("index")) is int
+                and 0 <= row["index"] < len(self._pending)
+            ):
+                retry.add(row["index"])
+                if row.get("code") == _BUDGET_EXCEEDED:
+                    throttled.add(row["index"])
+        return retry, throttled
+
+    def _enroll(self, transport: Any) -> None:
+        """Register the deployment key. The service answers with this deployment's IDs."""
+        if self._key is None:
+            self._key = deployment_key()
+        if self._legacy is None:
+            self._legacy = legacy_customer_uuid() or ""
+        result: Any = None
+        # At most two requests: a service that predates `legacy_customer_uuid` answers 422,
+        # and this call enrolls again at once without it, so a short-lived process still
+        # delivers its queued events. Any other failure goes to the caller's backoff.
+        for _ in range(2):
+            body: dict[str, Any] = {"is_cloud": MULTI_TENANT}
+            if self._legacy:
+                body["legacy_customer_uuid"] = self._legacy
+            response: requests.Response = transport(
+                _ENDPOINT + "/v1/enroll",
+                headers={
+                    "Authorization": "Bearer " + self._key,
+                    "Accept-Encoding": "identity",
+                },
+                json=body,
+                timeout=(1, 2),
+                allow_redirects=False,
+                stream=True,
+            )
+            with response:
+                if response.status_code == 422 and self._legacy:
+                    self._legacy = ""
+                    continue
+                if response.status_code != 200:
+                    raise ValueError("Fleet enrollment unavailable")
+                result = read_json_body(response, 4096)
+            break
+        deployment: Any = result["deployment_id"]
+        if not isinstance(deployment, str) or not _OPAQUE.fullmatch(deployment):
+            raise ValueError("Invalid fleet deployment ID")
+        self._customer = str(uuid.UUID(result["customer_uuid"]))
+        self._deployment = deployment
+
+    def _sum_stages(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Sum counter deltas per attempt and stage. Release the sums every window."""
+        ready: list[dict[str, Any]] = []
+        for event in events:
+            data: dict[str, Any] = event["data"]
+            if event["event_type"] != "attempt" or data.get("counter_mode") != "delta":
+                ready.append(event)
+                continue
+            key: tuple[str, ...] = (
+                event["customer_uuid"],
+                event["service"],
+                str(data.get("attempt_id")),
+                str(data.get("stage")),
+            )
+            total: dict[str, Any] = self._stage_sums.setdefault(key, event)
+            if total is not event:
+                summed: dict[str, Any] = total["data"]
+                counters: dict[str, Any] = summed.setdefault("counters", {})
+                for name, value in (data.get("counters") or {}).items():
+                    counters[name] = (counters.get(name) or 0) + (value or 0)
+                summed["duration_ms"] = (summed.get("duration_ms") or 0) + (
+                    data.get("duration_ms") or 0
+                )
+        now: float = time.monotonic()
+        # A closed sender has no later window, so it releases every sum now.
+        if (
+            self._stop.is_set()
+            or now - self._last_stage_flush >= _STAGE_WINDOW_SECONDS
+            or len(self._stage_sums) > _MAX_STAGE_KEYS
+        ):
+            ready.extend(self._stage_sums.values())
+            self._stage_sums = {}
+            self._last_stage_flush = now
+        return ready
+
+    def delivery_health(self) -> dict[str, int]:
+        """Loss totals, and the loss since the previous heartbeat."""
+        dropped: int = self.dropped
+        recent: int = dropped - self._dropped_at_heartbeat
+        self._dropped_at_heartbeat = dropped
+        return {
+            "dropped_events": dropped,
+            "recent_dropped_events": recent,
+            "rejected_events": self.rejected,
+            "invalid_events": self.invalid,
+            "spool_events": len(self._queue)
+            + len(self._pending)
+            + len(self._stage_sums),
+        }
+
+    def _report_start(self) -> None:
+        self.emit(
+            "runtime", {"service_instance_id": self.instance_id, "reason": "started"}
+        )
+        from onyx import __version__
+
+        self.emit("version", {"version": reported_version(__version__)})
+
+    def _run(self) -> None:
+        last_resource: float | None = None
+        try:
+            if self.report_process:
+                self._report_start()
+            while not self._stop.is_set():
+                try:
+                    now: float = time.monotonic()
+                    if self.report_process and poll_due(
+                        last_resource, now, RESOURCE_INTERVAL_SECONDS
+                    ):
+                        from onyx.utils.fleet_telemetry_resources import (
+                            collect_process_resource,
+                        )
+
+                        collect_process_resource(self)
+                        self.emit(
+                            "heartbeat",
+                            {
+                                **self.delivery_health(),
+                                **self.health,
+                                # Auxiliary services may not inherit the API's Lite setting.
+                                **(
+                                    {"deployment_type": DEPLOYMENT_TYPE.value}
+                                    if self.service == "api"
+                                    else {}
+                                ),
+                            },
+                        )
+                        if failures := _failure_counts.take():
+                            self.emit("failure_counts", failures)
+                        last_resource = now
+                    # A backlog drains in consecutive batches; an idle queue sends nothing.
+                    for _ in range(_MAX_BATCHES_PER_WAKEUP):
+                        if not self.flush_once() or len(self._queue) < _BATCH_SIZE:
+                            break
+                except Exception:
+                    # One failed iteration never ends delivery for the process.
+                    pass
+                self._stop.wait(_FLUSH_SECONDS)
+            self._final_flush()
+        except Exception:
+            # Telemetry failure never reaches the application, including initialization.
+            pass
+        finally:
+            if self._session is not None:
+                self._session.close()
+
+    def _final_flush(self) -> None:
+        """Release summed counters and send what remains while delivery is healthy.
+
+        Short-lived processes (e.g. spawned indexing children) otherwise exit with
+        their final counters still inside the summing window. A failed or
+        backed-off delivery ends the attempt immediately.
+        """
+        deadline: float = time.monotonic() + _FINAL_FLUSH_SECONDS
+        while (
+            self._queue or self._pending or self._stage_sums
+        ) and time.monotonic() < deadline:
+            if not self.flush_once():
+                return
+
+
+def _retry_after_seconds(value: str | None) -> float:
+    """The delay of a `Retry-After` header in seconds. HTTP dates, and values that are
+    not a finite positive number, count as none."""
+    try:
+        seconds: float = float(value or 0)
+    except ValueError:
+        return 0.0
+    return seconds if math.isfinite(seconds) and seconds > 0 else 0.0
+
+
+def poll_due(previous: float | None, now: float, interval: float) -> bool:
+    """Poll immediately before the first attempt, regardless of host uptime."""
+    return previous is None or now - previous >= interval
+
+
+_client: BoundedTelemetry | None = None
+
+
+def start_telemetry(
+    service: str = "api", *, report_process: bool = True
+) -> BoundedTelemetry | None:
+    """Start this process's sender thread. Never waits for the database or network.
+
+    `report_process=False` suits short-lived processes: they deliver hook events
+    without startup, resource, or heartbeat reports of their own.
+    """
+    global _client
+    if DISABLE_TELEMETRY:
+        return None
+    try:
+        if _client is None or _client.pid != os.getpid() or _client.closed:
+            _client = BoundedTelemetry(service, report_process=report_process)
+            _client.start()
+        return _client
+    except Exception:
+        return None
+
+
+def stop_telemetry(flush_timeout: float = 0.0) -> None:
+    """Stop sending. Waits at most `flush_timeout` for a final delivery."""
+    client: BoundedTelemetry | None = _client
+    if client is not None:
+        client.close(flush_timeout)
+
+
+def get_sender() -> BoundedTelemetry | None:
+    """This process's running sender, or None when telemetry is off or stopped."""
+    client: BoundedTelemetry | None = _client
+    if client is None or client.pid != os.getpid() or client.closed:
+        return None
+    return client
+
+
+def emit_telemetry(
+    event_type: str,
+    data: dict[str, Any],
+    *,
+    tenant_id: str | None = None,
+    service: str | None = None,
+) -> bool:
+    try:
+        client: BoundedTelemetry | None = _client
+        if client is None:
+            return False
+        return client.emit(
+            event_type,
+            data,
+            tenant_id=tenant_id or get_current_tenant_id(),
+            service=service,
+        )
+    except Exception:
+        return False
+
+
+def emit_stage_counter(
+    attempt_id: int | None,
+    stage: str,
+    counters: dict[str, int],
+    *,
+    duration_ms: int = 0,
+    tenant_id: str | None = None,
+) -> None:
+    if attempt_id is not None:
+        emit_telemetry(
+            "attempt",
+            {
+                "attempt_id": attempt_id,
+                "stage": stage,
+                "counter_mode": "delta",
+                "counters": counters,
+                "duration_ms": duration_ms,
+            },
+            tenant_id=tenant_id,
+        )
+
+
+def emit_corpus_count(
+    attempt_id: int,
+    cc_pair_id: int,
+    connector_type: str,
+    *,
+    window_start: float,
+    window_end: float,
+    duration_ms: int,
+    docs_by_type: dict[DocumentTypeLabel, int],
+    bytes_by_type: dict[DocumentTypeLabel, int],
+    partial: bool,
+) -> None:
+    """One event when the listing of an attempt's window finishes: how many
+    documents it found, by type, with their bytes. ``partial`` means the
+    listing could not reach a part of the source, so the real total is at
+    least this. The fleet compares the count with the attempt's own
+    docs_indexed."""
+    emit_telemetry(
+        "corpus",
+        {
+            "attempt_id": attempt_id,
+            "cc_pair_id": cc_pair_id,
+            "connector_type": connector_type,
+            "window_start": window_start,
+            "window_end": window_end,
+            "duration_ms": duration_ms,
+            "expected_docs": sum(docs_by_type.values()),
+            "expected_partial": partial,
+            "expected_by_type": {k.value: v for k, v in docs_by_type.items()},
+            "expected_bytes_by_type": {k.value: v for k, v in bytes_by_type.items()},
+        },
+    )
+
+
+def error_category(error: BaseException) -> str:
+    """Classify by known exception type names. Never inspect exception text/arguments."""
+    name: str = type(error).__name__
+    if name in {"TimeoutError", "ReadTimeout", "ConnectTimeout", "APITimeoutError"}:
+        return "timeout"
+    if name in {"AuthenticationError", "AuthError"}:
+        return "auth"
+    if name in {"PermissionError", "PermissionDeniedError"}:
+        return "permission"
+    if name == "RateLimitError":
+        return "rate_limit"
+    if name in {"BulkIndexError", "OpenSearchIndexError", "TransportError"}:
+        return "index_write"
+    if name in {"ConnectionError", "APIConnectionError", "ConnectionTimeout"}:
+        return "source_unavailable"
+    return "internal"

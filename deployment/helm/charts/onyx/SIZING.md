@@ -109,7 +109,8 @@ opensearch:
   persistence:
     size: 128Gi  # existing PVCs must be expanded manually
   # Pin to the dedicated index node group if you provisioned one — see the
-  # placement note in the Large section.
+  # placement note in the Large section. The terraform module keeps the legacy
+  # `vespa` names for this group so existing state is not replaced.
   nodeSelector:
     eks.amazonaws.com/nodegroup: vespa-node-group
   tolerations:
@@ -149,6 +150,11 @@ celery_worker_docfetching:
   replicaCount: 2
 celery_worker_docprocessing:
   replicaCount: 2
+# For a very large Google Drive, turn on the conversion stage and scale its
+# worker on queue depth (documentation: deployment/production/conversion_stage).
+# celery_worker_docconversion:
+#   enabled: true
+#   replicaCount: 3
   resources:
     requests: {cpu: 500m, memory: 2Gi}
     limits: {cpu: 1000m, memory: 18Gi}
@@ -169,7 +175,7 @@ opensearch:
   resources:
     requests: {cpu: 2000m, memory: 12Gi}
     limits: {cpu: 4000m, memory: 16Gi}
-  opensearchJavaOpts: "-Xmx6g -Xms6g"
+  opensearchJavaOpts: "-Xmx6g -Xms6g -XX:-UseBASE64Intrinsics"
   persistence:
     size: 512Gi
   # Pin the index to the dedicated document-index node group created by the
@@ -192,5 +198,5 @@ opensearch:
 If you use a managed OpenSearch domain (`opensearch.enabled: false` +
 `OPENSEARCH_HOST` in the configMap), skip every `opensearch:` block above and
 size the domain in terraform instead. In that case the terraform module's
-dedicated index node group has nothing to run — shrink
-`vespa_node_instance_types` to a small instance.
+dedicated index node group has nothing to run — set
+`vespa_node_enabled = false`.

@@ -4,18 +4,24 @@ import { use } from "react";
 import { useTranslations } from "next-intl";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 import { useSlackChannelConfigs } from "@/app/admin/bots/[bot-id]/hooks";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useAgents } from "@/lib/agents/hooks";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
-function EditSlackChannelConfigContent({ id }: { id: string }) {
+function EditSlackChannelConfigContent({
+  id,
+  botId,
+}: {
+  id: string;
+  botId: string;
+}) {
   const t = useTranslations("admin.slackBots");
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
@@ -58,12 +64,15 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
     : t("editChannel.channel.header.title");
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={SvgSlack} title={title} divider cancel />
+    <SettingsLayouts.Root loading={isLoading}>
+      <SettingsLayouts.Header
+        icon={SvgSlack}
+        title={title}
+        divider
+        cancel={`/admin/bots/${botId}`}
+      />
       <SettingsLayouts.Body>
-        {isLoading ? (
-          <SvgSimpleLoader />
-        ) : channelsError || !slackChannelConfigs ? (
+        {channelsError || !slackChannelConfigs ? (
           <ErrorCallout
             errorTitle={t("error.generic.title")}
             errorMsg={t("error.fetchChannels.message", {
@@ -113,8 +122,12 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
   );
 }
 
-export default function Page(props: { params: Promise<{ id: string }> }) {
+export default function Page(props: {
+  params: Promise<{ id: string; "bot-id": string }>;
+}) {
   const params = use(props.params);
 
-  return <EditSlackChannelConfigContent id={params.id} />;
+  return (
+    <EditSlackChannelConfigContent id={params.id} botId={params["bot-id"]} />
+  );
 }

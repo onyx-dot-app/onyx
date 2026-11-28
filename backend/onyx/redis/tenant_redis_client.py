@@ -381,6 +381,19 @@ class TenantRedisClient:
         """
         return cast(int, self._r.hdel(_prefix_key(self._prefix, name), *keys))
 
+    def hincrby(self, name: KeyArg, key: str | bytes, amount: int = 1) -> int:
+        """Atomically adds to an integer field of a tenant-prefixed hash key.
+
+        Args:
+            name: The (unprefixed) hash key.
+            key: The hash field. Stored verbatim (no prefixing).
+            amount: The amount to add. Defaults to ``1``.
+
+        Returns:
+            The new integer value of the field.
+        """
+        return cast(int, self._r.hincrby(_prefix_key(self._prefix, name), key, amount))
+
     def hexists(self, name: KeyArg, key: str | bytes) -> bool:
         """Tests whether a field exists in a tenant-prefixed hash key.
 
@@ -639,6 +652,18 @@ class TenantRedisClient:
             int, self._r.zremrangebyscore(_prefix_key(self._prefix, name), min, max)
         )
 
+    def zrem(self, name: KeyArg, *values: str | bytes) -> int:
+        """Removes members from a tenant-prefixed sorted-set key.
+
+        Args:
+            name: The (unprefixed) sorted-set key.
+            values: The members to remove.
+
+        Returns:
+            The number of members removed.
+        """
+        return cast(int, self._r.zrem(_prefix_key(self._prefix, name), *values))
+
     def zscore(self, name: KeyArg, value: str | bytes) -> float | None:
         """Returns the score of a member of a tenant-prefixed sorted-set key.
 
@@ -809,6 +834,54 @@ class TenantRedisClient:
                 ``-2`` if the key does not exist.
         """
         return cast(int, self._r.pttl(_prefix_key(self._prefix, name)))
+
+    def replace_if_value(
+        self,
+        name: KeyArg,
+        expected: bytes,
+        value: str | bytes | int | float,
+        ex: int | None,
+    ) -> bool:
+        """Set the current tenant's key only while it holds ``expected``."""
+        key = _prefix_key(self._prefix, name)
+        with self._r.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                if pipeline.get(key) != expected:
+                    return False
+                pipeline.multi()
+                pipeline.set(key, value, ex=ex)
+                return bool(pipeline.execute()[0])
+            except redis.WatchError:
+                return False
+
+    def delete_if_value(self, name: KeyArg, expected: bytes) -> bool:
+        """Delete the current tenant's key only while it holds ``expected``."""
+        key = _prefix_key(self._prefix, name)
+        with self._r.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                if pipeline.get(key) != expected:
+                    return False
+                pipeline.multi()
+                pipeline.delete(key)
+                return bool(pipeline.execute()[0])
+            except redis.WatchError:
+                return False
+
+    def renew_if_value(self, name: KeyArg, expected: bytes, seconds: int) -> bool:
+        """Renew only the current tenant's matching lease, without a lock wait."""
+        key = _prefix_key(self._prefix, name)
+        with self._r.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                if pipeline.get(key) != expected:
+                    return False
+                pipeline.multi()
+                pipeline.expire(key, seconds)
+                return bool(pipeline.execute()[0])
+            except redis.WatchError:
+                return False
 
     def expire(
         self,
@@ -1170,6 +1243,14 @@ class TenantRedisClient:
         """
         return cast(bool, self._r.ping())
 
+    def time(self) -> tuple[int, int]:
+        """Issues a TIME. Server-level command — no key, no prefix.
+
+        Returns:
+            The server's Unix time as (seconds, microseconds).
+        """
+        return cast("tuple[int, int]", self._r.time())
+
     def info(self, section: str | None = None) -> dict[str, Any]:
         """Issues an INFO. Server-level command — no key, no prefix.
 
@@ -1274,6 +1355,11 @@ class TenantRedisPipeline:
         self._p.delete(*(_prefix_key(self._prefix, n) for n in names))
         return self
 
+    def exists(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue EXISTS for a tenant-prefixed key."""
+        self._p.exists(_prefix_key(self._prefix, name))
+        return self
+
     def incr(self, name: KeyArg, amount: int = 1) -> TenantRedisPipeline:
         """Queues an INCRBY against a tenant-prefixed counter key.
 
@@ -1285,6 +1371,22 @@ class TenantRedisPipeline:
             ``self``, to allow chaining further pipeline commands.
         """
         self._p.incr(_prefix_key(self._prefix, name), amount)
+        return self
+
+    def hincrby(
+        self, name: KeyArg, key: str | bytes, amount: int = 1
+    ) -> TenantRedisPipeline:
+        """Queues an HINCRBY against a tenant-prefixed hash key.
+
+        Args:
+            name: The (unprefixed) hash key.
+            key: The hash field. Stored verbatim (no prefixing).
+            amount: The amount to add. Defaults to ``1``.
+
+        Returns:
+            ``self``, to allow chaining further pipeline commands.
+        """
+        self._p.hincrby(_prefix_key(self._prefix, name), key, amount)
         return self
 
     def expire(
@@ -1314,6 +1416,33 @@ class TenantRedisPipeline:
         )
         return self
 
+    def pexpire(
+        self,
+        name: KeyArg,
+        time: int,
+        nx: bool = False,
+        xx: bool = False,
+        gt: bool = False,
+        lt: bool = False,
+    ) -> TenantRedisPipeline:
+        """Queues a PEXPIRE against a tenant-prefixed key.
+
+        Args:
+            name: The (unprefixed) key.
+            time: TTL in milliseconds.
+            nx: Only set if the key has no current TTL.
+            xx: Only set if the key already has a TTL.
+            gt: Only set if the new TTL is greater than the current one.
+            lt: Only set if the new TTL is less than the current one.
+
+        Returns:
+            ``self``, to allow chaining further pipeline commands.
+        """
+        self._p.pexpire(
+            _prefix_key(self._prefix, name), time, nx=nx, xx=xx, gt=gt, lt=lt
+        )
+        return self
+
     def sadd(
         self,
         name: KeyArg,
@@ -1329,6 +1458,36 @@ class TenantRedisPipeline:
             ``self``, to allow chaining further pipeline commands.
         """
         self._p.sadd(_prefix_key(self._prefix, name), *values)
+        return self
+
+    def hset(self, name: KeyArg, mapping: Mapping[bytes, bytes]) -> TenantRedisPipeline:
+        """Queue hash fields under a tenant-prefixed key."""
+        self._p.hset(_prefix_key(self._prefix, name), mapping=mapping)
+        return self
+
+    # --------------------------------------------------------------------------
+    # Read commands
+    # --------------------------------------------------------------------------
+
+    def get(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue a tenant-prefixed GET."""
+        self._p.get(_prefix_key(self._prefix, name))
+        return self
+
+    def hget(self, name: KeyArg, key: str | bytes) -> TenantRedisPipeline:
+        """Queue a tenant-prefixed HGET without changing the field name."""
+        self._p.hget(_prefix_key(self._prefix, name), key)
+        return self
+
+    def hgetall(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue all hash fields under a tenant-prefixed key."""
+        self._p.hgetall(_prefix_key(self._prefix, name))
+        return self
+
+    def pttl(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue a tenant-prefixed PTTL: the ms until expiry, ``-1`` with no
+        TTL, or ``-2`` with no key."""
+        self._p.pttl(_prefix_key(self._prefix, name))
         return self
 
     # --------------------------------------------------------------------------

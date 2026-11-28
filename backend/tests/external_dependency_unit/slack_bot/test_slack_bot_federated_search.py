@@ -6,7 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 from uuid import uuid4
 
-from onyx.db.llm import update_default_provider, upsert_llm_provider
+from onyx.db.llm import update_default_model, upsert_llm_provider
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.federated.slack_search import fetch_and_cache_channel_metadata
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import (
     DocumentSet,
     FederatedConnector,
@@ -453,17 +454,22 @@ class TestSlackBotFederatedSearch:
                 is_public=True,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
-                        name="gpt-4o",
+                        name="gpt-6-luna",
                         is_visible=True,
                         max_input_tokens=None,
-                        display_name="gpt-4o",
+                        display_name="gpt-6-luna",
                     ),
                 ],
             ),
             db_session=db_session,
         )
 
-        update_default_provider(provider_view.id, "gpt-4o", db_session)
+        update_default_model(
+            provider_id=provider_view.id,
+            model="gpt-6-luna",
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
 
     def _teardown_common_mocks(self, patches: list) -> None:
         """Stop all patches"""
@@ -472,12 +478,12 @@ class TestSlackBotFederatedSearch:
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
     @patch(
-        "onyx.document_index.vespa.vespa_document_index.VespaDocumentIndex.hybrid_retrieval",
+        "onyx.document_index.opensearch.opensearch_document_index.OpenSearchIndexPair.hybrid_retrieval",
         return_value=[],
     )
     def test_slack_bot_public_channel_filtering(
         self,
-        mock_vespa: Mock,  # noqa: ARG002
+        mock_hybrid_retrieval: Mock,  # noqa: ARG002
         mock_gpu_status: Mock,  # noqa: ARG002
         db_session: Session,
     ) -> None:
@@ -532,12 +538,12 @@ class TestSlackBotFederatedSearch:
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
     @patch(
-        "onyx.document_index.vespa.vespa_document_index.VespaDocumentIndex.hybrid_retrieval",
+        "onyx.document_index.opensearch.opensearch_document_index.OpenSearchIndexPair.hybrid_retrieval",
         return_value=[],
     )
     def test_slack_bot_private_channel_filtering(
         self,
-        mock_vespa: Mock,  # noqa: ARG002
+        mock_hybrid_retrieval: Mock,  # noqa: ARG002
         mock_gpu_status: Mock,  # noqa: ARG002
         db_session: Session,
     ) -> None:
@@ -592,12 +598,12 @@ class TestSlackBotFederatedSearch:
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
     @patch(
-        "onyx.document_index.vespa.vespa_document_index.VespaDocumentIndex.hybrid_retrieval",
+        "onyx.document_index.opensearch.opensearch_document_index.OpenSearchIndexPair.hybrid_retrieval",
         return_value=[],
     )
     def test_slack_bot_dm_filtering(
         self,
-        mock_vespa: Mock,  # noqa: ARG002
+        mock_hybrid_retrieval: Mock,  # noqa: ARG002
         mock_gpu_status: Mock,  # noqa: ARG002
         db_session: Session,
     ) -> None:
@@ -652,7 +658,7 @@ class TestSlackBotFederatedSearch:
             self._teardown_common_mocks(patches)
 
 
-@patch("onyx.context.search.federated.slack_search.get_redis_client")
+@patch("onyx.context.search.federated.slack_search.get_cache_backend")
 @patch("onyx.context.search.federated.slack_search.WebClient")
 def test_missing_scope_resilience(
     mock_web_client: Mock, mock_redis_client: Mock
@@ -743,7 +749,7 @@ def test_missing_scope_resilience(
     assert result["D9876543210"]["type"] == "im"
 
 
-@patch("onyx.context.search.federated.slack_search.get_redis_client")
+@patch("onyx.context.search.federated.slack_search.get_cache_backend")
 @patch("onyx.context.search.federated.slack_search.WebClient")
 def test_multiple_missing_scopes_resilience(
     mock_web_client: Mock, mock_redis_client: Mock

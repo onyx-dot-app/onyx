@@ -1,3 +1,5 @@
+import sys
+
 from chonkie import SentenceChunker
 
 from onyx.configs.app_configs import (
@@ -34,6 +36,11 @@ CHUNK_MIN_CONTENT = 256
 DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS = MAX_CONTEXT_TOKENS * (
     int(USE_CHUNK_SUMMARY) + int(USE_DOCUMENT_SUMMARY)
 )
+
+# Bounds of the per-document sentence token count cache: about 10 MB of text.
+# The entry limit is in bytes of the stored str, which uses up to 4 per character.
+_TOKEN_COUNT_CACHE_MAX_ENTRIES = 10_000
+_TOKEN_COUNT_CACHE_MAX_ENTRY_BYTES = 1024
 
 logger = setup_logger()
 
@@ -144,8 +151,8 @@ class Chunker:
         self.enable_multipass = enable_multipass
         self.enable_large_chunks = enable_large_chunks
         self.enable_contextual_rag = enable_contextual_rag
-        if enable_contextual_rag:
-            assert USE_CHUNK_SUMMARY or USE_DOCUMENT_SUMMARY, (
+        if enable_contextual_rag and not (USE_CHUNK_SUMMARY or USE_DOCUMENT_SUMMARY):
+            raise ValueError(
                 "Contextual RAG requires at least one of chunk summary and document summary enabled"
             )
         self.default_contextual_rag_reserved_tokens = (
@@ -154,9 +161,22 @@ class Chunker:
         self.tokenizer = tokenizer
         self.callback = callback
 
-        # Create a token counter function that returns the count instead of the tokens
+        # The splitters count the same sentences: the chunk splitter first, then
+        # the blurb and mini-chunk splitters on its output. Keep the counts of
+        # one document.
+        sentence_token_counts: dict[str, int] = {}
+        self._sentence_token_counts = sentence_token_counts
+
         def token_counter(text: str) -> int:
-            return len(tokenizer.encode(text))
+            count = sentence_token_counts.get(text)
+            if count is None:
+                count = len(tokenizer.encode(text))
+                if (
+                    sys.getsizeof(text) <= _TOKEN_COUNT_CACHE_MAX_ENTRY_BYTES
+                    and len(sentence_token_counts) < _TOKEN_COUNT_CACHE_MAX_ENTRIES
+                ):
+                    sentence_token_counts[text] = count
+            return count
 
         self.blurb_splitter = SentenceChunker(
             tokenizer_or_token_counter=token_counter,
@@ -193,6 +213,8 @@ class Chunker:
     def _handle_single_document(
         self, document: IndexingDocument
     ) -> list[DocAwareChunk]:
+        self._sentence_token_counts.clear()
+
         # Specifically for reproducing an issue with gmail
         if document.source == DocumentSource.GMAIL:
             logger.debug("Chunking %s", document.semantic_identifier)
@@ -306,4 +328,5 @@ class Chunker:
             if self.callback:
                 self.callback.progress("Chunker.chunk", len(chunks))
 
+        self._sentence_token_counts.clear()
         return final_chunks

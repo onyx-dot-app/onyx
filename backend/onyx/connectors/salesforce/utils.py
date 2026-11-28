@@ -1,7 +1,8 @@
 import os
 import re
-from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 NAME_FIELD = "Name"
 MODIFIED_FIELD = "LastModifiedDate"
@@ -15,6 +16,13 @@ USER_OBJECT_TYPE = "User"
 # namespaces use `__`). This regex covers all valid SF identifiers and rejects
 # the characters needed for SOQL injection (`'`, `"`, `;`, whitespace, etc.).
 _SF_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+
+def resolve_parent_object_types(requested_objects: list[str] | None) -> list[str]:
+    """The parent object types to index when no custom query config is set."""
+    if not requested_objects:
+        return [ACCOUNT_OBJECT_TYPE]
+    return [obj.strip().capitalize() for obj in requested_objects]
 
 
 def is_valid_sf_identifier(name: str) -> bool:
@@ -34,8 +42,9 @@ def validate_sf_identifier(name: str) -> str:
     return name
 
 
-@dataclass
-class SalesforceObject:
+class SalesforceObject(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     id: str
     type: str
     data: dict[str, Any]

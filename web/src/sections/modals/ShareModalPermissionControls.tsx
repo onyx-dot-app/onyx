@@ -20,11 +20,10 @@ export function StaticPermissionLabel({
 }: StaticPermissionLabelProps) {
   return (
     <Content
-      color={muted ? "muted" : undefined}
+      font="main-ui-action"
+      titleColor={muted ? "text-03" : undefined}
       icon={icon}
-      sizePreset="main-ui"
       title={label}
-      variant="section"
     />
   );
 }
@@ -41,6 +40,7 @@ export function TransferTrailingButton({
   return (
     <Button
       icon={SvgArrowExchange}
+      aria-label={t("transferOwnership.trailingButton.tooltip")}
       onClick={onTransfer}
       prominence="tertiary"
       size="sm"

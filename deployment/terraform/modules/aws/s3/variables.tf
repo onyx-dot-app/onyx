@@ -28,6 +28,39 @@ variable "kms_key_id" {
   }
 }
 
+variable "create_kms_key" {
+  description = "Create a customer-managed KMS key (with rotation and an alias named after the bucket) and encrypt the bucket with it. Grants no role use of the key."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.create_kms_key || ((var.kms_key_id == null || var.kms_key_id == "") && !var.allow_anonymous_read)
+    error_message = "create_kms_key cannot be combined with kms_key_id (pick one key) or with allow_anonymous_read (anonymous requests cannot use KMS)."
+  }
+}
+
+variable "kms_key_deletion_window_days" {
+  description = "Days a key created by create_kms_key waits before deletion after a destroy. Objects encrypted with it cannot be read once it is gone."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.kms_key_deletion_window_days >= 7 && var.kms_key_deletion_window_days <= 30
+    error_message = "kms_key_deletion_window_days must be between 7 and 30 (AWS limit)."
+  }
+}
+
+variable "abort_incomplete_multipart_upload_days" {
+  description = "Days after which unfinished multipart uploads are removed. Set to 0 to disable."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.abort_incomplete_multipart_upload_days >= 0
+    error_message = "abort_incomplete_multipart_upload_days must be 0 (disabled) or a positive number of days."
+  }
+}
+
 variable "expiration_days" {
   description = "Number of days after which current objects are expired. Set to 0 to disable."
   type        = number

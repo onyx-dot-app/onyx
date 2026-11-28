@@ -1,23 +1,24 @@
 """Document-level metadata used during indexing.
 
-Previously declared in the now-removed `onyx.document_index.interfaces` module.
 Used by the indexing pipeline / Postgres upsert layer; not part of the search
-backend interface.
+backend interface (`onyx.document_index.interfaces`).
 """
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.access.models import ExternalAccess
 
 
-@dataclass
-class DocumentMetadata:
+class DocumentMetadata(BaseModel):
     """
     Document information that needs to be inserted into Postgres on first time
     encountering this document during indexing across any of the connectors.
     """
+
+    model_config = ConfigDict(strict=True)
 
     connector_id: int
     credential_id: int
@@ -38,3 +39,6 @@ class DocumentMetadata:
 
     # Opt-in pointer to the persisted raw file for this document (file_store id).
     file_id: str | None = None
+
+    source_mime_type: str | None = None
+    source_size_bytes: int | None = None

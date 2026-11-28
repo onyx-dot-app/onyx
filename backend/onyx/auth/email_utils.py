@@ -1,6 +1,6 @@
 import base64
 import smtplib
-from datetime import datetime
+from datetime import UTC, datetime
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -24,6 +24,7 @@ from onyx.configs.app_configs import (
     EMAIL_ARCHIVE_BCC_ADDRESSES,
     EMAIL_CONFIGURED,
     EMAIL_FROM,
+    MAGIC_LINK_TTL_SECONDS,
     SENDGRID_API_KEY,
     SMTP_PASS,
     SMTP_PORT,
@@ -157,6 +158,18 @@ HTML_EMAIL_TEMPLATE = """\
 """
 
 
+def _load_application_name() -> str:
+    """The name the admin gave the deployment, or the default when there is none."""
+    try:
+        load_runtime_settings_fn = fetch_versioned_implementation(
+            "onyx.server.enterprise_settings.store", "load_runtime_settings"
+        )
+        settings = load_runtime_settings_fn()
+        return settings.application_name or ONYX_DEFAULT_APPLICATION_NAME
+    except ModuleNotFoundError:
+        return ONYX_DEFAULT_APPLICATION_NAME
+
+
 def build_html_email(
     application_name: str | None,
     heading: str,
@@ -179,7 +192,7 @@ def build_html_email(
         message=message,
         cta_block=cta_block,
         community_link_fragment=community_link_fragment,
-        year=datetime.now().year,
+        year=datetime.now(UTC).astimezone().year,
     )
 
 
@@ -190,22 +203,42 @@ def send_email(
     text_body: str,
     mail_from: str = EMAIL_FROM,
     inline_png: tuple[str, bytes] | None = None,
+    *,
+    archive: bool = True,
 ) -> None:
+    """``archive=False`` keeps the email out of the archive copies. Use it for
+    an email whose content is a credential, such as a sign-in link."""
     if not EMAIL_CONFIGURED:
         raise ValueError("Email is not configured.")
 
     if SENDGRID_API_KEY:
         send_email_with_sendgrid(
-            user_email, subject, html_body, text_body, mail_from, inline_png
+            user_email,
+            subject,
+            html_body,
+            text_body,
+            mail_from,
+            inline_png,
+            archive=archive,
         )
         return
 
     send_email_with_smtplib(
-        user_email, subject, html_body, text_body, mail_from, inline_png
+        user_email,
+        subject,
+        html_body,
+        text_body,
+        mail_from,
+        inline_png,
+        archive=archive,
     )
 
 
-def _get_archive_bcc_addresses(user_email: str) -> tuple[str, ...]:
+def _get_archive_bcc_addresses(
+    user_email: str, archive: bool = True
+) -> tuple[str, ...]:
+    if not archive:
+        return ()
     seen_addresses = {user_email.casefold()}
     archive_bcc_addresses: list[str] = []
 
@@ -227,6 +260,8 @@ def send_email_with_sendgrid(
     text_body: str,
     mail_from: str = EMAIL_FROM,
     inline_png: tuple[str, bytes] | None = None,
+    *,
+    archive: bool = True,
 ) -> None:
     from_email = Email(mail_from) if mail_from else Email("noreply@onyx.app")
     to_email = To(user_email)
@@ -238,7 +273,7 @@ def send_email_with_sendgrid(
         plain_text_content=Content("text/plain", text_body),
     )
 
-    for bcc_address in _get_archive_bcc_addresses(user_email):
+    for bcc_address in _get_archive_bcc_addresses(user_email, archive):
         mail.add_bcc(bcc_address)
 
     # Add HTML content
@@ -274,12 +309,14 @@ def send_email_with_smtplib(
     text_body: str,
     mail_from: str = EMAIL_FROM,
     inline_png: tuple[str, bytes] | None = None,
+    *,
+    archive: bool = True,
 ) -> None:
     # Create a multipart/alternative message - this indicates these are alternative versions of the same content
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["To"] = user_email
-    archive_bcc_addresses = _get_archive_bcc_addresses(user_email)
+    archive_bcc_addresses = _get_archive_bcc_addresses(user_email, archive)
     if not mail_from:
         raise ValueError("EMAIL_FROM must be set when SMTP_USER is not provided")
     msg["From"] = mail_from
@@ -323,14 +360,7 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     """This is templated but isn't meaningful for whitelabeling."""
 
     # Example usage of the reusable HTML
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
+    application_name = _load_application_name()
 
     onyx_file = OnyxRuntime.get_emailable_logo()
 
@@ -403,14 +433,7 @@ def build_user_email_invite(
 
 
 def send_user_email_invite(user_email: str, current_user: User) -> None:
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
+    application_name = _load_application_name()
 
     onyx_file = OnyxRuntime.get_emailable_logo()
 
@@ -436,14 +459,7 @@ def send_forgot_password_email(
     mail_from: str = EMAIL_FROM,
 ) -> None:
     # Builds a forgot password email with or without fancy HTML
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
+    application_name = _load_application_name()
 
     onyx_file = OnyxRuntime.get_emailable_logo()
 
@@ -481,14 +497,7 @@ def send_user_verification_email(
     mail_from: str = EMAIL_FROM,
 ) -> None:
     # Builds a verification email
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
+    application_name = _load_application_name()
 
     onyx_file = OnyxRuntime.get_emailable_logo()
 
@@ -512,4 +521,61 @@ def send_user_verification_email(
         text_content,
         mail_from,
         inline_png=("logo.png", onyx_file.data),
+    )
+
+
+def build_magic_link_email(
+    application_name: str, link: str, minutes_valid: int
+) -> tuple[str, str]:
+    """Plain-text and HTML bodies of the sign-in link email."""
+    heading = f"Sign in to {application_name}"
+    message = (
+        f"<p>Click the button below to sign in to {application_name}. "
+        f"The link works once and expires in {minutes_valid} minutes.</p>"
+        "<p>If you did not ask for this email, you can ignore it. "
+        "Nothing happens until the link is clicked.</p>"
+    )
+    html_content = build_html_email(
+        application_name,
+        heading,
+        message,
+        "Sign in",
+        link,
+    )
+    text_content = (
+        f"Sign in to {application_name} with this link. "
+        f"It works once and expires in {minutes_valid} minutes.\n"
+        f"{link}\n"
+        "If you did not ask for this email, you can ignore it. "
+        "Nothing happens until the link is clicked.\n"
+    )
+    return text_content, html_content
+
+
+def send_magic_link_email(
+    user_email: str, link: str, mail_from: str = EMAIL_FROM
+) -> None:
+    # On multi-tenant the person may have no workspace yet, and a signed-out
+    # request cannot read one. The deployment's own name and logo apply.
+    if MULTI_TENANT:
+        application_name = ONYX_DEFAULT_APPLICATION_NAME
+        onyx_file = OnyxRuntime.get_emailable_logo(workspace_branding=False)
+    else:
+        application_name = _load_application_name()
+        onyx_file = OnyxRuntime.get_emailable_logo()
+    minutes_valid = max(1, MAGIC_LINK_TTL_SECONDS // 60)
+
+    text_content, html_content = build_magic_link_email(
+        application_name, link, minutes_valid
+    )
+    send_email(
+        user_email,
+        f"Sign in to {application_name}",
+        html_content,
+        text_content,
+        mail_from,
+        inline_png=("logo.png", onyx_file.data),
+        # The link signs the recipient in. An archive copy would let anyone
+        # who reads the archive do the same.
+        archive=False,
     )

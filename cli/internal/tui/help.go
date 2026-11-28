@@ -17,7 +17,11 @@ const helpText = `Onyx CLI Commands
 Keyboard Shortcuts
 
   Enter              Send message
-  Escape             Cancel current generation
+  Escape, Ctrl+C     Cancel current generation
+  y / a / n          Approve once / approve for this chat or command / reject a tool call
+  d                  Show all arguments of a tool call that waits for approval
+  Up/Down, Enter     Select and confirm a tool approval action or an answer
+                     to the agent's question
   Ctrl+O             Toggle source citations
   Ctrl+D             Quit (press twice)
   Scroll Up/Down     Mouse wheel or Shift+Up/Down

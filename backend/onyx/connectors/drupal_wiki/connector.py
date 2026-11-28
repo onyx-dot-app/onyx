@@ -9,6 +9,7 @@ from onyx.configs.app_configs import (
     CONTINUE_ON_CONNECTOR_FAILURE,
     DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD,
     INDEX_BATCH_SIZE,
+    SKIP_SPREADSHEET_CONTENT,
 )
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
@@ -49,7 +50,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import is_indexable_file_type
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -72,6 +73,8 @@ class DrupalWikiConnector(
     CheckpointedConnector[DrupalWikiCheckpoint],
     SlimConnector,
 ):
+    slim_listing_honors_indexing_start = True
+
     # Deprecated parameters that may exist in old connector configurations
     _DEPRECATED_PARAMS = {"drupal_wiki_scope", "include_all_spaces"}
 
@@ -199,13 +202,13 @@ class DrupalWikiConnector(
         if not file_name:
             return False
 
-        # Get file extension
-        file_extension = get_file_ext(file_name)
-
-        if file_extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+        # allow_images is applied after the download, without an error.
+        if is_indexable_file_type(file_name, None, allow_images=True):
             return True
 
-        logger.warning("Unsupported file type: %s for %s", file_extension, file_name)
+        logger.warning(
+            "Unsupported file type: %s for %s", get_file_ext(file_name), file_name
+        )
         return False
 
     def _get_media_type_from_filename(self, filename: str) -> str:
@@ -305,6 +308,7 @@ class DrupalWikiConnector(
                             file_name=file_name,
                             stage=self.raw_file_callback,
                             link=download_url,
+                            skip_content=SKIP_SPREADSHEET_CONTENT,
                         )
                     )
                 except Exception:

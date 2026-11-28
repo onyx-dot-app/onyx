@@ -124,6 +124,7 @@ const SOURCE_META: Record<DocumentSource, SourceMeta> = {
   web: { icon: SvgGlobe, displayName: "Web" },
   file: { icon: SvgFileText, displayName: "File" },
   user_file: { icon: SvgUploadCloud, displayName: "Uploaded Files" },
+  chat_artifact: { icon: SvgFileText, displayName: "Published Files" },
   craft_file: { icon: SvgFileText, displayName: "Your Files" },
   braintrust: { icon: SvgBraintrust, displayName: "Braintrust" },
   ingestion_api: { icon: SvgGlobe, displayName: "Ingestion" },

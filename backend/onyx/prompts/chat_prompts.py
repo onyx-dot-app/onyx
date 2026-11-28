@@ -7,6 +7,21 @@ CITATION_GUIDANCE_REPLACEMENT_PAT = "{{CITATION_GUIDANCE}}"
 REMINDER_TAG_REPLACEMENT_PAT = "{{REMINDER_TAG_DESCRIPTION}}"
 
 
+CONTENT_PENDING_NOTICE = (
+    "[This file is still being processed and its contents are not yet "
+    "available. Do not guess what it contains — tell the user the file is "
+    "still processing and to ask again in a moment.]"
+)
+
+
+CONTENT_UNAVAILABLE_NOTICE = (
+    "[No machine-readable text could be extracted from this file. It is "
+    "likely image-only (e.g. a scanned document) or in an unsupported "
+    "format. Its contents are not available to you — do not guess them. If "
+    "needed, ask the user for a text-based copy.]"
+)
+
+
 # Note this uses a string pattern replacement so the user can also include it in their custom prompts. Keeps the replacement logic simple
 # This is editable by the user in the admin UI.
 # The first line is intended to help guide the general feel/behavior of the system.
@@ -37,17 +52,22 @@ Organization description: {company_description}
 """
 
 # This is added to the system prompt prior to the tools section and is applied only if search tools have been run
+# Added to the system prompt alongside the citation guidance, so it applies only
+# to turns that ran a search. Complements ANSWER_COMPLETENESS_REMINDER: that one
+# asks for every part of the question and the exact values; this one covers how
+# the answer is laid out and which passage it is drawn from.
+ANSWER_COVERAGE_GUIDANCE = """
+
+When the answer has several components, lay them out as a list rather than compressing them into one sentence. Include the secondary elements the question asks for, not only its main point. Check that the passage you rely on matches the full context of the question - a near-miss document will not contain the details it asks for.
+"""
+
+
 REQUIRE_CITATION_GUIDANCE = """
 
 CRITICAL: If referencing knowledge from searches, cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the "document" field. \
 DO NOT provide any links following the citations. Cite inline as opposed to leaving all citations until the very end of the response.
 """
 
-
-# Reminder message if any search tool has been run anytime in the chat turn
-CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [2], [3], etc. based on the "document" field of the documents.
-""".strip()
 
 # Pushes answers to cover every part of the question with the exact values the
 # sources state. Validated on EnterpriseRAG-Bench (500 questions, paired runs).
@@ -62,15 +82,15 @@ You are on your last cycle and no longer have any tool calls available. You must
 
 # Reminder message that replaces the usual reminder if web_search was the last tool call
 OPEN_URL_REMINDER = """
-Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
-Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs. Open as many as you want.
+Remember that after using {web_search}, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
+Open the pages that look the most promising and high quality by calling the {open_url} tool with an array of URLs. Open as many as you want.
 
 If you do have enough to answer, remember to provide INLINE citations using the "document" field in the format [1], [2], [3], etc.
 """.strip()
 
 
 IMAGE_GEN_REMINDER = """
-Very briefly describe the image(s) generated. Do not include any links or attachments.
+Do not link or embed the generated image(s). Continue the task if needed; otherwise briefly describe them.
 """.strip()
 
 
@@ -80,15 +100,12 @@ If you reference or share these files, use the exact markdown format [filename](
 """.strip()
 
 
-# Wrapped in <system-reminder> tags by translate_history_to_llm_format when
+# Wrapped in <system-reminder> tags by prepare_model_messages when
 # the per-request image cap drops images from the outgoing request.
 IMAGE_DROP_REMINDER = """
 {dropped_count} earlier image(s) attached to this conversation were omitted to fit the model's per-request image limit.
 """.strip()
 
-
-# Specifically for OpenAI models, this prefix needs to be in place for the model to output markdown and correct styling
-CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
 # This is just for Slack context today
 ADDITIONAL_CONTEXT_PROMPT = """
@@ -96,6 +113,20 @@ Here is some additional context which may be relevant to the user query:
 
 {additional_context}
 """.strip()
+
+
+TOOL_PREFERENCE_REMINDER = (
+    "The user selected these operations for this request: {operations}. "
+    "{guidance} "
+    "If the selected operations are unsuitable or unavailable, explain why."
+)
+TOOL_PREFERENCE_GUIDANCE = (
+    "Prefer them when they help answer the request. "
+    "You may use other available tools or answer without tools."
+)
+TOOL_PREFERENCE_LAST_STEP_GUIDANCE = (
+    "No more tools can run. Answer from the available evidence."
+)
 
 
 TOOL_CALL_RESPONSE_CROSS_MESSAGE = """
@@ -130,3 +161,15 @@ Provide a short name for the conversation. Refer to other messages in the conver
 IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()
 # ruff: noqa: E501, W605 end
+
+
+SUBAGENT_INSTRUCTIONS = """You are an agent in a team of agents. Your parent agent gave you a task; you do not see the user's conversation. Your final answer goes to your parent.
+You can start your own agents with the same tools. Their results arrive as messages before you give your final answer."""
+
+
+# The root agent's block; `{wait_line}` is the agent shape's
+# (AgentShape.wait_line).
+ROOT_AGENT_INSTRUCTIONS = """Agents you start run in the background. When one finishes, you get an agent notification with its answer. It is not a message from the user.
+Keep doing useful work that doesn't overlap with your agents' tasks, and use their results when they arrive. Don't redo an agent's task yourself.
+Don't predict or invent the results of agents that are still running.
+Before your final answer, wait for the agents whose results you need. Each notification lists the ones still running. {wait_line}"""

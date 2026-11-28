@@ -11,6 +11,7 @@ from onyx.auth.constants import (
     API_KEY_PREFIX,
     BEARER_PREFIX,
     DEPRECATED_API_KEY_PREFIX,
+    MAX_BEARER_TOKEN_LENGTH,
     PAT_PREFIX,
     SCIM_TOKEN_PREFIX,
 )
@@ -48,6 +49,9 @@ def get_hashed_bearer_token_from_request(
     else:
         return None
 
+    if len(token) > MAX_BEARER_TOKEN_LENGTH:
+        return None
+
     # Check if token starts with any valid prefix
     if valid_prefixes:
         valid = any(token.startswith(prefix) for prefix in valid_prefixes)
@@ -77,6 +81,8 @@ def _extract_tenant_from_bearer_token(
         return None
 
     token = auth_header[len(BEARER_PREFIX) :].strip()
+    if len(token) > MAX_BEARER_TOKEN_LENGTH:
+        return None
 
     # Check if token starts with any valid prefix
     matched_prefix = None

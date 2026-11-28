@@ -5,8 +5,7 @@
    -------------------------------------------------------------------------- */
 
 .opal-input-field {
-  @apply w-full h-6 bg-transparent p-0.5 focus:outline-hidden;
-  font: inherit;
+  @apply w-full h-6 bg-transparent p-0.5 font-main-ui-body focus:outline-hidden;
 }
 
 .opal-input[data-variant="primary"] .opal-input-field,
@@ -17,6 +16,11 @@
 
 .opal-input[data-variant="disabled"] .opal-input-field {
   @apply text-text-02 cursor-not-allowed;
+}
+
+/* The component draws its own clear button. */
+.opal-input-field::-webkit-search-cancel-button {
+  @apply appearance-none;
 }
 
 .opal-input-field::placeholder {

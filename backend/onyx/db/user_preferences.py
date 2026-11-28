@@ -1,21 +1,39 @@
+import copy
 from collections.abc import Sequence
+from typing import Any, TypedDict, Unpack
 from uuid import UUID
 
-from sqlalchemy import Column, delete, desc, select, update
+from sqlalchemy import Column, delete, desc, inspect, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.schema import ScalarElementColumnDefault
 
-from onyx.db.enums import AccountType, DefaultAppMode, ThemePreference
+from onyx.configs.constants import ANONYMOUS_USER_UUID
+from onyx.db.enums import (
+    AccountType,
+    DefaultAppMode,
+    InterfaceFont,
+    MotionPreference,
+    PopupDismissal,
+    ResponseFont,
+    ThemePreference,
+)
+from onyx.db.integration_connection import delete_connections_for_user__no_commit
 from onyx.db.models import (
     AccessToken,
     Assistant__UserSpecificConfig,
     Memory,
     User,
+    UserPreferences,
 )
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
     is_limited_user,
+    release_personas_owned_by_user__no_commit,
     user_is_admin,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import ReasoningEffort
 from onyx.server.manage.models import MemoryItem, UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
@@ -27,8 +45,11 @@ def deactivate_user(
     user: User,
     db_session: Session,
 ) -> None:
-    """Deactivate a user by setting is_active to False."""
+    """Deactivate a user, release the personas they own and delete their
+    integration connections."""
     user.is_active = False
+    release_personas_owned_by_user__no_commit(db_session, user.id)
+    delete_connections_for_user__no_commit(db_session, user.id)
     db_session.add(user)
     db_session.commit()
 
@@ -91,183 +112,79 @@ def update_users_craft_enabled(
     db_session.commit()
 
 
-def update_user_temperature_override_enabled(
-    user_id: UUID,
-    temperature_override_enabled: bool,
-    db_session: Session,
+class UserPreferenceValues(TypedDict, total=False):
+    """Values to save to a user's `UserPreferences` row. A missing key keeps
+    the saved value; None clears a nullable column."""
+
+    default_model: str | None
+    temperature_override_enabled: bool
+    temperature_default: float | None
+    reasoning_effort_default: ReasoningEffort | None
+    auto_scroll: bool | None
+    shortcut_enabled: bool
+    theme_preference: ThemePreference
+    language: str | None
+    chat_background: str | None
+    default_app_mode: DefaultAppMode
+    interface_font: InterfaceFont
+    response_font: ResponseFont
+    motion: MotionPreference
+    popup_dismissal: PopupDismissal
+    dynamic_conversations: bool
+    use_memories: bool
+    enable_memory_tool: bool
+    instructions: str | None
+    chosen_assistants: list[int] | None
+    visible_assistants: list[int]
+    hidden_assistants: list[int]
+    paste_as_tile: bool
+    interrupt_on_send: bool
+    voice_auto_send: bool
+    voice_auto_playback: bool
+    voice_playback_speed: float
+
+
+def fetch_user_preferences(user: User, db_session: Session) -> UserPreferences:
+    """The user's saved preferences. A user who has saved none gets an unsaved
+    row that holds the column defaults. The shared anonymous account never
+    saves preferences and never uses memories."""
+    if not user.is_anonymous:
+        saved = db_session.get(UserPreferences, user.id)
+        if saved is not None:
+            return saved
+    defaults: dict[str, Any] = {
+        column.key: copy.deepcopy(column.default.arg)
+        for column in inspect(UserPreferences).columns
+        if isinstance(column.default, ScalarElementColumnDefault)
+    }
+    if user.is_anonymous:
+        defaults.update(use_memories=False, enable_memory_tool=False)
+    return UserPreferences(user_id=user.id, **defaults)
+
+
+def upsert_user_preferences__no_commit(
+    db_session: Session, user_id: UUID, **values: Unpack[UserPreferenceValues]
 ) -> None:
-    """Update user's temperature override enabled setting."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(temperature_override_enabled=temperature_override_enabled)
-    )
-    db_session.commit()
-
-
-def update_user_temperature_default(
-    user_id: UUID,
-    temperature_default: float | None,
-    db_session: Session,
-) -> None:
-    """Update the user's own temperature default. Null clears it."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(temperature_default=temperature_default)
-    )
-    db_session.commit()
-
-
-def update_user_reasoning_effort_default(
-    user_id: UUID,
-    reasoning_effort_default: ReasoningEffort | None,
-    db_session: Session,
-) -> None:
-    """Update the user's own reasoning default. Null clears it."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(reasoning_effort_default=reasoning_effort_default)
-    )
-    db_session.commit()
-
-
-def update_user_shortcut_enabled(
-    user_id: UUID,
-    shortcut_enabled: bool,
-    db_session: Session,
-) -> None:
-    """Update user's shortcut enabled setting."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(shortcut_enabled=shortcut_enabled)
-    )
-    db_session.commit()
-
-
-def update_user_paste_as_tile(
-    user_id: UUID,
-    paste_as_tile: bool,
-    db_session: Session,
-) -> None:
-    """Update user's paste-as-tile setting."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(paste_as_tile=paste_as_tile)
-    )
-    db_session.commit()
-
-
-def update_user_auto_scroll(
-    user_id: UUID,
-    auto_scroll: bool | None,
-    db_session: Session,
-) -> None:
-    """Update user's auto scroll setting."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(auto_scroll=auto_scroll)
-    )
-    db_session.commit()
-
-
-def update_user_default_model(
-    user_id: UUID,
-    default_model: str | None,
-    db_session: Session,
-) -> None:
-    """Update user's default model setting."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(default_model=default_model)
-    )
-    db_session.commit()
-
-
-def update_user_theme_preference(
-    user_id: UUID,
-    theme_preference: ThemePreference,
-    db_session: Session,
-) -> None:
-    """Update user's theme preference setting."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(theme_preference=theme_preference)
-    )
-    db_session.commit()
-
-
-def update_user_language(
-    user_id: UUID,
-    language: str,
-    db_session: Session,
-) -> None:
-    """Update user's language setting."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(language=language)
-    )
-    db_session.commit()
-
-
-def update_user_chat_background(
-    user_id: UUID,
-    chat_background: str | None,
-    db_session: Session,
-) -> None:
-    """Update user's chat background setting."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(chat_background=chat_background)
-    )
-    db_session.commit()
-
-
-def update_user_default_app_mode(
-    user_id: UUID,
-    default_app_mode: DefaultAppMode,
-    db_session: Session,
-) -> None:
-    """Update user's default app mode setting."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(default_app_mode=default_app_mode)
-    )
-    db_session.commit()
-
-
-def update_user_personalization(
-    user_id: UUID,
-    *,
-    personal_name: str | None,
-    personal_role: str | None,
-    use_memories: bool,
-    enable_memory_tool: bool,
-    memories: list[MemoryItem],
-    user_preferences: str | None,
-    db_session: Session,
-) -> None:
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(
-            personal_name=personal_name,
-            personal_role=personal_role,
-            use_memories=use_memories,
-            enable_memory_tool=enable_memory_tool,
-            user_preferences=user_preferences,
+    """Save the given values. The first save creates the user's row; columns
+    not given get their defaults. The shared anonymous account cannot save
+    preferences."""
+    if user_id == UUID(ANONYMOUS_USER_UUID):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "Sign in to save settings."
         )
+    if not values:
+        return
+    db_session.execute(
+        pg_insert(UserPreferences)
+        .values(user_id=user_id, **values)
+        .on_conflict_do_update(index_elements=[UserPreferences.user_id], set_=values)
     )
 
+
+def replace_user_memories__no_commit(
+    db_session: Session, user_id: UUID, memories: list[MemoryItem]
+) -> None:
+    """Make the user's memories match `memories`."""
     # ID-based upsert: use real DB IDs from the frontend to match memories.
     incoming_ids = {m.id for m in memories if m.id is not None}
 
@@ -298,8 +215,6 @@ def update_user_personalization(
             [Memory(user_id=user_id, memory_text=item.content) for item in new_items]
         )
 
-    db_session.commit()
-
 
 def get_memories_for_user(
     user_id: UUID,
@@ -308,26 +223,6 @@ def get_memories_for_user(
     return db_session.scalars(
         select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.desc())
     ).all()
-
-
-def update_user_assistant_visibility(
-    user_id: UUID,
-    hidden_assistants: list[int] | None,
-    visible_assistants: list[int] | None,
-    chosen_assistants: list[int] | None,
-    db_session: Session,
-) -> None:
-    """Update user's assistant visibility settings."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(
-            hidden_assistants=hidden_assistants,
-            visible_assistants=visible_assistants,
-            chosen_assistants=chosen_assistants,
-        )
-    )
-    db_session.commit()
 
 
 def get_all_user_assistant_specific_configs(
@@ -348,8 +243,6 @@ def update_assistant_preferences(
     new_assistant_preference: UserSpecificAssistantPreference,
     db_session: Session,
 ) -> None:
-    """Update the disabled tools for a specific assistant for a specific user."""
-    # First check if a config already exists
     result = db_session.execute(
         select(Assistant__UserSpecificConfig)
         .where(Assistant__UserSpecificConfig.assistant_id == assistant_id)
@@ -358,14 +251,20 @@ def update_assistant_preferences(
     config = result.scalar_one_or_none()
 
     if config:
-        # Update existing config
-        config.disabled_tool_ids = new_assistant_preference.disabled_tool_ids
+        if new_assistant_preference.disabled_tool_ids is not None:
+            config.disabled_tool_ids = new_assistant_preference.disabled_tool_ids
+        if new_assistant_preference.disabled_integration_ids is not None:
+            config.disabled_integration_ids = (
+                new_assistant_preference.disabled_integration_ids
+            )
     else:
-        # Create new config
         config = Assistant__UserSpecificConfig(
             assistant_id=assistant_id,
             user_id=user_id,
-            disabled_tool_ids=new_assistant_preference.disabled_tool_ids,
+            disabled_tool_ids=new_assistant_preference.disabled_tool_ids or [],
+            disabled_integration_ids=(
+                new_assistant_preference.disabled_integration_ids or []
+            ),
         )
         db_session.add(config)
 

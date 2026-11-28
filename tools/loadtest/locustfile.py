@@ -5,7 +5,8 @@ ChatWithSearch 20 / MultiTool 8 / DeepResearch 2); name a class to run a
 targeted reproducer (LongConversationUser, DisconnectUser). For the worker /
 threadpool concurrency sweep, name ThreadHogUser + HealthProbeUser (see
 README "Worker concurrency sweep"). ONYX_SHAPE=stepramp drives a staged ramp.
-See README.md for usage and env vars.
+For code mode arms, set CODE_MODE_ENABLED on the API server and select the
+search model (README "Compare code mode"). See README.md for usage and env vars.
 """
 
 import os
@@ -20,6 +21,7 @@ from scenarios import (
     FileAttachmentUser,
     HealthProbeUser,
     LongConversationUser,
+    LongTurnUser,
     MultiToolUser,
     ThreadHogUser,
 )
@@ -30,6 +32,7 @@ __all__ = [
     "MultiToolUser",
     "DeepResearchUser",
     "LongConversationUser",
+    "LongTurnUser",
     "DisconnectUser",
     "CompressionUser",
     "FileAttachmentUser",

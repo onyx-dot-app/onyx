@@ -1,4 +1,6 @@
-from dataclasses import dataclass
+from typing import ClassVar
+
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from onyx.access.utils import (
     prefix_external_group,
@@ -8,16 +10,17 @@ from onyx.access.utils import (
 from onyx.configs.constants import PUBLIC_DOC_PAT
 
 
-@dataclass(frozen=True)
-class ExternalAccess:
+class ExternalAccess(BaseModel):
     # arbitrary limit to prevent excessively large permissions sets
     # not internally enforced ... the caller can check this before using the instance
-    MAX_NUM_ENTRIES = 5000
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    MAX_NUM_ENTRIES: ClassVar[int] = 5000
 
     # Emails of external users with access to the doc externally
-    external_user_emails: set[str]
+    external_user_emails: set[StrictStr] = Field(strict=False)
     # Names or external IDs of groups with access to the doc
-    external_user_group_ids: set[str]
+    external_user_group_ids: set[StrictStr] = Field(strict=False)
     # Whether the document is public in the external system or Onyx
     is_public: bool
 
@@ -66,12 +69,13 @@ class ExternalAccess:
         )
 
 
-@dataclass(frozen=True)
-class DocExternalAccess:
+class DocExternalAccess(BaseModel):
     """
     This is just a class to wrap the external access and the document ID
-    together. It's used for syncing document permissions to Vespa.
+    together. It's used for syncing document permissions to the document index.
     """
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     external_access: ExternalAccess
     # The document ID
@@ -106,12 +110,13 @@ class DocExternalAccess:
         )
 
 
-@dataclass(frozen=True)
-class NodeExternalAccess:
+class NodeExternalAccess(BaseModel):
     """
     Wraps external access with a hierarchy node's raw ID.
     Used for syncing hierarchy node permissions (e.g., folder permissions).
     """
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     external_access: ExternalAccess
     # The raw node ID from the source system (e.g., Google Drive folder ID)
@@ -154,9 +159,6 @@ class NodeExternalAccess:
 ElementExternalAccess = DocExternalAccess | NodeExternalAccess
 
 
-# TODO(andrei): First refactor this into a pydantic model, then get rid of
-# duplicate fields.
-@dataclass(frozen=True, init=False)
 class DocumentAccess(ExternalAccess):
     # User emails for Onyx users, None indicates admin
     user_emails: set[str | None]
@@ -209,24 +211,13 @@ class DocumentAccess(ExternalAccess):
     ) -> "DocumentAccess":
         """Don't prefix incoming data wth acl type, prefix on read from to_acl!"""
 
-        obj = object.__new__(cls)
-        object.__setattr__(
-            obj, "user_emails", {user_email for user_email in user_emails if user_email}
+        return cls.model_construct(
+            user_emails={email for email in user_emails if email},
+            user_groups=set(user_groups),
+            external_user_emails=set(external_user_emails),
+            external_user_group_ids=set(external_user_group_ids),
+            is_public=is_public,
         )
-        object.__setattr__(obj, "user_groups", set(user_groups))
-        object.__setattr__(
-            obj,
-            "external_user_emails",
-            set(external_user_emails),
-        )
-        object.__setattr__(
-            obj,
-            "external_user_group_ids",
-            set(external_user_group_ids),
-        )
-        object.__setattr__(obj, "is_public", is_public)
-
-        return obj
 
 
 default_public_access = DocumentAccess.build(

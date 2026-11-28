@@ -80,7 +80,7 @@ spec:
           {{- end }}
         {{- if .Values.indexCapability.securityContext }}
         securityContext:
-          {{- toYaml .Values.indexCapability.securityContext | nindent 10 }}
+          {{- include "onyx.containerSecurityContext" .Values.indexCapability.securityContext | nindent 10 }}
         {{- end }}
         {{- if .Values.indexCapability.resources }}
         resources:

@@ -41,18 +41,22 @@ _CLIENT_CREDENTIAL_FIELDS = [
 ]
 
 
-def _setup_instructions(google_api_name: str) -> str:
+_SETUP_URL = "https://console.cloud.google.com/apis/credentials"
+
+
+def _setup_steps(google_api_name: str) -> list[str]:
     """The Cloud Console setup steps, identical across Google providers except
     for which API the admin must enable."""
-    return (
-        "In Google Cloud Console: create a project (or pick one), enable the "
-        f"{google_api_name} under APIs & Services → Library, configure the "
-        "OAuth consent screen (External for personal Google accounts, Internal "
-        "for Workspace), then under APIs & Services → Credentials create an "
-        "OAuth 2.0 Client ID of type Web application. Add this Onyx instance's "
-        "callback URL (/craft/v1/apps/oauth/callback) to Authorized redirect "
-        "URIs. Then paste the Client ID and Client Secret below."
-    )
+    return [
+        "Create a project, or select one.",
+        "Open APIs & Services → Library.",
+        f"Enable the {google_api_name}.",
+        "Configure the OAuth consent screen: Internal for Workspace, else External.",
+        "Under APIs & Services → Credentials, create an OAuth 2.0 Client ID.",
+        "Set the application type to Web application.",
+        "Add the callback URL to Authorized redirect URIs.",
+        "Paste the Client ID and Client Secret into the fields.",
+    ]
 
 
 class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
@@ -87,7 +91,6 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
                 # access_type=offline issues a refresh_token; prompt=consent
                 # forces fresh consent so Google reissues it on re-auth.
                 extra_authorize_params={
-                    "response_type": "code",
                     "access_type": "offline",
                     "prompt": "consent",
                 },
@@ -96,7 +99,8 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template={"Authorization": "Bearer {access_token}"},
                 required_org_credential_fields=list(_CLIENT_CREDENTIAL_FIELDS),
-                setup_instructions=_setup_instructions(google_api_name),
+                setup_steps=_setup_steps(google_api_name),
+                setup_url=_SETUP_URL,
             ),
             endpoint_catalog=endpoint_catalog,
         )

@@ -4,7 +4,7 @@ unsupported on cloud)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict, SkipValidation
 
 from onyx.configs.app_configs import (
     BRAINTRUST_API_KEY,
@@ -24,23 +24,26 @@ from shared_configs.enums import TracingProviderType
 logger = setup_logger()
 
 
-@dataclass(frozen=True)
-class BraintrustConfig:
-    api_key: str
-    project: str
+class BraintrustConfig(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    api_key: SkipValidation[str]
+    project: SkipValidation[str]
     # Optional custom API URL for self-hosted / non-default Braintrust deployments.
-    api_url: str | None = None
+    api_url: SkipValidation[str | None] = None
 
 
-@dataclass(frozen=True)
-class LangfuseConfig:
-    secret_key: str
-    public_key: str
-    host: str | None
+class LangfuseConfig(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    secret_key: SkipValidation[str]
+    public_key: SkipValidation[str]
+    host: SkipValidation[str | None]
 
 
-@dataclass(frozen=True)
-class EffectiveTracingConfig:
+class EffectiveTracingConfig(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
     braintrust: BraintrustConfig | None = None
     langfuse: LangfuseConfig | None = None
 
@@ -118,6 +121,15 @@ def _langfuse_from_row(row: TracingProviderConfig) -> LangfuseConfig | None:
         public_key=public_key,
         host=config.get("host") or None,
     )
+
+
+def env_tracing_configured(provider_type: TracingProviderType) -> bool:
+    """Whether env vars configure the provider, whatever a DB row says."""
+    if provider_type == TracingProviderType.BRAINTRUST:
+        return _env_braintrust() is not None
+    if provider_type == TracingProviderType.LANGFUSE:
+        return _env_langfuse() is not None
+    return False
 
 
 def resolve_effective_tracing_config() -> EffectiveTracingConfig:

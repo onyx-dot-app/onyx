@@ -1,17 +1,16 @@
 "use client";
 
-import { InputSwitch } from "@opal/components";
+import { InputSwitch, Text } from "@opal/components";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
-import Text from "@/refresh-components/texts/Text";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
+import { useAppearancePreferences } from "@/lib/appearance/hooks";
 import { useTheme } from "next-themes";
 import {
   CHAT_BACKGROUND_OPTIONS,
   CHAT_BACKGROUND_NONE,
-  ChatBackgroundOption,
 } from "@/lib/constants/chatBackgrounds";
 import { ThemePreference } from "@/lib/types";
 import { useTranslations } from "next-intl";
@@ -26,11 +25,9 @@ interface SettingRowProps {
 const SettingRow = ({ label, description, children }: SettingRowProps) => (
   <div className="flex justify-between items-center py-3">
     <div className="flex flex-col gap-0.5">
-      <Text mainUiBody text04>
-        {label}
-      </Text>
+      <Text color="text-04">{label}</Text>
       {description && (
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {description}
         </Text>
       )}
@@ -69,7 +66,7 @@ const BackgroundThumbnail = ({
     >
       {isNone ? (
         <div className="absolute inset-0 bg-background flex items-center justify-center">
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("nrf.settingsPanel.backgroundNone.label")}
           </Text>
         </div>
@@ -117,38 +114,12 @@ export const SettingsPanel = ({
   const t = useTranslations("chat");
   const { appName } = useSettings();
   const { useOnyxAsNewTab } = useNRFPreferences();
-  const { theme, setTheme } = useTheme();
-  const { user, updateUserChatBackground, updateUserThemePreference } =
-    useUser();
+  const { theme } = useTheme();
+  const { chooseTheme, chooseChatBackground } = useAppearancePreferences();
+  const { user } = useUser();
 
   const currentBackgroundId = user?.preferences?.chat_background ?? "none";
   const isDark = theme === "dark";
-
-  const toggleTheme = async () => {
-    const nextTheme = isDark ? ThemePreference.LIGHT : ThemePreference.DARK;
-    setTheme(nextTheme);
-    try {
-      await updateUserThemePreference(nextTheme);
-    } catch {
-      // errors are already logged and state is rolled back via refreshUser
-      // inside updateUserThemePreference
-    }
-  };
-
-  const handleBackgroundChange = async (bg: ChatBackgroundOption) => {
-    try {
-      await updateUserChatBackground(
-        bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
-      );
-      if (bg.theme) {
-        setTheme(bg.theme);
-        await updateUserThemePreference(bg.theme);
-      }
-    } catch {
-      // errors are already logged and state is rolled back via refreshUser
-      // inside the update functions
-    }
-  };
 
   return (
     <>
@@ -184,7 +155,7 @@ export const SettingsPanel = ({
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-background-tint-02">
                 <SvgSettings className="w-5 h-5 stroke-text-03" />
               </div>
-              <Text headingH3 text04>
+              <Text font="heading-section" color="text-04">
                 {t("nrf.settingsPanel.header.title")}
               </Text>
             </div>
@@ -192,7 +163,11 @@ export const SettingsPanel = ({
               {/* Theme Toggle */}
               <Button
                 icon={isDark ? SvgMoon : SvgSun}
-                onClick={toggleTheme}
+                onClick={() =>
+                  void chooseTheme(
+                    isDark ? ThemePreference.LIGHT : ThemePreference.DARK
+                  )
+                }
                 prominence="tertiary"
                 tooltip={t("nrf.settingsPanel.themeToggle.tooltip", {
                   mode: isDark ? "light" : "dark",
@@ -211,9 +186,11 @@ export const SettingsPanel = ({
         <div className="px-6 pb-8 flex flex-col gap-8">
           {/* General Section */}
           <section className="flex flex-col gap-3">
-            <Text secondaryAction text03 className="uppercase tracking-wider">
-              {t("nrf.settingsPanel.generalSection.title")}
-            </Text>
+            <div className="uppercase tracking-wider">
+              <Text font="secondary-action" color="text-03">
+                {t("nrf.settingsPanel.generalSection.title")}
+              </Text>
+            </div>
             <div className="flex flex-col gap-1 bg-background-tint-01 rounded-2xl px-4">
               <SettingRow
                 label={t("nrf.settingsPanel.newTabToggle.label", { appName })}
@@ -228,9 +205,11 @@ export const SettingsPanel = ({
 
           {/* Background Section */}
           <section className="flex flex-col gap-3">
-            <Text secondaryAction text03 className="uppercase tracking-wider">
-              {t("nrf.settingsPanel.backgroundSection.title")}
-            </Text>
+            <div className="uppercase tracking-wider">
+              <Text font="secondary-action" color="text-03">
+                {t("nrf.settingsPanel.backgroundSection.title")}
+              </Text>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               {CHAT_BACKGROUND_OPTIONS.map((bg) => (
                 <BackgroundThumbnail
@@ -239,7 +218,7 @@ export const SettingsPanel = ({
                   label={bgLabels[bg.id] ?? bg.label}
                   isNone={bg.src === CHAT_BACKGROUND_NONE}
                   isSelected={currentBackgroundId === bg.id}
-                  onClick={() => handleBackgroundChange(bg)}
+                  onClick={() => void chooseChatBackground(bg)}
                 />
               ))}
             </div>

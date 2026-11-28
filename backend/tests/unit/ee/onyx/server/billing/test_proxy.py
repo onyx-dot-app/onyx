@@ -54,10 +54,9 @@ class TestProxySeatUpdate:
     @pytest.mark.asyncio
     async def test_rejects_missing_tenant_id(self) -> None:
         """Should reject license without tenant_id."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.billing.models import SeatUpdateRequest
         from ee.onyx.server.tenants.proxy import proxy_seat_update
+        from onyx.error_handling.exceptions import OnyxError
 
         # Create a license payload without tenant_id by using a mock
         license_payload = MagicMock(spec=LicensePayload)
@@ -65,7 +64,7 @@ class TestProxySeatUpdate:
 
         request = SeatUpdateRequest(new_seat_count=10)
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await proxy_seat_update(
                 request_body=request,
                 license_payload=license_payload,
@@ -131,10 +130,9 @@ class TestForwardToControlPlane:
         self,
         mock_token: MagicMock,
     ) -> None:
-        """Should raise HTTPException on HTTP error."""
-        from fastapi import HTTPException
-
+        """Should raise OnyxError on HTTP error."""
         from ee.onyx.server.tenants.proxy import forward_to_control_plane
+        from onyx.error_handling.exceptions import OnyxError
 
         mock_token.return_value = "jwt_token"
         mock_response = make_mock_response({"detail": "Bad request"})
@@ -145,7 +143,7 @@ class TestForwardToControlPlane:
         mock_client = make_mock_http_client("post", side_effect=error)
 
         with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await forward_to_control_plane("POST", "/test")
 
         assert exc_info.value.status_code == 400
@@ -157,17 +155,16 @@ class TestForwardToControlPlane:
         self,
         mock_token: MagicMock,
     ) -> None:
-        """Should raise HTTPException on connection error."""
-        from fastapi import HTTPException
-
+        """Should raise OnyxError on connection error."""
         from ee.onyx.server.tenants.proxy import forward_to_control_plane
+        from onyx.error_handling.exceptions import OnyxError
 
         mock_token.return_value = "jwt_token"
         error = httpx.RequestError("Connection failed")
         mock_client = make_mock_http_client("post", side_effect=error)
 
         with patch("httpx.AsyncClient", mock_client):
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await forward_to_control_plane("POST", "/test")
 
         assert exc_info.value.status_code == 502
@@ -178,7 +175,6 @@ class TestVerifyLicenseAuth:
     """Tests for verify_license_auth helper."""
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     @patch("ee.onyx.server.tenants.proxy.is_license_valid")
     async def test_valid_license(
@@ -198,27 +194,24 @@ class TestVerifyLicenseAuth:
         assert result == mock_payload
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     async def test_invalid_signature(
         self,
         mock_verify: MagicMock,
     ) -> None:
         """Should reject invalid license signature."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.tenants.proxy import verify_license_auth
+        from onyx.error_handling.exceptions import OnyxError
 
         mock_verify.side_effect = ValueError("Invalid signature")
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             verify_license_auth("invalid_license")
 
         assert exc_info.value.status_code == 401
         assert "Invalid license" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     @patch("ee.onyx.server.tenants.proxy.is_license_valid")
     async def test_expired_license_rejected(
@@ -227,22 +220,20 @@ class TestVerifyLicenseAuth:
         mock_verify: MagicMock,
     ) -> None:
         """Should reject expired license when allow_expired=False."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.tenants.proxy import verify_license_auth
+        from onyx.error_handling.exceptions import OnyxError
 
         mock_payload = make_license_payload(expired=True)
         mock_verify.return_value = mock_payload
         mock_is_valid.return_value = False
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             verify_license_auth("expired_license", allow_expired=False)
 
         assert exc_info.value.status_code == 401
         assert "expired" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     @patch("ee.onyx.server.tenants.proxy.is_license_valid")
     async def test_expired_license_allowed(
@@ -262,7 +253,6 @@ class TestVerifyLicenseAuth:
         assert result == mock_payload
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     @patch("ee.onyx.server.tenants.proxy.is_license_valid")
     async def test_a_long_expired_license_still_authenticates_the_way_back_in(
@@ -291,7 +281,7 @@ class TestProxyLicenseFetchBustsBillingCache:
     endpoints that signal the subscription moved."""
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.get_redis_client")
+    @patch("ee.onyx.server.tenants.proxy.get_cache_backend")
     @patch("ee.onyx.server.tenants.proxy.forward_to_control_plane")
     async def test_reclaim_drops_the_cached_snapshot(
         self,
@@ -314,7 +304,7 @@ class TestProxyLicenseFetchBustsBillingCache:
         mock_redis.return_value.delete.assert_called_once_with(BILLING_INFO_CACHE_KEY)
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.get_redis_client")
+    @patch("ee.onyx.server.tenants.proxy.get_cache_backend")
     @patch("ee.onyx.server.tenants.proxy.forward_to_control_plane")
     async def test_an_incomplete_response_leaves_the_snapshot_alone(
         self,
@@ -323,13 +313,12 @@ class TestProxyLicenseFetchBustsBillingCache:
     ) -> None:
         """Nothing was reclaimed, so the cached snapshot is still whatever the
         control plane last reported."""
-        from fastapi import HTTPException
-
         from ee.onyx.server.tenants.proxy import proxy_license_fetch
+        from onyx.error_handling.exceptions import OnyxError
 
         mock_forward.return_value = {}
 
-        with pytest.raises(HTTPException):
+        with pytest.raises(OnyxError):
             await proxy_license_fetch(
                 tenant_id="tenant_123",
                 license_payload=make_license_payload(tenant_id="tenant_123"),
@@ -338,7 +327,7 @@ class TestProxyLicenseFetchBustsBillingCache:
         mock_redis.return_value.delete.assert_not_called()
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.get_redis_client")
+    @patch("ee.onyx.server.tenants.proxy.get_cache_backend")
     @patch("ee.onyx.server.tenants.proxy.forward_to_control_plane")
     async def test_a_redis_failure_still_returns_the_license(
         self,

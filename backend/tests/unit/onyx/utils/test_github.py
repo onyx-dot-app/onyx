@@ -1,17 +1,20 @@
 """Unit tests for onyx.utils.github."""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from requests.structures import CaseInsensitiveDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.github import (
     GitHubSource,
     download_github_archive,
+    github_default_branch,
     parse_github_source,
+    resolve_github_revision,
 )
 
 _SOURCE = GitHubSource(owner="onyx-dot-app", repo="onyx")
@@ -21,49 +24,11 @@ class TestParseGithubSource:
     def test_preserves_unsplit_tree_tail_for_revision_resolution(self) -> None:
         source = parse_github_source(
             "https://github.com/onyx-dot-app/onyx/tree/feature/foo/backend/onyx",
-            allow_tree_path=True,
         )
 
         assert source.owner == "onyx-dot-app"
         assert source.repo == "onyx"
         assert source.tree_tail == ("feature", "foo", "backend", "onyx")
-
-    def test_coding_agent_can_accept_ssh_clone_url(self) -> None:
-        parsed = parse_github_source(
-            "git@github.com:onyx-dot-app/onyx.git",
-            allow_ssh=True,
-        )
-
-        assert parsed.owner == "onyx-dot-app"
-        assert parsed.repo == "onyx"
-
-    @pytest.mark.parametrize(
-        "source",
-        [
-            "https://github.com/onyx-dot-app/onyx/tree/main",
-            "https://github.com/onyx-dot-app/onyx/issues/123",
-            "https://github.com/onyx-dot-app/onyx/pull/123",
-            "https://github.com/onyx-dot-app/onyx/blob/main/README.md",
-        ],
-    )
-    def test_coding_agent_rejects_repository_subpages(self, source: str) -> None:
-        with pytest.raises(OnyxError) as exc_info:
-            parse_github_source(
-                source,
-                allow_ssh=True,
-            )
-
-        assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
-        assert "without a branch, file, or subpage" in exc_info.value.detail
-
-    def test_coding_agent_rejects_http_repository_url(self) -> None:
-        with pytest.raises(OnyxError) as exc_info:
-            parse_github_source(
-                "http://github.com/onyx-dot-app/onyx",
-                allow_ssh=True,
-            )
-
-        assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
 
     @pytest.mark.parametrize(
         "source",
@@ -84,7 +49,7 @@ class TestParseGithubSource:
 def _mock_response(
     chunks: Iterable[bytes],
     status_code: int = 200,
-    headers: dict[str, str] | None = None,
+    headers: Mapping[str, str] | None = None,
 ) -> MagicMock:
     """Build a MagicMock that quacks like a streamed ``requests.Response``."""
     response = MagicMock(spec=requests.Response)
@@ -183,7 +148,7 @@ class TestDownloadGithubArchive:
 
         assert mock_get.call_args.kwargs["headers"] is None
 
-    def test_uses_streaming_with_split_timeout(self) -> None:
+    def test_streams_archive_with_timeout(self) -> None:
         response = _mock_response([b""])
         with patch(
             "onyx.utils.github.ssrf_safe_get", return_value=response
@@ -192,13 +157,12 @@ class TestDownloadGithubArchive:
                 _SOURCE,
                 "HEAD",
                 max_size_bytes=500 * 1024 * 1024,
-                timeout=(30, 300),
             )
 
         kwargs = mock_get.call_args.kwargs
         assert kwargs["stream"] is True
         assert kwargs["follow_redirects"] is True
-        assert kwargs["timeout"] == (30, 300)
+        assert kwargs["timeout"] == 30
 
     def test_raises_when_exceeds_max_size(self) -> None:
         response = _mock_response([b"x" * 10, b"x" * 10])
@@ -223,3 +187,25 @@ class TestDownloadGithubArchive:
                 )
 
         assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+
+
+class TestRateLimitHeaders:
+    @pytest.mark.parametrize("lookup", [github_default_branch, resolve_github_revision])
+    def test_lowercase_rate_limit_headers_give_the_rate_limit_error(
+        self, lookup: Callable[[GitHubSource, str | None], object]
+    ) -> None:
+        def limited(*_args: object, **_kwargs: object) -> MagicMock:
+            return _mock_response(
+                [],
+                status_code=403,
+                headers=CaseInsensitiveDict(
+                    {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1800000000"}
+                ),
+            )
+
+        with patch("onyx.utils.github.ssrf_safe_get", side_effect=limited):
+            with pytest.raises(OnyxError) as exc_info:
+                lookup(_SOURCE, "Bearer ghp_secret")
+
+        assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
+        assert exc_info.value.extra == {"reset_at": "2027-01-15T08:00:00+00:00"}

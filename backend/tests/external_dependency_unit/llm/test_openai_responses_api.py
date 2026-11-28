@@ -19,13 +19,24 @@ behavior of that bridge that cannot be reached with mocks:
 
 import json
 import warnings
+from typing import Any
+from unittest.mock import patch
 
+import httpx
 import pytest
+from pydantic import JsonValue
 
+from onyx.agents.execution_records import messages_for_model
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.litellm_singleton import litellm
-from onyx.llm.models import ChatCompletionMessage, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
+from onyx.llm.models import GenerationOptions, GenerationRequest, ReasoningItemBlock
+from onyx.llm.models import UserMessage as AppUserMessage
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.tracing.flows import LLMFlow
+from tests.common.models import CI_OPENAI_MODEL
+from tests.unit.onyx.agents.fakes import collect_generation
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -37,7 +48,6 @@ def _build_openai_llm(model: str, api_key: str) -> LitellmLLM:
         model_provider=LlmProviderNames.OPENAI,
         model_name=model,
         max_input_tokens=128_000,
-        timeout=60,
     )
 
 
@@ -56,9 +66,9 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
     fixed both. This test is the regression guard against either failure
     re-emerging.
     """
-    llm = _build_openai_llm("gpt-4o-mini", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -87,7 +97,6 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "For Paris, France: call get_weather AND get_population. "
                 "Issue both tool calls in a single response."
@@ -96,7 +105,7 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
     ]
 
     accumulated: dict[int, dict[str, str]] = {}
-    for chunk in llm.stream(prompt=prompt, tools=tools):
+    for chunk in llm.stream_raw(prompt=prompt, tools=tools):
         for tc in chunk.choice.delta.tool_calls:
             slot = accumulated.setdefault(
                 tc.index, {"id": "", "name": "", "arguments": ""}
@@ -145,7 +154,7 @@ def test_responses_call_with_invalid_key_raises_authentication_error() -> None:
     """
     with pytest.raises(Exception) as exc_info:
         litellm.responses(
-            model="openai/gpt-5.4-nano",
+            model=f"openai/{CI_OPENAI_MODEL}",
             input="hi",
             api_key="sk-onyx-contract-test-deliberately-invalid",
             metadata=None,
@@ -178,7 +187,7 @@ def test_responses_call_tolerates_explicit_metadata_none(
     error paths.
     """
     response = litellm.responses(
-        model="openai/gpt-5.4-nano",
+        model=f"openai/{CI_OPENAI_MODEL}",
         input="Reply with exactly the word: ok",
         api_key=test_secrets[TestSecret.OPENAI_API_KEY],
         metadata=None,
@@ -201,11 +210,10 @@ def test_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     `monkey_patches.py`) inserts the blank line. This test guards that the
     patch is still firing for current LiteLLM and OpenAI behavior.
     """
-    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a $2000 budget. "
                 "First plan the itinerary, then verify each restaurant choice is safe, then check "
@@ -215,7 +223,7 @@ def test_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     ]
 
     reasoning_parts: list[str] = []
-    for chunk in llm.stream(prompt=prompt):
+    for chunk in llm.stream_raw(prompt=prompt):
         rc = chunk.choice.delta.reasoning_content
         if rc:
             reasoning_parts.append(rc)
@@ -242,11 +250,10 @@ def test_non_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     `monkey_patches.py`) post-processes the result to join with `\\n\\n`. This
     test guards that the patch fires on the non-stream path.
     """
-    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a $2000 budget. "
                 "First plan the itinerary, then verify each restaurant choice is safe, then check "
@@ -255,7 +262,7 @@ def test_non_streaming_reasoning_summary_sections_are_separated_by_blank_line(
         )
     ]
 
-    response = llm.invoke(prompt=prompt)
+    response = llm.invoke_raw(prompt=prompt)
     reasoning = response.choice.message.reasoning_content or ""
 
     assert "\n\n" in reasoning, (
@@ -281,15 +288,15 @@ def test_streaming_emits_no_pydantic_serializer_warnings(
     captures the symptom rather than either patch's internals — if the
     warning escapes, at least one patch is broken or upstream regressed.
     """
-    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content="Reply with exactly the word: ok")
+        UserMessage(content="Reply with exactly the word: ok")
     ]
 
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always")
-        for _ in llm.stream(prompt=prompt):
+        for _ in llm.stream_raw(prompt=prompt):
             pass
 
     serializer_warnings = [
@@ -303,3 +310,61 @@ def test_streaming_emits_no_pydantic_serializer_warnings(
         "monkey patches for usage format / assembled streaming response are "
         f"not silencing them: {[str(w.message) for w in serializer_warnings]!r}"
     )
+
+
+@pytest.mark.secrets(TestSecret.OPENAI_API_KEY)
+def test_reasoning_item_from_one_turn_is_accepted_on_the_next(
+    test_secrets: dict[TestSecret, str],
+) -> None:
+    """A streamed turn keeps the reasoning item OpenAI returned, and the next
+    turn replays it with its encrypted content in a request OpenAI accepts."""
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
+    question = AppUserMessage(
+        content=(
+            "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a "
+            "$2000 budget. Keep the answer under 120 words."
+        )
+    )
+    context = GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
+    first = collect_generation(
+        list(
+            llm.stream(
+                GenerationRequest(
+                    messages=[question], options=GenerationOptions(max_tokens=4000)
+                ),
+                context,
+            )
+        )
+    )
+    items = [
+        block
+        for block in first.thinking_blocks or []
+        if isinstance(block, ReasoningItemBlock)
+    ]
+    assert items, f"Expected a reasoning item in {first.content!r}"
+    assert items[0].encrypted_content
+
+    bodies: list[dict[str, Any]] = []
+    original_send = httpx.Client.send
+
+    def send(
+        client: httpx.Client, request: httpx.Request, **kwargs: Any
+    ) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return original_send(client, request, **kwargs)
+
+    history = messages_for_model(
+        [question, first, AppUserMessage(content="Which city was that? One word.")]
+    )
+    with patch.object(httpx.Client, "send", send):
+        second = llm.invoke(
+            GenerationRequest(
+                messages=history, options=GenerationOptions(max_tokens=400)
+            ),
+            context,
+        )
+
+    assert "tokyo" in second.text.lower()
+    replayed = [item for item in bodies[-1]["input"] if item["type"] == "reasoning"]
+    assert replayed[0]["id"] == items[0].id
+    assert replayed[0]["encrypted_content"] == items[0].encrypted_content

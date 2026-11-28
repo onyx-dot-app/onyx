@@ -2,6 +2,15 @@ import { mutate } from "swr";
 import { User, UserPersonalization } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { CustomRefreshTokenResponse } from "@/lib/users/types";
+import { clearOutputThumbnailCache } from "@/app/craft/services/outputThumbnailCache";
+import { CHAT_PANEL_STORAGE_PREFIX } from "@/lib/chat/rightPanel";
+import {
+  draftKey,
+  invalidateChatDraftWrites,
+  type DraftStorage,
+} from "@/hooks/useDraft";
+import { useUnseenRuns } from "@/lib/chat/runStatus";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -18,12 +27,44 @@ export async function getCurrentUser(): Promise<User | null> {
   return user;
 }
 
+/** Refetches `/api/me`. When the session has ended, its 403 makes the session
+ * watcher show the session-ended modal. */
+export async function revalidateCurrentUser(): Promise<void> {
+  await mutate(SWR_KEYS.me);
+}
+
+/** Removes every key that starts with one of `prefixes`. */
+function removeStorageKeys(kind: DraftStorage, prefixes: string[]) {
+  try {
+    const storage =
+      kind === "local" ? window.localStorage : window.sessionStorage;
+    for (let index = storage.length - 1; index >= 0; index--) {
+      const key = storage.key(index);
+      if (key && prefixes.some((prefix) => key.startsWith(prefix))) {
+        storage.removeItem(key);
+      }
+    }
+  } catch {
+    // Disabled browser storage must not prevent logout.
+  }
+}
+
 export async function logout(): Promise<Response> {
   const response = await fetch("/auth/logout", {
     method: "POST",
     credentials: "include",
   });
   if (response.ok) {
+    invalidateChatDraftWrites();
+    clearOutputThumbnailCache();
+    removeStorageKeys("session", [
+      "onyx:craft:",
+      draftKey("craft", ""),
+      CHAT_PANEL_STORAGE_PREFIX,
+    ]);
+    useChatSessionStore.getState().suppressRunMarkers();
+    useUnseenRuns.getState().clearAll();
+    removeStorageKeys("local", [draftKey("chat", "")]);
     // Drop the cached /api/me so any subsequent useCurrentUser read does not
     // hand callers the just-signed-out user from the SWR dedup window.
     await mutate(SWR_KEYS.me, null, { revalidate: false });
@@ -108,8 +149,30 @@ export async function refreshToken(
   }
 }
 
+/** The name Onyx calls the user: the preferred name, else the full name. */
+export function getUserAddressedName(user: User | null): string | null {
+  return (
+    user?.personalization?.preferred_name || user?.personalization?.name || null
+  );
+}
+
+/**
+ * URL of a user's profile photo, or null when they have none. The file id
+ * makes a replaced photo a new URL, so the browser can cache each one forever.
+ */
+export function buildUserProfileImageUrl(
+  user:
+    | { id: string | null; profile_image_file_id?: string | null }
+    | null
+    | undefined
+): string | null {
+  if (!user?.id || !user.profile_image_file_id) return null;
+  return `/api/user/${encodeURIComponent(user.id)}/profile-image?v=${encodeURIComponent(user.profile_image_file_id)}`;
+}
+
 export function getUserDisplayName(user: User | null): string {
-  if (user?.personalization?.name) return user.personalization.name;
+  const addressedName = getUserAddressedName(user);
+  if (addressedName) return addressedName;
 
   if (user?.email) {
     const atIndex = user.email.indexOf("@");
@@ -175,16 +238,6 @@ export function getUserInitials(
     if (/^[A-Z]$/.test(result)) return result;
   }
   return null;
-}
-
-export async function setUserDefaultModel(
-  model: string | null
-): Promise<Response> {
-  return fetch(`/api/user/default-model`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ default_model: model }),
-  });
 }
 
 export async function updateUserPersonalization(

@@ -20,7 +20,7 @@ from typing import Any
 _BASE = "https://api.hubapi.com"
 _DEFAULT_LIMIT = 100
 _PAGE_SIZE = 100
-_HTTP_TIMEOUT_SECONDS = 180
+_HTTP_TIMEOUT_SECONDS = 200
 _METHODS = ("GET", "POST", "PATCH", "PUT", "DELETE")
 
 # CRM object types this helper supports (path segment under /crm/v3/objects).

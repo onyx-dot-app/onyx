@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgBookstack = ({ size, ...props }: IconProps) => (
+const SvgBookStack = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -34,4 +34,4 @@ const SvgBookstack = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgBookstack;
+export default SvgBookStack;

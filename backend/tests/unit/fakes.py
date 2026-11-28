@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import builtins
+from collections.abc import Collection
+
 from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.integrations.models import CallCredentials
 
 
 class FakeLock(CacheLock):
@@ -32,6 +36,7 @@ class FakeLock(CacheLock):
 class FakeCache(CacheBackend):
     def __init__(self) -> None:
         self.store: dict[str, bytes] = {}
+        self.sets: dict[str, set[bytes]] = {}
         self.expiries: dict[str, int] = {}
         self.locks: dict[str, FakeLock] = {}
 
@@ -63,15 +68,81 @@ class FakeCache(CacheBackend):
         self.set(key, value, ex=ex)
         return True
 
+    def replace_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        if self.store.get(key) != expected:
+            return False
+        self.expiries.pop(key, None)
+        self.set(key, value, ex=ex)
+        return True
+
+    def incr(self, key: str, ex: int | None = None) -> int:
+        count = int(self.store.get(key, b"0")) + 1
+        self.store[key] = str(count).encode()
+        if ex is not None:
+            self.expiries[key] = ex
+        return count
+
     def delete(self, key: str) -> None:
         self.store.pop(key, None)
+        self.sets.pop(key, None)
         self.expiries.pop(key, None)
+
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        if self.store.get(key) != expected:
+            return False
+        self.delete(key)
+        return True
+
+    def delete_prefix(self, prefix: str) -> None:
+        if not prefix:
+            raise ValueError("Cache deletion requires a nonempty prefix")
+        for key in list(self.store):
+            if key.startswith(prefix):
+                self.delete(key)
+
+    def exists_many(self, keys: Collection[str]) -> builtins.set[str]:
+        return {key for key in keys if key in self.store}
+
+    def set_add(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.setdefault(key, set()).add(value)
+
+    def set_remove(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.get(key, set()).discard(value)
+
+    def set_contains(self, key: str, member: str | bytes) -> bool:
+        value = member if isinstance(member, bytes) else member.encode()
+        return value in self.sets.get(key, set())
+
+    def set_replace(self, key: str, members: Collection[str | bytes]) -> None:
+        self.sets[key] = {
+            member if isinstance(member, bytes) else member.encode()
+            for member in members
+        }
+
+    def set_members(self, key: str, *, limit: int) -> list[bytes]:
+        if limit < 1:
+            raise ValueError("Cache set member limit must be positive")
+        return list(self.sets.get(key, set()))[:limit]
 
     def exists(self, key: str) -> bool:
         return key in self.store
 
     def expire(self, key: str, seconds: int) -> None:
         self.expiries[key] = seconds
+
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        if self.get(key) != expected:
+            return False
+        self.expire(key, seconds)
+        return True
 
     def ttl(self, key: str) -> int:
         return 60 if key in self.store else -2
@@ -85,3 +156,13 @@ class FakeCache(CacheBackend):
 
     def blpop(self, keys: list[str], timeout: int = 0) -> tuple[bytes, bytes] | None:
         raise NotImplementedError
+
+
+# The credential of an integration with no sign-in.
+NO_CREDENTIALS = CallCredentials(
+    integration_id=0,
+    auth_method=None,
+    connection_id=None,
+    connection_user_id=None,
+    headers={},
+)

@@ -1,0 +1,212 @@
+/**
+ * @jest-environment jsdom
+ */
+import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
+import Page from "@/app/auth/error/page";
+
+const mockReplace = jest.fn();
+let mockError: string | null = null;
+
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: mockReplace }),
+  usePathname: () => "/auth/error",
+  useSearchParams: () =>
+    new URLSearchParams(mockError === null ? {} : { error: mockError }),
+}));
+
+// The shell fetches workspace settings, which this page's behavior doesn't use.
+jest.mock("@/components/auth/AuthFlowContainer", () => ({
+  __esModule: true,
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+const STALE_SIGN_IN_MESSAGE =
+  "This sign-in link has expired or is no longer valid. Please sign in again.";
+
+beforeEach(() => {
+  window.sessionStorage.clear();
+  // Navigation skips a URL it is already on, so each test starts here.
+  window.history.replaceState(null, "", "/auth/error");
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+describe("auth error page", () => {
+  test("restarts sign-in for a stale state without showing the error", async () => {
+    mockError = "ACCESS_TOKEN_DECODE_ERROR";
+
+    render(<Page />);
+
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith("/auth/login")
+    );
+    expect(screen.queryByText(STALE_SIGN_IN_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  test("shows the error when the restarted sign-in fails the same way", async () => {
+    mockError = "ACCESS_TOKEN_ALREADY_EXPIRED";
+    const first = render(<Page />);
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    first.unmount();
+    mockReplace.mockReset();
+    window.history.replaceState(null, "", "/auth/error");
+
+    render(<Page />);
+
+    expect(await screen.findByText(STALE_SIGN_IN_MESSAGE)).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("restarts again once the window has passed", async () => {
+    mockError = "ACCESS_TOKEN_DECODE_ERROR";
+    const now = jest.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const first = render(<Page />);
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    first.unmount();
+    now.mockReturnValue(1_000_000 + 5 * 60 * 1000);
+    // The first restart moved the URL to /auth/login.
+    window.history.replaceState(null, "", "/auth/error");
+
+    render(<Page />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(STALE_SIGN_IN_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  test("shows the error when storage is blocked and the restart can't be guarded", async () => {
+    mockError = "OAUTH_INVALID_STATE";
+    jest.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+
+    render(<Page />);
+
+    expect(await screen.findByText(STALE_SIGN_IN_MESSAGE)).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("shows any other error without restarting", async () => {
+    mockError = "OAUTH_USER_ALREADY_EXISTS";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(/already exists under a different sign-in method/)
+    ).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("tells a refused playground sign-up to contact sales", async () => {
+    mockError = "PLAYGROUND_LIMIT_REACHED";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText("Your company has used its playground access.")
+    ).toBeInTheDocument();
+    const sales = screen.getByRole("link", { name: "Contact sales" });
+    expect(sales).toHaveAttribute("href", "https://www.onyx.app/contact-sales");
+    expect(sales).toHaveAttribute("target", "_blank");
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("tells a free-mail sign-up to use a work email", async () => {
+    mockError = "PLAYGROUND_FREE_MAIL";
+
+    render(<Page />);
+
+    expect(await screen.findByText("Use your work email.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Contact sales" })).toHaveAttribute(
+      "href",
+      "https://www.onyx.app/contact-sales"
+    );
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("tells a playground sign-up the check did not run", async () => {
+    mockError = "PLAYGROUND_CHECK_FAILED";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(
+        "We could not check your sign-up. Try again later."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Contact sales" })).toHaveAttribute(
+      "href",
+      "https://www.onyx.app/contact-sales"
+    );
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("lets a playground sign-up join its team or start a new one", async () => {
+    mockError = "PLAYGROUND_ACTIVE_TENANT";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(/Join your team, or start a new team\?/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Start a new team" })
+    ).toHaveAttribute("href", "/auth/signup?start_new_team=true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Join your team" }));
+
+    expect(
+      await screen.findByText("Ask your admin to invite you.")
+    ).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+  test("offers a new link for an expired or used magic link", async () => {
+    mockError = "MAGIC_LINK_INVALID";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(
+        "This sign-in link has expired or was already used. Ask for a new one."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Get a new link" })
+    ).toHaveAttribute("href", "/auth/login?autoRedirectToSso=false");
+  });
+
+  test("sends a magic link refused for SSO-only to SSO sign-in", async () => {
+    mockError = "MAGIC_LINK_USE_SSO";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(
+        "Sign in with your SSO provider. Email links are turned off for this workspace."
+      )
+    ).toBeInTheDocument();
+    // The login page may start SSO at once: it is the way in here.
+    expect(
+      screen.getByRole("link", { name: "Sign in with SSO" })
+    ).toHaveAttribute("href", "/auth/login");
+  });
+
+  test("offers a new link when the typed address was not the link's", async () => {
+    mockError = "MAGIC_LINK_WRONG_EMAIL";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(
+        "This link was sent to a different email address. Ask for a new link."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Get a new link" })
+    ).toHaveAttribute("href", "/auth/login?autoRedirectToSso=false");
+  });
+});

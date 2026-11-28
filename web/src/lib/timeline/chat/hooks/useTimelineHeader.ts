@@ -1,0 +1,166 @@
+import { useMemo } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import type { TurnGroup } from "@/lib/timeline/chat/transformers";
+import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
+import type { AwaitingUser } from "@/lib/chat/toolApprovals";
+import {
+  IMAGE_GENERATION_TOOL_TYPE,
+  isCodeInterpreterToolType,
+  Packet,
+  PacketType,
+  SearchToolPacket,
+  StopReason,
+} from "@/app/app/services/streamingModels";
+import {
+  formatSearchHeader,
+  constructCurrentSearchState,
+} from "@/lib/timeline/chat/renderers/search/searchStateUtils";
+import {
+  firstActivityPacket,
+  type TimelineTranslate,
+} from "@/lib/timeline/chat/message/messageComponents/toolDisplayHelpers";
+import { commandProgramName } from "@/lib/timeline/chat/commandProgramName";
+import {
+  reasoningPreview,
+  reasoningText,
+} from "@/lib/timeline/chat/renderers/reasoning/reasoningPreview";
+
+const AWAITING_LABELS = {
+  approval: "header.waitingForApproval.label",
+  answer: "header.waitingForAnswer.label",
+  ownerApproval: "header.waitingForOwnerApproval.label",
+  ownerAnswer: "header.waitingForOwnerAnswer.label",
+} as const satisfies Record<AwaitingUser, string>;
+
+/** Header text for the activity of one step, or null for no tool activity. */
+function stepHeaderText(
+  packets: Packet[],
+  t: TimelineTranslate,
+  locale: string
+): string | null {
+  const firstPacket = firstActivityPacket(packets);
+  if (!firstPacket) return null;
+
+  const obj = firstPacket.obj;
+  switch (obj.type) {
+    case PacketType.SEARCH_TOOL_START: {
+      // SAFETY: a step that starts with a search start packet holds only
+      // search tool packets.
+      const searchState = constructCurrentSearchState(
+        packets as SearchToolPacket[]
+      );
+      if (searchState.hasResults && !searchState.isInternetSearch) {
+        return t("header.reading.label");
+      }
+      if (searchState.isInternetSearch) {
+        return t("header.searchingWeb.label");
+      }
+      return formatSearchHeader(
+        searchState.sourceFilters,
+        searchState.timeFilter,
+        t,
+        locale
+      );
+    }
+    case PacketType.FETCH_TOOL_START:
+      return t("header.browsing.label");
+    case PacketType.PYTHON_TOOL_START:
+      return t("header.executingCode.label");
+    // A tool's arguments stream in before its start packet.
+    case PacketType.TOOL_CALL_ARGUMENT_DELTA:
+      if (isCodeInterpreterToolType(obj.tool_type)) {
+        return t("header.executingCode.label");
+      }
+      return obj.tool_type === IMAGE_GENERATION_TOOL_TYPE
+        ? t("header.generatingImages.label")
+        : null;
+    case PacketType.IMAGE_GENERATION_TOOL_START:
+      return t("header.generatingImages.label");
+    case PacketType.FILE_READER_START:
+      return t("header.readingFile.label");
+    case PacketType.EXEC_COMMAND_START: {
+      const program = commandProgramName(obj.cmd.trim());
+      return program
+        ? t("header.runningProgram.label", { program })
+        : t("header.runningCommand.label");
+    }
+    case PacketType.WRITE_STDIN_START:
+      return t("header.runningCommand.label");
+    case PacketType.FILE_TOOL_PROGRESS:
+    case PacketType.APPLY_PATCH_START:
+      return t("header.editingFiles.label");
+    case PacketType.PUBLISH_FILES_START:
+      return t("header.publishingFiles.label");
+    case PacketType.CUSTOM_TOOL_START: {
+      const toolName = obj.display_name;
+      return toolName
+        ? t("header.executingNamedTool.label", { toolName })
+        : t("header.executingTool.label");
+    }
+    case PacketType.MEMORY_TOOL_START:
+    case PacketType.MEMORY_TOOL_NO_ACCESS:
+      return t("header.updatingMemory.label");
+    case PacketType.POSTGRES_TOOL_START:
+      return t("header.queryingKnowledgeBase.label");
+    case PacketType.REASONING_START:
+    case PacketType.REASONING_DELTA:
+      return (
+        reasoningPreview(reasoningText(packets)) || t("header.thinking.label")
+      );
+    case PacketType.DEEP_RESEARCH_PLAN_START:
+      return t("header.generatingPlan.label");
+    case PacketType.RESEARCH_AGENT_START:
+      return t("header.researching.label");
+    default:
+      return null;
+  }
+}
+
+export interface TimelineHeaderResult {
+  headerText: string;
+  hasPackets: boolean;
+  userStopped: boolean;
+}
+
+/**
+ * Hook that determines timeline header state based on current activity.
+ * Returns header text, whether there are packets, and whether user stopped.
+ */
+export function useTimelineHeader(
+  turnGroups: TurnGroup[],
+  stopReason?: StopReason,
+  codeModeWorking = false,
+  awaitingUser: AwaitingUser | null = null
+): TimelineHeaderResult {
+  const t = useTranslations("chat.messages.timeline");
+  const locale = useLocale();
+
+  return useMemo(() => {
+    const hasPackets = turnGroups.length > 0;
+    const userStopped = stopReason === StopReason.USER_CANCELLED;
+    if (awaitingUser) {
+      return {
+        headerText: t(AWAITING_LABELS[awaitingUser]),
+        hasPackets,
+        userStopped,
+      };
+    }
+
+    const working = t("header.working.label");
+    if (codeModeWorking) {
+      return { headerText: working, hasPackets, userStopped };
+    }
+
+    // The current step's activity: the newest step that still runs, since a
+    // parallel step can finish before an earlier one; otherwise the newest
+    // step. A step with no activity of its own yet is working.
+    const steps = turnGroups.flatMap((group) => group.steps);
+    const current =
+      steps.findLast((step) => !step.packets.some(isGroupEndPacket)) ??
+      steps.at(-1);
+    const packets = current?.packets;
+    const headerText =
+      (packets && stepHeaderText(packets, t, locale)) ?? working;
+    return { headerText, hasPackets, userStopped };
+  }, [turnGroups, stopReason, codeModeWorking, awaitingUser, t, locale]);
+}

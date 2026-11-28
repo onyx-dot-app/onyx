@@ -5,15 +5,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from onyx.llm.model_request import RequestFunctionCall, ToolCall
 from onyx.llm.model_response import (
     ChatCompletionMessageToolCall,
     Choice,
     Message,
     ModelResponse,
-    Usage,
+    ResponseFunctionCall,
 )
-from onyx.llm.model_response import FunctionCall as ModelResponseFunctionCall
-from onyx.llm.models import FunctionCall, ToolCall
+from onyx.llm.models import Usage
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.traces import TraceContentMode
 from onyx.tracing.llm_utils import record_llm_response, record_llm_span_output
@@ -37,7 +37,7 @@ class TestRecordLlmResponse:
             id="test-id",
             created="2024-01-01",
             choice=Choice(
-                message=Message(content="Hello, world!", role="assistant"),
+                message=Message(content="Hello, world!"),
             ),
         )
 
@@ -55,7 +55,6 @@ class TestRecordLlmResponse:
             choice=Choice(
                 message=Message(
                     content="The answer is 42.",
-                    role="assistant",
                     reasoning_content="Let me think step by step...",
                 ),
             ),
@@ -73,7 +72,7 @@ class TestRecordLlmResponse:
         tool_call = ChatCompletionMessageToolCall(
             id="call-123",
             type="function",
-            function=ModelResponseFunctionCall(
+            function=ResponseFunctionCall(
                 name="search_documents",
                 arguments='{"query": "test query"}',
             ),
@@ -84,7 +83,6 @@ class TestRecordLlmResponse:
             choice=Choice(
                 message=Message(
                     content=None,
-                    role="assistant",
                     tool_calls=[tool_call],
                 ),
             ),
@@ -106,7 +104,7 @@ class TestRecordLlmResponse:
             id="test-id",
             created="2024-01-01",
             choice=Choice(
-                message=Message(content="Test", role="assistant"),
+                message=Message(content="Test"),
             ),
             usage=Usage(
                 prompt_tokens=100,
@@ -132,7 +130,7 @@ class TestRecordLlmResponse:
             id="test-id",
             created="2024-01-01",
             choice=Choice(
-                message=Message(content=None, role="assistant"),
+                message=Message(content=None),
             ),
         )
 
@@ -147,7 +145,7 @@ class TestRecordLlmResponse:
             id="test-id",
             created="2024-01-01",
             choice=Choice(
-                message=Message(content="Test", role="assistant"),
+                message=Message(content="Test"),
             ),
             usage=None,
         )
@@ -162,7 +160,7 @@ class TestRecordLlmResponse:
         tool_call = ChatCompletionMessageToolCall(
             id="call-456",
             type="function",
-            function=ModelResponseFunctionCall(
+            function=ResponseFunctionCall(
                 name="analyze",
                 arguments='{"text": "sample"}',
             ),
@@ -173,7 +171,6 @@ class TestRecordLlmResponse:
             choice=Choice(
                 message=Message(
                     content="Here's my analysis:",
-                    role="assistant",
                     reasoning_content="I need to think about this carefully...",
                     tool_calls=[tool_call],
                 ),
@@ -263,7 +260,7 @@ class TestRecordLlmSpanOutput:
             ToolCall(
                 id="call-789",
                 type="function",
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name="get_weather",
                     arguments='{"location": "NYC"}',
                 ),
@@ -285,7 +282,7 @@ class TestRecordLlmSpanOutput:
             ToolCall(
                 id="call-abc",
                 type="function",
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name="search",
                     arguments='{"q": "test"}',
                 ),
@@ -312,7 +309,7 @@ class TestRecordLlmSpanOutput:
             ToolCall(
                 id="call-xyz",
                 type="function",
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name="calculator",
                     arguments='{"expr": "2+2"}',
                 ),

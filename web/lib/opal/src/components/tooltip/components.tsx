@@ -1,19 +1,31 @@
 "use client";
 
 import "@opal/components/tooltip/styles.css";
+import { useRef, useState } from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { RichStr } from "@opal/types";
 import { Text } from "@opal/components";
 import { isRichStr } from "@opal/components/text/InlineMarkdown";
+import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type TooltipSide = "top" | "bottom" | "left" | "right";
-type TooltipAlign = "start" | "center" | "end";
+/**
+ * Which side of the trigger the tooltip appears on. `start` and `end` are
+ * logical: in a right-to-left layout `start` is the right side.
+ */
+type TooltipSide = "top" | "bottom" | "start" | "end";
+/**
+ * Where the tooltip sits along its side. `follow` slides it to stay level
+ * with the pointer: vertically for `start`/`end` sides, horizontally for
+ * `top`/`bottom`. For a tall or wide trigger, such as a block of items.
+ */
+type TooltipAlign = "start" | "center" | "end" | "follow";
 
 interface TooltipProps {
+  tone?: "default" | "neutral";
   /**
    * Tooltip content shown on hover. When `undefined`, the tooltip is not
    * rendered and children are returned as-is.
@@ -23,7 +35,7 @@ interface TooltipProps {
    */
   tooltip?: React.ReactNode | RichStr;
 
-  /** Which side the tooltip appears on. @default "right" */
+  /** Which side the tooltip appears on. @default "end" */
   side?: TooltipSide;
 
   /** Alignment along the tooltip's side axis. @default "center" */
@@ -38,6 +50,19 @@ interface TooltipProps {
    * remounts them.
    */
   suppressed?: boolean;
+
+  /**
+   * Shows the tooltip from a hover the caller tracks itself, for a hover area
+   * larger than the trigger: an input whose whole row shows its reason. Radix's
+   * own hover and focus are then ignored. Keep it set for the tooltip's life.
+   */
+  open?: boolean;
+
+  /**
+   * Radix's own open state, for a caller that sets `open` and also needs the
+   * plain hover (e.g. to show it from either). Without `open` it is not needed.
+   */
+  onOpenChange?: (open: boolean) => void;
 
   /**
    * Delay in milliseconds before the tooltip appears on hover.
@@ -56,6 +81,40 @@ interface TooltipProps {
 }
 
 // ---------------------------------------------------------------------------
+// Direction
+// ---------------------------------------------------------------------------
+
+/** Whether the page reads right to left. The root layout sets `dir`. */
+function isRtl(): boolean {
+  return (
+    typeof document !== "undefined" && document.documentElement.dir === "rtl"
+  );
+}
+
+/**
+ * Keeps the tooltip open on a press of a disabled control inside the trigger.
+ * Radix closes on the trigger's pointer down and click, and skips that for a
+ * prevented event. A disabled control's tooltip gives the reason, so a press
+ * (including a click on its label) shows it until blur or the pointer leaves.
+ * A link keeps its native action: an `allowClick` region stays clickable.
+ */
+function keepOpenOnDisabledPress(event: React.SyntheticEvent<HTMLElement>) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest("a[href]")) return;
+  const disabledElement = target.closest('[aria-disabled="true"]');
+  if (disabledElement && event.currentTarget.contains(disabledElement)) {
+    event.preventDefault();
+  }
+}
+
+/** Radix positions by physical side, so `start` and `end` follow `dir`. */
+function physicalSide(side: TooltipSide): "top" | "bottom" | "left" | "right" {
+  if (side === "top" || side === "bottom") return side;
+  return (side === "start") !== isRtl() ? "left" : "right";
+}
+
+// ---------------------------------------------------------------------------
 // Tooltip
 // ---------------------------------------------------------------------------
 
@@ -69,7 +128,8 @@ interface TooltipProps {
  * drops any open change that already matches the value it was given, so a
  * caller that gates `open` on something other than the hover state stops
  * hearing about closes and holds a hover that ended. Use `suppressed` to turn
- * a tooltip off instead.
+ * a tooltip off instead. `open` is only for a hover the caller tracks itself;
+ * `onOpenChange` then only reports Radix's own hover, never gates it.
  *
  * @example
  * ```tsx
@@ -86,15 +146,45 @@ interface TooltipProps {
  * ```
  */
 function Tooltip({
+  tone = "default",
   tooltip,
-  side = "right",
+  side = "end",
   align = "center",
   suppressed,
+  open,
+  onOpenChange,
   delayDuration,
   sideOffset = 4,
   children,
 }: TooltipProps) {
+  // With `align="follow"`: the pointer's distance from the trigger's start
+  // along the side's axis, and the tooltip's size on that axis.
+  const [pointerOffset, setPointerOffset] = useState<number | null>(null);
+  const [contentSize, setContentSize] = useState<number>(0);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const alongY: boolean = side === "start" || side === "end";
+
   if (tooltip == null) return children;
+
+  function trackPointer(event: React.PointerEvent<HTMLElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    // Measured from the trigger's start edge, which `align="start"` uses.
+    setPointerOffset(
+      alongY
+        ? event.clientY - rect.top
+        : isRtl()
+          ? rect.right - event.clientX
+          : event.clientX - rect.left
+    );
+    const content = contentRef.current;
+    if (content) {
+      setContentSize(alongY ? content.offsetHeight : content.offsetWidth);
+    }
+  }
+
+  // Aligned to the trigger's start, then moved so the tooltip's middle
+  // meets the pointer. Radix still shifts it back into view at an edge.
+  const following: boolean = align === "follow" && pointerOffset !== null;
 
   const content =
     typeof tooltip === "string" || isRichStr(tooltip) ? (
@@ -107,6 +197,8 @@ function Tooltip({
 
   return (
     <TooltipPrimitive.Root
+      open={open}
+      onOpenChange={onOpenChange}
       delayDuration={delayDuration}
       /* Radix closes on a pointer that leaves the trigger from the content
       itself, which tracks the pointer across the gap between the two. A
@@ -115,14 +207,35 @@ function Tooltip({
       appears the moment the suppression lifts. */
       disableHoverableContent={suppressed}
     >
-      <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Trigger
+        asChild
+        // Radix skips its open handler for a prevented event. Otherwise a
+        // suppressed tooltip still opens in Radix's state, which closes any
+        // enclosing tooltip.
+        onPointerMove={
+          suppressed
+            ? (event) => event.preventDefault()
+            : align === "follow"
+              ? trackPointer
+              : undefined
+        }
+        onPointerDown={keepOpenOnDisabledPress}
+        onClick={keepOpenOnDisabledPress}
+      >
+        {children}
+      </TooltipPrimitive.Trigger>
       {!suppressed && (
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
-            /* Dark surface in both themes, so the content resolves dark tokens. */
-            className="dark opal-tooltip"
-            side={side}
-            align={align}
+            ref={contentRef}
+            className={cn("opal-tooltip", tone === "default" && "dark")}
+            data-tone={tone}
+            side={physicalSide(side)}
+            // Until the pointer moves, a follower sits centered.
+            align={following ? "start" : align === "follow" ? "center" : align}
+            alignOffset={
+              following ? (pointerOffset ?? 0) - contentSize / 2 : undefined
+            }
             sideOffset={sideOffset}
           >
             {content}

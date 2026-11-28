@@ -1,5 +1,5 @@
 import type { Tag } from "@/lib/types";
-import type { SourceMetadata } from "@/lib/search/types";
+import { type SourceMetadata } from "@/lib/connectors/types/source";
 import type { InputDateRangePickerValue } from "@opal/components";
 
 /** What is selected, without the means to change it. */
@@ -40,5 +40,8 @@ export interface SearchFiltersRequest {
   // (BaseFilters.tags in onyx/context/search/models.py). It went undeclared
   // because the old body returned via a variable, which skips the excess
   // property check a returned literal gets.
-  tags: Tag[];
+  tags: TagSelection[];
 }
+
+/** A tag as a filter names it: the key and value a search matches. */
+export type TagSelection = Pick<Tag, "tag_key" | "tag_value">;

@@ -14,8 +14,14 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
 from onyx.tools.tool_implementations.open_url.tavily import TavilyExtractClient
 from onyx.tools.tool_implementations.web_search.clients.brave_client import BraveClient
 from onyx.tools.tool_implementations.web_search.clients.exa_client import ExaClient
+from onyx.tools.tool_implementations.web_search.clients.firecrawl_client import (
+    FirecrawlSearchClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.google_pse_client import (
     GooglePSEClient,
+)
+from onyx.tools.tool_implementations.web_search.clients.parallel_client import (
+    ParallelSearchClient,
 )
 from onyx.tools.tool_implementations.web_search.clients.searxng_client import (
     SearXNGClient,
@@ -116,6 +122,34 @@ def build_search_provider_from_config(
             search_depth=config.get("search_depth"),
             topic=config.get("topic"),
             country=config.get("country"),
+        )
+    if provider_type == WebSearchProviderType.FIRECRAWL:
+        return FirecrawlSearchClient(
+            api_key=api_key,
+            num_results=num_results,
+            base_url=config.get("base_url"),
+            timeout_seconds=_parse_positive_int_config(
+                raw_value=config.get("timeout_seconds"),
+                default=30,
+                provider_name="Firecrawl",
+                config_key="timeout_seconds",
+            ),
+            tbs=config.get("tbs"),
+            location=config.get("location"),
+            country=config.get("country"),
+        )
+    if provider_type == WebSearchProviderType.PARALLEL:
+        return ParallelSearchClient(
+            api_key=api_key,
+            num_results=num_results,
+            timeout_seconds=_parse_positive_int_config(
+                raw_value=config.get("timeout_seconds"),
+                default=30,
+                provider_name="Parallel",
+                config_key="timeout_seconds",
+            ),
+            mode=config.get("mode"),
+            location=config.get("location"),
         )
     if provider_type == WebSearchProviderType.GOOGLE_PSE:
         search_engine_id = (

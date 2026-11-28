@@ -9,11 +9,17 @@ Multiline text field on the shared `.opal-input` chrome. Accepts standard textar
 | Prop           | Type            | Default     | Description                                                                                                                  |
 | -------------- | --------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `variant`      | `InputVariants` | `"primary"` | Wrapper chrome variant                                                                                                       |
+| `tooltip`      | `string \| RichStr` | —       | Shown on hover, in any state                                                                                                 |
 | `rows`         | `number`        | `4`         | Initial rows and the `autoResize` minimum. The field has a 48px min-height floor, so values below 2 rows render at the floor |
 | `autoResize`   | `boolean`       | `false`     | Grow with content between `rows` and `maxRows`, disables manual resizing                                                     |
 | `maxRows`      | `number`        | —           | Row cap for `autoResize`, content beyond it scrolls                                                                          |
 | `resizable`    | `boolean`       | `true`      | Manual vertical resize handle, ignored with `autoResize`                                                                     |
 | `rightSection` | `ReactNode`     | —           | Slot pinned to the top-right inside the field                                                                                |
+| `mono`         | `boolean`       | `false`     | Monospace text (`font-main-ui-mono`), for code or queries                                                                    |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` sets the
+`"disabled"` variant, and its `disabledTooltip` replaces `tooltip` while
+disabled.
 
 ## Usage
 

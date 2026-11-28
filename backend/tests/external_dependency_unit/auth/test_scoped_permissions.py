@@ -20,7 +20,7 @@ from onyx.auth.scoped_permissions import (
     within_scope,
 )
 from onyx.db.document_set import get_document_set_by_id
-from onyx.db.enums import AccessType, Permission
+from onyx.db.enums import AccessType, ConnectorManageRole, Permission
 from onyx.db.models import (
     ConnectorCredentialPair,
     DocumentSet,
@@ -35,6 +35,7 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.db.user_preferences import fetch_user_preferences
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import UserInfo
 from tests.external_dependency_unit.conftest import create_test_user
@@ -79,7 +80,7 @@ def test_bundle_is_the_seven_token_set() -> None:
             Permission.ADD_AGENTS,
             Permission.MANAGE_USER_GROUPS,
             Permission.MANAGE_ACTIONS,
-            Permission.MANAGE_SKILLS,
+            Permission.MANAGE_PLUGINS,
         }
     )
     # admin-only tokens must never be scopable
@@ -374,7 +375,9 @@ def test_within_managed_scope_clause_handles_enum_privateness(
     for pair in (private_pair, public_pair):
         db_session.add(
             UserGroup__ConnectorCredentialPair(
-                user_group_id=managed.id, cc_pair_id=pair.id
+                user_group_id=managed.id,
+                cc_pair_id=pair.id,
+                role=ConnectorManageRole.EDITOR,
             )
         )
     db_session.commit()
@@ -412,7 +415,9 @@ def test_within_managed_scope_clause_includes_sync_cc_pairs(
     for pair in (private_pair, sync_pair, public_pair):
         db_session.add(
             UserGroup__ConnectorCredentialPair(
-                user_group_id=managed.id, cc_pair_id=pair.id
+                user_group_id=managed.id,
+                cc_pair_id=pair.id,
+                role=ConnectorManageRole.EDITOR,
             )
         )
     db_session.commit()
@@ -541,7 +546,11 @@ def test_admin_capabilities_reveal_the_bundle_for_a_manager(
     manager.effective_permissions = granted
     _manage(db_session, manager, _make_group(db_session))
 
-    info = UserInfo.from_model(manager, effective_permissions=granted)
+    info = UserInfo.from_model(
+        manager,
+        fetch_user_preferences(manager, db_session),
+        effective_permissions=granted,
+    )
 
     assert info.is_group_manager
     assert SCOPED_MANAGER_PERMISSIONS_EXPANDED <= set(info.admin_capabilities)
@@ -555,7 +564,9 @@ def test_admin_capabilities_stay_global_only_without_a_manager_edge(
     granted = [Permission.BASIC_ACCESS.value]
     user.effective_permissions = granted
 
-    info = UserInfo.from_model(user, effective_permissions=granted)
+    info = UserInfo.from_model(
+        user, fetch_user_preferences(user, db_session), effective_permissions=granted
+    )
 
     assert not info.is_group_manager
     assert info.admin_capabilities == granted

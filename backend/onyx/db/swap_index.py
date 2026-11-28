@@ -4,13 +4,15 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     DISABLE_VECTOR_DB,
+    DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
     PORT_SWAP_VERIFY_DOCS_PER_UNIT,
     PORT_SWAP_VERIFY_RETRY_DELAY_S,
-    VESPA_NUM_ATTEMPTS_ON_STARTUP,
 )
-from onyx.configs.constants import KV_REINDEX_KEY
+from onyx.configs.constants import KV_REINDEX_KEY, DocumentSource
+from onyx.db.chat import flag_chat_artifacts_for_reindex__no_commit
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
     get_connector_credential_pairs,
@@ -18,9 +20,11 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.document import (
     PortedScope,
-    count_secondary_only_sync_pending_documents_for_cc_pairs,
+    clear_content_hash_for_cc_pair_since__no_commit,
+    clear_content_hash_for_failed_documents__no_commit,
     delete_all_documents_for_connector_credential_pair,
     filter_existing_document_ids,
+    mark_secondary_pending_documents_needs_sync__no_commit,
     sample_ported_document_ids,
 )
 from onyx.db.enums import (
@@ -46,10 +50,11 @@ from onyx.db.port_attempt import (
     get_latest_port_attempt,
     latest_port_bounds_by_user,
 )
+from onyx.db.reindex_clear import get_pair_clear_bounds
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
-    update_search_settings_status,
+    update_search_settings_status__no_commit,
 )
 from onyx.db.user_file import (
     PortedUserScope,
@@ -58,13 +63,15 @@ from onyx.db.user_file import (
     filter_existing_user_file_ids_any_owner,
     sample_ported_user_file_ids,
 )
-from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.opensearch.new_deployment import (
+    set_new_deployment_vector_quantization,
+)
 from onyx.document_index.opensearch.port_copy import (
     find_documents_missing_from_index,
     find_documents_with_no_chunks,
 )
 from onyx.key_value_store.factory import get_kv_store
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -75,8 +82,14 @@ def _perform_index_swap(
     new_search_settings: SearchSettings,
     all_cc_pairs: list[ConnectorCredentialPair],
     cleanup_documents: bool = False,
+    clear_for_cc_pairs: list[ConnectorCredentialPair] | None = None,
 ) -> SearchSettings | None:
     """Swap the indices and expire the old one.
+
+    `clear_for_cc_pairs` (the non-INSTANT port flow) clears what FUTURE may
+    lack inside the flip's transaction and once more right after the commit;
+    see _clear_what_future_missed__no_commit. An empty list still clears the
+    documents a FUTURE attempt failed on.
 
     Returns the old search settings if the swap was successful, otherwise None.
     """
@@ -120,17 +133,37 @@ def _perform_index_swap(
     ):
         new_search_settings.port_backfill_source_id = current_search_settings.id
 
-    # swap over search settings
-    update_search_settings_status(
+    # Swap both statuses (and the backfill pin above) in one commit. Two commits leave
+    # a window with no PRESENT row, and readers such as run_port_attempt fail in it.
+    update_search_settings_status__no_commit(
         search_settings=current_search_settings,
         new_status=IndexModelStatus.PAST,
         db_session=db_session,
     )
-    update_search_settings_status(
+    update_search_settings_status__no_commit(
         search_settings=new_search_settings,
         new_status=IndexModelStatus.PRESENT,
         db_session=db_session,
     )
+    # Published files are not ported: the indexing beat writes them into the
+    # new index after the swap.
+    flag_chat_artifacts_for_reindex__no_commit(db_session)
+    if clear_for_cc_pairs is not None:
+        # After the status updates, in the same transaction: every stamp that
+        # was in flight has committed by now, and a row still locked belongs to
+        # a batch that will read PAST and stamp nothing, so skip it rather
+        # than wait (waiting here could deadlock with that batch).
+        _clear_what_future_missed__no_commit(
+            db_session, new_search_settings, clear_for_cc_pairs, skip_locked=True
+        )
+    db_session.commit()
+    if clear_for_cc_pairs is not None:
+        # Once more after the commit, for the rows that were skipped: they are
+        # free now, and nothing can stamp into the old index anymore.
+        _clear_what_future_missed__no_commit(
+            db_session, new_search_settings, clear_for_cc_pairs, skip_locked=False
+        )
+        db_session.commit()
 
     # FUTURE is now live: cancel stragglers that dropped out of the required set
     # (paused/INVALID) so they stop writing into the live index. Skip for INSTANT —
@@ -161,45 +194,45 @@ def _perform_index_swap(
         new_search_settings.contextual_rag_model_configuration_id = None
         db_session.commit()
 
-    # This flow is for checking and possibly creating an index so we get all
-    # indices.
-    document_indices = get_all_document_indices(new_search_settings, None, None)
+    # Check for and possibly create the index for the new search settings. On a
+    # new deployment this creates the first index, for the default model's
+    # FUTURE row from the migrations.
+    set_new_deployment_vector_quantization(db_session, new_search_settings)
+    document_index = get_default_document_index(new_search_settings, None)
 
     WAIT_SECONDS = 5
 
-    for document_index in document_indices:
-        success = False
-        for x in range(VESPA_NUM_ATTEMPTS_ON_STARTUP):
-            try:
-                logger.notice(
-                    "Document index %s swap (attempt %s/%s)...",
-                    document_index.__class__.__name__,
-                    x + 1,
-                    VESPA_NUM_ATTEMPTS_ON_STARTUP,
-                )
-                document_index.verify_and_create_index_if_necessary(
-                    embedding_dim=new_search_settings.final_embedding_dim,
-                    embedding_precision=new_search_settings.embedding_precision,
-                )
-
-                logger.notice("Document index swap complete.")
-                success = True
-                break
-            except Exception:
-                logger.exception(
-                    "Document index swap for %s did not succeed. The document index services may not be ready yet. Retrying in %s seconds.",
-                    document_index.__class__.__name__,
-                    WAIT_SECONDS,
-                )
-                time.sleep(WAIT_SECONDS)
-
-        if not success:
-            logger.error(
-                "Document index swap for %s did not succeed. Attempt limit reached. (%s)",
+    success = False
+    for x in range(DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP):
+        try:
+            logger.notice(
+                "Document index %s swap (attempt %s/%s)...",
                 document_index.__class__.__name__,
-                VESPA_NUM_ATTEMPTS_ON_STARTUP,
+                x + 1,
+                DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
             )
-            return None
+            document_index.verify_and_create_index_if_necessary(
+                embedding_dim=new_search_settings.final_embedding_dim,
+            )
+
+            logger.notice("Document index swap complete.")
+            success = True
+            break
+        except Exception:
+            logger.exception(
+                "Document index swap for %s did not succeed. The document index services may not be ready yet. Retrying in %s seconds.",
+                document_index.__class__.__name__,
+                WAIT_SECONDS,
+            )
+            time.sleep(WAIT_SECONDS)
+
+    if not success:
+        logger.error(
+            "Document index swap for %s did not succeed. Attempt limit reached. (%s)",
+            document_index.__class__.__name__,
+            DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
+        )
+        return None
 
     return current_search_settings
 
@@ -226,12 +259,6 @@ def _required_cc_pairs_for_switchover(
     return [cc_pair for cc_pair in all_cc_pairs if cc_pair.id in portable_ids]
 
 
-def _required_users_for_switchover(db_session: Session) -> list[UUID]:
-    """Portable users whose port must finish before a port-flow swap — the same set
-    check_for_port ports. Switchover-agnostic (users have no paused concept)."""
-    return fetch_port_scope_user_ids(db_session)
-
-
 def _verification_backoff_key(search_settings_id: int) -> str:
     return f"port_swap_verify_failed:{search_settings_id}"
 
@@ -253,9 +280,9 @@ def _ported_documents_present_in_new_index(
     if PORT_SWAP_VERIFY_DOCS_PER_UNIT == 0:
         return True
 
-    redis_client = get_redis_client()
+    cache = get_cache_backend()
     backoff_key = _verification_backoff_key(new_search_settings.id)
-    if redis_client.exists(backoff_key):
+    if cache.exists(backoff_key):
         return False
 
     connector_document_ids = sample_ported_document_ids(
@@ -269,9 +296,9 @@ def _ported_documents_present_in_new_index(
         return True
 
     def hold_and_back_off() -> bool:
-        # Redis rejects ex=0, and a delay of 0 means retry on the next tick anyway.
+        # The cache rejects ex=0, and a delay of 0 means retry on the next tick anyway.
         if PORT_SWAP_VERIFY_RETRY_DELAY_S > 0:
-            redis_client.set(backoff_key, "1", ex=PORT_SWAP_VERIFY_RETRY_DELAY_S)
+            cache.set(backoff_key, "1", ex=PORT_SWAP_VERIFY_RETRY_DELAY_S)
         return False
 
     try:
@@ -362,15 +389,67 @@ def _no_writer_left_in_flight(
 
     # Waiting on this flag is safe because new files dual-write to FUTURE and the
     # reconciler supplies the content on a 404, so every pending flag eventually clears.
-    if any_user_file_reconcile_pending_for_users(db_session, required_user_ids):
-        return False
+    # Connector documents pending for FUTURE do not hold the swap: the swap turns
+    # their flag into a plain needs-sync (_clear_what_future_missed__no_commit).
+    return not any_user_file_reconcile_pending_for_users(db_session, required_user_ids)
 
-    return (
-        count_secondary_only_sync_pending_documents_for_cc_pairs(
-            db_session, cc_pair_ids
-        )
-        == 0
+
+def _clear_what_future_missed__no_commit(
+    db_session: Session,
+    new_search_settings: SearchSettings,
+    required_cc_pairs: list[ConnectorCredentialPair],
+    *,
+    skip_locked: bool,
+) -> None:
+    """Make the next poll on the new PRESENT re-index what FUTURE may lack.
+
+    Clears the content hash of documents the old PRESENT wrote after FUTURE's
+    last successful poll (the bound comes from onyx.db.reindex_clear) and of
+    documents a FUTURE attempt failed on; a NULL hash never matches. Turns the
+    deferred-sync flags into a plain needs-sync so the new index gets their
+    permissions. Runs inside the flip's transaction with `skip_locked`, and
+    once more after the commit for the rows that had to be skipped. Caller
+    commits."""
+    bounds = get_pair_clear_bounds(
+        db_session, new_search_settings, [cc_pair.id for cc_pair in required_cc_pairs]
     )
+    for cc_pair in required_cc_pairs:
+        bound = bounds.get(cc_pair.id)
+        if bound is None or bound.push_based:
+            continue
+        cleared = clear_content_hash_for_cc_pair_since__no_commit(
+            db_session,
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            bound.clear_from,
+            skip_locked=skip_locked,
+        )
+        flipped = mark_secondary_pending_documents_needs_sync__no_commit(
+            db_session,
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            skip_locked=skip_locked,
+        )
+        if cleared or flipped:
+            logger.info(
+                "Swap clear: cc_pair=%s since=%s hashes_cleared=%s needs_sync=%s "
+                "skip_locked=%s",
+                cc_pair.id,
+                bound.clear_from.isoformat(),
+                cleared,
+                flipped,
+                skip_locked,
+            )
+    failed = clear_content_hash_for_failed_documents__no_commit(
+        db_session, new_search_settings.id, skip_locked=skip_locked
+    )
+    if failed:
+        logger.info(
+            "Swap clear: hashes cleared for %s documents FUTURE attempts failed on "
+            "(skip_locked=%s)",
+            failed,
+            skip_locked,
+        )
 
 
 def _port_swap_ready(
@@ -383,10 +462,10 @@ def _port_swap_ready(
 
     Returns True once every required cc_pair and user has a SUCCESS port and no active
     one, nothing is still writing into the new settings, and a sample of ported
-    documents is present in the new index. There is no post-port connector index
-    attempt; the port copy is the whole bar. The pending-sync count is scoped to
-    required_cc_pairs because a global count never drains for INVALID/DELETING
-    documents, which never reach FUTURE.
+    documents is present in the new index. Nothing waits for FUTURE to catch up
+    with what PRESENT wrote during the port: the swap clears the content hash of
+    those documents (_clear_what_future_missed__no_commit) and the next poll on
+    the new PRESENT re-indexes them.
     """
     ss_id = new_search_settings.id
     cc_pair_scopes: list[PortedScope] = []
@@ -445,13 +524,20 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
     if DISABLE_VECTOR_DB:
         return None
 
-    # Default CC-pair created for Ingestion API unused here
-    all_cc_pairs = get_connector_credential_pairs(db_session)
-    cc_pair_count = max(len(all_cc_pairs) - 1, 0)
     new_search_settings = get_secondary_search_settings(db_session)
 
     if not new_search_settings:
         return None
+
+    all_cc_pairs = get_connector_credential_pairs(db_session, eager_load_connector=True)
+    # User Library pairs are never indexed, so they never count as complete.
+    swap_counted_cc_pairs = [
+        cc_pair
+        for cc_pair in all_cc_pairs
+        if cc_pair.connector.source != DocumentSource.CRAFT_FILE
+    ]
+    # Default CC-pair created for Ingestion API unused here
+    cc_pair_count = max(len(swap_counted_cc_pairs) - 1, 0)
 
     # Handle switchover based on switchover_type
     switchover_type = new_search_settings.switchover_type
@@ -472,7 +558,8 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
             db_session, all_cc_pairs, switchover_type
         )
 
-        required_user_ids = _required_users_for_switchover(db_session)
+        # Use the same users as check_for_port; users cannot be paused.
+        required_user_ids = fetch_port_scope_user_ids(db_session)
         if _port_swap_ready(
             db_session, new_search_settings, required_cc_pairs, required_user_ids
         ):
@@ -480,6 +567,7 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
                 db_session=db_session,
                 new_search_settings=new_search_settings,
                 all_cc_pairs=all_cc_pairs,
+                clear_for_cc_pairs=required_cc_pairs,
             )
         return None
 
@@ -520,7 +608,7 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
         # Count non-paused cc_pairs (excluding the default Ingestion API cc_pair)
         active_cc_pairs = [
             cc_pair
-            for cc_pair in all_cc_pairs
+            for cc_pair in swap_counted_cc_pairs
             if cc_pair.status != ConnectorCredentialPairStatus.PAUSED
         ]
         active_cc_pair_count = max(len(active_cc_pairs) - 1, 0)

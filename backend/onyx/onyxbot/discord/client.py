@@ -17,6 +17,7 @@ from onyx.onyxbot.discord.handle_commands import (
 )
 from onyx.onyxbot.discord.handle_message import process_chat_message, should_respond
 from onyx.onyxbot.discord.utils import get_bot_token
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -35,7 +36,6 @@ class OnyxDiscordClient(commands.Bot):
     def __init__(self, command_prefix: str = DISCORD_BOT_INVOKE_CHAR) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
-        intents.members = True
 
         super().__init__(command_prefix=command_prefix, intents=intents)
 
@@ -200,15 +200,15 @@ class OnyxDiscordClient(commands.Bot):
 def main() -> None:
     """Main entry point for Discord bot."""
     from onyx.db.engine.sql_engine import SqlEngine
-    from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+    from onyx.utils.variable_functionality import set_is_ee_if_available
 
     logger.info("Starting Onyx Discord Bot...")
 
     # Initialize the database engine (required before any DB operations)
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
-    # Initialize EE features based on environment
-    set_is_ee_based_on_env_variable()
+    set_is_ee_if_available()
+    validate_encryption_configuration()
 
     counter = 0
     while True:

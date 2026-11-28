@@ -11,9 +11,13 @@ import pytest
 
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
-from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.disabled import VECTOR_DB_DISABLED_ERROR, DisabledDocumentIndex
-from onyx.document_index.interfaces_new import IndexingMetadata, MetadataUpdateRequest
+from onyx.document_index.interfaces import (
+    ContentMatchDateField,
+    ContentMatchRequest,
+    IndexingMetadata,
+    MetadataUpdateRequest,
+)
 
 ESCAPED_ERROR = re.escape(VECTOR_DB_DISABLED_ERROR)
 
@@ -30,7 +34,6 @@ def _stub_filters() -> IndexFilters:
 def test_verify_and_create_no_op(disabled_index: DisabledDocumentIndex) -> None:
     disabled_index.verify_and_create_index_if_necessary(
         embedding_dim=768,
-        embedding_precision=EmbeddingPrecision.FLOAT,
     )
 
 
@@ -97,3 +100,26 @@ def test_semantic_retrieval_raises(disabled_index: DisabledDocumentIndex) -> Non
 def test_random_retrieval_raises(disabled_index: DisabledDocumentIndex) -> None:
     with pytest.raises(RuntimeError, match=ESCAPED_ERROR):
         disabled_index.random_retrieval(filters=_stub_filters())
+
+
+def test_match_documents_by_content_raises(
+    disabled_index: DisabledDocumentIndex,
+) -> None:
+    with pytest.raises(RuntimeError, match=ESCAPED_ERROR):
+        disabled_index.match_documents_by_content(
+            request=ContentMatchRequest(phrases=["test"], filters=_stub_filters()),
+            date_field=ContentMatchDateField.UPDATED,
+            descending=True,
+            after=None,
+            limit=10,
+        )
+
+
+def test_count_documents_by_content_raises(
+    disabled_index: DisabledDocumentIndex,
+) -> None:
+    with pytest.raises(RuntimeError, match=ESCAPED_ERROR):
+        disabled_index.count_documents_by_content(
+            request=ContentMatchRequest(phrases=["test"], filters=_stub_filters()),
+            max_count=10,
+        )

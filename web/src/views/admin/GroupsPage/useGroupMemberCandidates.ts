@@ -7,7 +7,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
 import { AccountType, UserStatus } from "@/lib/types";
 import type { FullUserSnapshot } from "@/views/admin/UsersPage/types";
-import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
+import type { ApiKeyDescriptor, MemberRow } from "./types";
 
 interface ManageUsersResponse {
   accepted: FullUserSnapshot[];
@@ -29,6 +29,7 @@ function snapshotToMemberRow(snapshot: FullUserSnapshot): MemberRow {
     is_scim_synced: snapshot.is_scim_synced,
     craft_enabled: snapshot.craft_enabled,
     personal_name: snapshot.personal_name,
+    profile_image_file_id: snapshot.profile_image_file_id,
     created_at: snapshot.created_at,
     updated_at: snapshot.updated_at,
     last_active: snapshot.last_active,
@@ -51,6 +52,7 @@ function serviceAccountToMemberRow(
     craft_enabled: snapshot.craft_enabled,
     personal_name:
       apiKey?.api_key_name ?? snapshot.personal_name ?? "Unnamed Key",
+    profile_image_file_id: null,
     created_at: null,
     updated_at: null,
     last_active: null,

@@ -49,6 +49,20 @@ export interface GoogleDriveConfig {
   shared_folder_urls?: string;
 }
 
+export enum OneDriveScope {
+  General = "general",
+  Specific = "specific",
+}
+
+export interface OneDriveConfig {
+  users: string[];
+  excluded_paths: string[];
+  treat_organization_link_as_public: boolean;
+  authority_host: string;
+  graph_api_host: string;
+  ru_per_minute?: number;
+}
+
 export interface GmailConfig {}
 
 export interface BookstackConfig {}
@@ -84,6 +98,7 @@ export interface SharepointConfig {
   authority_host?: string;
   graph_api_host?: string;
   sharepoint_domain_suffix?: string;
+  ru_per_minute?: number;
 }
 
 export interface TeamsConfig {
@@ -95,6 +110,7 @@ export interface TeamsConfig {
   meeting_organizers?: string[];
   authority_host?: string;
   graph_api_host?: string;
+  ru_per_minute?: number;
 }
 
 export interface DiscourseConfig {
@@ -246,3 +262,15 @@ export interface ImapConfig {
   port?: number;
   mailboxes?: string[];
 }
+
+/** A stored connector setting: the JSON the form saved. */
+export type ConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | ConfigValue[]
+  | { [key: string]: ConfigValue };
+
+export type ConfigEntries = Record<string, ConfigValue>;

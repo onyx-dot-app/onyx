@@ -78,7 +78,7 @@ export function formatContextWindow(tokens: number): string {
 }
 
 const SLIDER_THUMB_CLASS =
-  "block size-3 rounded-full bg-background-neutral-00 shadow-[0_0_2px_1px_rgba(0,0,0,0.15)] focus:outline-none";
+  "block size-3 rounded-full bg-background-neutral-light-00 shadow-[0_0_2px_1px_rgba(0,0,0,0.15)] focus:outline-none";
 const SLIDER_TRACK_CLASS =
   "h-1.5 w-full overflow-hidden rounded bg-background-tint-02";
 const SLIDER_FILL_CLASS = "h-full bg-theme-primary-05";
@@ -91,8 +91,10 @@ interface PaneSliderProps {
   disabled?: boolean;
   /** 16px-tall variant matching the mock's popover sliders. */
   compact?: boolean;
+  /** The thumb's accessible name. */
+  "aria-label"?: string;
   onValueChange: (value: number) => void;
-  onValueCommit: (value: number) => void;
+  onValueCommit?: (value: number) => void;
 }
 
 export function PaneSlider({
@@ -102,6 +104,7 @@ export function PaneSlider({
   step,
   disabled,
   compact,
+  "aria-label": ariaLabel,
   onValueChange,
   onValueCommit,
 }: PaneSliderProps) {
@@ -117,14 +120,19 @@ export function PaneSlider({
       step={step}
       disabled={disabled}
       onValueChange={(vals) => vals[0] !== undefined && onValueChange(vals[0])}
-      onValueCommit={(vals) => vals[0] !== undefined && onValueCommit(vals[0])}
+      onValueCommit={(vals) =>
+        vals[0] !== undefined && onValueCommit?.(vals[0])
+      }
     >
       <SliderPrimitive.Track
         className={cn(SLIDER_TRACK_CLASS, "relative grow")}
       >
         <SliderPrimitive.Range className={cn(SLIDER_FILL_CLASS, "absolute")} />
       </SliderPrimitive.Track>
-      <SliderPrimitive.Thumb className={SLIDER_THUMB_CLASS} />
+      <SliderPrimitive.Thumb
+        className={SLIDER_THUMB_CLASS}
+        aria-label={ariaLabel}
+      />
     </SliderPrimitive.Root>
   );
 }

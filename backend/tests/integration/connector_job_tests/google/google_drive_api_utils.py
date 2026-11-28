@@ -6,21 +6,21 @@ from google.oauth2.service_account import Credentials
 from onyx.connectors.google_utils.resources import (
     GoogleDocsService,
     GoogleDriveService,
-    get_drive_service,
-    get_google_docs_service,
+    GoogleService,
+    get_google_service,
 )
+from tests.daily.connectors.google_drive.consts_and_utils import E2E_NAME_PREFIX
 
 GOOGLE_SCOPES = {
     "google_drive": [
         "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/admin.directory.group",
-        "https://www.googleapis.com/auth/admin.directory.user",
     ],
 }
 
 
 def _create_doc_service(drive_service: GoogleDriveService) -> GoogleDocsService:
-    docs_service = get_google_docs_service(
+    docs_service = get_google_service(
+        GoogleService.DOCS,
         creds=drive_service._http.credentials,
         user_email=drive_service._http.credentials._subject,
     )
@@ -39,7 +39,9 @@ class GoogleDriveManager:
             subject=impersonated_user_email,
         )
 
-        service = get_drive_service(credentials, impersonated_user_email)
+        service = get_google_service(
+            GoogleService.DRIVE, credentials, impersonated_user_email
+        )
 
         # Verify impersonation
         about = (
@@ -74,7 +76,7 @@ class GoogleDriveManager:
                     f"Expected to create drive as {admin_email}, but instead created drive as {creating_user}"
                 )
 
-            drive_metadata = {"name": f"perm_sync_drive_{test_id}"}
+            drive_metadata = {"name": f"{E2E_NAME_PREFIX}drive_{test_id}"}
 
             request_id = str(uuid4())
             drive = (
@@ -101,7 +103,7 @@ class GoogleDriveManager:
         Creates an empty document in the given drive and returns the document's ID
         """
         file_metadata = {
-            "name": f"perm_sync_doc_{drive_id}_{str(uuid4())}",
+            "name": f"{E2E_NAME_PREFIX}doc_{drive_id}_{str(uuid4())}",
             "mimeType": "application/vnd.google-apps.document",
             "parents": [drive_id],
         }
@@ -139,28 +141,29 @@ class GoogleDriveManager:
         ).execute()
 
     @staticmethod
-    def remove_file_permissions(
-        drive_service: Any,
-        file_id: str,
-        email: str,  # noqa: ARG004
-    ) -> None:
+    def remove_file_permissions(drive_service: Any, file_id: str, email: str) -> None:
         permissions = (
             drive_service.permissions()
-            .list(fileId=file_id, supportsAllDrives=True)
+            .list(
+                fileId=file_id,
+                supportsAllDrives=True,
+                fields="permissions(id,emailAddress)",
+            )
             .execute()
         )
-        # TODO: This is a hacky way to remove permissions. Removes anyone with reader role.
-        # Need to find a way to map a user's email to a permission id.
-        # The permissions.get returns a permissionID but email field is None,
-        # something to do with it being a group or domain wide delegation.
-        for permission in permissions.get("permissions", []):
-            if permission.get("role") == "reader":
-                drive_service.permissions().delete(
-                    fileId=file_id,
-                    permissionId=permission["id"],
-                    supportsAllDrives=True,
-                ).execute()
-                break
+        matching = [
+            permission["id"]
+            for permission in permissions.get("permissions", [])
+            if (permission.get("emailAddress") or "").lower() == email.lower()
+        ]
+        if not matching:
+            raise ValueError(f"{email} has no permission on {file_id}")
+        for permission_id in matching:
+            drive_service.permissions().delete(
+                fileId=file_id,
+                permissionId=permission_id,
+                supportsAllDrives=True,
+            ).execute()
 
     @staticmethod
     def make_file_public(drive_service: Any, file_id: str) -> None:
@@ -173,7 +176,7 @@ class GoogleDriveManager:
     def cleanup_drive(drive_service: Any, drive_id: str) -> None:
         try:
             # Delete up to 2 files that match our pattern
-            file_name_prefix = f"perm_sync_doc_{drive_id}"
+            file_name_prefix = f"{E2E_NAME_PREFIX}doc_{drive_id}"
             files = (
                 drive_service.files()
                 .list(

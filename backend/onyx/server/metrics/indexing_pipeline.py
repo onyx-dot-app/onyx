@@ -22,6 +22,8 @@ from typing import Any
 
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
+
+# no-direct-redis: allow type of the Celery broker client
 from redis import Redis
 
 from onyx.background.celery.celery_redis import (
@@ -50,6 +52,7 @@ _STALL_WARNING_INTERVAL = 120.0
 _QUEUE_LABEL_MAP: dict[str, str] = {
     OnyxCeleryQueues.PRIMARY: "primary",
     OnyxCeleryQueues.DOCPROCESSING: "docprocessing",
+    OnyxCeleryQueues.DOCCONVERSION: "docconversion",
     OnyxCeleryQueues.CONNECTOR_DOC_FETCHING: "docfetching",
     OnyxCeleryQueues.VESPA_METADATA_SYNC: "vespa_metadata_sync",
     OnyxCeleryQueues.CONNECTOR_DELETION: "connector_deletion",
@@ -63,17 +66,19 @@ _QUEUE_LABEL_MAP: dict[str, str] = {
     OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP: "index_attempt_cleanup",
     OnyxCeleryQueues.CSV_GENERATION: "csv_generation",
     OnyxCeleryQueues.CAPABILITY_CHECKS: "capability_checks",
+    OnyxCeleryQueues.CAPABILITY_CHECKS_DRAFT: "capability_checks_draft",
     OnyxCeleryQueues.USER_FILE_PROCESSING: "user_file_processing",
     OnyxCeleryQueues.USER_FILE_PROJECT_SYNC: "user_file_project_sync",
     OnyxCeleryQueues.USER_FILE_DELETE: "user_file_delete",
     OnyxCeleryQueues.MONITORING: "monitoring",
     OnyxCeleryQueues.SANDBOX: "sandbox",
-    OnyxCeleryQueues.OPENSEARCH_MIGRATION: "opensearch_migration",
+    OnyxCeleryQueues.SUGGESTED_QUESTIONS: "suggested_questions",
 }
 
 # Queues where prefetched (unacked) task counts are meaningful
 _UNACKED_QUEUES: list[str] = [
     OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
+    OnyxCeleryQueues.DOCCONVERSION,
     OnyxCeleryQueues.DOCPROCESSING,
 ]
 

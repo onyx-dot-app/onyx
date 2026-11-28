@@ -57,6 +57,64 @@ onyx-cli chat --agent-name "Support Agent"
 | `--agent-id <int>` | Agent ID to use for this session |
 | `--agent-name <string>` | Agent name to use for this session (exact or unique substring; mutually exclusive with `--agent-id`) |
 
+#### Tool approvals
+
+Some tool calls need your approval before they run. The chat shows a card with
+the tool name and its arguments. The request waits until you decide. It has no
+time limit.
+
+| Key | Action |
+|-----|--------|
+| `y` | Approve once |
+| `a` | Approve for this chat, or for this command on a VM command's request. A request that asks each time has no `a`. |
+| `n` | Reject |
+| `d` | Show all arguments in full, or the short list again |
+| `Up` / `Down`, `Enter` | Select and confirm an action |
+| `Escape`, `Ctrl+C` | Stop the response while it runs |
+
+The card shows at most 10 arguments and shortens long values. Press `d` to
+read every argument before you decide.
+
+The shortcuts work when the input is empty. After the decision, the card changes
+to a one-line record: Approved, Approved for this chat, Approved for this command, Not approved,
+Disabled, or No longer waiting. When the server continues the response, the
+chat shows the rest of it.
+
+While a request waits, the response is paused on the server. A paused response
+cannot be stopped, so `Escape` and `Ctrl+C` do nothing to it; decide each
+request instead. If you stop a running response while a request is open, Onyx
+rejects the request, and the card shows that outcome. You can quit the chat and
+decide later: when you open the session with `/resume`, the chat shows the
+response with its card. If you send a message while the response waits, Onyx
+refuses it: the chat keeps your message as a draft and shows the card. If the
+connection to a running response drops, the chat connects to it again.
+
+A request from a background agent names the agent, for example
+`triage wants to run Create issue`. It does not pause the chat: you can send
+messages while it waits, and its card stays after the response ends or stops.
+After you decide, the chat shows the outcome and the agent's later requests.
+
+#### Questions from the agent
+
+The agent can ask you 1 to 4 questions when your answer changes its work. The
+chat shows a card that asks each question in turn, with its choices and an
+**Other** row. The response waits until you answer. It has no time limit.
+
+| Key | Action |
+|-----|--------|
+| `Up` / `Down`, `Enter` | Select and confirm a choice |
+| Type a choice's number, `Enter` | Choose that choice |
+| `Enter` on **Other** | Type your own answer in the input, then press `Enter` |
+| Type a reply, `Enter` | Answer every question of the response with your reply |
+| `Escape` | Go back from **Other** to the choices |
+
+After the last question, the chat sends your answers, and the card changes to
+a record of them. A reply that you type shows as your message under the
+record. If a tool call of the response also waits for approval, decide it
+first. If you stop a running response before you answer, the record shows
+**Not answered**. As with approvals, a waiting response cannot be stopped, and
+`/resume` shows the card again.
+
 ### One-shot question
 
 ```shell
@@ -74,6 +132,52 @@ onyx-cli ask --json "Hello"
 | `--prompt <string>` | Question text (use with piped stdin context) |
 | `--quiet` | Buffer output and print once at end |
 | `--max-output <int>` | Max bytes before truncating (0 to disable) |
+| `--approve <answer>` | Answer to tool approval requests when `ask` cannot prompt: `fail` (default), `reject`, `once`, or `session`. `session` approves for the chat, or for the command on a VM command's request |
+| `--questions <answer>` | Answer to the agent's questions when `ask` cannot prompt: `fail` (default) or `skip` |
+
+When a tool call needs approval and stderr is a terminal, `ask` shows the
+request on stderr and prompts:
+`[y] approve once / [a] approve for this chat / [d] show all arguments / [N] reject`.
+The request shows at most 10 arguments and shortens long values. Answer `d` to
+show every argument in full, then answer the prompt again. If the server ends
+the request first, for example because the program that made the call ended,
+the prompt ends and `ask` shows the outcome. `ask` ignores input that you typed
+before the prompt showed. When the response continues after the answers, `ask`
+follows it and prints the rest of the answer.
+If you interrupt `ask` at a prompt while the response waits, `ask` exits with
+code 11 without a decision. The request keeps waiting, and you can decide it in
+another client, for example with `/resume` in `onyx-cli chat`. An interrupt
+while the response still runs stops it.
+
+Without a terminal, in CI, or with `--json`, `ask` never waits for input. It
+uses `--approve` instead:
+
+- `fail` rejects the tool call, prints the rest of the answer, and exits with
+  code 10.
+- `reject` rejects the tool call and continues the response without it.
+- `once` and `session` approve every tool call in the response that needs
+  approval.
+
+If you set `--approve`, `ask` uses it on a terminal too. With `--json`, approval
+requests appear as `tool_approval_request` and `tool_approval_resolved` events.
+A `stop` event with `stop_reason` `awaiting_user` marks where the response
+waits for the answers; the events of its continuation follow. They do not
+repeat events that `ask` already printed.
+
+When the agent asks questions and stderr is a terminal, `ask` shows each
+question with its numbered choices on stderr and prompts, for a question with
+three choices: `[1-3] choose an option / type your own answer / [Enter] no answer`.
+Type a number to choose, or type your own answer. An empty answer tells the
+agent that you have no answer. Without a terminal, in CI, or with `--json`,
+`ask` uses `--questions` instead. Both values tell the agent that no one can
+answer, so it continues with its own judgment:
+
+- `fail` prints the rest of the answer and exits with code 12.
+- `skip` prints the rest of the answer and exits normally.
+
+If you set `--questions`, `ask` uses it on a terminal too. With `--json`,
+questions appear as `tool_question_request` and `tool_question_resolved`
+events.
 
 ### List agents
 
@@ -81,6 +185,15 @@ onyx-cli ask --json "Hello"
 onyx-cli agents
 onyx-cli agents --json
 ```
+
+### List document sets
+
+```shell
+onyx-cli document-sets
+onyx-cli document-sets --json
+```
+
+Pass the names to `onyx-cli search --document-set` to limit a search to those document sets.
 
 ### Serve over SSH
 
@@ -116,6 +229,7 @@ Useful hardening flags:
 | `chat` | Interactive | Launch the interactive chat TUI (requires terminal) |
 | `ask` | Agent / Script | Ask a question and print the answer to stdout |
 | `agents` | Agent / Script | List available agents (ID, name, description) |
+| `document-sets` | Agent / Script | List document sets you can search (ID, name, description) |
 | `validate-config` | Agent / Script | Check CLI configuration and server connectivity |
 | `install-skill` | Agent / Script | Install the Onyx CLI agent skill file |
 | `experiments` | Agent / Script | List experimental features and their status |
@@ -161,6 +275,9 @@ export ONYX_PAT="your-pat"
 | 7 | Timeout | Request timed out |
 | 8 | ServerError | Server returned 5xx |
 | 9 | NotAvailable | Feature/endpoint doesn't exist |
+| 10 | ApprovalRequired | A tool call needed approval and `ask --approve=fail` rejected it |
+| 11 | ApprovalPending | `ask` was interrupted at an approval or question prompt; the request still waits |
+| 12 | QuestionUnanswered | The agent asked questions and `ask --questions=fail` answered that no one can answer |
 
 ### Skill File
 
@@ -198,7 +315,10 @@ onyx-cli install-skill --agent claude-code
 | Key | Action |
 |-----|--------|
 | `Enter` | Send message |
-| `Escape` | Cancel current generation |
+| `Escape`, `Ctrl+C` | Cancel current generation |
+| `y` / `a` / `n` | Approve once / approve for this chat or command / reject a tool call |
+| `d` | Show all arguments of a tool call that waits for approval |
+| `Up` / `Down`, `Enter` | Select and confirm an approval action or an answer to the agent's question |
 | `Ctrl+O` | Toggle source citations |
 | `Ctrl+D` | Quit (press twice) |
 | `Scroll` / `Shift+Up/Down` | Scroll chat history |
@@ -302,7 +422,7 @@ UV_BUILD_CONSTRAINT="$(git rev-parse --show-toplevel)/tools/requirements/build-c
 ```
 
 `tools/requirements/build-constraints.txt` is compiled from its `.in` by the
-`pip-compile` pre-commit hook, so a plain `pre-commit run pip-compile` refreshes
+`pip-compile` pre-commit hook, so `prek run pip-compile --all-files` refreshes
 it. To upgrade a pinned build dependency, edit `build-constraints.in` and the
 matching `[build-system] requires` in all three `pyproject.toml` files; the
 `build-constraints-drift` hook fails if they disagree.
@@ -316,3 +436,22 @@ and in `tools/requirements/build-constraints.in`, and the compiled `build-constr
 ### Versioning
 
 Versions are derived from git tags with the `cli/` prefix (e.g. `cli/v0.1.0`). The tag is parsed by `internal/_version.py` and injected into the Go binary via `-ldflags` at build time.
+
+### Chat completion and cancellation
+
+The interactive client keeps the current request active until the server confirms that
+its session is idle. A STOP packet or a closed connection does not confirm a saved turn.
+Temporary readiness failures keep Send blocked and retry. Unsupported or denied requests
+stop polling and show an error. Session, agent, and model pickers remain available while Send is blocked.
+Reopening the active session preserves its live messages and readiness check.
+Failed drafts remain in the input.
+The `ask` command confirms idle before naming the saved conversation.
+
+Cancellation waits for the response ID before sending Stop. The request owns that ID,
+so a delayed Stop cannot cancel a later turn. If acknowledgement never arrives,
+cancellation closes delivery after ten seconds without sending an unscoped Stop.
+For acknowledged runs, delivery closes after the bounded Stop request completes.
+Session and response identities remain available after cancellation so the next message can continue from the cancelled turn.
+
+A chat stream has no total time limit, because a turn can run for many minutes.
+The server sends a heartbeat every 15 seconds. The client fails the stream after 2 minutes without data.

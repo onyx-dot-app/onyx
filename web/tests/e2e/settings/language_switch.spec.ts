@@ -1,15 +1,19 @@
 import { test } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
-import { SettingsGeneralPage } from "@tests/e2e/pages/SettingsGeneralPage";
+import { SettingsAppearancePage } from "@tests/e2e/pages/SettingsAppearancePage";
 
 // One Latin-script locale and one CJK locale cover the two rendering paths
 // (the CJK case also exercises the ja catalog and the <html lang> switch the
 // :lang() line-breaking CSS keys off). marker is the locale's translation of
-// settings.appearance.title, visible on the settings page.
+// the Appearance tab label, visible on the settings page.
 const LOCALES = [
   { endonym: "Español", lang: "es", marker: "Apariencia" },
   { endonym: "日本語", lang: "ja", marker: "外観" },
 ] as const;
+
+// A fresh user has no language override, so the picker shows the Global
+// Default row.
+const WORKSPACE_DEFAULT_OPTION = "Global Default";
 
 for (const { endonym, lang, marker } of LOCALES) {
   // Uses a fresh random user: changing the language mutates the user row, and
@@ -20,10 +24,10 @@ for (const { endonym, lang, marker } of LOCALES) {
   }) => {
     await loginAsRandomUser(page);
 
-    const settingsPage = new SettingsGeneralPage(page);
+    const settingsPage = new SettingsAppearancePage(page);
     await settingsPage.goto();
 
-    await settingsPage.switchLanguage("English", endonym);
+    await settingsPage.switchLanguage(WORKSPACE_DEFAULT_OPTION, endonym);
     // router.refresh() re-renders the server layout with the new locale.
     await settingsPage.expectLocale(lang, marker);
 

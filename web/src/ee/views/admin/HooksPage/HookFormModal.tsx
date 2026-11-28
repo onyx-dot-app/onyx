@@ -14,10 +14,15 @@ import {
 } from "@opal/icons";
 import { BasicModalFooter, Modal } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  InputVertical,
+  toast,
+  Section,
+} from "@opal/layouts";
 import {
   createHook,
   updateHook,
@@ -289,19 +294,17 @@ export default function HookFormModal({
                 <Modal.Body>
                   {/* Hook point section header */}
                   <ContentAction
-                    sizePreset="main-ui"
-                    variant="section"
+                    font="main-ui-action"
                     padding={0}
                     title={hookPointDisplayName}
                     description={pointDescription}
                     rightChildren={
                       <div className="flex flex-col items-end gap-1">
                         <Content
-                          sizePreset="secondary"
-                          variant="body"
+                          font="secondary-body"
                           icon={SvgShareWebhook}
                           title={t("form.hookPoint.label")}
-                          color="muted"
+                          titleColor="text-03"
                           width="fit"
                         />
                         {docsUrl && (
@@ -328,41 +331,33 @@ export default function HookFormModal({
                     title={t("form.failStrategy.title")}
                     subDescription={failStrategyDescription}
                   >
-                    <InputSelect
+                    <InputSingleSelect
                       value={values.fail_strategy}
                       onValueChange={(v) =>
                         setFieldValue("fail_strategy", v as HookFailStrategy)
                       }
                       disabled={isSubmitting}
-                    >
-                      <InputSelect.Trigger
-                        placeholder={t("form.failStrategy.placeholder")}
-                      />
-                      <InputSelect.Content>
-                        <InputSelect.Item value="soft">
-                          {t("form.failStrategy.soft.label")}
-                          {spec?.default_fail_strategy === "soft" && (
-                            <>
-                              {" "}
-                              <Text color="text-03">
-                                {t("form.failStrategy.default.label")}
-                              </Text>
-                            </>
-                          )}
-                        </InputSelect.Item>
-                        <InputSelect.Item value="hard">
-                          {t("form.failStrategy.hard.label")}
-                          {spec?.default_fail_strategy === "hard" && (
-                            <>
-                              {" "}
-                              <Text color="text-03">
-                                {t("form.failStrategy.default.label")}
-                              </Text>
-                            </>
-                          )}
-                        </InputSelect.Item>
-                      </InputSelect.Content>
-                    </InputSelect>
+                      defaultOption={spec?.default_fail_strategy ?? "hard"}
+                      placeholder={t("form.failStrategy.placeholder")}
+                      options={[
+                        {
+                          value: "soft",
+                          title: t("form.failStrategy.soft.label"),
+                          description:
+                            spec?.default_fail_strategy === "soft"
+                              ? t("form.failStrategy.default.label")
+                              : undefined,
+                        },
+                        {
+                          value: "hard",
+                          title: t("form.failStrategy.hard.label"),
+                          description:
+                            spec?.default_fail_strategy === "hard"
+                              ? t("form.failStrategy.default.label")
+                              : undefined,
+                        },
+                      ]}
+                    />
                   </InputVertical>
 
                   <TimeoutField spec={spec} />
@@ -375,7 +370,7 @@ export default function HookFormModal({
                     <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
                       <InputTypeInField
                         name="endpoint_url"
-                        placeholder="https://your-api-endpoint.com"
+                        placeholder={t("placeholders.endpointUrl")}
                         variant={isSubmitting ? "disabled" : undefined}
                       />
                     </div>
@@ -410,7 +405,6 @@ export default function HookFormModal({
                       justifyContent="start"
                       height="fit"
                       gap={4}
-                      className="px-0.5"
                     >
                       <div className="p-0.5 shrink-0">
                         {isConnected ? (

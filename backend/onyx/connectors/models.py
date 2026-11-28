@@ -6,12 +6,19 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializeAsAny,
+    field_validator,
+    model_validator,
+)
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import INDEX_SEPARATOR, RETURN_SEPARATOR, DocumentSource
 from onyx.db.enums import HierarchyNodeType, IndexModelStatus
-from onyx.utils.text_processing import make_url_compatible
+from onyx.utils.text_processing import make_url_compatible, shorten
 
 
 class InputType(str, Enum):
@@ -246,6 +253,11 @@ class DocumentBase(BaseModel):
 
     file_id: str | None = None
 
+    # The file's type and size as the source reports them, for the admin breakdown.
+    source_mime_type: str | None = None
+    # Bounded to what the BigInteger column holds.
+    source_size_bytes: int | None = Field(default=None, ge=0, le=2**63 - 1)
+
     def get_title_for_document_index(
         self,
     ) -> str | None:
@@ -420,6 +432,8 @@ class Document(DocumentBase):
             title=base.title,
             from_ingestion_api=base.from_ingestion_api,
             file_id=base.file_id,
+            source_mime_type=base.source_mime_type,
+            source_size_bytes=base.source_size_bytes,
         )
 
     def __sizeof__(self) -> int:
@@ -460,6 +474,43 @@ class SlimDocument(BaseModel):
     parent_hierarchy_raw_node_id: str | None = None
     # UTC source creation time.
     doc_created_at: datetime | None = None
+
+
+class ListingPayload(BaseModel):
+    """What a connector's listing knows about one document that its conversion
+    step needs. A connector that needs one defines a subclass.
+
+    A stub loaded from JSON holds this base class, with the subclass fields
+    kept as extra fields. The connector reads them with ``as_type``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    def as_type[P: "ListingPayload"](self, payload_type: type[P]) -> P:
+        """This payload as the connector's subclass."""
+        if isinstance(self, payload_type):
+            return self
+        return payload_type.model_validate(self.model_dump())
+
+
+class ResolveTarget(BaseModel):
+    """One document for `Resolver.resolve_targets` to fetch and convert."""
+
+    document_id: str
+    document_link: str | None = None
+    listing_payload: SerializeAsAny[ListingPayload] | None = None
+
+
+class SlimDocumentStub(SlimDocument):
+    """A listed document whose content is not fetched yet. It has what a
+    later step needs to decide if the document changed and to fetch it.
+    Pruning and permission sync read only the ``SlimDocument`` fields."""
+
+    # UTC source modification time.
+    doc_updated_at: datetime | None = None
+    mime_type: str | None = None
+    # None when the source lists no size.
+    size_bytes: int | None = None
+    listing_payload: SerializeAsAny[ListingPayload] | None = None
 
 
 class HierarchyNode(BaseModel):
@@ -506,6 +557,29 @@ class IndexAttemptMetadata(BaseModel):
 
     # Work in progress: will likely contain metadata about cc pair / index attempt
     structured_id: str | None = None
+
+
+class DocumentTypeLabel(str, Enum):
+    """The document types a corpus count reports. One vocabulary for every
+    source, so counts compare across connectors and fleet telemetry can carry
+    them. A source maps its own file types onto these."""
+
+    DOCUMENT = "document"
+    SPREADSHEET = "spreadsheet"
+    PRESENTATION = "presentation"
+    PDF = "pdf"
+    TEXT = "text"
+    IMAGE = "image"
+    OTHER = "other"
+
+
+class ListingCounts(BaseModel):
+    """What a listing found, by document type. ``partial`` means the listing
+    could not reach a part of the source, so the real total is at least this."""
+
+    docs_by_type: dict[DocumentTypeLabel, int] = {}
+    bytes_by_type: dict[DocumentTypeLabel, int] = {}
+    partial: bool = False
 
 
 class ConnectorCheckpoint(BaseModel):
@@ -589,3 +663,30 @@ class DocIndexingContext(BaseModel):
     total_failures: int
     net_doc_change: int
     total_chunks: int
+
+
+# A check row's summary is this many characters or fewer.
+MAX_ROW_SUMMARY_LENGTH: int = 40
+
+
+class CheckRowText(BaseModel):
+    """The text a capability check's row shows, as on ``ValidationError``: a
+    ``summary`` line and up to three lines of ``description``."""
+
+    model_config = ConfigDict(frozen=True)
+
+    summary: str
+    description: str
+
+
+def counted(count: int | str, noun: str, plural: str) -> str:
+    """``count`` with its noun: "1 repository", "3 repositories", "100+
+    repositories"."""
+    return f"{count} {noun if str(count) == '1' else plural}"
+
+
+def fit_summary(prefix: str, name: str, suffix: str = "") -> str:
+    """``prefix``, ``name`` and ``suffix``, with the name cut to fit a row's
+    summary."""
+    room: int = MAX_ROW_SUMMARY_LENGTH - len(prefix) - len(suffix)
+    return f"{prefix}{shorten(name, room)}{suffix}"

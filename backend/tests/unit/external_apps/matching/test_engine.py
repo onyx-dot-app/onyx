@@ -1,101 +1,135 @@
-"""Pure unit tests for the matching engine. The DB-driven ``recognize_actions``
-path is covered in ``external_dependency_unit/craft/test_action_matching.py``."""
+"""Recognition uses provider catalogs without loading permission or credential state."""
 
-from __future__ import annotations
+import json
 
 import pytest
 from pydantic import ValidationError
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
-from onyx.db.models import ExternalApp
+from onyx.db.enums import ActionPolicy, ExternalAppType, IntegrationKind
 from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
     AllMatchedActions,
     GatedTarget,
-    MatchedAction,
-    apply_credential_gate,
+    recognize_actions,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
+from onyx.integrations.models import ApiShape
 
 
 def test_rejects_empty_actions() -> None:
-    """An AllMatchedActions with no actions is a programmer error — every gate
-    consumer reads ``actions[0]``."""
     with pytest.raises(ValidationError, match="actions must be non-empty"):
         AllMatchedActions(
             actions=(),
-            target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=1, app_name="X"),
+            target=GatedTarget(
+                integration_id=1,
+                kind=IntegrationKind.API,
+                app_name="X",
+                api_shape=ApiShape.PRESET,
+            ),
         )
 
 
-# ── apply_credential_gate: the pure credential/synthesize fork ─────────
+@pytest.mark.parametrize(
+    ("path", "action_id", "default"),
+    [
+        ("/api/conversations.list", "slack.channels.read", ActionPolicy.ALWAYS),
+        ("/api/chat.postMessage", "slack.messages.write", ActionPolicy.ASK),
+        ("/api/unknown", OTHER_REQUEST_ACTION_KEY, ActionPolicy.ASK),
+    ],
+)
+def test_recognition_preserves_action_identity_and_catalog_default(
+    path: str, action_id: str, default: ActionPolicy
+) -> None:
+    matched = recognize_actions(
+        ExternalAppType.SLACK, ProxiedRequest(method="POST", path=path)
+    )
+    assert matched[0].action_type == action_id
+    assert matched[0].policy == default
 
 
-def _app(app_type: ExternalAppType = ExternalAppType.SLACK) -> ExternalApp:
-    app = ExternalApp(name="Slack", app_type=app_type)
-    app.id = 1
-    return app
+def test_custom_app_unknown_action_is_the_other_request_action() -> None:
+    matched = recognize_actions(
+        ExternalAppType.CUSTOM, ProxiedRequest(method="POST", path="/anything")
+    )
+    assert matched[0].action_type == OTHER_REQUEST_ACTION_KEY
+    assert matched[0].policy == ActionPolicy.ASK
 
 
-def _request() -> ProxiedRequest:
-    return ProxiedRequest(method="POST", path="/api/x")
+def _linear_actions(body: object) -> list[str]:
+    matched = recognize_actions(
+        ExternalAppType.LINEAR,
+        ProxiedRequest(method="POST", path="/graphql", body=json.dumps(body).encode()),
+    )
+    return [action.action_type for action in matched]
 
 
-def _matched_actions(*policies: EndpointPolicy) -> AllMatchedActions:
-    return AllMatchedActions(
-        actions=tuple(
-            MatchedAction(
-                action_type=f"a{i}", display_name="A", description="d", policy=p
-            )
-            for i, p in enumerate(policies)
+@pytest.mark.parametrize(
+    "body",
+    [
+        {
+            "query": 'query A { viewer { id } } mutation B { issueDelete(id: "x") { success } }'
+        },
+        {"query": "{ viewer { id } organization { id } }"},
+        [
+            {"query": "{ viewer { id } }"},
+            {"query": 'mutation { issueDelete(id: "x") { success } }'},
+        ],
+        [
+            {"query": "{ viewer { id } }"},
+            {"extensions": {"persistedQuery": {"sha256Hash": "abc"}}},
+        ],
+        [{"query": "{ viewer { id } }"}, {"query": "mutation {"}],
+    ],
+    ids=[
+        "two_operations",
+        "two_root_fields",
+        "batch",
+        "batch_with_persisted_query",
+        "batch_with_unreadable_document",
+    ],
+)
+def test_unknown_graphql_field_next_to_a_known_one_asks(body: object) -> None:
+    actions = _linear_actions(body)
+    assert actions[0] == OTHER_REQUEST_ACTION_KEY
+    assert "linear.viewer.read" in actions
+
+
+def test_known_graphql_fields_of_one_action_do_not_ask() -> None:
+    actions = _linear_actions(
+        {"query": '{ issues { nodes { id } } issue(id: "x") { id } }'}
+    )
+    assert actions == ["linear.issues.read"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("DELETE", "/repos/o/r/issues/comments/1"),
+        ("POST", "/repos/o/r/issues/comments/1"),
+        ("GET", "/graphql"),
+    ],
+)
+def test_a_graphql_body_matches_only_a_post_to_the_graphql_endpoint(
+    method: str, path: str
+) -> None:
+    matched = recognize_actions(
+        ExternalAppType.GITHUB,
+        ProxiedRequest(
+            method=method,
+            path=path,
+            body=json.dumps({"query": "{ viewer { id } }"}).encode(),
         ),
-        target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=1, app_name="Slack"),
     )
+    assert [action.action_type for action in matched] == [OTHER_REQUEST_ACTION_KEY]
 
 
-def test_apply_gate_serveable_passes_recognition_through() -> None:
-    matched_actions = _matched_actions(EndpointPolicy.ALWAYS)
-    assert (
-        apply_credential_gate(_app(), _request(), matched_actions, is_available=True)
-        is matched_actions
+def test_a_query_string_keeps_the_graphql_endpoint() -> None:
+    matched = recognize_actions(
+        ExternalAppType.LINEAR,
+        ProxiedRequest(
+            method="POST",
+            path="/graphql?tenant=acme",
+            body=json.dumps({"query": "{ viewer { id } }"}).encode(),
+        ),
     )
-
-
-def test_apply_gate_serveable_no_catalog_synthesizes_whole_domain_ask() -> None:
-    matched_actions = apply_credential_gate(_app(), _request(), None, is_available=True)
-    assert matched_actions is not None
-    assert matched_actions.governing_action.action_type == WHOLE_DOMAIN_ACTION_TYPE
-    assert matched_actions.governing_action.policy == EndpointPolicy.ASK
-    assert matched_actions.app_name == "Slack"
-    assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, 1)
-
-
-def test_apply_gate_uses_custom_app_display_name() -> None:
-    app = _app(ExternalAppType.CUSTOM)
-    app.name = "Customer CRM"
-
-    matched_actions = apply_credential_gate(app, _request(), None, is_available=True)
-
-    assert matched_actions is not None
-    assert matched_actions.app_name == "Customer CRM"
-
-
-def test_apply_gate_not_serveable_no_catalog_forwards_bare() -> None:
-    assert apply_credential_gate(_app(), _request(), None, is_available=False) is None
-
-
-def test_apply_gate_not_serveable_without_deny_forwards_bare() -> None:
-    matched_actions = _matched_actions(EndpointPolicy.ALWAYS, EndpointPolicy.ASK)
-    assert (
-        apply_credential_gate(_app(), _request(), matched_actions, is_available=False)
-        is None
-    )
-
-
-def test_apply_gate_not_serveable_keeps_only_deny() -> None:
-    matched_actions = _matched_actions(EndpointPolicy.DENY, EndpointPolicy.ASK)
-    gated = apply_credential_gate(
-        _app(), _request(), matched_actions, is_available=False
-    )
-    assert gated is not None
-    assert [a.policy for a in gated.actions] == [EndpointPolicy.DENY]
+    assert [action.action_type for action in matched] == ["linear.viewer.read"]

@@ -1,4 +1,6 @@
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
+from onyx.db.engine.migration_lock import schema_migration_lock
+from onyx.db.engine.migration_search_path import pin_search_path_per_transaction
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
@@ -15,6 +17,14 @@ from sqlalchemy import pool
 from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
+from sqlalchemy.schema import (
+    Column,
+    ColumnCollectionConstraint,
+    Constraint,
+    Index,
+    SchemaItem,
+    Table,
+)
 import os
 from itertools import chain
 import asyncio
@@ -36,11 +46,13 @@ from celery.backends.database.session import (
     ResultModelBase,  # ty: ignore[unresolved-import]
 )
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+from onyx.utils.variable_functionality import set_is_ee_if_available
+from onyx.utils.encryption import validate_encryption_configuration
 
 # Match the app processes' edition so migrations that use versioned
 # implementations (e.g. encrypt_string_to_bytes) resolve the EE variants.
-set_is_ee_based_on_env_variable()
+set_is_ee_if_available()
+validate_encryption_configuration()
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
@@ -56,6 +68,75 @@ if config.config_file_name is not None and config.attributes.get(
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = [Base.metadata, ResultModelBase.metadata]
+
+# Tables that stay in the database for rollback after their model was deleted.
+# Without this filter, autogenerate proposes to drop them.
+_TABLES_KEPT_WITHOUT_MODEL = frozenset(
+    {
+        "external_app__skill",
+        "external_app_user_credential",
+        "mcp_server__user",
+        "mcp_server_user_preference",
+        "oauth_user_token",
+        "scheduled_task_action_policy",
+        "scheduled_task_enabled_app",
+        "skill__user",
+        "skill__user_group",
+        "tool_user_preference",
+        "user_action_policy",
+        "user_skill_preference",
+        "workspace_action_policy",
+    }
+)
+
+# Columns of a mapped table that stay in the database for rollback after they
+# left the model, and the indexes and constraints that use them.
+_COLUMNS_KEPT_WITHOUT_MODEL = frozenset(
+    ("skill", column)
+    for column in (
+        "bundle_file_id",
+        "bundle_sha256",
+        "is_valid",
+        "author_user_id",
+        "public_permission",
+        "installation_policy",
+    )
+)
+_INDEXES_KEPT_WITHOUT_MODEL = frozenset({"uq_skill_automatic_name"})
+
+
+def include_object(
+    object_: SchemaItem,
+    _name: str | None,
+    _type: str,
+    reflected: bool,
+    compare_to: SchemaItem | None,
+) -> bool:
+    if not reflected or compare_to is not None:
+        return True
+    if isinstance(object_, Table):
+        return object_.name not in _TABLES_KEPT_WITHOUT_MODEL
+    if isinstance(object_, Column):
+        table = object_.table
+        return table is None or (
+            table.name not in _TABLES_KEPT_WITHOUT_MODEL
+            and (table.name, object_.name) not in _COLUMNS_KEPT_WITHOUT_MODEL
+        )
+    if isinstance(object_, (Constraint, Index)):
+        table = object_.table
+        return table is None or (
+            table.name not in _TABLES_KEPT_WITHOUT_MODEL
+            and object_.name not in _INDEXES_KEPT_WITHOUT_MODEL
+            and not (
+                isinstance(object_, (ColumnCollectionConstraint, Index))
+                and any(
+                    (table.name, column.name) in _COLUMNS_KEPT_WITHOUT_MODEL
+                    for column in object_.columns
+                )
+            )
+        )
+    return True
+
 
 logger = logging.getLogger(__name__)
 
@@ -250,13 +331,16 @@ def do_run_migrations(
     if create_schema:
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
 
-    connection.execute(text(f'SET search_path TO "{schema_name}"'))
+    # Per transaction, not once: a migration that commits mid-run may continue
+    # on another server connection behind PgBouncer transaction pooling.
+    pin_search_path_per_transaction(connection, schema_name)
 
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         version_table_schema=schema_name,
         include_schemas=True,
+        include_object=include_object,
         compare_type=True,
         compare_server_default=True,
         script_location=config.get_main_option("script_location"),
@@ -317,13 +401,14 @@ async def _migrate_schemas(
             schema,
         )
         try:
-            async with engine.connect() as connection:
-                await connection.run_sync(
-                    do_run_migrations,
-                    schema_name=schema,
-                    create_schema=create_schema,
-                )
-                await connection.commit()
+            async with schema_migration_lock(engine, schema):
+                async with engine.connect() as connection:
+                    await connection.run_sync(
+                        do_run_migrations,
+                        schema_name=schema,
+                        create_schema=create_schema,
+                    )
+                    await connection.commit()
         except Exception as e:
             logger.error("Error migrating schema %s: %s", schema, e)
             if not continue_on_error:
@@ -526,14 +611,16 @@ def run_migrations_online() -> None:
 
         # pytest-alembic passes an Engine, we need to get a connection from it
         with connectable.connect() as connection:
-            # Set search path for the schema
-            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            pin_search_path_per_transaction(connection, schema_name)
 
             context.configure(
                 connection=connection,
                 target_metadata=target_metadata,
-                version_table_schema=schema_name,
-                include_schemas=True,
+                version_table_schema=(
+                    None if schema_name == POSTGRES_DEFAULT_SCHEMA else schema_name
+                ),
+                include_schemas=schema_name != POSTGRES_DEFAULT_SCHEMA,
+                include_object=include_object,
                 compare_type=True,
                 compare_server_default=True,
                 script_location=config.get_main_option("script_location"),

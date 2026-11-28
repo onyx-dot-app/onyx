@@ -1,14 +1,71 @@
-from __future__ import annotations
-
+import threading
+import time
+from collections.abc import Callable
+from datetime import UTC, datetime
+from threading import Barrier
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
-from onyx.configs.constants import DocumentSource, MessageType
-from onyx.context.search.models import BaseFilters
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
-from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
+import pytest
+from opensearchpy import AuthorizationException, RequestError, TransportError
+
+from onyx.agents.models import RunHooks
+from onyx.agents.runtime import Agent
+from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource
+from onyx.context.search.models import (
+    BaseFilters,
+    DocumentTimeField,
+    InferenceChunk,
+    InferenceSection,
+    SearchCycle,
+    SearchDocsResponse,
+    Tag,
+    TimeFilter,
+    UserAccessFilters,
+)
+from onyx.document_index.interfaces import (
+    DocumentIndex,
+    DocumentSectionRequest,
+    KeywordTermCounts,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.feature_flags.interface import NoOpFeatureFlagProvider
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    AssistantMessage,
+    TextContent,
+    ToolCall,
+    ToolResult,
+    ToolResultMessage,
+    UserMessage,
+)
+from onyx.tools.models import ToolContext
+from onyx.tools.tool_implementations.search.constants import (
+    ANALYZED_QUERY_MAX_CHARS,
+    LLM_NON_CUSTOM_QUERY_WEIGHT,
+    LLM_SEMANTIC_QUERY_WEIGHT,
+    MAX_QUERIES_PER_CALL,
+    MAX_SELECTED_SECTIONS,
+    QUERY_MAX_DISTINCT_TERMS,
+    QUERY_MAX_TERMS,
+    UNANALYZED_QUERY_MAX_CHARS,
+)
+from onyx.tools.tool_implementations.search.models import (
+    SearchContext,
+    SearchPlanningResult,
+)
+from onyx.tools.tool_implementations.search.search_tool import (
+    SearchTool,
+    update_search_context,
+)
+from onyx.tools.tool_implementations.utils import (
+    convert_inference_sections_to_llm_string,
+)
+from onyx.tracing.flows import LLMFlow
+from tests.unit.onyx.agents.fakes import FakeModelClient
 
 MODULE = "onyx.tools.tool_implementations.search.search_tool"
 
@@ -19,11 +76,14 @@ ScopeDecision = list[DocumentSource] | None
 def _make_tool(
     user_selected_filters: BaseFilters | None = None,
     auto_detect_filters: bool = True,
+    selection_llm_factory: MagicMock | None = None,
+    primary_llm_cost_checked: bool = True,
+    retrieval_only: bool = False,
+    retrieval_context_chunks: int = 0,
 ) -> SearchTool:
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
         tool_id=1,
-        emitter=MagicMock(),
         user=MagicMock(is_anonymous=False),
         persona_search_info=MagicMock(document_set_names=[]),
         llm=MagicMock(),
@@ -32,6 +92,10 @@ def _make_tool(
         project_id_filter=None,
         enable_slack_search=False,
         auto_detect_filters=auto_detect_filters,
+        selection_llm_factory=selection_llm_factory,
+        primary_llm_cost_checked=primary_llm_cost_checked,
+        retrieval_only=retrieval_only,
+        retrieval_context_chunks=retrieval_context_chunks,
     )
 
 
@@ -42,23 +106,47 @@ def _run(
     decision: ScopeDecision = None,
     decide_mock: MagicMock | None = None,
     skip_query_expansion: bool = False,
+    progress: list[ToolProgress] | None = None,
+    sections: list[InferenceSection] | None = None,
+    context: ToolContext | None = None,
+    queries: list[str] | None = None,
+    federated_mock: MagicMock | None = None,
+    search_pipeline_mock: MagicMock | None = None,
+    fusion_mock: MagicMock | None = None,
+    results: list[ToolResult] | None = None,
+    user_message: str = "resolve the ticket",
+    published: list[tuple[ToolProgress, str]] | None = None,
 ) -> MagicMock:
-    """Run tool.run() with all DB/LLM deps mocked; returns the search_pipeline mock.
-
-    decide_search_scope is replaced by `decide_mock` when given (so its call args
-    can be inspected), otherwise by a stub returning `decision`. search_pipeline
-    returns no chunks, so run() takes the empty-results early return.
-    """
-    mock_search_pipeline = MagicMock(return_value=[])
+    """Mock retrieval and scope selection; supplied sections exercise context expansion."""
+    mock_search_pipeline = (
+        search_pipeline_mock
+        if search_pipeline_mock is not None
+        else MagicMock(return_value=[])
+    )
     decide = (
         decide_mock if decide_mock is not None else MagicMock(return_value=decision)
     )
+
+    def record(item: ToolProgress) -> None:
+        if progress is not None:
+            progress.append(item.model_copy(deep=True))
+        if published is not None:
+            published.append((item, item.model_dump_json()))
+
     with (
         patch(f"{MODULE}.get_session_with_current_tenant") as mock_session_ctx,
-        patch(f"{MODULE}.build_access_filters_for_user", return_value=[]),
+        patch(
+            f"{MODULE}.build_access_filters_for_user",
+            return_value=UserAccessFilters(access_control_list=[], cc_pair_access=None),
+        ),
         patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock()),
         patch(f"{MODULE}.EmbeddingModel"),
-        patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),
+        patch(
+            f"{MODULE}.get_federated_retrieval_functions",
+            federated_mock
+            if federated_mock is not None
+            else MagicMock(return_value=[]),
+        ),
         patch(
             f"{MODULE}.fetch_unique_document_sources", return_value=connected_sources
         ),
@@ -66,28 +154,335 @@ def _run(
         patch(f"{MODULE}.keyword_query_expansion", return_value=[]),
         patch(f"{MODULE}.decide_search_scope", decide),
         patch(f"{MODULE}.decide_time_filter", MagicMock(return_value=None)),
-        patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[]),
-        patch(f"{MODULE}.merge_individual_chunks", return_value=[]),
+        patch(
+            f"{MODULE}.weighted_reciprocal_rank_fusion",
+            fusion_mock if fusion_mock is not None else MagicMock(return_value=[]),
+        ),
+        patch(f"{MODULE}.merge_individual_chunks", return_value=sections or []),
         patch(f"{MODULE}.search_pipeline", mock_search_pipeline),
     ):
         mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        tool.run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=SearchToolOverrideKwargs(
-                starting_citation_num=1,
-                original_query="resolve the ticket",
-                message_history=[
-                    ChatMinimalTextMessage(
-                        message="resolve the ticket",
-                        message_type=MessageType.USER,
-                    )
-                ],
-                skip_query_expansion=skip_query_expansion,
+        result = tool.run(
+            invocation=ToolInvocation(
+                call_id="search",
+                arguments={"queries": queries or ["ticket"]},
+                cancellation=CancellationSignal(),
+                update=record,
+                messages=[UserMessage(content=user_message)],
             ),
-            queries=["ticket"],
+            context=(context or ToolContext()).model_copy(
+                update={"skip_search_query_expansion": skip_query_expansion}
+            ),
+        )
+    assert isinstance(result, ToolResult)
+    if results is not None:
+        results.append(result)
+    if context is not None:
+        context.search_context = update_search_context(
+            context.search_context,
+            [
+                ToolResultMessage(
+                    tool_call_id="search",
+                    tool_name="internal_search",
+                    content=result.content,
+                    metadata=result.metadata,
+                    is_error=result.is_error,
+                )
+            ],
         )
     return mock_search_pipeline
+
+
+@pytest.mark.parametrize(
+    ("selected", "expected"),
+    [(["Engineering Wiki"], ["Engineering Wiki"]), (None, ["Persona Set"])],
+)
+def test_federated_retrieval_uses_selected_document_sets(
+    selected: list[str] | None, expected: list[str]
+) -> None:
+    """Selected document sets replace the persona's sets, as for indexed search."""
+    tool = _make_tool(user_selected_filters=BaseFilters(document_set=selected))
+    tool.persona_search_info.document_set_names = ["Persona Set"]
+    federated = MagicMock(return_value=[])
+
+    with patch(
+        "onyx.db.document_set.filter_document_set_names_by_user_access",
+        return_value=set(selected or []),
+    ):
+        _run(
+            tool,
+            connected_sources=[],
+            skip_query_expansion=True,
+            federated_mock=federated,
+        )
+
+    assert federated.call_args.kwargs["document_set_names"] == expected
+
+
+def _slack_oauth_token(connector_id: int) -> MagicMock:
+    token = MagicMock(federated_connector_id=connector_id)
+    token.federated_connector.source = FederatedConnectorSource.FEDERATED_SLACK
+    token.federated_connector.config = {"channels": ["eng"]}
+    token.token.get_value.return_value = f"slack-token-{connector_id}"
+    return token
+
+
+@pytest.mark.parametrize(
+    ("linked_connector_id", "expected_token"),
+    [(7, "slack-token-7"), (9, "slack-token-9"), (8, None)],
+)
+def test_slack_oauth_search_requires_link_to_selected_document_sets(
+    linked_connector_id: int, expected_token: str | None
+) -> None:
+    tool = _make_tool(user_selected_filters=BaseFilters(document_set=["Eng"]))
+    with (
+        patch(
+            f"{MODULE}.list_federated_connector_oauth_tokens",
+            return_value=[_slack_oauth_token(7), _slack_oauth_token(9)],
+        ),
+        patch(
+            f"{MODULE}.get_federated_connector_document_set_mappings_by_document_set_names",
+            return_value=[MagicMock(federated_connector_id=linked_connector_id)],
+        ) as mappings,
+    ):
+        access_token, _, _ = tool._prefetch_slack_data(MagicMock())
+
+    mappings.assert_called_once()
+    assert mappings.call_args.args[1] == ["Eng"]
+    assert access_token == expected_token
+
+
+def test_empty_search_never_resolves_selection_model() -> None:
+    resolver = MagicMock(side_effect=ValueError("selection model unavailable"))
+    tool = _make_tool(selection_llm_factory=resolver)
+
+    _run(tool, connected_sources=[DocumentSource.GITHUB])
+
+    resolver.assert_not_called()
+
+
+def test_slack_search_over_primary_budget_skips_only_slack_lane() -> None:
+    tool = _make_tool(auto_detect_filters=False, primary_llm_cost_checked=False)
+    tool.enable_slack_search = True
+    tool.llm.config.api_key = "primary-key"
+    error = OnyxError(OnyxErrorCode.RATE_LIMITED, "Provider budget exceeded")
+    with (
+        patch.object(
+            tool, "_prefetch_slack_data", return_value=("slack-token", None, {})
+        ),
+        patch(f"{MODULE}.check_llm_cost_limit_for_provider", side_effect=error) as cost,
+        patch.object(tool, "_run_slack_search") as slack,
+    ):
+        _run(tool, connected_sources=[DocumentSource.SLACK], skip_query_expansion=True)
+
+    assert cost.call_args.kwargs["llm_provider_api_key"] == "primary-key"
+    slack.assert_not_called()
+
+
+@pytest.mark.parametrize("tags", [None, [Tag(tag_key="assignee", tag_value="Ada")]])
+def test_tagged_search_skips_federated_and_slack(tags: list[Tag] | None) -> None:
+    """Federated sources cannot apply tags, so their results would ignore them."""
+    tool = _make_tool(
+        user_selected_filters=BaseFilters(tags=tags), auto_detect_filters=False
+    )
+    tool.enable_slack_search = True
+    federated_info = MagicMock()
+    with (
+        patch.object(
+            tool, "_prefetch_slack_data", return_value=("slack-token", None, {})
+        ),
+        patch.object(tool, "_run_slack_search", return_value=[]) as slack,
+    ):
+        pipeline = _run(
+            tool,
+            connected_sources=[DocumentSource.JIRA],
+            skip_query_expansion=True,
+            federated_mock=MagicMock(return_value=[federated_info]),
+        )
+
+    federated_sent = pipeline.call_args.kwargs["prefetched_federated_retrieval_infos"]
+    if tags:
+        slack.assert_not_called()
+        assert federated_sent == []
+    else:
+        slack.assert_called_once()
+        assert federated_sent == [federated_info]
+
+
+@pytest.mark.parametrize("selection_mode", ["configured", "primary", "unavailable"])
+@pytest.mark.parametrize("with_slack", [False, True])
+def test_search_uses_one_selection_model_per_invocation(
+    selection_mode: str,
+    with_slack: bool,
+) -> None:
+    resolver = MagicMock()
+    tool = _make_tool(selection_llm_factory=resolver, primary_llm_cost_checked=False)
+    tool.enable_slack_search = with_slack
+    selection_llm = MagicMock() if selection_mode == "configured" else tool.llm
+    resolver.return_value = selection_llm
+    if selection_mode == "unavailable":
+        resolver.side_effect = ValueError("selection unavailable")
+    chunk = InferenceChunk(
+        document_id="doc-1",
+        chunk_id=0,
+        content="selected evidence",
+        source_type=DocumentSource.GITHUB,
+        semantic_identifier="Runbook",
+        title="Runbook",
+        boost=1,
+        score=0.5,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+        image_file_id=None,
+        source_links={},
+        section_continuation=False,
+        blurb="selected evidence",
+    )
+    section = InferenceSection(
+        center_chunk=chunk, chunks=[chunk], combined_content=chunk.content
+    )
+    sections = [section]
+    with (
+        patch(f"{MODULE}.check_llm_cost_limit_for_provider") as cost,
+        patch.object(
+            tool, "_prefetch_slack_data", return_value=("slack-token", None, {})
+        ),
+        patch.object(tool, "_run_slack_search", return_value=[]),
+        patch(f"{MODULE}.populate_file_ids_on_sections"),
+        patch(f"{MODULE}.convert_inference_sections_to_search_docs", return_value=[]),
+        patch(f"{MODULE}.get_llm_token_counter", return_value=lambda _: 0),
+        patch(f"{MODULE}._trim_sections_by_tokens", return_value=sections),
+        patch(
+            f"{MODULE}.select_sections_for_expansion",
+            return_value=(sections, None),
+        ) as select,
+        patch(f"{MODULE}.expand_section_with_context", return_value=section) as expand,
+        patch(f"{MODULE}.merge_overlapping_sections", return_value=sections),
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            return_value=("selected evidence", {1: "doc-1"}),
+        ),
+    ):
+        _run(tool, connected_sources=[DocumentSource.GITHUB], sections=sections)
+        resolver.assert_called_once_with()
+        _run(tool, connected_sources=[DocumentSource.GITHUB], sections=sections)
+
+    assert resolver.call_count == 2
+    assert select.call_args.kwargs["llm"] is selection_llm
+    assert expand.call_args.kwargs["llm"] is selection_llm
+    assert select.call_args.kwargs["enforce_llm_input_budget"] is (
+        selection_mode == "configured"
+    )
+    assert expand.call_args.kwargs["enforce_llm_input_budget"] is (
+        selection_mode == "configured"
+    )
+    assert cost.call_count == (2 if with_slack or selection_mode != "configured" else 0)
+
+
+def _next_chunk(
+    chunk_requests: list[DocumentSectionRequest], **_: object
+) -> list[InferenceChunk]:
+    (request,) = chunk_requests
+    chunk = _section(request.document_id).center_chunk
+    return [
+        chunk.model_copy(
+            update={"chunk_id": 1, "content": f"next chunk of {request.document_id}"}
+        )
+    ]
+
+
+@pytest.mark.parametrize("context_chunks", [0, 2])
+def test_retrieval_only_expands_context_without_model_calls(
+    context_chunks: int,
+) -> None:
+    resolver = MagicMock()
+    decide = MagicMock(return_value=None)
+    tool = _make_tool(
+        selection_llm_factory=resolver,
+        primary_llm_cost_checked=False,
+        retrieval_only=True,
+        retrieval_context_chunks=context_chunks,
+    )
+    tool.enable_slack_search = True
+    index = cast(MagicMock, tool.document_index)
+    index.id_based_retrieval.side_effect = _next_chunk
+    sections = [_section(f"doc-{i}") for i in range(MAX_SELECTED_SECTIONS + 1)]
+    context = ToolContext()
+    with (
+        patch(f"{MODULE}.check_llm_cost_limit_for_provider") as cost,
+        patch.object(tool, "_prefetch_slack_data") as slack_prefetch,
+        patch.object(tool, "_resolve_decision_client") as decision_client,
+        patch(f"{MODULE}.populate_file_ids_on_sections") as populate_file_ids,
+        patch(f"{MODULE}.select_sections_for_expansion") as select,
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            wraps=convert_inference_sections_to_llm_string,
+        ) as to_llm_string,
+    ):
+        searched = _run(
+            tool,
+            context=context,
+            connected_sources=[DocumentSource.GITHUB],
+            decide_mock=decide,
+            sections=sections,
+        )
+
+    assert sorted(_queries_sent(searched)) == ["resolve the ticket", "ticket"]
+    assert [
+        section.combined_content
+        for section in to_llm_string.call_args.kwargs["top_sections"]
+    ] == [
+        f"content of doc-{i}" + (f"\nnext chunk of doc-{i}" if context_chunks else "")
+        for i in range(MAX_SELECTED_SECTIONS)
+    ]
+    # Each kept section reads only the chunks below it, up to the window.
+    assert [
+        call.kwargs["chunk_requests"][0].max_chunk_ind
+        for call in index.id_based_retrieval.call_args_list
+    ] == [context_chunks] * (MAX_SELECTED_SECTIONS if context_chunks else 0)
+    # One completed search and no expansion or time decision to carry forward.
+    assert len(context.search_context.search_cycles) == 1
+    assert context.search_context.cached_expansion is None
+    assert context.search_context.time_filter_computed is False
+    assert cast(MagicMock, tool.llm).mock_calls == []
+    for step in (
+        decide,
+        slack_prefetch,
+        decision_client,
+        resolver,
+        select,
+        cost,
+        populate_file_ids,
+    ):
+        step.assert_not_called()
+
+
+def test_retrieval_only_ignores_planning_from_earlier_steps() -> None:
+    context = ToolContext()
+    context.search_context = SearchContext(
+        cached_expansion=("rephrased query", ("cached keyword",)),
+        time_filter=TimeFilter(
+            field=DocumentTimeField.UPDATED_AT, start=datetime(2026, 1, 1, tzinfo=UTC)
+        ),
+        time_filter_computed=True,
+    )
+    tool = _make_tool(
+        user_selected_filters=BaseFilters(source_type=[DocumentSource.ASANA]),
+        retrieval_only=True,
+    )
+
+    searched = _run(tool, context=context, connected_sources=[DocumentSource.ASANA])
+
+    assert sorted(_queries_sent(searched)) == ["resolve the ticket", "ticket"]
+    assert all(
+        applied.updated_at_range is None
+        for applied in _filters_passed_to_search(searched)
+    )
 
 
 def _filters_passed_to_search(mock_search_pipeline: MagicMock) -> list[Any]:
@@ -104,11 +499,25 @@ def _queries_sent(mock_search_pipeline: MagicMock) -> list[str]:
     ]
 
 
-def _emitted_filter_sources(tool: SearchTool) -> list[list[str]]:
-    """Sources of each SearchToolFilterDelta the tool emitted to the UI."""
-    emit_mock = cast(MagicMock, tool.emitter.emit)
-    emitted = [call.args[0].obj for call in emit_mock.call_args_list]
-    return [obj.sources for obj in emitted if isinstance(obj, SearchToolFilterDelta)]
+def _emitted_filter_sources(progress: list[ToolProgress]) -> list[list[str]]:
+    return [
+        item.details.sources
+        for item in progress
+        if isinstance(item.details, SearchDocsResponse) and item.details.sources
+    ]
+
+
+def test_a_call_runs_at_most_the_query_limit() -> None:
+    queries = [f"query {index}" for index in range(MAX_QUERIES_PER_CALL + 2)]
+    mock_search_pipeline = _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.SLACK],
+        skip_query_expansion=True,
+        queries=queries,
+    )
+    sent = set(_queries_sent(mock_search_pipeline))
+    assert set(queries[:MAX_QUERIES_PER_CALL]) <= sent
+    assert not set(queries[MAX_QUERIES_PER_CALL:]) & sent
 
 
 def test_decided_scope_is_passed_to_search() -> None:
@@ -133,22 +542,25 @@ def test_decided_scope_is_passed_to_search() -> None:
 
 def test_filter_delta_emitted_for_a_subset_scope() -> None:
     """A scope narrower than the connected sources surfaces a filter to the UI."""
+    updates: list[ToolProgress] = []
     tool = _make_tool()
     _run(
         tool,
+        progress=updates,
         decision=[DocumentSource.CONFLUENCE],
         connected_sources=[DocumentSource.CONFLUENCE, DocumentSource.GITHUB],
     )
-    assert _emitted_filter_sources(tool) == [["confluence"]]
+    assert _emitted_filter_sources(updates) == [["confluence"], ["confluence"]]
 
 
 def test_no_filter_delta_when_scope_covers_all_sources() -> None:
     """Scoping to every connected source is equivalent to an unscoped search, so
     no filter is surfaced (the UI keeps its default 'internal documents' label)."""
+    updates: list[ToolProgress] = []
     tool = _make_tool()
     connected = [DocumentSource.CONFLUENCE, DocumentSource.GITHUB]
-    _run(tool, decision=connected, connected_sources=connected)
-    assert _emitted_filter_sources(tool) == []
+    _run(tool, progress=updates, decision=connected, connected_sources=connected)
+    assert _emitted_filter_sources(updates) == []
 
 
 def test_no_decided_scope_leaves_search_unscoped() -> None:
@@ -221,15 +633,22 @@ def test_cached_expansion_is_reused_on_a_new_filter_not_a_repeat() -> None:
     """The first call expands (and caches). A repeat call on a NOT-yet-searched
     source reuses the cached expansion; a repeat on an already-searched source
     does not (the agent is expected to vary terms there)."""
+    context = ToolContext()
     tool = _make_tool()
     connected = [DocumentSource.ZENDESK, DocumentSource.ASANA]
 
     # Call 1: first search (expansion runs) scoped to Zendesk -> caches expansion.
-    _run(tool, decision=[DocumentSource.ZENDESK], connected_sources=connected)
+    _run(
+        tool,
+        context=context,
+        decision=[DocumentSource.ZENDESK],
+        connected_sources=connected,
+    )
 
     # Call 2: repeat call, walk advanced to Asana (new) -> reuse cached expansion.
     new_filter = _run(
         tool,
+        context=context,
         decision=[DocumentSource.ASANA],
         connected_sources=connected,
         skip_query_expansion=True,
@@ -241,6 +660,7 @@ def test_cached_expansion_is_reused_on_a_new_filter_not_a_repeat() -> None:
     # Call 3: repeat call on Asana again (already searched) -> no reuse.
     repeat = _run(
         tool,
+        context=context,
         decision=[DocumentSource.ASANA],
         connected_sources=connected,
         skip_query_expansion=True,
@@ -254,12 +674,13 @@ def test_no_scope_decision_is_not_repeated_within_a_turn() -> None:
     """Once a cycle's scope decision comes back unscoped, the conversation has no
     source directive (which can't change this turn), so later cycles skip the
     decision instead of burning another LLM call."""
+    context = ToolContext()
     tool = _make_tool()
     connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
     decide_mock = MagicMock(return_value=None)
 
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
+    _run(tool, context=context, decide_mock=decide_mock, connected_sources=connected)
+    _run(tool, context=context, decide_mock=decide_mock, connected_sources=connected)
 
     assert decide_mock.call_count == 1, (
         "decide_search_scope should run once, then latch off after a no-scope result"
@@ -269,14 +690,15 @@ def test_no_scope_decision_is_not_repeated_within_a_turn() -> None:
 def test_scope_decision_keeps_running_while_a_directive_is_present() -> None:
     """A routed decision does not latch the skip — the walk must keep deciding on
     later cycles (e.g. to advance a backoff sequence to the next source)."""
+    context = ToolContext()
     tool = _make_tool()
     connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
     decide_mock = MagicMock(
         side_effect=[[DocumentSource.ZENDESK], [DocumentSource.CONFLUENCE]]
     )
 
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
+    _run(tool, context=context, decide_mock=decide_mock, connected_sources=connected)
+    _run(tool, context=context, decide_mock=decide_mock, connected_sources=connected)
 
     assert decide_mock.call_count == 2
 
@@ -284,6 +706,7 @@ def test_scope_decision_keeps_running_while_a_directive_is_present() -> None:
 def test_prior_cycles_accumulate_across_calls_for_the_walk() -> None:
     """A backoff sequence advances: the first call's queries + resolved scope are
     passed back to decide_search_scope as previous_cycles on the second."""
+    context = ToolContext()
     tool = _make_tool()
     connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
 
@@ -291,8 +714,8 @@ def test_prior_cycles_accumulate_across_calls_for_the_walk() -> None:
     decide_mock = MagicMock(
         side_effect=[[DocumentSource.ZENDESK], [DocumentSource.CONFLUENCE]]
     )
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
+    _run(tool, context=context, decide_mock=decide_mock, connected_sources=connected)
+    _run(tool, context=context, decide_mock=decide_mock, connected_sources=connected)
 
     # previous_cycles is the 4th positional arg.
     first_cycles = decide_mock.call_args_list[0].args[3]
@@ -306,16 +729,17 @@ def test_prior_cycles_accumulate_across_calls_for_the_walk() -> None:
 
 def test_auto_detect_disabled_skips_scope_decision() -> None:
     """With auto-detect off, no scope decision runs and the search stays unscoped."""
+    updates: list[ToolProgress] = []
     tool = _make_tool(auto_detect_filters=False)
     connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
     decide_mock = MagicMock(return_value=[DocumentSource.ZENDESK])
 
     mock_search_pipeline = _run(
-        tool, decide_mock=decide_mock, connected_sources=connected
+        tool, progress=updates, decide_mock=decide_mock, connected_sources=connected
     )
 
     decide_mock.assert_not_called()
-    assert _emitted_filter_sources(tool) == []
+    assert _emitted_filter_sources(updates) == []
     filters = _filters_passed_to_search(mock_search_pipeline)
     assert filters, "search_pipeline was never called"
     for applied in filters:
@@ -344,3 +768,962 @@ def test_auto_detect_disabled_keeps_user_selected_filters() -> None:
     for applied in filters:
         assert applied is not None
         assert applied.source_type == restriction
+
+
+def test_custom_agent_project_search_keeps_source_scope_and_both_file_filters() -> None:
+    tool: SearchTool = _make_tool(
+        BaseFilters(source_type=[DocumentSource.GITHUB]), auto_detect_filters=False
+    )
+    tool.project_id_filter = 42
+    tool.persona_id_filter = 7
+
+    search: MagicMock = _run(
+        tool, connected_sources=[DocumentSource.GITHUB, DocumentSource.GOOGLE_DRIVE]
+    )
+
+    assert search.call_count > 0
+    for call in search.call_args_list:
+        assert call.kwargs["project_id_filter"] == 42
+        assert call.kwargs["persona_id_filter"] == 7
+        assert call.kwargs[
+            "chunk_search_request"
+        ].user_selected_filters.source_type == [DocumentSource.GITHUB]
+
+
+@pytest.mark.parametrize("project_id", [None, 99])
+@pytest.mark.parametrize(
+    "selected_sources, expected_sources",
+    [
+        (None, [DocumentSource.GITHUB, DocumentSource.USER_FILE]),
+        ([DocumentSource.GITHUB], [DocumentSource.GITHUB]),
+        (
+            [DocumentSource.GITHUB, DocumentSource.USER_FILE],
+            [DocumentSource.GITHUB, DocumentSource.USER_FILE],
+        ),
+    ],
+)
+def test_inferred_scope_retains_context_files_within_explicit_selection(
+    project_id: int | None,
+    selected_sources: list[DocumentSource] | None,
+    expected_sources: list[DocumentSource],
+) -> None:
+    context = ToolContext()
+    tool: SearchTool = _make_tool(BaseFilters(source_type=selected_sources))
+    tool.project_id_filter = project_id
+    tool.persona_id_filter = 42
+    decision: list[DocumentSource] = [DocumentSource.GITHUB]
+    updates: list[ToolProgress] = []
+    search: MagicMock = _run(
+        tool,
+        context=context,
+        decision=decision,
+        progress=updates,
+        connected_sources=[
+            DocumentSource.GITHUB,
+            DocumentSource.USER_FILE,
+            DocumentSource.SLACK,
+        ],
+    )
+    assert search.call_args_list
+    for call in search.call_args_list:
+        assert call.kwargs["project_id_filter"] == project_id
+        assert call.kwargs["persona_id_filter"] == 42
+        assert (
+            call.kwargs["chunk_search_request"].user_selected_filters.source_type
+            == expected_sources
+        )
+    expected_values: list[str] = [source.value for source in expected_sources]
+    assert _emitted_filter_sources(updates) == [expected_values, expected_values]
+    assert context.search_context.search_cycles[-1].searched_sources == expected_values
+    assert decision == [DocumentSource.GITHUB]
+    assert tool.user_selected_filters is not None
+    assert tool.user_selected_filters.source_type == selected_sources
+
+
+def test_shared_search_tool_keeps_conversations_separate() -> None:
+    tool = _make_tool()
+    first = ToolContext()
+    second = ToolContext()
+    sources = [DocumentSource.SLACK, DocumentSource.GITHUB]
+    first_scope = MagicMock(return_value=[DocumentSource.SLACK])
+    second_scope = MagicMock(return_value=[DocumentSource.GITHUB])
+
+    _run(tool, context=first, connected_sources=sources, decide_mock=first_scope)
+    _run(tool, context=second, connected_sources=sources, decide_mock=second_scope)
+    _run(tool, context=first, connected_sources=sources, decide_mock=first_scope)
+
+    assert second_scope.call_args.args[3] == []
+    assert len(first_scope.call_args.args[3]) == 1
+    assert first.search_context.search_cycles[0].searched_sources == ["slack"]
+    assert second.search_context.search_cycles[0].searched_sources == ["github"]
+
+
+def test_selected_documents_are_published_before_context_expansion() -> None:
+    chunk = InferenceChunk(
+        document_id="ticket",
+        source_type=DocumentSource.CONFLUENCE,
+        semantic_identifier="Support ticket",
+        title="Support ticket",
+        chunk_id=0,
+        blurb="Evidence",
+        content="Evidence",
+        source_links={0: "https://example.com/ticket"},
+        image_file_id=None,
+        section_continuation=False,
+        boost=0,
+        score=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+    )
+    section = InferenceSection(
+        center_chunk=chunk, chunks=[chunk], combined_content="Evidence"
+    )
+    updates: list[ToolProgress] = []
+
+    def expand(
+        section: InferenceSection,
+        user_query: str,  # noqa: ARG001
+        llm: LLM,  # noqa: ARG001
+        document_index: DocumentIndex,  # noqa: ARG001
+        expand_override: bool,  # noqa: ARG001
+        enforce_llm_input_budget: bool = False,  # noqa: ARG001
+        decision_client: object = None,  # noqa: ARG001
+    ) -> InferenceSection:
+        details = updates[-1].details
+        assert isinstance(details, SearchDocsResponse)
+        assert details.displayed_docs is not None
+        assert [doc.document_id for doc in details.displayed_docs] == ["ticket"]
+        assert "ticket" in details.queries
+        assert details.sources == ["confluence"]
+        return section
+
+    with (
+        patch(f"{MODULE}.populate_file_ids_on_sections"),
+        patch(f"{MODULE}.get_llm_token_counter"),
+        patch(f"{MODULE}._trim_sections_by_tokens", return_value=[section]),
+        patch(
+            f"{MODULE}.select_sections_for_expansion",
+            return_value=([section], ["ticket"]),
+        ),
+        patch(f"{MODULE}.expand_section_with_context", side_effect=expand) as expansion,
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            return_value=("Evidence", {1: "ticket"}),
+        ),
+    ):
+        _run(
+            _make_tool(),
+            connected_sources=[DocumentSource.CONFLUENCE, DocumentSource.SLACK],
+            decision=[DocumentSource.CONFLUENCE],
+            progress=updates,
+            sections=[section],
+        )
+    expansion.assert_called_once()
+    first = updates[0].details
+    assert isinstance(first, SearchDocsResponse)
+    assert first.displayed_docs is None
+    assert first.search_docs == []
+
+
+@pytest.mark.parametrize("merge_calls", [False, True])
+def test_sdk_searches_preserve_context_and_call_identity(merge_calls: bool) -> None:
+    tool = _make_tool()
+    context = ToolContext(
+        skip_search_query_expansion=True,
+        search_context=SearchContext(
+            search_cycles=(
+                SearchCycle(
+                    cycle_number=1,
+                    queries=["prior"],
+                    searched_sources=["slack"],
+                ),
+            )
+        ),
+    )
+    before = context.model_dump_json()
+    execution_count = 1 if merge_calls else 2
+    retrievals_started = Barrier(2)
+
+    def retrieve(query: str, *_args: object) -> list[InferenceChunk]:
+        # The shared original question must not satisfy the two-call barrier.
+        if query in {"first", "second"}:
+            retrievals_started.wait(timeout=5)
+        return []
+
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id=query, name=SearchTool.NAME, arguments={"queries": [query]}
+                    )
+                    for query in ("first", "second")
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="done")]),
+        ]
+    )
+    agent = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool.bind(lambda: context)],
+        # Per-call approval checks prevent merging, even when they permit execution.
+        feature=RunHooks(before_tool_call=None if merge_calls else lambda _: None),
+    )
+
+    with (
+        patch(f"{MODULE}.get_session_with_current_tenant"),
+        patch(
+            f"{MODULE}.build_access_filters_for_user",
+            return_value=UserAccessFilters(
+                access_control_list=[],
+                cc_pair_access=None,
+            ),
+        ),
+        patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock()),
+        patch(f"{MODULE}.EmbeddingModel"),
+        patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),
+        patch(
+            f"{MODULE}.fetch_unique_document_sources",
+            return_value=[DocumentSource.GITHUB],
+        ),
+        patch(
+            f"{MODULE}.decide_search_scope", return_value=[DocumentSource.GITHUB]
+        ) as scope,
+        patch(f"{MODULE}.decide_time_filter", return_value=None) as time_filter,
+        patch.object(tool, "_run_search_for_query", side_effect=retrieve),
+    ):
+        run = agent.start(max_steps=2, messages=[UserMessage(content="Find evidence")])
+        try:
+            assert run.result(10).output.text == "done"
+            assert run.wait_for_idle(5)
+            results = [
+                message
+                for message in run.snapshot().messages
+                if isinstance(message, ToolResultMessage)
+            ]
+        finally:
+            retrievals_started.abort()
+            run.cancel()
+            assert run.wait_for_idle(5)
+
+    assert [result.tool_call_id for result in results] == ["first", "second"]
+    assert context.model_dump_json() == before
+    assert scope.call_count == time_filter.call_count == execution_count
+    for call in scope.call_args_list:
+        assert call.args[3] == list(context.search_context.search_cycles)
+    for result in results:
+        assert not result.is_error
+        assert isinstance(result.metadata, SearchPlanningResult)
+        assert result.metadata.original_queries == (
+            ("first", "second") if merge_calls else (result.tool_call_id,)
+        )
+        assert result.metadata.tool_call_id == (
+            "first" if merge_calls else result.tool_call_id
+        )
+        assert result.metadata.searched_sources == ("github",)
+        assert isinstance(result.details, SearchDocsResponse)
+        assert result.details.sources == []
+    updated = update_search_context(context.search_context, results)
+    assert len(updated.search_cycles) == 1 + execution_count
+    assert [cycle.queries for cycle in updated.search_cycles[1:]] == (
+        [["first", "second"]] if merge_calls else [["first"], ["second"]]
+    )
+
+
+def test_search_context_folds_merged_results_once_in_model_order() -> None:
+    initial = SearchContext()
+    first = SearchPlanningResult(
+        tool_call_id="merged",
+        original_queries=("one", "two"),
+        searched_sources=("github",),
+        cached_expansion=("first", ("one",)),
+        time_filter_computed=True,
+    )
+    later = SearchPlanningResult(
+        tool_call_id="later",
+        original_queries=("three",),
+        searched_sources=("slack",),
+        cached_expansion=("last", ("three",)),
+        scope_decision_settled=True,
+        time_filter=TimeFilter(field=DocumentTimeField.UPDATED_AT),
+        time_filter_computed=True,
+    )
+    results = [
+        ToolResultMessage(
+            tool_call_id=call_id,
+            tool_name="internal_search",
+            content="",
+            metadata=planning,
+            is_error=error,
+        )
+        for call_id, planning, error in (
+            ("one", first, False),
+            ("two", first.model_copy(), False),
+            ("failure", later, True),
+            ("three", later, False),
+        )
+    ]
+    final = update_search_context(initial, results)
+    assert initial == SearchContext()
+    assert [cycle.queries for cycle in final.search_cycles] == [
+        ["one", "two"],
+        ["three"],
+    ]
+    assert [cycle.cycle_number for cycle in final.search_cycles] == [1, 2]
+    assert final.cached_expansion == ("last", ("three",))
+    assert final.scope_decision_settled
+    assert final.time_filter_computed and final.time_filter is None
+
+
+def test_empty_source_selection_and_failed_retrieval_do_not_advance_context() -> None:
+    context = ToolContext()
+    empty_tool = _make_tool(BaseFilters(source_type=[]))
+    pipeline = _run(
+        empty_tool, context=context, connected_sources=[DocumentSource.GITHUB]
+    )
+    pipeline.assert_not_called()
+    assert context.search_context == SearchContext()
+
+    tool = _make_tool()
+    with patch.object(
+        tool, "_run_search_for_query", side_effect=RuntimeError("retrieval failed")
+    ):
+        _run(tool, context=context, connected_sources=[DocumentSource.GITHUB])
+    assert context.search_context == SearchContext()
+
+
+def _section(document_id: str) -> InferenceSection:
+    chunk = InferenceChunk(
+        document_id=document_id,
+        chunk_id=0,
+        content=f"content of {document_id}",
+        source_type=DocumentSource.GITHUB,
+        semantic_identifier=document_id,
+        title=document_id,
+        boost=1,
+        score=0.5,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+        image_file_id=None,
+        source_links={},
+        section_continuation=False,
+        blurb=document_id,
+    )
+    return InferenceSection(
+        center_chunk=chunk, chunks=[chunk], combined_content=chunk.content
+    )
+
+
+def _run_selection(
+    tool: SearchTool,
+    sections: list[InferenceSection],
+    rank: MagicMock,
+    decision_client: MagicMock | None,
+    expand_effect: Callable[..., InferenceSection] = lambda **kwargs: kwargs["section"],
+    published: list[tuple[ToolProgress, str]] | None = None,
+) -> tuple[MagicMock, MagicMock, MagicMock, MagicMock]:
+    """Run a search that reaches selection; returns the mocks for LLM selection,
+    expansion, overlap merging and search-doc conversion."""
+    with (
+        patch.object(tool, "_resolve_decision_client", return_value=decision_client),
+        patch(f"{MODULE}.populate_file_ids_on_sections"),
+        patch(
+            f"{MODULE}.convert_inference_sections_to_search_docs", return_value=[]
+        ) as to_docs,
+        patch(f"{MODULE}.rank_sections_listwise", rank),
+        patch(
+            f"{MODULE}.select_sections_for_expansion",
+            return_value=(sections[:2], None),
+        ) as select,
+        patch(
+            f"{MODULE}.expand_section_with_context", side_effect=expand_effect
+        ) as expand,
+        patch(
+            f"{MODULE}.merge_overlapping_sections", side_effect=lambda found: found
+        ) as merge,
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            return_value=("evidence", {}),
+        ),
+    ):
+        _run(
+            tool,
+            connected_sources=[DocumentSource.GITHUB],
+            sections=sections,
+            published=published,
+        )
+    return select, expand, merge, to_docs
+
+
+def test_published_progress_does_not_change_after_publication() -> None:
+    """The run publishes each update as is, so the tool sends a new value for
+    each one instead of changing one it already sent."""
+    published: list[tuple[ToolProgress, str]] = []
+    sections = [_section(f"doc-{index}") for index in range(3)]
+    _run_selection(
+        _make_tool(),
+        sections,
+        MagicMock(return_value=[0.5] * len(sections)),
+        None,
+        published=published,
+    )
+    assert len(published) >= 3
+    assert [item.model_dump_json() for item, _ in published] == [
+        dump for _, dump in published
+    ]
+
+
+def test_decision_rerank_selects_by_listwise_probability() -> None:
+    tool = _make_tool()
+    client = MagicMock()
+    sections = [_section(f"doc-{index}") for index in range(60)]
+    # doc-55 sits past the 50 top hits; doc-3 and doc-7 tie and keep fused order.
+    scores = [0.0] * 60
+    scores[55], scores[3], scores[7] = 0.99, 0.5, 0.5
+    rank = MagicMock(return_value=scores)
+
+    with patch("onyx.llm.factory.get_llm_tokenizer_encode_func") as encoder:
+        select, expand, merge, to_docs = _run_selection(tool, sections, rank, client)
+    encoder.assert_not_called()
+
+    select.assert_not_called()
+    assert rank.call_args.args[0] == sections
+    picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
+    assert picked[:3] == ["doc-55", "doc-3", "doc-7"]
+    assert len(picked) == 10
+    assert all(call.kwargs["decision_client"] is client for call in expand.mock_calls)
+    # Each pick is expanded once, whether during the ranking call or after it.
+    expanded = [
+        call.kwargs["section"].center_chunk.document_id for call in expand.mock_calls
+    ]
+    assert all(expanded.count(document_id) == 1 for document_id in picked)
+    # The pick from beyond the top hits gets its own search doc.
+    converted = [
+        [section.center_chunk.document_id for section in call.args[0]]
+        for call in to_docs.mock_calls
+    ]
+    assert ["doc-55"] in converted
+
+
+def test_decision_rerank_failure_falls_back_to_llm_selection() -> None:
+    tool = _make_tool()
+    sections = [_section(f"doc-{index}") for index in range(5)]
+    rank = MagicMock(side_effect=RuntimeError("decision model down"))
+
+    select, expand, merge, _ = _run_selection(tool, sections, rank, MagicMock())
+
+    select.assert_called_once()
+    picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
+    assert picked == ["doc-0", "doc-1"]
+    # Expansion after the fallback does not wait on the failed model.
+    llm_expanded = {
+        call.kwargs["section"].center_chunk.document_id
+        for call in expand.mock_calls
+        if call.kwargs["decision_client"] is None
+    }
+    assert llm_expanded == {"doc-0", "doc-1"}
+
+
+@pytest.mark.parametrize(
+    ("noop", "flag_enabled", "expect_client"),
+    [
+        # Without PostHog, a configured decision model is enough.
+        (True, False, True),
+        (False, False, False),
+        (False, True, True),
+    ],
+)
+def test_decision_client_requires_the_flag_only_with_posthog(
+    noop: bool, flag_enabled: bool, expect_client: bool
+) -> None:
+    posthog = MagicMock()
+    posthog.feature_enabled_for_user_tenant.return_value = flag_enabled
+    provider = NoOpFeatureFlagProvider() if noop else posthog
+    client = MagicMock()
+    with (
+        patch(f"{MODULE}.get_default_feature_flag_provider", return_value=provider),
+        patch(f"{MODULE}.get_decision_client", return_value=client) as get_client,
+    ):
+        resolved = _make_tool()._resolve_decision_client()
+
+    assert (resolved is client) is expect_client
+    assert get_client.called is expect_client
+
+
+def test_decision_client_is_none_without_a_decision_model() -> None:
+    with (
+        patch(
+            f"{MODULE}.get_default_feature_flag_provider",
+            return_value=NoOpFeatureFlagProvider(),
+        ),
+        patch(f"{MODULE}.get_decision_client", return_value=None),
+    ):
+        assert _make_tool()._resolve_decision_client() is None
+
+
+def test_decision_client_is_none_when_the_model_is_unavailable() -> None:
+    with (
+        patch(
+            f"{MODULE}.get_default_feature_flag_provider",
+            return_value=MagicMock(
+                feature_enabled_for_user_tenant=MagicMock(return_value=True)
+            ),
+        ),
+        patch(
+            f"{MODULE}.get_decision_client",
+            side_effect=OnyxError(OnyxErrorCode.RATE_LIMITED, "over budget"),
+        ),
+    ):
+        assert _make_tool()._resolve_decision_client() is None
+
+
+def test_decision_client_is_none_for_content_free_turns() -> None:
+    with (
+        patch(
+            f"{MODULE}.get_default_feature_flag_provider",
+            return_value=NoOpFeatureFlagProvider(),
+        ),
+        patch(f"{MODULE}.current_turn_persists_content", return_value=False),
+        patch(f"{MODULE}.get_decision_client") as get_client,
+    ):
+        assert _make_tool()._resolve_decision_client() is None
+    get_client.assert_not_called()
+
+
+def test_decision_rerank_does_not_wait_for_unselected_expansions() -> None:
+    tool = _make_tool()
+    sections = [_section(f"doc-{index}") for index in range(12)]
+    # doc-9 is expanded speculatively but not selected; its expansion hangs.
+    scores = [1.0] * 12
+    scores[9] = 0.0
+    release = threading.Event()
+
+    def expand(**kwargs: Any) -> InferenceSection:
+        if kwargs["section"].center_chunk.document_id == "doc-9":
+            release.wait(timeout=10)
+        return kwargs["section"]
+
+    started = time.monotonic()
+    try:
+        _, _, merge, _ = _run_selection(
+            tool,
+            sections,
+            MagicMock(return_value=scores),
+            MagicMock(),
+            expand_effect=expand,
+        )
+    finally:
+        release.set()
+
+    assert time.monotonic() - started < 5
+    picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
+    assert "doc-9" not in picked
+
+
+def test_failed_background_expansion_costs_no_llm_call() -> None:
+    tool = _make_tool()
+    sections = [_section(f"doc-{index}") for index in range(12)]
+    # doc-8 and doc-9 are expanded in the background but not selected.
+    scores = [0.9] * 8 + [0.0, 0.0] + [0.9, 0.9]
+
+    def expand(**kwargs: Any) -> InferenceSection:
+        # The decision model is down: decision-only calls fail.
+        if kwargs.get("llm_fallback") is False:
+            raise RuntimeError("decision model down")
+        return kwargs["section"]
+
+    _, expand_mock, merge, _ = _run_selection(
+        tool,
+        sections,
+        MagicMock(return_value=scores),
+        MagicMock(),
+        expand_effect=expand,
+    )
+
+    background = [
+        call
+        for call in expand_mock.mock_calls
+        if call.kwargs.get("llm_fallback") is False
+    ]
+    with_llm = [
+        call.kwargs["section"].center_chunk.document_id
+        for call in expand_mock.mock_calls
+        if call.kwargs.get("llm_fallback") is not False
+    ]
+    # Background expansions ran without an LLM fallback.
+    assert len(background) == 10
+    # Only selected sections are expanded again, with the LLM fallback.
+    picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
+    assert "doc-8" not in picked and "doc-9" not in picked
+    assert sorted(with_llm) == sorted(picked)
+
+
+def test_decision_model_searches_when_the_primary_budget_is_exhausted() -> None:
+    tool = _make_tool(primary_llm_cost_checked=False)
+    sections = [_section(f"doc-{index}") for index in range(3)]
+    budget = OnyxError(OnyxErrorCode.RATE_LIMITED, "Provider budget exceeded")
+    with patch(f"{MODULE}.check_llm_cost_limit_for_provider", side_effect=budget):
+        select, expand, merge, _ = _run_selection(
+            tool, sections, MagicMock(return_value=[0.9, 0.5, 0.1]), MagicMock()
+        )
+
+    select.assert_not_called()
+    assert [s.center_chunk.document_id for s in merge.call_args.args[0]] == [
+        "doc-0",
+        "doc-1",
+        "doc-2",
+    ]
+    # Expansion may not fall back to the over-budget primary model.
+    assert all(call.kwargs.get("llm_fallback") is False for call in expand.mock_calls)
+
+
+def test_failed_rerank_stops_at_the_primary_budget() -> None:
+    tool = _make_tool(primary_llm_cost_checked=False)
+    sections = [_section(f"doc-{index}") for index in range(3)]
+    budget = OnyxError(OnyxErrorCode.RATE_LIMITED, "Provider budget exceeded")
+    with patch(f"{MODULE}.check_llm_cost_limit_for_provider", side_effect=budget):
+        select, _, merge, _ = _run_selection(
+            tool,
+            sections,
+            MagicMock(side_effect=RuntimeError("decision model down")),
+            MagicMock(),
+        )
+
+    # The budget error ends the search before the over-budget LLM selects.
+    select.assert_not_called()
+    merge.assert_not_called()
+
+
+# Bodies OpenSearch returned for an oversized hybrid query, trimmed to the
+# fields that identify the failure.
+_TOO_MANY_CLAUSES_BODY = {
+    "error": {
+        "root_cause": [
+            {
+                "type": "query_shard_exception",
+                "reason": "failed to create query: maxClauseCount is set to 1024",
+            }
+        ],
+        "type": "search_phase_execution_exception",
+        "reason": "all shards failed",
+        "caused_by": {
+            "type": "query_shard_exception",
+            "reason": "failed to create query: maxClauseCount is set to 1024",
+            "caused_by": {
+                "type": "too_many_clauses",
+                "reason": "maxClauseCount is set to 1024",
+            },
+        },
+    },
+    "status": 400,
+}
+_TOO_MANY_NESTED_CLAUSES_BODY = {
+    "error": {
+        "root_cause": [
+            {
+                "type": "too_many_nested_clauses",
+                "reason": "Query contains too many nested clauses; maxClauseCount is set to 1024",
+            }
+        ],
+        "type": "search_phase_execution_exception",
+        "reason": "all shards failed",
+    },
+    "status": 500,
+}
+_CLAUSE_LIMIT_ERRORS = [
+    RequestError(400, "search_phase_execution_exception", _TOO_MANY_CLAUSES_BODY),
+    TransportError(
+        500, "search_phase_execution_exception", _TOO_MANY_NESTED_CLAUSES_BODY
+    ),
+]
+# _run sends the rephrased query, the model's query, then the user message.
+_ORIGINAL_MESSAGE = "resolve the ticket"
+
+
+def _chunk(document_id: str) -> InferenceChunk:
+    return cast(InferenceChunk, MagicMock(document_id=document_id, chunk_id=0))
+
+
+def _pipeline_failing_for(
+    failing_queries: set[str], error: Exception
+) -> tuple[MagicMock, dict[str, list[InferenceChunk]]]:
+    hits = {
+        query: [_chunk(query)]
+        for query in ("rephrased query", "ticket", _ORIGINAL_MESSAGE)
+    }
+
+    def search(**kwargs: Any) -> list[InferenceChunk]:
+        query = kwargs["chunk_search_request"].query
+        if query in failing_queries:
+            raise error
+        return hits[query]
+
+    return MagicMock(side_effect=search), hits
+
+
+@pytest.mark.parametrize("error", _CLAUSE_LIMIT_ERRORS)
+def test_oversized_query_leaves_the_other_queries_to_answer(error: Exception) -> None:
+    pipeline, hits = _pipeline_failing_for({_ORIGINAL_MESSAGE}, error)
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        search_pipeline_mock=pipeline,
+        fusion_mock=fusion,
+        results=results,
+    )
+
+    assert not results[0].is_error
+    fused = fusion.call_args.kwargs
+    assert fused["ranked_results"] == [hits["rephrased query"], hits["ticket"]]
+    assert fused["weights"] == [LLM_SEMANTIC_QUERY_WEIGHT, LLM_NON_CUSTOM_QUERY_WEIGHT]
+
+
+@pytest.mark.parametrize("error", _CLAUSE_LIMIT_ERRORS)
+def test_every_query_oversized_is_a_tool_error(error: Exception) -> None:
+    pipeline, _ = _pipeline_failing_for(
+        {"rephrased query", "ticket", _ORIGINAL_MESSAGE}, error
+    )
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        search_pipeline_mock=pipeline,
+        fusion_mock=fusion,
+        results=results,
+    )
+
+    assert results[0].is_error
+    assert "shorter" in results[0].text
+    fusion.assert_not_called()
+
+
+def test_empty_query_result_is_not_an_oversized_query() -> None:
+    def search(**kwargs: Any) -> list[InferenceChunk]:
+        if kwargs["chunk_search_request"].query == "ticket":
+            return []
+        raise _CLAUSE_LIMIT_ERRORS[0]
+
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        search_pipeline_mock=MagicMock(side_effect=search),
+        fusion_mock=fusion,
+        results=results,
+    )
+
+    assert not results[0].is_error
+    fused = fusion.call_args.kwargs
+    assert fused["ranked_results"] == [[]]
+    assert fused["weights"] == [LLM_NON_CUSTOM_QUERY_WEIGHT]
+
+
+def test_other_index_errors_are_not_treated_as_oversized_queries() -> None:
+    error = AuthorizationException(
+        403,
+        "security_exception",
+        {"error": {"type": "security_exception", "reason": "no permissions"}},
+    )
+    pipeline, _ = _pipeline_failing_for({_ORIGINAL_MESSAGE}, error)
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        search_pipeline_mock=pipeline,
+        fusion_mock=fusion,
+        results=results,
+    )
+
+    assert results[0].is_error
+    assert "security_exception" in results[0].text
+    fusion.assert_not_called()
+
+
+@pytest.mark.parametrize("slack_chunks", [[], [_chunk("slack")]])
+def test_every_index_query_oversized_with_slack(
+    slack_chunks: list[InferenceChunk],
+) -> None:
+    tool = _make_tool()
+    tool.enable_slack_search = True
+    pipeline, _ = _pipeline_failing_for(
+        {"rephrased query", "ticket", _ORIGINAL_MESSAGE}, _CLAUSE_LIMIT_ERRORS[0]
+    )
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    with (
+        patch.object(
+            tool, "_prefetch_slack_data", return_value=("slack-token", None, {})
+        ),
+        # A failed Slack search also returns [].
+        patch.object(tool, "_run_slack_search", return_value=slack_chunks),
+    ):
+        _run(
+            tool,
+            connected_sources=[DocumentSource.SLACK],
+            search_pipeline_mock=pipeline,
+            fusion_mock=fusion,
+            results=results,
+        )
+
+    # Slack results still answer; with none, the model is told to shorten.
+    assert results[0].is_error == (not slack_chunks)
+    if slack_chunks:
+        assert fusion.call_args.kwargs["ranked_results"] == [slack_chunks]
+
+
+_SMALL_TERM_COUNTS = KeywordTermCounts(total=1, distinct=1)
+
+
+def _run_with_user_message(
+    user_message: str,
+    term_counts: KeywordTermCounts | Exception = _SMALL_TERM_COUNTS,
+    retrieval_only: bool = False,
+    skip_query_expansion: bool = False,
+    queries: list[str] | None = None,
+) -> tuple[list[str], MagicMock]:
+    """Returns the queries sent to retrieval and the index term counter."""
+    tool = _make_tool(retrieval_only=retrieval_only)
+    count_terms = cast(MagicMock, tool.document_index).count_keyword_terms
+    if isinstance(term_counts, Exception):
+        count_terms.side_effect = term_counts
+    else:
+        count_terms.return_value = term_counts
+    pipeline = _run(
+        tool,
+        connected_sources=[DocumentSource.CONFLUENCE],
+        user_message=user_message,
+        skip_query_expansion=skip_query_expansion,
+        queries=queries,
+    )
+    return _queries_sent(pipeline), count_terms
+
+
+@pytest.mark.parametrize(
+    ("length", "analyzed"),
+    [(UNANALYZED_QUERY_MAX_CHARS, False), (UNANALYZED_QUERY_MAX_CHARS + 1, True)],
+)
+def test_short_ascii_message_runs_without_analysis(length: int, analyzed: bool) -> None:
+    message = "a" * length
+    sent, count_terms = _run_with_user_message(message)
+
+    assert message in sent
+    assert count_terms.called is analyzed
+
+
+def test_short_non_ascii_message_is_analyzed() -> None:
+    message = "Où est le rapport d'incident ?"
+    sent, count_terms = _run_with_user_message(message)
+
+    assert message in sent
+    count_terms.assert_called_once_with(message)
+
+
+@pytest.mark.parametrize(
+    ("length", "sent_expected"),
+    [(ANALYZED_QUERY_MAX_CHARS, True), (ANALYZED_QUERY_MAX_CHARS + 1, False)],
+)
+def test_message_over_the_character_limit_is_skipped_unanalyzed(
+    length: int, sent_expected: bool
+) -> None:
+    message = "a" * length
+    sent, count_terms = _run_with_user_message(message)
+
+    assert (message in sent) is sent_expected
+    assert count_terms.called is sent_expected
+    assert "ticket" in sent
+
+
+@pytest.mark.parametrize(
+    ("total", "distinct", "sent_expected"),
+    [
+        (QUERY_MAX_TERMS, QUERY_MAX_DISTINCT_TERMS, True),
+        (QUERY_MAX_TERMS + 1, QUERY_MAX_DISTINCT_TERMS, False),
+        (QUERY_MAX_TERMS, QUERY_MAX_DISTINCT_TERMS + 1, False),
+    ],
+)
+def test_analyzed_message_runs_within_the_term_limits(
+    total: int, distinct: int, sent_expected: bool
+) -> None:
+    message = "a" * (UNANALYZED_QUERY_MAX_CHARS + 1)
+    sent, _ = _run_with_user_message(
+        message, KeywordTermCounts(total=total, distinct=distinct)
+    )
+
+    assert (message in sent) is sent_expected
+    assert "ticket" in sent
+
+
+def test_failed_analysis_still_searches_the_message() -> None:
+    message = "a" * (UNANALYZED_QUERY_MAX_CHARS + 1)
+    sent, _ = _run_with_user_message(message, RuntimeError("analyzer unavailable"))
+
+    assert {message, "rephrased query", "ticket"} <= set(sent)
+
+
+def test_generated_echo_of_an_oversized_message_is_skipped() -> None:
+    message = "a" * (ANALYZED_QUERY_MAX_CHARS + 1)
+    sent, _ = _run_with_user_message(message, queries=[message.upper(), "ticket"])
+
+    assert sent and all(len(query) <= ANALYZED_QUERY_MAX_CHARS for query in sent)
+
+
+def test_raw_search_sends_the_message_without_a_size_check() -> None:
+    message = "a" * (ANALYZED_QUERY_MAX_CHARS + 1)
+    sent, count_terms = _run_with_user_message(message, retrieval_only=True)
+
+    assert message in sent
+    count_terms.assert_not_called()
+
+
+def test_follow_up_round_still_searches_the_message() -> None:
+    sent, _ = _run_with_user_message(
+        "who owned the rollback", skip_query_expansion=True, queries=["owner"]
+    )
+
+    assert "who owned the rollback" in sent
+
+
+def test_focused_queries_do_not_wait_for_message_analysis() -> None:
+    message = "a" * (UNANALYZED_QUERY_MAX_CHARS + 1)
+    focused_searched = threading.Event()
+    tool = _make_tool()
+
+    def count_terms(_: str) -> KeywordTermCounts:
+        # Rejects the message if focused retrieval waits for its analysis.
+        if focused_searched.wait(timeout=5):
+            return KeywordTermCounts(total=1, distinct=1)
+        return KeywordTermCounts(total=QUERY_MAX_TERMS + 1, distinct=1)
+
+    def search(**kwargs: Any) -> list[InferenceChunk]:
+        if kwargs["chunk_search_request"].query == "ticket":
+            focused_searched.set()
+        return []
+
+    cast(MagicMock, tool.document_index).count_keyword_terms.side_effect = count_terms
+    pipeline = _run(
+        tool,
+        connected_sources=[DocumentSource.CONFLUENCE],
+        user_message=message,
+        search_pipeline_mock=MagicMock(side_effect=search),
+    )
+
+    assert message in _queries_sent(pipeline)

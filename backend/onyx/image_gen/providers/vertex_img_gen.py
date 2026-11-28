@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import datetime
+import time
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
@@ -114,7 +114,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
         ):
             return image_generation(
                 prompt=prompt,
-                model=model,
+                model=model if model.startswith("vertex_ai/") else f"vertex_ai/{model}",
                 size=size,
                 n=n,
                 quality=quality,
@@ -218,7 +218,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
             raise RuntimeError("No image data returned from Vertex AI.")
 
         return ImageResponse(
-            created=int(datetime.now().timestamp()),
+            created=int(time.time()),
             data=generated_data,
         )
 
@@ -241,9 +241,8 @@ def _parse_to_vertex_credentials(
     if not custom_config:
         raise ImageProviderCredentialsError("Custom config is required")
 
-    vertex_location = custom_config.get(VERTEX_LOCATION_KWARG)
-    if not vertex_location:
-        raise ImageProviderCredentialsError("Vertex location is required")
+    # Same default as Vertex chat: the latest Gemini models only serve "global".
+    vertex_location = custom_config.get(VERTEX_LOCATION_KWARG) or "global"
 
     # Missing auth method is treated as service_account_json for backwards
     # compatibility with configs created before this field existed.

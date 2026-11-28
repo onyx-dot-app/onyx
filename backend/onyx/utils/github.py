@@ -1,9 +1,12 @@
 import re
-from dataclasses import dataclass
+from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Final
 from urllib.parse import quote, unquote, urlparse
 
 import requests
+from pydantic import BaseModel, ConfigDict
+from requests.structures import CaseInsensitiveDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -12,36 +15,55 @@ from onyx.utils.url import SSRFException, ssrf_safe_get
 GITHUB_COMMIT_SHA_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{40}$")
 
 _GITHUB_FETCH_TIMEOUT_SECONDS: Final[int] = 30
-_GITHUB_CODELOAD_ARCHIVE_URL_TEMPLATE: Final[str] = (
-    "https://codeload.github.com/{owner}/{repo}/tar.gz/{revision}"
+GITHUB_REPOSITORY_NOT_FOUND: Final = (
+    "Repository or branch not found. Check the URL. If the repository is "
+    "private, connect GitHub and try again."
 )
-_GITHUB_REPOSITORY_COMPONENT_PATTERN: Final[re.Pattern[str]] = re.compile(
+# Tests point these at a fake GitHub.
+GITHUB_API_BASE_URL = "https://api.github.com"
+GITHUB_ARCHIVE_BASE_URL = "https://codeload.github.com"
+GITHUB_REPOSITORY_COMPONENT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"[A-Za-z0-9_.-]+"
 )
-_GITHUB_SSH_SOURCE_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"git@github\.com:([^/]+)/([^/\s]+?)(?:\.git)?$"
-)
 
 
-@dataclass(frozen=True, slots=True)
-class GitHubSource:
+def github_rate_limited(headers: Mapping[str, str]) -> OnyxError:
+    """GitHub's limit error, with the reset time from its headers when given."""
+    reset = headers.get("X-RateLimit-Reset")
+    reset_at = (
+        datetime.fromtimestamp(int(reset), tz=timezone.utc)
+        if reset is not None and reset.isdigit()
+        else None
+    )
+    when = (
+        f"It resets at {reset_at:%H:%M} UTC."
+        if reset_at is not None
+        else "Try again in a few minutes."
+    )
+    return OnyxError(
+        OnyxErrorCode.RATE_LIMITED,
+        f"GitHub's API rate limit has been reached. {when} "
+        "Connect GitHub to raise the limit.",
+        extra={"reset_at": reset_at.isoformat()} if reset_at is not None else None,
+    )
+
+
+class GitHubSource(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     owner: str
     repo: str
     tree_tail: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class GitHubRevision:
+class GitHubRevision(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     revision: str
     subpath: str | None
 
 
-def parse_github_source(
-    source: str,
-    *,
-    allow_ssh: bool = False,
-    allow_tree_path: bool = False,
-) -> GitHubSource:
+def parse_github_source(source: str) -> GitHubSource:
     """Parse a GitHub repository or repository-folder source."""
     value = source.strip().rstrip("/")
     if not value:
@@ -51,10 +73,9 @@ def parse_github_source(
         )
 
     tree_tail: tuple[str, ...] = ()
-    ssh_match = _GITHUB_SSH_SOURCE_PATTERN.fullmatch(value) if allow_ssh else None
-    if ssh_match:
-        owner, repo = ssh_match.groups()
-    elif "://" not in value:
+    if value.lower().startswith(("github.com/", "www.github.com/")):
+        value = f"https://{value}"
+    if "://" not in value:
         source_parts = value.removesuffix(".git").split("/")
         if len(source_parts) != 2:
             raise OnyxError(
@@ -80,20 +101,16 @@ def parse_github_source(
             )
         owner, repo = source_parts[0], source_parts[1].removesuffix(".git")
         if len(source_parts) > 2:
-            if allow_tree_path and len(source_parts) >= 4 and source_parts[2] == "tree":
+            if len(source_parts) >= 4 and source_parts[2] == "tree":
                 tree_tail = source_parts[3:]
             else:
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT,
-                    (
-                        "Enter a GitHub repository URL without a branch, file, or subpage."
-                        if not allow_tree_path
-                        else "Enter a repository URL or a URL for a folder within a repository."
-                    ),
+                    "Enter a repository URL or a URL for a folder within a repository.",
                 )
 
     if not all(
-        _GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part) for part in (owner, repo)
+        GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part) for part in (owner, repo)
     ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -108,7 +125,6 @@ def _github_get(
     authorization: str | None = None,
     stream: bool = False,
     follow_redirects: bool = True,
-    timeout: float | tuple[float, float] = _GITHUB_FETCH_TIMEOUT_SECONDS,
 ) -> requests.Response:
     headers = (
         {
@@ -122,7 +138,7 @@ def _github_get(
         return ssrf_safe_get(
             url,
             headers=headers,
-            timeout=timeout,
+            timeout=_GITHUB_FETCH_TIMEOUT_SECONDS,
             stream=stream,
             follow_redirects=follow_redirects,
         )
@@ -141,6 +157,65 @@ def _github_get(
             OnyxErrorCode.BAD_GATEWAY,
             "Could not reach GitHub. Check your connection and try again.",
         ) from exc
+
+
+def _github_failure(
+    status: int, headers: Mapping[str, str], used_authorization: bool
+) -> OnyxError:
+    """The error for a GitHub repository request that did not succeed."""
+    if status == 401:
+        return OnyxError(
+            OnyxErrorCode.UNAUTHENTICATED,
+            "Your GitHub connection has expired. Reconnect GitHub, then try again.",
+        )
+    if status in {403, 429} and (
+        status == 429
+        or headers.get("X-RateLimit-Remaining") == "0"
+        or "Retry-After" in headers
+    ):
+        return github_rate_limited(headers)
+    if status == 403 and used_authorization:
+        return OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "GitHub denied access to this repository. Confirm that your connected account has access and has authorized organization SSO if required.",
+        )
+    if status in {403, 404}:
+        return OnyxError(OnyxErrorCode.NOT_FOUND, GITHUB_REPOSITORY_NOT_FOUND)
+    return OnyxError(
+        OnyxErrorCode.BAD_GATEWAY,
+        "Couldn't load the repository from GitHub. Try again in a few minutes.",
+    )
+
+
+def github_default_branch(
+    source: GitHubSource, authorization_header: str | None = None
+) -> str:
+    """The repository's default branch. Raises when GitHub does not give it."""
+    repository_url = (
+        f"{GITHUB_API_BASE_URL}/repos/{quote(source.owner, safe='')}/"
+        f"{quote(source.repo, safe='')}"
+    )
+    response = _github_get(repository_url)
+    used_authorization = False
+    if response.status_code in {401, 403, 404, 429} and authorization_header:
+        response.close()
+        response = _github_get(repository_url, authorization=authorization_header)
+        used_authorization = True
+    with response:
+        if response.status_code != 200:
+            raise _github_failure(
+                response.status_code, response.headers, used_authorization
+            )
+        try:
+            branch = response.json().get("default_branch")
+        except (requests.JSONDecodeError, ValueError, AttributeError):
+            branch = None
+    if not isinstance(branch, str) or not branch:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "GitHub returned an unreadable repository. Try again.",
+        )
+    return branch
 
 
 def resolve_github_revision(
@@ -179,11 +254,11 @@ def resolve_github_revision(
         for index in range(len(ref_parts), 0, -1)
     ]
     last_status = 404
-    last_headers: dict[str, str] = {}
+    last_headers: Mapping[str, str] = CaseInsensitiveDict()
     used_authorization = False
     for candidate_ref, candidate_subpath in candidates:
         commit_url = (
-            f"https://api.github.com/repos/{encoded_owner}/{encoded_repo}/"
+            f"{GITHUB_API_BASE_URL}/repos/{encoded_owner}/{encoded_repo}/"
             f"commits/{quote(candidate_ref, safe='')}"
         )
         response = _github_get(commit_url)
@@ -195,8 +270,9 @@ def resolve_github_revision(
             )
             used_authorization = True
         with response:
-            last_status = response.status_code
-            last_headers = dict(response.headers)
+            # GitHub answers 422 for a branch, tag or commit that does not exist.
+            last_status = 404 if response.status_code == 422 else response.status_code
+            last_headers = response.headers
             if response.status_code != 200:
                 continue
             try:
@@ -217,34 +293,20 @@ def resolve_github_revision(
                 subpath=candidate_subpath,
             )
 
-    if last_status == 401:
-        raise OnyxError(
-            OnyxErrorCode.UNAUTHENTICATED,
-            "Your GitHub connection has expired. Reconnect GitHub, then try again.",
-        )
-    if last_status in {403, 429} and (
-        last_status == 429
-        or last_headers.get("X-RateLimit-Remaining") == "0"
-        or "Retry-After" in last_headers
-    ):
-        raise OnyxError(
-            OnyxErrorCode.RATE_LIMITED,
-            "GitHub's API rate limit has been reached. Try again in a few minutes.",
-        )
-    if last_status == 403 and used_authorization:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "GitHub denied access to this repository. Confirm that your connected account has access and has authorized organization SSO if required.",
-        )
-    if last_status in {403, 404}:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "Repository or branch not found. Check the URL. If the repository is private, connect GitHub and try again.",
-        )
-    raise OnyxError(
-        OnyxErrorCode.BAD_GATEWAY,
-        "Couldn't load the repository from GitHub. Try again in a few minutes.",
-    )
+    if last_status == 404 and source.tree_tail:
+        repository_url = f"{GITHUB_API_BASE_URL}/repos/{encoded_owner}/{encoded_repo}"
+        with _github_get(
+            repository_url,
+            authorization=authorization_header if used_authorization else None,
+        ) as response:
+            repository_found = response.status_code == 200
+        if repository_found:
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"The branch or folder '{'/'.join(source.tree_tail)}' is not in "
+                f"{source.owner}/{source.repo}.",
+            )
+    raise _github_failure(last_status, last_headers, used_authorization)
 
 
 def download_github_archive(
@@ -253,22 +315,20 @@ def download_github_archive(
     authorization_header: str | None = None,
     *,
     max_size_bytes: int,
-    timeout: float | tuple[float, float] = _GITHUB_FETCH_TIMEOUT_SECONDS,
 ) -> bytes:
     """Download a bounded tarball without forwarding credentials to archive hosts."""
     encoded_owner = quote(source.owner, safe="")
     encoded_repo = quote(source.repo, safe="")
     encoded_revision = quote(revision, safe="")
-    archive_url = _GITHUB_CODELOAD_ARCHIVE_URL_TEMPLATE.format(
-        owner=encoded_owner,
-        repo=encoded_repo,
-        revision=encoded_revision,
+    archive_url = (
+        f"{GITHUB_ARCHIVE_BASE_URL}/{encoded_owner}/{encoded_repo}/tar.gz/"
+        f"{encoded_revision}"
     )
-    response = _github_get(archive_url, stream=True, timeout=timeout)
+    response = _github_get(archive_url, stream=True)
     if response.status_code != 200 and authorization_header is not None:
         response.close()
         redirect_response = _github_get(
-            f"https://api.github.com/repos/{encoded_owner}/{encoded_repo}"
+            f"{GITHUB_API_BASE_URL}/repos/{encoded_owner}/{encoded_repo}"
             f"/tarball/{encoded_revision}",
             authorization=authorization_header,
             follow_redirects=False,
@@ -285,17 +345,11 @@ def download_github_archive(
                     or redirect_response.headers.get("X-RateLimit-Remaining") == "0"
                     or "Retry-After" in redirect_response.headers
                 )
+                if rate_limited:
+                    raise github_rate_limited(redirect_response.headers)
                 raise OnyxError(
-                    (
-                        OnyxErrorCode.RATE_LIMITED
-                        if rate_limited
-                        else OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-                    ),
-                    (
-                        "GitHub's API rate limit has been reached. Try again in a few minutes."
-                        if rate_limited
-                        else "GitHub denied access to this repository. Confirm that your connected account has access and has authorized organization SSO if required."
-                    ),
+                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                    "GitHub denied access to this repository. Confirm that your connected account has access and has authorized organization SSO if required.",
                 )
             if redirect_response.status_code == 404:
                 raise OnyxError(
@@ -313,7 +367,7 @@ def download_github_archive(
                     OnyxErrorCode.BAD_GATEWAY,
                     "GitHub didn't provide a repository download. Try again.",
                 )
-        response = _github_get(archive_url, stream=True, timeout=timeout)
+        response = _github_get(archive_url, stream=True)
 
     with response:
         if response.status_code in {403, 404}:
@@ -322,10 +376,7 @@ def download_github_archive(
                 "Repository or revision not found. Check the URL. If the repository is private, connect GitHub and try again.",
             )
         if response.status_code == 429:
-            raise OnyxError(
-                OnyxErrorCode.RATE_LIMITED,
-                "GitHub's API rate limit has been reached. Try again in a few minutes.",
-            )
+            raise github_rate_limited(response.headers)
         if response.status_code != 200:
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,

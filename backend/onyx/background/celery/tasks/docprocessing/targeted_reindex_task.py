@@ -9,23 +9,129 @@ connector invocation + indexing pipeline plumbing live in
 
 import datetime
 import logging
+import traceback
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from celery import Task, shared_task
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import TARGETED_REINDEX_TIMEOUT, OnyxCeleryTask
+from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import IndexingStatus
+from onyx.db.enums import IndexAttemptErrorResolvedReason, IndexingStatus
+from onyx.db.index_attempt import (
+    create_index_attempt_errors__no_commit,
+    resolve_index_attempt_errors_for_documents__no_commit,
+)
+from onyx.db.models import IndexAttempt, TargetedReindexJobTarget
 from onyx.db.targeted_reindex import (
     get_index_attempts_for_targeted_reindex_job,
+    get_retry_attempt_ids_by_cc_pair,
     get_targeted_reindex_job,
     get_targets_for_job,
     resolve_failure_derived_targets,
+    targets_to_connector_failures,
 )
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from shared_configs.contextvars import get_current_tenant_id
 
-_TARGETED_REINDEX_SOFT_TIME_LIMIT = 60 * 30  # 30 minutes
-_TARGETED_REINDEX_TIME_LIMIT = _TARGETED_REINDEX_SOFT_TIME_LIMIT + 60
+if TYPE_CHECKING:
+    from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
+
+_CANCELED_MSG = "Canceled by a user."
+
+
+class _PairEnd(BaseModel):
+    """How a pair's retry attempts end: FAILED with ``error_msg`` when every
+    target failed again, SUCCESS when it is None, with one error per document
+    that failed again."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    failures: list[ConnectorFailure]
+    error_msg: str | None = None
+    exception_trace: str | None = None
+
+
+def _processed_end(
+    db_session: Session,
+    targets: Sequence[TargetedReindexJobTarget],
+    result: "CCPairReindexResult",
+) -> _PairEnd:
+    """Each failed document keeps this run's failure. A pair that ended before
+    fetching files its reason, or the original error when it has none."""
+    failed = [t for t in targets if t.document_id in result.failed_doc_ids]
+    originals = targets_to_connector_failures(failed, db_session)
+    if result.reason is not None:
+        failures = [
+            original.model_copy(update={"failure_message": result.reason})
+            for original in originals
+        ]
+        return _PairEnd(failures=failures, error_msg=result.reason)
+    failures = [
+        result.failures.get(target.document_id, original)
+        for target, original in zip(failed, originals, strict=True)
+    ]
+    if not failures or len(failures) < len(targets):
+        return _PairEnd(failures=failures)
+    return _PairEnd(failures=failures, error_msg="Every retried document failed again.")
+
+
+def _raised_end(
+    db_session: Session,
+    targets: Sequence[TargetedReindexJobTarget],
+    error: Exception,
+) -> _PairEnd:
+    message = str(error) or type(error).__name__
+    failures = [
+        failure.model_copy(update={"failure_message": message, "exception": error})
+        for failure in targets_to_connector_failures(targets, db_session)
+    ]
+    return _PairEnd(
+        failures=failures,
+        error_msg=message,
+        exception_trace="".join(traceback.format_exception(error)),
+    )
+
+
+def _canceled_pair_ids(db_session: Session, attempts: list[IndexAttempt]) -> set[int]:
+    """Pairs with a Cancel on any of their retry attempts. The cancel route
+    commits in its own session, so the flag is reread."""
+    for attempt in attempts:
+        db_session.refresh(attempt, ["cancellation_requested"])
+    return {
+        attempt.connector_credential_pair_id
+        for attempt in attempts
+        if attempt.cancellation_requested
+    }
+
+
+def _end_attempts__no_commit(
+    db_session: Session,
+    attempts: list[IndexAttempt],
+    pair_ends: dict[int, _PairEnd],
+    now: datetime.datetime,
+) -> None:
+    canceled = _canceled_pair_ids(db_session, attempts)
+    for attempt in attempts:
+        end = pair_ends.get(attempt.connector_credential_pair_id, _PairEnd(failures=[]))
+        if attempt.connector_credential_pair_id in canceled:
+            attempt.status = IndexingStatus.CANCELED
+            attempt.error_msg = _CANCELED_MSG
+        else:
+            attempt.status = (
+                IndexingStatus.SUCCESS
+                if end.error_msg is None
+                else IndexingStatus.FAILED
+            )
+            attempt.error_msg = end.error_msg
+        attempt.full_exception_trace = end.exception_trace
+        attempt.time_updated = now
+        attempt.time_finished = now
+        create_index_attempt_errors__no_commit(db_session, attempt, end.failures)
 
 
 def run_targeted_reindex(
@@ -49,11 +155,13 @@ def run_targeted_reindex(
     )
 
     with get_session_with_current_tenant() as db_session:
-        job = get_targeted_reindex_job(db_session, targeted_reindex_job_id)
+        job = get_targeted_reindex_job(
+            db_session, targeted_reindex_job_id, for_update=True
+        )
         if job is None:
             log.warning("Job not found, dropping task")
             return
-        if job.status.is_terminal():
+        if job.status != IndexingStatus.NOT_STARTED:
             log.info("Job already terminal, dropping task")
             return
 
@@ -66,13 +174,15 @@ def run_targeted_reindex(
             attempt.time_started = datetime.datetime.now(datetime.timezone.utc)
         job.status = IndexingStatus.IN_PROGRESS
         db_session.commit()
+        tenant_id = get_current_tenant_id()
+        # Keeps check_for_indexing, which runs the stale-job validator,
+        # scheduled for this tenant while the job is open.
+        maybe_mark_tenant_active(tenant_id, caller="targeted_reindex")
 
         resolved_count = 0
         still_failing_count = 0
         runtime_skipped = 0
         try:
-            tenant_id = get_current_tenant_id()
-
             # 2. group targets by cc_pair (the unit of connector invocation).
             target_rows = get_targets_for_job(db_session, targeted_reindex_job_id)
             by_cc_pair = group_targets_by_cc_pair(target_rows)
@@ -90,7 +200,17 @@ def run_targeted_reindex(
             # another.
             landed_keys: set[tuple[int, str]] = set()
             failed_keys: set[tuple[int, str]] = set()
+            pair_ends: dict[int, _PairEnd] = {}
             for cc_pair_id, cc_targets in by_cc_pair.items():
+                # The stale-job validator can fail the job while a pair runs.
+                # Index no more pairs after that.
+                db_session.refresh(job, ["status"])
+                if job.status.is_terminal():
+                    break
+                # A Cancel stops the pairs not yet fetched. One that arrives
+                # while a pair runs ends that pair's attempts CANCELED after it.
+                if cc_pair_id in _canceled_pair_ids(db_session, attempts):
+                    continue
                 try:
                     result = process_targets_for_cc_pair(
                         cc_pair_id=cc_pair_id,
@@ -99,7 +219,7 @@ def run_targeted_reindex(
                         tenant_id=tenant_id,
                         db_session=db_session,
                     )
-                except Exception:
+                except Exception as e:
                     # One bad cc_pair must not poison the rest of the
                     # job — log, mark its targets still_failing, and
                     # carry on to the next cc_pair.
@@ -108,6 +228,7 @@ def run_targeted_reindex(
                         cc_pair_id,
                     )
                     failed_keys.update((cc_pair_id, t.document_id) for t in cc_targets)
+                    pair_ends[cc_pair_id] = _raised_end(db_session, cc_targets, e)
                     continue
                 landed_keys.update(
                     (cc_pair_id, doc_id) for doc_id in result.landed_doc_ids
@@ -115,27 +236,54 @@ def run_targeted_reindex(
                 failed_keys.update(
                     (cc_pair_id, doc_id) for doc_id in result.failed_doc_ids
                 )
+                pair_ends[cc_pair_id] = _processed_end(db_session, cc_targets, result)
                 if result.unsupported:
                     log.info(
                         "cc_pair_id=%s connector does not support targeted reindex",
                         cc_pair_id,
                     )
 
+            # Do not overwrite a job that the stale-job validator failed.
+            job = get_targeted_reindex_job(
+                db_session, targeted_reindex_job_id, for_update=True
+            )
+            if job is None or job.status.is_terminal():
+                db_session.rollback()
+                return
+
             # 4. resolution tracking: clear error rows only for the
             #    (cc_pair, doc) pairs that actually landed. Errors
             #    whose target failed to land stay open so the admin can
             #    retry.
-            resolved_count, summary = resolve_failure_derived_targets(
-                db_session, targeted_reindex_job_id, landed_keys
+            retry_attempt_ids = get_retry_attempt_ids_by_cc_pair(
+                db_session, targeted_reindex_job_id
             )
+            resolved_count, summary = resolve_failure_derived_targets(
+                db_session, targeted_reindex_job_id, landed_keys, retry_attempt_ids
+            )
+            # A landed document closes every open error it has on the pair as a
+            # retry, including those an earlier retry filed.
+            for cc_pair_id in by_cc_pair:
+                landed_doc_ids = [
+                    doc_id for pair_id, doc_id in landed_keys if pair_id == cc_pair_id
+                ]
+                if not landed_doc_ids:
+                    continue
+                resolve_index_attempt_errors_for_documents__no_commit(
+                    db_session,
+                    cc_pair_id,
+                    landed_doc_ids,
+                    retry_attempt_ids[cc_pair_id],
+                    IndexAttemptErrorResolvedReason.RETRY,
+                )
 
             still_failing_count = len(failed_keys)
             total_attempted = len(target_rows)
 
-            # 5. terminal state on synthetic IndexAttempts.
-            for attempt in attempts:
-                attempt.status = IndexingStatus.SUCCESS
-                attempt.time_updated = datetime.datetime.now(datetime.timezone.utc)
+            # 5. terminal state and the errors of documents that failed
+            # again on the synthetic IndexAttempts, committed with the job.
+            now = datetime.datetime.now(datetime.timezone.utc)
+            _end_attempts__no_commit(db_session, attempts, pair_ends, now)
 
             # 6. terminal state on the job + counters + summary snapshot.
             # `runtime_skipped` covers the residual: targets that neither
@@ -150,7 +298,7 @@ def run_targeted_reindex(
             job.still_failing_count = still_failing_count
             job.skipped_count = (job.skipped_count or 0) + runtime_skipped
             job.resolved_summary = summary
-            job.completed_at = datetime.datetime.now(datetime.timezone.utc)
+            job.completed_at = now
             job.status = IndexingStatus.SUCCESS
 
             db_session.commit()
@@ -167,7 +315,9 @@ def run_targeted_reindex(
             log.exception("Targeted reindex task failed; marking job FAILED")
             try:
                 db_session.rollback()
-                job = get_targeted_reindex_job(db_session, targeted_reindex_job_id)
+                job = get_targeted_reindex_job(
+                    db_session, targeted_reindex_job_id, for_update=True
+                )
                 if job is not None and not job.status.is_terminal():
                     attempts = get_index_attempts_for_targeted_reindex_job(
                         db_session, targeted_reindex_job_id
@@ -177,13 +327,14 @@ def run_targeted_reindex(
                         if not attempt.status.is_terminal():
                             attempt.status = IndexingStatus.FAILED
                             attempt.time_updated = now
+                            attempt.time_finished = now
                     job.status = IndexingStatus.FAILED
                     job.completed_at = now
                     db_session.commit()
             except Exception:
                 log.exception(
                     "Failed to mark job FAILED during error recovery; "
-                    "row may remain IN_PROGRESS until the celery retry"
+                    "row may remain IN_PROGRESS until the stale-job validator"
                 )
             raise
 
@@ -197,8 +348,8 @@ def run_targeted_reindex(
 
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.TARGETED_REINDEX_TASK,
-    soft_time_limit=_TARGETED_REINDEX_SOFT_TIME_LIMIT,
-    time_limit=_TARGETED_REINDEX_TIME_LIMIT,
+    soft_time_limit=TARGETED_REINDEX_TIMEOUT,
+    time_limit=TARGETED_REINDEX_TIMEOUT + 60,
     bind=True,
 )
 def targeted_reindex_task(

@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, usePathname } from "@opal/navigation";
 // Bottom-left floating banner: shows one banner-worthy notification at a time
 // (severity WARNING or louder — connector failures, license expiry, admin
 // announcements, trial notices), pageable via prev/next when more than one is
@@ -7,20 +8,19 @@
 // corner so it never covers the sidebar. Falls back to the viewport edge when
 // there is no content area.
 
-import { usePathname, useRouter } from "next/navigation";
+import { Section } from "@opal/layouts";
 import { useLocale, useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { cn, markdown } from "@opal/utils";
 import { timeAgo } from "@opal/time";
 import { SvgChevronLeft, SvgChevronRight, SvgX } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
 import { isAuthPath } from "@/lib/auth/paths";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { getNotificationIcon, openNotificationLink } from "@/lib/notifications";
 import {
   NotificationSeverity,
   NotificationType,
-} from "@/lib/notifications/interfaces";
+} from "@/lib/notifications/types";
 import { useBannerQueue } from "@/lib/banner/hooks";
 
 // Inset from the content area's left edge, matching the card's bottom inset.
@@ -70,7 +70,7 @@ export default function BannerQueue() {
   const t = useTranslations("chat.banners");
   const locale = useLocale();
   const pathname = usePathname();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { inlineStart: contentInlineStart } = useContainerCenter();
   const { current, hasMultiple, goToNext, goToPrevious, dismissCurrent } =
     useBannerQueue();
@@ -88,6 +88,10 @@ export default function BannerQueue() {
     },
     [NotificationType.TRIAL_ENDS_TWO_DAYS]: {
       sourceLabel: t("trialEnds.source.label"),
+    },
+    [NotificationType.OPENSEARCH_CLUSTER_ISSUE]: {
+      sourceLabel: t("searchCluster.source.label"),
+      ctaLabel: t("searchCluster.cta.label"),
     },
     [NotificationType.CONNECTOR_REPEATED_ERRORS]: {
       sourceLabel: t("connectors.source.label"),
@@ -237,7 +241,7 @@ export default function BannerQueue() {
               <Button
                 prominence="secondary"
                 size="sm"
-                onClick={() => openNotificationLink(link, router)}
+                onClick={() => openNotificationLink(link, navigation)}
               >
                 {ctaLabel}
               </Button>

@@ -39,6 +39,11 @@ interface InputBarProps {
   onStop: () => void;
   chatState: ChatState;
   attachments: UseComposerDraft;
+  // A waiting question card takes the sent message as its answer.
+  answersQuestions?: boolean;
+  toolsReady: boolean;
+  toolsFailed?: boolean;
+  onRetryTools?: () => void;
 }
 
 export function InputBar({
@@ -48,15 +53,22 @@ export function InputBar({
   onStop,
   chatState,
   attachments,
+  answersQuestions = false,
+  toolsReady,
+  toolsFailed = false,
+  onRetryTools,
 }: InputBarProps) {
   const insets = useSafeAreaInsets();
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const isBusy = chatState === "loading" || chatState === "streaming";
+  const isBusy = chatState !== "input" && chatState !== "uploading";
   const hasFiles = attachments.files.length > 0;
 
   const canSend =
-    value.trim().length > 0 && !isBusy && !attachments.hasBlockingFiles;
+    value.trim().length > 0 &&
+    !isBusy &&
+    !attachments.hasBlockingFiles &&
+    toolsReady;
 
   const { data: recentFiles = [], isLoading: isLoadingRecent } =
     useRecentFiles(pickerOpen);
@@ -95,7 +107,7 @@ export function InputBar({
         <ComposerInput
           value={value}
           onChangeText={onChangeText}
-          placeholder="Message Onyx…"
+          placeholder={answersQuestions ? "Type your answer…" : "Message Onyx…"}
           placeholderClassName="text-text-02"
           multiline
           className="px-12 pb-8 pt-12 text-text-04"
@@ -121,8 +133,23 @@ export function InputBar({
           </Text>
         ) : null}
 
+        {toolsFailed ? (
+          <View className="flex-row items-center justify-between gap-8 px-12 pb-4">
+            <Text
+              font="secondary-body"
+              color="status-error-05"
+              className="shrink"
+            >
+              Your action settings did not load.
+            </Text>
+            <Button prominence="tertiary" size="sm" onPress={onRetryTools}>
+              Retry
+            </Button>
+          </View>
+        ) : null}
+
         <View className="min-h-40 flex-row items-center justify-between p-4">
-          {/* RN elements don't shrink by default, so a long forced-tool pill would push the send
+          {/* RN elements don't shrink by default, so a long preferred-tool pill would push the send
               button past the card's right edge without this. */}
           <View className="min-w-0 shrink flex-row items-center gap-8">
             <Button

@@ -25,9 +25,9 @@ from starlette.websockets import WebSocket
 import onyx.auth.users as users_module
 import shared_configs.contextvars as shared_contextvars
 from onyx.auth.session_tokens import build_session_token_value
-from onyx.auth.users import current_user_from_websocket_cookie, get_redis_strategy
+from onyx.auth.users import current_user_from_websocket_cookie
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX, WEB_DOMAIN
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, AuthBackend
 from onyx.db.engine.async_sql_engine import abandon_async_engines
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.server.features.build.webapp_proxy import public_build_router
@@ -90,6 +90,8 @@ def _simulate_multi_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     no tenant set, and reading it unset raises."""
     monkeypatch.setattr(users_module, "MULTI_TENANT", True)
     monkeypatch.setattr(shared_contextvars, "MULTI_TENANT", True)
+    # The tests seed their session tokens in Redis.
+    monkeypatch.setattr(users_module, "AUTH_BACKEND", AuthBackend.REDIS)
 
 
 def _run_with_unset_tenant(run: Callable[[], Coroutine[Any, Any, None]]) -> None:
@@ -106,7 +108,7 @@ def test_hmr_route_uses_shared_cookie_websocket_auth() -> None:
     route = next(
         r
         for r in public_build_router.routes
-        if isinstance(r, APIWebSocketRoute) and "webpack-hmr" in r.path
+        if isinstance(r, APIWebSocketRoute) and "{hmr_endpoint}" in r.path
     )
     dependency_calls = [d.call for d in route.dependant.dependencies]
     assert current_user_from_websocket_cookie in dependency_calls
@@ -128,9 +130,7 @@ def test_cookie_websocket_auth_sets_tenant_from_session_token(
         websocket = _fake_websocket(
             origin=WEB_DOMAIN, cookie=f"{FASTAPI_USERS_AUTH_COOKIE_NAME}={token}"
         )
-        dependency = current_user_from_websocket_cookie(
-            websocket=websocket, strategy=get_redis_strategy()
-        )
+        dependency = current_user_from_websocket_cookie(websocket=websocket)
         try:
             resolved = await anext(dependency)
             assert resolved.id == user.id
@@ -169,9 +169,7 @@ def test_cookie_websocket_auth_rejects_expired_session(
         websocket = _fake_websocket(
             origin=WEB_DOMAIN, cookie=f"{FASTAPI_USERS_AUTH_COOKIE_NAME}={token}"
         )
-        dependency = current_user_from_websocket_cookie(
-            websocket=websocket, strategy=get_redis_strategy()
-        )
+        dependency = current_user_from_websocket_cookie(websocket=websocket)
         try:
             with pytest.raises(WebSocketException) as exc_info:
                 await anext(dependency)
@@ -196,8 +194,7 @@ def test_cookie_websocket_auth_rejects_missing_cookie(
 
     async def _run() -> None:
         dependency = current_user_from_websocket_cookie(
-            websocket=_fake_websocket(origin=WEB_DOMAIN, cookie=None),
-            strategy=get_redis_strategy(),
+            websocket=_fake_websocket(origin=WEB_DOMAIN, cookie=None)
         )
         with pytest.raises(WebSocketException) as exc_info:
             await anext(dependency)

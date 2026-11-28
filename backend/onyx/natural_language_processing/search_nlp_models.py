@@ -1,30 +1,28 @@
 import asyncio
+import hashlib
 import json
-import os
 import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import wraps
+from functools import partial, wraps
 from types import TracebackType
 from typing import Any, cast
 
-import aioboto3
 import httpx
 import requests
 import voyageai
+from aiobotocore.session import get_session
 from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
-from google.oauth2 import service_account
 from httpx import HTTPError
+from pydantic import SecretStr
 from requests import JSONDecodeError, RequestException, Response
 from tenacity import (
     retry,
+    retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
-    wait_exponential,
-    wait_fixed,
-    wait_random,
 )
 
 from onyx.configs.app_configs import (
@@ -41,12 +39,35 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.natural_language_processing.constants import (
     DEFAULT_COHERE_MODEL,
     DEFAULT_OPENAI_MODEL,
-    DEFAULT_VERTEX_MODEL,
     DEFAULT_VOYAGE_MODEL,
     EmbeddingModelTextType,
 )
+from onyx.natural_language_processing.embedding_auth import (
+    ApiKeyEmbeddingAuth,
+    CloudEmbeddingAuth,
+    VertexEmbeddingAuth,
+    build_embedding_auth,
+)
+from onyx.natural_language_processing.embedding_providers.gemini import (
+    format_gemini_embedding_text,
+    is_gemini_embedding_2_model,
+)
+from onyx.natural_language_processing.embedding_providers.vertex import (
+    embed_with_vertex,
+)
+from onyx.natural_language_processing.embedding_rate_limit import (
+    EmbeddingWaitTimeoutError,
+    EmbeddingWaitTotals,
+    load_embedding_rate_limiter,
+)
+from onyx.natural_language_processing.embedding_request_policy import (
+    EmbeddingRequestPolicy,
+    EmbeddingRetryBackoff,
+)
 from onyx.natural_language_processing.exceptions import (
     CohereBillingLimitError,
+    EmbeddingRequestFailedError,
+    EmbeddingRequestRejectedError,
     ModelServerRateLimitError,
 )
 from onyx.natural_language_processing.utils import get_tokenizer, tokenizer_trim_content
@@ -70,15 +91,12 @@ from shared_configs.configs import (
     MODEL_SERVER_READ_TIMEOUT,
     OPENAI_EMBEDDING_TIMEOUT,
     SKIP_WARM_UP,
-    VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType, RerankerProvider
 from shared_configs.model_server_models import (
     Embedding,
     EmbedRequest,
     EmbedResponse,
-    IntentRequest,
-    IntentResponse,
     RerankRequest,
     RerankResponse,
 )
@@ -92,11 +110,23 @@ logger = setup_logger()
 # we hit the 60s cap exactly once, totaling ~123s before giving up.
 _RETRY_DELAY = 1 if INDEXING_ONLY else 0.1
 _RETRY_TRIES = 8 if INDEXING_ONLY else 2
+_PASSAGE_RETRY_TRIES = 8
+# Model server: attempts for errors other than rate limits.
+_MODEL_SERVER_ERROR_TRIES = 3
+
+_QUERY_REQUEST_POLICY = EmbeddingRequestPolicy(
+    retry_backoff=EmbeddingRetryBackoff(scale_seconds=_RETRY_DELAY, max_seconds=60),
+    retry_tries=_RETRY_TRIES,
+)
+_PASSAGE_RETRY_BACKOFF = EmbeddingRetryBackoff(scale_seconds=5, max_seconds=60)
 
 # OpenAI only allows 2048 embeddings to be computed at once
 _OPENAI_MAX_INPUT_LEN = 2048
 # Cohere allows up to 96 embeddings in a single embedding calling
 _COHERE_MAX_INPUT_LEN = 96
+# Voyage caps total tokens per request (120k for voyage-4-large and
+# voyage-3-large). 128 full chunks stay under that at any chunk size we use.
+_VOYAGE_MAX_INPUT_LEN = 128
 
 # Authentication error string constants
 _AUTH_ERROR_401 = "401"
@@ -201,10 +231,6 @@ WARM_UP_STRINGS = [
 ]
 
 
-def clean_model_name(model_str: str) -> str:
-    return model_str.replace("/", "_").replace("-", "_").replace(".", "_").lower()
-
-
 def build_model_server_url(
     model_server_host: str,
     model_server_port: int,
@@ -237,38 +263,47 @@ def is_authentication_error(error: Exception) -> bool:
     )
 
 
-_GEMINI_EMBEDDING_2_MODEL_PREFIX = "gemini-embedding-2"
-
-# Gemini embedding-2 ignores task_type entirely; instead the documented way
-# to differentiate query vs. document is to wrap the input in Google's task
-# instruction format. The exact templates come from
-# https://ai.google.dev/gemini-api/docs/embeddings (Gemini Embedding 2 section).
-_GEMINI_EMBEDDING_2_PROMPT_TEMPLATES = {
-    "RETRIEVAL_QUERY": "task: search result | query: {text}",
-    "RETRIEVAL_DOCUMENT": "title: none | text: {text}",
-}
-
-
-def _is_gemini_embedding_2_model(model: str) -> bool:
-    return (
-        model.split("/")[-1]
-        .strip()
-        .lower()
-        .startswith(_GEMINI_EMBEDDING_2_MODEL_PREFIX)
-    )
+# Bifrost model IDs are `<provider>/<model>`; these routes accept `task_type`.
+_BIFROST_GOOGLE_MODEL_PREFIXES: tuple[str, ...] = ("gemini/", "vertex/")
+_BIFROST_OPENAI_MODEL_PREFIXES: tuple[str, ...] = ("openai/", "azure/")
+# Bifrost forwards a batch upstream unsplit; Cohere's cap is a safe default.
+_BIFROST_DEFAULT_MAX_INPUT_LEN: int = _COHERE_MAX_INPUT_LEN
+_BIFROST_MAX_CONCURRENT_REQUESTS: int = 8
+_BIFROST_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
+# Client errors that are not a verdict on the request itself.
+_BIFROST_NON_FINAL_STATUSES: frozenset[int] = frozenset({401, 408, 429})
 
 
-def _format_vertex_embedding_text(text: str, model: str, embedding_type: str) -> str:
-    if not _is_gemini_embedding_2_model(model):
-        return text
+def _bifrost_batch_size(model_name: str) -> int:
+    # Bifrost releases up to v2.2.6 apply the task type to the first input of a
+    # Gemini/Vertex batch only, so send one input per request.
+    if model_name.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES):
+        return 1
+    if model_name.startswith(_BIFROST_OPENAI_MODEL_PREFIXES):
+        return _OPENAI_MAX_INPUT_LEN
+    return _BIFROST_DEFAULT_MAX_INPUT_LEN
 
-    template = _GEMINI_EMBEDDING_2_PROMPT_TEMPLATES.get(embedding_type)
-    if template is None:
-        raise RuntimeError(
-            f"Unsupported Gemini embedding-2 task type: {embedding_type}"
-        )
 
-    return template.format(text=text)
+def _is_retryable_bifrost_error(error: BaseException) -> bool:
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code in _BIFROST_RETRYABLE_STATUSES
+    # Timeouts are not retried: each one already waited the full timeout.
+    return isinstance(error, (httpx.ConnectError, httpx.RemoteProtocolError))
+
+
+def _bifrost_error_message(response: httpx.Response) -> str:
+    """The gateway's error text, e.g. "The model `gpt-6-luna` does not support embeddings."."""
+    try:
+        body: object = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        error: object = body.get("error")
+        if isinstance(error, dict):
+            message: object = error.get("message")
+            if isinstance(message, str):
+                return message
+    return response.text[:500] or f"HTTP {response.status_code}"
 
 
 def format_embedding_error(
@@ -297,7 +332,7 @@ def _extract_cohere_embeddings(response_embeddings: Any) -> list[Embedding]:
     """Normalize Cohere's embed response across SDK versions.
 
     v3 models return ``response.embeddings`` as a flat ``list[list[float]]``.
-    v4 models return an ``EmbedByTypeResponseEmbeddings`` object that carries
+    v4 and v5 models return an ``EmbedByTypeResponseEmbeddings`` object that carries
     the embeddings under ``float_`` (and possibly other per-type buckets when
     ``embedding_types`` is set). We always read the float bucket here since
     we never request alternate types.
@@ -327,23 +362,46 @@ class AuthenticationError(Exception):
 class CloudEmbedding:
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None,
         provider: EmbeddingProvider,
         api_url: str | None = None,
         api_version: str | None = None,
         timeout: int = API_BASED_EMBEDDING_TIMEOUT,
+        auth: CloudEmbeddingAuth | None = None,
+        policy: EmbeddingRequestPolicy = _QUERY_REQUEST_POLICY,
     ) -> None:
         self.provider = provider
+        self.policy = policy
         self.api_key = api_key
         self.api_url = api_url
         self.api_version = api_version
         self.timeout = timeout
+        self.auth = auth or build_embedding_auth(provider, api_key)
         self.http_client = httpx.AsyncClient(timeout=timeout)
         self._closed = False
-        self.sanitized_api_key = api_key[:4] + "********" + api_key[-4:]
+        self.sanitized_api_key = (
+            api_key[:4] + "********" + api_key[-4:] if api_key else None
+        )
+
+    def _resolve_optional_api_key(self) -> str | None:
+        """The API key, or None for a gateway that runs without auth."""
+        if not isinstance(self.auth, ApiKeyEmbeddingAuth):
+            raise ValueError("This provider does not use API-key authentication.")
+        api_key: SecretStr | None = self.auth.resolve_credentials().api_key
+        return api_key.get_secret_value() if api_key is not None else None
+
+    def _resolve_api_key(self) -> str:
+        api_key: str | None = self._resolve_optional_api_key()
+        if api_key is None:
+            raise ValueError("API key not provided for cloud model")
+        return api_key
 
     async def _embed_openai(
-        self, texts: list[str], model: str | None, reduced_dimension: int | None
+        self,
+        texts: list[str],
+        model: str | None,
+        reduced_dimension: int | None,
+        base_url: str | None = None,
     ) -> list[Embedding]:
         if not model:
             model = DEFAULT_OPENAI_MODEL
@@ -352,16 +410,24 @@ class CloudEmbedding:
 
         # Use the OpenAI specific timeout for this one
         client = openai.AsyncOpenAI(
-            api_key=self.api_key, timeout=OPENAI_EMBEDDING_TIMEOUT
+            api_key=self._resolve_api_key(),
+            timeout=OPENAI_EMBEDDING_TIMEOUT,
+            base_url=base_url,
+            max_retries=(
+                0 if self.policy.counts_every_request else openai.DEFAULT_MAX_RETRIES
+            ),
         )
 
         final_embeddings: list[Embedding] = []
 
         for text_batch in batch_list(texts, _OPENAI_MAX_INPUT_LEN):
-            response = await client.embeddings.create(
-                input=text_batch,
-                model=model,
-                dimensions=reduced_dimension or openai.omit,
+            response = await self.policy.send_async(
+                partial(
+                    client.embeddings.create,
+                    input=text_batch,
+                    model=model,
+                    dimensions=reduced_dimension or openai.omit,
+                )
             )
             final_embeddings.extend(
                 [embedding.embedding for embedding in response.data]
@@ -374,21 +440,27 @@ class CloudEmbedding:
         if not model:
             model = DEFAULT_COHERE_MODEL
 
-        client = CohereAsyncClient(api_key=self.api_key)
+        client = CohereAsyncClient(
+            api_key=self._resolve_api_key(),
+            max_retries=0 if self.policy.counts_every_request else None,
+        )
 
         final_embeddings: list[Embedding] = []
         for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
             # Does not use the same tokenizer as the Onyx API server but it's approximately the same
             # empirically it's only off by a very few tokens so it's not a big deal
-            response = await client.embed(
-                texts=text_batch,
-                model=model,
-                input_type=embedding_type,
-                truncate="END",
-                # Explicit float request — guarantees .float_ is populated
-                # on Cohere's typed v4 response and keeps the contract
-                # explicit on the older v3 endpoint too.
-                embedding_types=["float"],
+            response = await self.policy.send_async(
+                partial(
+                    client.embed,
+                    texts=text_batch,
+                    model=model,
+                    input_type=embedding_type,
+                    truncate="END",
+                    # Explicit float request — guarantees .float_ is populated
+                    # on Cohere's typed v4 response and keeps the contract
+                    # explicit on the older v3 endpoint too.
+                    embedding_types=["float"],
+                )
             )
             final_embeddings.extend(_extract_cohere_embeddings(response.embeddings))
         return final_embeddings
@@ -400,29 +472,37 @@ class CloudEmbedding:
             model = DEFAULT_VOYAGE_MODEL
 
         client = voyageai.AsyncClient(
-            api_key=self.api_key, timeout=API_BASED_EMBEDDING_TIMEOUT
+            api_key=self._resolve_api_key(), timeout=API_BASED_EMBEDDING_TIMEOUT
         )
 
-        response = await client.embed(
-            texts=texts,
-            model=model,
-            input_type=embedding_type,
-            truncation=True,
-        )
-        return response.embeddings
+        final_embeddings: list[Embedding] = []
+        for text_batch in batch_list(texts, _VOYAGE_MAX_INPUT_LEN):
+            response = await self.policy.send_async(
+                partial(
+                    client.embed,
+                    texts=text_batch,
+                    model=model,
+                    input_type=embedding_type,
+                    truncation=True,
+                )
+            )
+            final_embeddings.extend(response.embeddings)
+        return final_embeddings
 
     async def _embed_azure(
         self, texts: list[str], model: str | None
     ) -> list[Embedding]:
         from litellm import aembedding
 
-        response = await aembedding(
-            model=model,
-            input=texts,
-            timeout=API_BASED_EMBEDDING_TIMEOUT,
-            api_key=self.api_key,
-            api_base=self.api_url,
-            api_version=self.api_version,
+        response = await self.policy.send_async(
+            lambda: aembedding(
+                model=model,
+                input=texts,
+                timeout=API_BASED_EMBEDDING_TIMEOUT,
+                api_key=self._resolve_api_key(),
+                api_base=self.api_url,
+                api_version=self.api_version,
+            )
         )
         embeddings = [embedding["embedding"] for embedding in response.data]
         return embeddings
@@ -434,121 +514,16 @@ class CloudEmbedding:
         embedding_type: str,
         reduced_dimension: int | None,
     ) -> list[Embedding]:
-        from google import genai
-        from google.genai import types as genai_types
-
-        resolved_model = model or DEFAULT_VERTEX_MODEL
-
-        service_account_info = json.loads(self.api_key)
-        credentials = service_account.Credentials.from_service_account_info(
-            service_account_info,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        if not isinstance(self.auth, VertexEmbeddingAuth):
+            raise ValueError("Google embeddings require Vertex authentication.")
+        return await embed_with_vertex(
+            texts,
+            auth=self.auth,
+            policy=self.policy,
+            model=model,
+            embedding_type=embedding_type,
+            reduced_dimension=reduced_dimension,
         )
-        project_id = service_account_info["project_id"]
-        location = (
-            service_account_info.get("location")
-            or os.environ.get("GOOGLE_CLOUD_LOCATION")
-            or "global"
-        )
-
-        client = genai.Client(
-            vertexai=True,
-            project=project_id,
-            location=location,
-            credentials=credentials,
-        )
-
-        # gemini-embedding-2 rejects task_type; embedding intent is conveyed
-        # via the instruction-formatted text instead. Older models continue
-        # to use task_type.
-        if _is_gemini_embedding_2_model(resolved_model):
-            embed_config = genai_types.EmbedContentConfig(
-                output_dimensionality=reduced_dimension,
-                auto_truncate=True,
-            )
-        else:
-            embed_config = genai_types.EmbedContentConfig(
-                task_type=embedding_type,
-                output_dimensionality=reduced_dimension,
-                auto_truncate=True,
-            )
-
-        async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
-            content_requests: list[Any] = [
-                genai_types.Content(
-                    parts=[
-                        genai_types.Part(
-                            text=_format_vertex_embedding_text(
-                                text=text,
-                                model=resolved_model,
-                                embedding_type=embedding_type,
-                            )
-                        )
-                    ]
-                )
-                for text in batch_texts
-            ]
-            response = await client.aio.models.embed_content(
-                model=resolved_model,
-                contents=content_requests,
-                config=embed_config,
-            )
-
-            if not response.embeddings:
-                raise RuntimeError("Received empty embeddings from Google GenAI.")
-
-            embeddings: list[Embedding] = []
-            for idx, embedding in enumerate(response.embeddings):
-                if embedding.values is None:
-                    raise RuntimeError(
-                        f"Missing embedding values for input at index {idx}."
-                    )
-                embeddings.append(embedding.values)
-            return embeddings
-
-        # Process VertexAI batches sequentially to avoid additional intra-task fanout.
-        # The higher-level thread pool already provides concurrency; running these
-        # requests in parallel here was causing excessive memory usage.
-        batches = [
-            texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
-            for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
-        ]
-        all_embeddings: list[Embedding] = []
-
-        logger.debug(
-            "VertexAI embedding: processing %s texts in %s batches (batch_size=%s)",
-            len(texts),
-            len(batches),
-            VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE,
-        )
-
-        try:
-            for batch_idx, batch in enumerate(batches):
-                batch_embeddings = await _embed_batch(batch)
-                all_embeddings.extend(batch_embeddings)
-
-                # Log progress for large batches to track memory usage patterns
-                if batch_idx % 10 == 0 and batch_idx > 0:
-                    logger.debug(
-                        "VertexAI embedding progress: batch %s/%s, total_embeddings=%s",
-                        batch_idx,
-                        len(batches),
-                        len(all_embeddings),
-                    )
-
-            logger.debug(
-                "VertexAI embedding completed: %s embeddings generated",
-                len(all_embeddings),
-            )
-            return all_embeddings
-        finally:
-            # Ensure client is closed with a timeout to prevent hanging on stuck sessions
-            try:
-                await asyncio.wait_for(client.aio.aclose(), timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("Google GenAI client aclose() timed out after 5s")
-            except Exception as e:
-                logger.warning("Error closing Google GenAI client: %s", e)
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -556,32 +531,170 @@ class CloudEmbedding:
         if not model_name:
             raise ValueError("Model name is required for LiteLLM proxy embedding.")
 
-        if not self.api_url:
+        api_url: str | None = self.api_url
+        if not api_url:
             raise ValueError("API URL is required for LiteLLM proxy embedding.")
 
         headers = (
-            {} if not self.api_key else {"Authorization": f"Bearer {self.api_key}"}
+            {}
+            if not (api_key := self._resolve_optional_api_key())
+            else {"Authorization": f"Bearer {api_key}"}
         )
 
-        response = await self.http_client.post(
-            self.api_url,
-            json={
-                "model": model_name,
-                "input": texts,
-            },
-            headers=headers,
-        )
-        response.raise_for_status()
-        result = response.json()
+        async def post() -> httpx.Response:
+            response = await self.http_client.post(
+                api_url,
+                json={
+                    "model": model_name,
+                    "input": texts,
+                },
+                headers=headers,
+            )
+            response.raise_for_status()
+            return response
+
+        result = (await self.policy.send_async(post)).json()
         return [embedding["embedding"] for embedding in result["data"]]
 
-    @retry(
-        retry=retry_if_exception_type(RuntimeError),
-        stop=stop_after_attempt(_RETRY_TRIES),
-        wait=wait_exponential(multiplier=_RETRY_DELAY, max=60) + wait_random(0, 2),
-        reraise=True,
-    )
+    async def _embed_bifrost(
+        self,
+        texts: list[str],
+        model_name: str | None,
+        embedding_type: str,
+        reduced_dimension: int | None,
+    ) -> list[Embedding]:
+        if not model_name:
+            raise ValueError("Model name is required for Bifrost embedding.")
+
+        if not self.api_url:
+            raise ValueError("API URL is required for Bifrost embedding.")
+
+        api_base: str = self.api_url.strip().rstrip("/").removesuffix("/embeddings")
+        url: str = (
+            f"{api_base}/embeddings"
+            if api_base.endswith("/v1")
+            else f"{api_base}/v1/embeddings"
+        )
+        headers: dict[str, str] = (
+            {}
+            if not (api_key := self._resolve_optional_api_key())
+            else {"Authorization": f"Bearer {api_key}"}
+        )
+
+        model: str = model_name
+        is_google_model: bool = model.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES)
+        is_gemini_embedding_2: bool = is_gemini_embedding_2_model(model)
+
+        async def send(payload: dict[str, Any]) -> httpx.Response:
+            response: httpx.Response = await self.http_client.post(
+                url, json=payload, headers=headers
+            )
+            if response.status_code == 429:
+                response.raise_for_status()
+            return response
+
+        # Retry one request here. A request that still fails escapes the outer
+        # retry in `embed`, so inputs that already succeeded are not embedded again.
+        @retry(
+            retry=retry_if_exception(_is_retryable_bifrost_error),
+            stop=stop_after_attempt(self.policy.retry_tries),
+            wait=self.policy.retry_backoff.wait(),
+            reraise=True,
+        )
+        async def post(payload: dict[str, Any]) -> httpx.Response:
+            response = await self.policy.send_async(lambda: send(payload))
+            if (
+                response.is_client_error
+                and response.status_code not in _BIFROST_NON_FINAL_STATUSES
+            ):
+                raise EmbeddingRequestRejectedError(_bifrost_error_message(response))
+            response.raise_for_status()
+            return response
+
+        async def embed_batch(text_batch: list[str]) -> list[Embedding]:
+            payload: dict[str, Any] = {
+                "model": model,
+                "input": [
+                    format_gemini_embedding_text(
+                        text=text, model=model, embedding_type=embedding_type
+                    )
+                    for text in text_batch
+                ],
+            }
+            # Bifrost strips `task_type` for OpenAI, but other upstreams may reject it.
+            if is_google_model and not is_gemini_embedding_2:
+                payload["task_type"] = embedding_type
+                # Bifrost releases up to v2.2.6 read Gemini's task type only from `taskType`.
+                if model.startswith("gemini/"):
+                    payload["taskType"] = embedding_type
+            if reduced_dimension:
+                payload["dimensions"] = reduced_dimension
+
+            try:
+                response: httpx.Response = await post(payload)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 401:
+                    raise
+                raise EmbeddingRequestFailedError(
+                    f"HTTP {e.response.status_code}: {_bifrost_error_message(e.response)}"
+                ) from e
+            except httpx.HTTPError as e:
+                raise EmbeddingRequestFailedError(f"{type(e).__name__}: {e}") from e
+            data: list[dict[str, Any]] = sorted(
+                response.json()["data"], key=lambda item: item["index"]
+            )
+            if len(data) != len(text_batch):
+                raise EmbeddingRequestFailedError(
+                    f"Bifrost returned {len(data)} embeddings for {len(text_batch)} inputs."
+                )
+            return [item["embedding"] for item in data]
+
+        semaphore: asyncio.Semaphore = asyncio.Semaphore(
+            _BIFROST_MAX_CONCURRENT_REQUESTS
+        )
+
+        async def embed_batch_bounded(text_batch: list[str]) -> list[Embedding]:
+            async with semaphore:
+                return await embed_batch(text_batch)
+
+        results: list[list[Embedding] | BaseException] = await asyncio.gather(
+            *(
+                embed_batch_bounded(text_batch)
+                for text_batch in batch_list(texts, _bifrost_batch_size(model))
+            ),
+            return_exceptions=True,
+        )
+        final_embeddings: list[Embedding] = []
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+            final_embeddings.extend(result)
+        return final_embeddings
+
     async def embed(
+        self,
+        *,
+        texts: list[str],
+        text_type: EmbedTextType,
+        model_name: str | None = None,
+        deployment_name: str | None = None,
+        reduced_dimension: int | None = None,
+    ) -> list[Embedding]:
+        embed_with_retries = retry(
+            retry=retry_if_exception_type(RuntimeError),
+            stop=stop_after_attempt(self.policy.retry_tries),
+            wait=self.policy.retry_backoff.wait(),
+            reraise=True,
+        )(self._embed_once)
+        return await embed_with_retries(
+            texts=texts,
+            text_type=text_type,
+            model_name=model_name,
+            deployment_name=deployment_name,
+            reduced_dimension=reduced_dimension,
+        )
+
+    async def _embed_once(
         self,
         *,
         texts: list[str],
@@ -595,6 +708,14 @@ class CloudEmbedding:
         try:
             if self.provider == EmbeddingProvider.OPENAI:
                 return await self._embed_openai(texts, model_name, reduced_dimension)
+            elif self.provider == EmbeddingProvider.OPENAI_COMPATIBLE:
+                if not model_name or not self.api_url:
+                    raise ValueError(
+                        "Model name and API base URL are required for OpenAI-compatible embedding."
+                    )
+                return await self._embed_openai(
+                    texts, model_name, reduced_dimension, base_url=self.api_url
+                )
             elif self.provider == EmbeddingProvider.AZURE:
                 return await self._embed_azure(texts, f"azure/{deployment_name}")
             elif self.provider == EmbeddingProvider.LITELLM:
@@ -609,10 +730,21 @@ class CloudEmbedding:
                 return await self._embed_vertex(
                     texts, model_name, embedding_type, reduced_dimension
                 )
+            elif self.provider == EmbeddingProvider.BIFROST:
+                return await self._embed_bifrost(
+                    texts, model_name, embedding_type, reduced_dimension
+                )
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:
-            raise AuthenticationError(provider="OpenAI")
+            raise AuthenticationError(provider=self.provider.value)
+        except (ConnectorStopSignal, EmbeddingWaitTimeoutError):
+            # Raised while waiting for a rate limit; never retried.
+            raise
+        except EmbeddingRequestFailedError:
+            # The provider client already retried, or the provider refused the
+            # request itself; retrying the whole call would resend good inputs.
+            raise
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 raise AuthenticationError(provider=str(self.provider))
@@ -625,7 +757,7 @@ class CloudEmbedding:
                 sanitized_api_key=self.sanitized_api_key,
                 status_code=e.response.status_code,
             )
-            # Log at warning because the @retry decorator will re-invoke us
+            # Log at warning because the retry in `embed` will re-invoke us
             # on failure — an ERROR-level log here floods Sentry with up to
             # _RETRY_TRIES duplicate events per failing batch (rate limits,
             # transient provider outages). The final failure surfaces via
@@ -716,11 +848,12 @@ async def cohere_rerank_aws(
     aws_access_key_id: str,
     aws_secret_access_key: str,
 ) -> list[float]:
-    session = aioboto3.Session(
-        aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key
-    )
-    async with session.client(
-        "bedrock-runtime", region_name=region_name
+    session = get_session()
+    async with session.create_client(
+        "bedrock-runtime",
+        region_name=region_name,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
     ) as bedrock_client:
         body = json.dumps(
             {
@@ -786,7 +919,9 @@ class EmbeddingModel:
         api_version: str | None = None,
         deployment_name: str | None = None,
         reduced_dimension: int | None = None,
+        auth: CloudEmbeddingAuth | None = None,
     ) -> None:
+        self.query_embedding_cache_key: str | None = None
         self.api_key = api_key
         self.provider_type = provider_type
         self.query_prefix = query_prefix
@@ -798,10 +933,17 @@ class EmbeddingModel:
         self.api_version = api_version
         self.deployment_name = deployment_name
         self.reduced_dimension = reduced_dimension
+        self.auth = (
+            auth or build_embedding_auth(provider_type, api_key)
+            if provider_type is not None
+            else None
+        )
         self.tokenizer = get_tokenizer(
             model_name=model_name, provider_type=provider_type
         )
         self.callback = callback
+        # Time this model's requests spent waiting on rate limits.
+        self.wait_totals = EmbeddingWaitTotals()
 
         # Only build model server endpoint for local models
         if self.provider_type is None:
@@ -816,14 +958,15 @@ class EmbeddingModel:
     async def _make_direct_api_call(
         self,
         embed_request: EmbedRequest,
+        policy: EmbeddingRequestPolicy = _QUERY_REQUEST_POLICY,
     ) -> EmbedResponse:
         """Make direct API call to cloud provider, bypassing model server."""
         if self.provider_type is None:
             raise ValueError("Provider type is required for direct API calls")
 
-        if self.api_key is None:
-            logger.error("API key not provided for cloud model")
-            raise RuntimeError("API key not provided for cloud model")
+        if self.auth is None:
+            raise ValueError("Authentication is required for cloud embeddings.")
+        self.auth.validate_credentials()
 
         # Check for prefix usage with cloud models
         if embed_request.manual_query_prefix or embed_request.manual_passage_prefix:
@@ -851,10 +994,12 @@ class EmbeddingModel:
         )
 
         async with CloudEmbedding(
-            api_key=self.api_key,
+            api_key=self.api_key or "",
             provider=self.provider_type,
             api_url=self.api_url,
             api_version=self.api_version,
+            auth=self.auth,
+            policy=policy,
         ) as cloud_model:
             embeddings = await cloud_model.embed(
                 texts=embed_request.texts,
@@ -887,6 +1032,7 @@ class EmbeddingModel:
         embed_request: EmbedRequest,
         tenant_id: str | None = None,
         request_id: str | None = None,
+        policy: EmbeddingRequestPolicy = _QUERY_REQUEST_POLICY,
     ) -> EmbedResponse:
         if self.embed_server_endpoint is None:
             raise ValueError("Model server endpoint is not configured for local models")
@@ -902,53 +1048,47 @@ class EmbeddingModel:
             if request_id:
                 headers["X-Onyx-Request-ID"] = request_id
 
-            response = requests.post(
-                endpoint,
-                headers=headers,
-                json=embed_request.model_dump(),
-                timeout=(MODEL_SERVER_CONNECT_TIMEOUT, MODEL_SERVER_READ_TIMEOUT),
-            )
-            # signify that this is a rate limit error
-            if response.status_code == 429:
-                raise ModelServerRateLimitError(response.text)
+            def post() -> Response:
+                response = requests.post(
+                    endpoint,
+                    headers=headers,
+                    json=embed_request.model_dump(),
+                    timeout=(MODEL_SERVER_CONNECT_TIMEOUT, MODEL_SERVER_READ_TIMEOUT),
+                )
+                if response.status_code == 429:
+                    raise ModelServerRateLimitError(response.text)
+                return response
 
+            response = policy.send(post)
             response.raise_for_status()
             return response
 
         final_make_request_func = _make_request
 
-        # if the text type is a passage, add some default
-        # retries + handling for rate limiting
+        # Passage requests retry errors here. A 429 never reaches this retry:
+        # the passage policy blocks on it in `policy.send`.
         if embed_request.text_type == EmbedTextType.PASSAGE:
             final_make_request_func = retry(
                 retry=retry_if_exception_type(
                     (RequestException, ValueError, JSONDecodeError)
                 ),
-                stop=stop_after_attempt(3),
-                wait=wait_fixed(5),
+                stop=stop_after_attempt(_MODEL_SERVER_ERROR_TRIES),
+                wait=policy.retry_backoff.wait(),
                 reraise=True,
             )(final_make_request_func)
-            # use 10 second delay as per Azure suggestion
-            final_make_request_func = retry(
-                retry=retry_if_exception_type(ModelServerRateLimitError),
-                stop=stop_after_attempt(10),
-                wait=wait_fixed(10),
-                reraise=True,
-            )(final_make_request_func)
-
-        response: Response | None = None
 
         try:
             response = final_make_request_func()
             return EmbedResponse(**response.json())
         except requests.HTTPError as e:
-            if not response:
+            # raise_for_status() raised, so the failed response is only on the error.
+            if e.response is None:
                 raise HTTPError("HTTP error occurred - response is None.") from e
 
             try:
-                error_detail = response.json().get("detail", str(e))
+                error_detail = e.response.json().get("detail", str(e))
             except Exception:
-                error_detail = response.text
+                error_detail = e.response.text
             raise HTTPError(f"HTTP error occurred: {error_detail}") from e
         except requests.RequestException as e:
             raise HTTPError(f"Request failed: {str(e)}") from e
@@ -964,6 +1104,20 @@ class EmbeddingModel:
         request_id: str | None = None,
     ) -> list[Embedding]:
         text_batches = batch_list(texts, batch_size)
+        # Resolved here, not in the worker threads, which lack the tenant
+        # context. Only indexing waits for the rate limit; queries never block.
+        policy = (
+            EmbeddingRequestPolicy(
+                retry_backoff=_PASSAGE_RETRY_BACKOFF,
+                retry_tries=_PASSAGE_RETRY_TRIES,
+                rate_limiter=load_embedding_rate_limiter(),
+                should_stop=self.callback.should_stop if self.callback else None,
+                block_on_provider_rate_limit=True,
+                wait_totals=self.wait_totals,
+            )
+            if text_type == EmbedTextType.PASSAGE
+            else _QUERY_REQUEST_POLICY
+        )
         num_of_batches = len(text_batches)
 
         logger.debug("Encoding %s texts in %s batches.", len(texts), num_of_batches)
@@ -1042,7 +1196,7 @@ class EmbeddingModel:
                             # during batch processing.
                             loop = _get_or_create_event_loop()
                             response = loop.run_until_complete(
-                                self._make_direct_api_call(embed_request)
+                                self._make_direct_api_call(embed_request, policy)
                             )
                         else:
                             # This code is being called from an event loop,
@@ -1054,13 +1208,18 @@ class EmbeddingModel:
                                     EmbedResponse,
                                     pool.submit(
                                         asyncio.run,
-                                        self._make_direct_api_call(embed_request),
+                                        self._make_direct_api_call(
+                                            embed_request, policy
+                                        ),
                                     ).result(),
                                 )
                     else:
                         # For local models, use model server.
                         response = self._make_model_server_request(
-                            embed_request, tenant_id=tenant_id, request_id=request_id
+                            embed_request,
+                            tenant_id=tenant_id,
+                            request_id=request_id,
+                            policy=policy,
                         )
                 success = True
             finally:
@@ -1138,7 +1297,7 @@ class EmbeddingModel:
 
         return embeddings
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def encode(
         self,
         texts: list[str],
@@ -1195,8 +1354,9 @@ class EmbeddingModel:
         server_host: str,  # Changes depending on indexing or inference
         server_port: int,
         retrim_content: bool = False,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> "EmbeddingModel":
-        return cls(
+        model = cls(
             server_host=server_host,
             server_port=server_port,
             model_name=search_settings.model_name,
@@ -1210,7 +1370,39 @@ class EmbeddingModel:
             api_version=search_settings.api_version,
             deployment_name=search_settings.deployment_name,
             reduced_dimension=search_settings.reduced_dimension,
+            callback=callback,
+            auth=(
+                build_embedding_auth(
+                    search_settings.provider_type,
+                    search_settings.api_key,
+                    search_settings.cloud_provider.vertex_config
+                    if search_settings.cloud_provider is not None
+                    else None,
+                )
+                if search_settings.provider_type is not None
+                else None
+            ),
         )
+        if search_settings.id is not None:
+            # Provider edits can change the effective deployment without a new settings ID.
+            provider = search_settings.cloud_provider
+            identity = (
+                search_settings.id,
+                model.model_name,
+                model.provider_type,
+                model.query_prefix,
+                model.normalize,
+                model.reduced_dimension,
+                model.api_url,
+                model.api_version,
+                model.deployment_name,
+                model.api_key,
+                provider.vertex_config if provider else None,
+            )
+            model.query_embedding_cache_key = hashlib.sha256(
+                json.dumps(identity, sort_keys=True).encode()
+            ).hexdigest()
+        return model
 
 
 class RerankingModel:
@@ -1319,48 +1511,6 @@ class RerankingModel:
                 response.raise_for_status()
 
                 return RerankResponse(**response.json()).scores
-
-
-class QueryAnalysisModel:
-    def __init__(
-        self,
-        model_server_host: str = MODEL_SERVER_HOST,
-        model_server_port: int = MODEL_SERVER_PORT,
-        # Lean heavily towards not throwing out keywords
-        keyword_percent_threshold: float = 0.1,
-        # Lean towards semantic which is the default
-        semantic_percent_threshold: float = 0.4,
-    ) -> None:
-        model_server_url = build_model_server_url(model_server_host, model_server_port)
-        self.intent_server_endpoint = model_server_url + "/custom/query-analysis"
-        self.keyword_percent_threshold = keyword_percent_threshold
-        self.semantic_percent_threshold = semantic_percent_threshold
-
-    def predict(
-        self,
-        query: str,
-    ) -> tuple[bool, list[str]]:
-        intent_request = IntentRequest(
-            query=query,
-            keyword_percent_threshold=self.keyword_percent_threshold,
-            semantic_percent_threshold=self.semantic_percent_threshold,
-        )
-
-        with traced_llm_call(
-            flow=LLMFlow.INTENT_CLASSIFICATION,
-            model="query-analysis",
-            provider="model_server",
-        ):
-            response = requests.post(
-                self.intent_server_endpoint,
-                json=intent_request.model_dump(),
-                timeout=(MODEL_SERVER_CONNECT_TIMEOUT, MODEL_SERVER_READ_TIMEOUT),
-            )
-            response.raise_for_status()
-
-            response_model = IntentResponse(**response.json())
-
-        return response_model.is_keyword, response_model.keywords
 
 
 def warm_up_retry(

@@ -29,6 +29,7 @@ from ee.onyx.server.gateway.stream_bridge import (
     _sse_response,
     _stream_worker_guard,
     _StreamAccumulator,
+    finalize_tool_calls,
 )
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
@@ -40,28 +41,34 @@ from onyx.db.llm import (
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_request import (
+    AssistantMessage,
+    ChatCompletionMessage,
+    ToolCall,
+    UserMessage,
+)
 from onyx.llm.model_response import ChatCompletionMessageToolCall
 from onyx.llm.models import (
     AnyThinkingBlock,
-    AssistantMessage,
-    ChatCompletionMessage,
     NamedToolChoice,
     ReasoningEffort,
     RedactedThinkingBlock,
     TextContentPart,
     ThinkingBlock,
-    ToolCall,
     ToolChoice,
     ToolChoiceOptions,
-    UserMessage,
 )
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.tracing_wrap import _finalize_tool_calls
 from onyx.server.features.build.craft_gateway import gateway_request_flow
-from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
+from onyx.server.gateway.configs import (
+    GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
+    GATEWAY_PATH_PREFIX,
+)
+from onyx.server.gateway.craft_session import craft_session_binder
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
     AnthropicContentBlock,
@@ -109,38 +116,41 @@ from onyx.server.gateway.models import (
     ResponsesOutputTextPart,
     ResponsesRequest,
 )
+from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
-from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
+from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import trace
-from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from litellm.types.llms.anthropic import (
-        AnthopicMessagesAssistantMessageParam,
-        AnthropicMessagesUserMessageParam,
+        AllAnthropicPassThroughMessageValues,
+        AnthropicThinkingParam,
     )
     from litellm.types.llms.openai import ChatCompletionToolParam
 
-    _AnthropicAdapterMessage = (
-        AnthropicMessagesUserMessageParam | AnthopicMessagesAssistantMessageParam
-    )
-
 logger = setup_logger()
 
-router = APIRouter(prefix=GATEWAY_PATH_PREFIX)
+# One user dependency object, shared by the endpoints and the Craft session
+# binder, so FastAPI resolves the user once per request.
+_gateway_user = require_permission(Permission.USE_LLM_GATEWAY)
+router = APIRouter(
+    prefix=GATEWAY_PATH_PREFIX,
+    # Binds the calling Craft session (if any) for the traces opened below,
+    # including on the stream worker threads.
+    dependencies=[Depends(craft_session_binder(_gateway_user))],
+)
 
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
     list[ChatCompletionMessage]
 )
-
-
-def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
 
 
 def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
@@ -149,6 +159,18 @@ def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
+        )
+    # The workspace switch only gates third-party PAT traffic. Craft sandbox
+    # tokens keep working — admins control those via the Craft setting.
+    # Fail closed: a settings-read error must not silently re-enable a
+    # feature the admin switched off.
+    if (
+        flow is LLMFlow.LLM_GATEWAY
+        and not load_settings(raise_on_error=True).llm_gateway_enabled
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_DISABLED,
+            "The Onyx LLM gateway is disabled by an administrator.",
         )
     return flow
 
@@ -183,7 +205,7 @@ def resolve_gateway_model(
         (
             model
             for model in provider.model_configurations
-            if model.is_visible and model.name == model_name
+            if model.is_visible and model.supports_chat and model.name == model_name
         ),
         None,
     )
@@ -261,8 +283,6 @@ def _prepare_messages(
         continuation=False,
         with_metadata=False,
     )
-    if not isinstance(processed_messages, list):
-        raise RuntimeError("LLM gateway message processing returned non-list input")
     return processed_messages
 
 
@@ -305,7 +325,7 @@ def _emit_stream_error(
 
 
 def _stream_worker(
-    llm: LLM,
+    llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
@@ -321,7 +341,7 @@ def _stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -337,7 +357,7 @@ def _stream_worker(
             out=out,
             cancelled=cancelled,
         ):
-            state.upstream = llm.stream(
+            state.upstream = llm.stream_raw(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -395,7 +415,7 @@ def handle_chat_completion(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,
@@ -404,9 +424,9 @@ def handle_chat_completion(
         ) as span,
     ):
         try:
-            response = llm.invoke(
+            response = llm.invoke_raw(
                 prompt=messages,
-                stream=True,
+                total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=request.tools,
                 tool_choice=tool_choice,
                 structured_response_format=request.response_format,
@@ -542,7 +562,7 @@ def _build_responses_output_items(
 
 
 def _responses_stream_worker(
-    llm: LLM,
+    llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
@@ -620,7 +640,7 @@ def _responses_stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -634,7 +654,7 @@ def _responses_stream_worker(
             out=out,
             cancelled=cancelled,
         ):
-            state.upstream = llm.stream(
+            state.upstream = llm.stream_raw(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -687,7 +707,7 @@ def _responses_stream_worker(
                     item
                     for item in (
                         _function_call_item(tool_call)
-                        for tool_call in _finalize_tool_calls(state.tool_call_buffer)
+                        for tool_call in finalize_tool_calls(state.tool_call_buffer)
                         or []
                     )
                     if item is not None
@@ -775,7 +795,7 @@ def handle_responses_request(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,
@@ -784,9 +804,9 @@ def handle_responses_request(
         ) as span,
     ):
         try:
-            response = llm.invoke(
+            response = llm.invoke_raw(
                 prompt=messages,
-                stream=True,
+                total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,
                 tool_choice=tool_choice,
                 max_tokens=max_tokens,
@@ -898,7 +918,7 @@ def _anthropic_messages_to_raw_messages(
 
     adapter = LiteLLMAnthropicMessagesAdapter()
     translated = adapter.translate_anthropic_messages_to_openai(
-        messages=cast("list[_AnthropicAdapterMessage]", messages)
+        messages=cast("list[AllAnthropicPassThroughMessageValues]", messages)
     )
     raw: list[dict[str, Any]] = []
     system_message = _anthropic_system_to_raw_message(system)
@@ -990,7 +1010,7 @@ def _anthropic_reasoning_effort(
 ) -> ReasoningEffort:
     """Anthropic has two thinking APIs: legacy ``thinking.type=enabled`` with
     ``budget_tokens``, and adaptive ``thinking.type=adaptive`` where effort
-    lives in top-level ``output_config.effort``. The downstream LLM layer
+    lives in top-level ``output_config.effort``. The provider adapter
     re-derives the right API per model from the single ReasoningEffort, so
     both request shapes must map faithfully here."""
     if thinking is not None and thinking.get("type") == "disabled":
@@ -1007,7 +1027,7 @@ def _anthropic_reasoning_effort(
     )
 
     effort = LiteLLMAnthropicMessagesAdapter.translate_anthropic_thinking_to_reasoning_effort(
-        thinking
+        cast("AnthropicThinkingParam", thinking)
     )
     return _parse_reasoning_effort(effort)
 
@@ -1043,7 +1063,7 @@ def _anthropic_thinking_content_blocks(
     for block in thinking_blocks or []:
         if isinstance(block, RedactedThinkingBlock):
             blocks.append(AnthropicRedactedThinkingBlock.create(data=block.data))
-        elif block.thinking or block.signature:
+        elif isinstance(block, ThinkingBlock) and (block.thinking or block.signature):
             blocks.append(
                 AnthropicThinkingBlock.create(
                     thinking=block.thinking, signature=block.signature or ""
@@ -1078,7 +1098,7 @@ def _anthropic_tool_use_blocks(
 
 
 def _anthropic_stream_worker(
-    llm: LLM,
+    llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
@@ -1121,7 +1141,7 @@ def _anthropic_stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -1178,9 +1198,14 @@ def _anthropic_stream_worker(
                     ) or not emit(AnthropicContentBlockStopEvent.create(index=index)):
                         return False
                     continue
+                if not isinstance(block, ThinkingBlock):
+                    # OpenAI reasoning items carry no Anthropic-shaped thinking;
+                    # their summary already streamed as reasoning_content.
+                    continue
                 if not ensure_block_open("thinking"):
                     return False
-                assert open_index is not None
+                if open_index is None:
+                    raise RuntimeError("Thinking block has no content index")
                 if block.thinking and not emit(
                     AnthropicContentBlockDeltaEvent.create(
                         index=open_index,
@@ -1206,7 +1231,7 @@ def _anthropic_stream_worker(
             out=out,
             cancelled=cancelled,
         ):
-            state.upstream = llm.stream(
+            state.upstream = llm.stream_raw(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -1234,7 +1259,8 @@ def _anthropic_stream_worker(
                 if delta.content:
                     if not ensure_block_open("text"):
                         break
-                    assert open_index is not None
+                    if open_index is None:
+                        raise RuntimeError("Text block has no content index")
                     if not emit(
                         AnthropicContentBlockDeltaEvent.create(
                             index=open_index,
@@ -1244,7 +1270,7 @@ def _anthropic_stream_worker(
                         break
             else:
                 close_open_block()
-                finalized_tool_calls = _finalize_tool_calls(state.tool_call_buffer)
+                finalized_tool_calls = finalize_tool_calls(state.tool_call_buffer)
                 tool_blocks = _anthropic_tool_use_blocks(finalized_tool_calls)
                 named_tool_calls = [
                     tc for tc in finalized_tool_calls or [] if tc.function.name
@@ -1325,7 +1351,7 @@ def handle_anthropic_messages(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,
@@ -1334,9 +1360,9 @@ def handle_anthropic_messages(
         ) as span,
     ):
         try:
-            response = llm.invoke(
+            response = llm.invoke_raw(
                 prompt=messages,
-                stream=True,
+                total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
                 tools=tools,
                 tool_choice=tool_choice,
                 max_tokens=max_tokens,
@@ -1376,7 +1402,7 @@ def handle_anthropic_messages(
     except ValueError as e:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            "The upstream LLM returned invalid tool arguments.",
+            "The upstream model returned invalid tool arguments.",
         ) from e
     content.extend(tool_blocks)
     return AnthropicMessageResponse.from_parts(
@@ -1410,13 +1436,14 @@ def _resolve_metered_gateway_model(
             tenant_id=get_current_tenant_id(),
             llm_provider_api_key=provider.api_key,
         )
+    check_model_spend_limits(user, model_config.id)
     return provider, model_config
 
 
 @router.get("/v1/models")
 def gateway_list_models(
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     _authorize_gateway_request(http_request, user)
@@ -1429,7 +1456,7 @@ def gateway_list_models(
 def gateway_chat_completions(
     request: ChatCompletionRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
@@ -1454,7 +1481,7 @@ def gateway_chat_completions(
 def gateway_responses(
     request: ResponsesRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
@@ -1485,7 +1512,7 @@ def gateway_responses(
 def gateway_anthropic_messages(
     request: AnthropicMessagesRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
@@ -1519,7 +1546,7 @@ def gateway_anthropic_messages(
 def gateway_anthropic_count_tokens(
     request: AnthropicCountTokensRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     # No token rate limit check: nothing is generated by this endpoint.

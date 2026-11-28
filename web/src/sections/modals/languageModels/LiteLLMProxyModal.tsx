@@ -45,6 +45,7 @@ function LiteLLMProxyModalInternals({
   isOnboarding,
 }: LiteLLMProxyModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   const formikProps = useFormikContext<LiteLLMProxyModalValues>();
 
   const isFetchDisabled =
@@ -66,7 +67,7 @@ function LiteLLMProxyModalInternals({
     <>
       <APIBaseField
         subDescription={t("liteLlmProxy.apiBaseField.description")}
-        placeholder="https://your-litellm-proxy.com"
+        placeholder={tPlaceholders("litellm.apiBase")}
       />
 
       <APIKeyField providerName="LiteLLM Proxy" />

@@ -29,7 +29,6 @@ export const WEB_SEARCH_TOOL_ID = "WebSearchTool";
 export const IMAGE_GENERATION_TOOL_ID = "ImageGenerationTool";
 export const PYTHON_TOOL_ID = "PythonTool";
 export const OPEN_URL_TOOL_ID = "OpenURLTool";
-export const CODING_AGENT_TOOL_ID = "CodingAgentTool";
 export const KNOWLEDGE_GRAPH_TOOL_ID = "KnowledgeGraphTool";
 // Always hidden from the actions list (it isn't a user-selectable action).
 export const FILE_READER_TOOL_ID = "FileReaderTool";
@@ -40,7 +39,6 @@ const TOOL_ICONS: Record<string, IconFunctionComponent> = {
   [IMAGE_GENERATION_TOOL_ID]: SvgImage,
   [PYTHON_TOOL_ID]: SvgTerminalSmall,
   [OPEN_URL_TOOL_ID]: SvgLink,
-  [CODING_AGENT_TOOL_ID]: SvgCpu,
   [KNOWLEDGE_GRAPH_TOOL_ID]: SvgServer,
 };
 
@@ -78,13 +76,33 @@ export function displayableTools(tools: ToolSnapshot[]): ToolSnapshot[] {
   );
 }
 
-// null when nothing is disabled → backend allows every tool. Otherwise the enabled ids (which may
-// be [] if the user disabled all). Never send a bare [] just because no prefs exist.
-export function computeAllowedToolIds(
+// A built-in tool by its id, or a plugin (the backend `tool_options.allowed` entries).
+export type ToolOptionsEntry =
+  | { type: "capability"; tool_id: number }
+  | { type: "plugin"; plugin_id: string };
+
+/*
+ * null when nothing is off → backend allows every tool and plugin. Otherwise the enabled built-in
+ * tools and each known plugin that is not off (may be [] if the user disabled all). An allow-list
+ * leaves out every plugin it does not name, so `pluginIds` must hold every plugin known.
+ */
+export function computeAllowedEntries(
   tools: ToolSnapshot[],
   disabledToolIds: number[],
-): number[] | null {
-  if (disabledToolIds.length === 0) return null;
-  const disabled = new Set(disabledToolIds);
-  return tools.map((t) => t.id).filter((id) => !disabled.has(id));
+  disabledPluginIds: string[],
+  pluginIds: string[],
+): ToolOptionsEntry[] | null {
+  if (disabledToolIds.length === 0 && disabledPluginIds.length === 0) {
+    return null;
+  }
+  const disabledTools = new Set(disabledToolIds);
+  const disabledPlugins = new Set(disabledPluginIds);
+  return [
+    ...tools
+      .filter((t) => t.in_code_tool_id !== null && !disabledTools.has(t.id))
+      .map((t): ToolOptionsEntry => ({ type: "capability", tool_id: t.id })),
+    ...pluginIds
+      .filter((id) => !disabledPlugins.has(id))
+      .map((id): ToolOptionsEntry => ({ type: "plugin", plugin_id: id })),
+  ];
 }

@@ -7,8 +7,8 @@ Free tagging, the Figma `Input/Tags` component: editable `Tag`s rendered inline 
 Interaction model:
 
 - Enter adds the trimmed input text via `onAdd`.
-- Backspace on an empty input arms the last tag (its dark keyboard-selection state).
-- Backspace or Delete on an armed tag removes it and focus returns to the input. Enter and Space also activate the armed remove button.
+- Backspace on an empty input, or ArrowLeft with the caret at the start, arms the last tag (its dark keyboard-selection state). ArrowLeft and ArrowRight walk the armed tags; ArrowRight off the last returns to the input. Tags are not Tab stops, so Tab leaves the field.
+- Backspace or Delete on an armed tag removes it and arms the tag before it, so repeated presses clear tags one by one; with none left, focus returns to the input. Enter and Space also activate the armed remove button.
 - Clicking the field focuses the input.
 
 ## Props
@@ -23,14 +23,19 @@ Interaction model:
 | `placeholder`  | `string`                             | —              | Input placeholder                                                                 |
 | `variant`      | `"primary" \| "internal" \| "error"` | `"primary"`    | Wrapper chrome. `"internal"` is the borderless Figma `Style=Subtle` look          |
 | `disabled`     | `boolean`                            | `false`        | Dims the field, disables input, hides remove and clear buttons                    |
-| `icon`         | `IconFunctionComponent`              | —              | Leading icon (24px container)                                                     |
+| `tooltip`      | `string \| RichStr`                  | —              | Shown on hover, in any state                                                      |
+| `icon`         | `IconFunctionComponent`              | —              | Leading icon (20px icon container)                                                |
 | `onClear`      | `() => void`                         | —              | Renders the clear action button                                                   |
 | `minRows`      | `number`                             | `1`            | Tag rows the field is tall enough to show before it grows. Rows pack from the top |
+| `maxRows`      | `number`                             | `2`            | Tag rows the field grows to before the tags scroll inside it. A new tag scrolls the input row into view |
 | `focusOnMount` | `boolean`                            | `false`        | Focuses the text input on mount                                                   |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the field, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 ### `TagItem`
 
-`TagItem` is `{ id: string; label: string; error?: boolean }`. `error` shows the warning indicator on that tag.
+`TagItem` is `{ id: string; label: string; icon?: IconFunctionComponent; error?: boolean; locked?: boolean }`. `icon` leads the tag; `error` shows the warning indicator on it; `locked` removes its remove button, so neither a click nor the keyboard can remove it. In `InputMultiSelect`, a locked tag outside the option set does not flag the error variant.
 
 ## Usage
 

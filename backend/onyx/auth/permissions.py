@@ -10,7 +10,7 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from fastapi import Depends, Request
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, computed_field, field_validator
 
 from onyx.db.enums import AccountType, Permission, PermissionAuthority
 from onyx.db.models import User
@@ -85,7 +85,7 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
 # Permissions that cannot be toggled via the group-permission API.
 # BASIC_ACCESS is always granted, FULL_ADMIN_PANEL_ACCESS is too broad,
 # and implied permissions (READ_* and the API-surface scopes) are never
-# stored directly. MANAGE_SKILLS is the old curator role: a scoped manager
+# stored directly. MANAGE_PLUGINS is the old curator role: a scoped manager
 # resolves it from the bundle below, an admin from the full-admin short-circuit,
 # so nothing grants it — and there is no global curator to grant it to.
 NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
@@ -93,9 +93,15 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.BASIC_ACCESS,
         Permission.FULL_ADMIN_PANEL_ACCESS,
         Permission.CRAFT_SANDBOX,
-        Permission.MANAGE_SKILLS,
+        Permission.MANAGE_PLUGINS,
     }
     | Permission.IMPLIED
+)
+
+# The only grants an admin may switch on or off for the seeded Basic group, which
+# holds the whole org. Everything else on a default group stays fixed by migrations.
+DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
+    {Permission.CREATE_USER_API_KEYS, Permission.ADD_AGENTS}
 )
 
 # Permissions auto-granted to all users in Community Edition.
@@ -119,8 +125,8 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.MANAGE_AGENTS,
         Permission.ADD_AGENTS,
         Permission.MANAGE_USER_GROUPS,
-        Permission.MANAGE_ACTIONS,  # scoped via its agents at GATE 2
-        Permission.MANAGE_SKILLS,  # scoped via Skill__UserGroup at GATE 2
+        Permission.MANAGE_ACTIONS,  # scoped via manages_integration
+        Permission.MANAGE_PLUGINS,  # scoped via Plugin__UserGroup at GATE 2
     }
 )
 
@@ -137,6 +143,12 @@ class PermissionRegistryEntry(BaseModel):
     description: str
     permissions: list[Permission]
     group: int
+
+    @computed_field
+    @property
+    def default_group_toggleable(self) -> bool:
+        """Whether the row is offered on the Basic group's page."""
+        return all(p in DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS for p in self.permissions)
 
     @field_validator("permissions")
     @classmethod
@@ -165,13 +177,17 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
         group=0,
     ),
     PermissionRegistryEntry(
-        id="manage_connectors_and_document_sets",
-        display_name="Manage Connectors & Document Sets",
-        description="Add and update connectors and document sets.",
-        permissions=[
-            Permission.MANAGE_CONNECTORS,
-            Permission.MANAGE_DOCUMENT_SETS,
-        ],
+        id="manage_connectors",
+        display_name="Manage Connectors",
+        description="Add and update connectors and their credentials, and run indexing.",
+        permissions=[Permission.MANAGE_CONNECTORS],
+        group=0,
+    ),
+    PermissionRegistryEntry(
+        id="manage_document_sets",
+        display_name="Manage Document Sets",
+        description="Add and update document sets from existing connectors.",
+        permissions=[Permission.MANAGE_DOCUMENT_SETS],
         group=0,
     ),
     PermissionRegistryEntry(
@@ -317,6 +333,17 @@ def has_global_permission(user: User, permission: Permission) -> bool:
     return has_permission(user, permission) is PermissionAuthority.GLOBAL
 
 
+def token_allows(request: Request, permission: Permission) -> bool:
+    """Whether the token of the request allows ``permission``. A session or
+    an unrestricted token has no cap."""
+    token_scopes: list[Permission] | None = getattr(  # ods: ignore[getattr]
+        request.state, "token_scopes", None
+    )
+    return token_scopes is None or permission.value in resolve_effective_permissions(
+        {scope.value for scope in token_scopes}
+    )
+
+
 def require_permission(
     required: Permission,
     *,
@@ -338,20 +365,13 @@ def require_permission(
     base_user = current_chat_accessible_user if allow_anonymous else current_user
 
     async def dependency(request: Request, user: User = Depends(base_user)) -> User:
-        token_scopes: list[Permission] | None = getattr(  # ods: ignore[getattr]
-            request.state, "token_scopes", None
-        )
         authority = has_permission(user, required)
         # allow_scope: GATE 1 lets a SCOPED manager reach the route; default GLOBAL-only.
         if allow_scope:
             permitted_by_user = authority is not PermissionAuthority.NONE
         else:
             permitted_by_user = authority is PermissionAuthority.GLOBAL
-        token_implies = token_scopes is not None and required.value in (
-            resolve_effective_permissions({s.value for s in token_scopes})
-        )
-        permitted_by_token = token_scopes is None or token_implies
-        permitted = permitted_by_user and permitted_by_token
+        permitted = permitted_by_user and token_allows(request, required)
         if not permitted:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -362,4 +382,6 @@ def require_permission(
     dependency._is_require_permission = True  # ty: ignore[unresolved-attribute]
     # Lets tests pin a route's permission level without closure introspection.
     dependency._required_permission = required  # ty: ignore[unresolved-attribute]
+    dependency._allow_scope = allow_scope  # ty: ignore[unresolved-attribute]
+    dependency._allow_anonymous = allow_anonymous  # ty: ignore[unresolved-attribute]
     return dependency

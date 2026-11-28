@@ -1,14 +1,11 @@
 """Unit tests for onyx.db.voice module."""
 
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 import pytest
 
 from onyx.db.models import VoiceProvider
 from onyx.db.voice import (
-    MAX_VOICE_PLAYBACK_SPEED,
-    MIN_VOICE_PLAYBACK_SPEED,
     deactivate_stt_provider,
     deactivate_tts_provider,
     delete_voice_provider,
@@ -19,7 +16,6 @@ from onyx.db.voice import (
     fetch_voice_providers,
     set_default_stt_provider,
     set_default_tts_provider,
-    update_user_voice_settings,
     upsert_voice_provider,
 )
 from onyx.error_handling.exceptions import OnyxError
@@ -416,7 +412,7 @@ class TestDeleteVoiceProvider:
 
     def test_hard_deletes_provider_when_found(self, mock_db_session: MagicMock) -> None:
         provider = _make_voice_provider(id=1)
-        mock_db_session.scalar.return_value = provider
+        mock_db_session.scalar.side_effect = [provider, None]
 
         delete_voice_provider(mock_db_session, 1)
 
@@ -546,104 +542,3 @@ class TestDeactivateProviders:
             deactivate_tts_provider(db_session=mock_db_session, provider_id=999)
 
         assert "No voice provider with id 999" in str(exc_info.value)
-
-
-class TestUpdateUserVoiceSettings:
-    """Tests for update_user_voice_settings."""
-
-    def test_updates_auto_send(self, mock_db_session: MagicMock) -> None:
-        user_id = uuid4()
-
-        update_user_voice_settings(mock_db_session, user_id, auto_send=True)
-
-        mock_db_session.execute.assert_called_once()
-        mock_db_session.flush.assert_called_once()
-
-    def test_updates_auto_playback(self, mock_db_session: MagicMock) -> None:
-        user_id = uuid4()
-
-        update_user_voice_settings(mock_db_session, user_id, auto_playback=True)
-
-        mock_db_session.execute.assert_called_once()
-        mock_db_session.flush.assert_called_once()
-
-    def test_updates_playback_speed_within_range(
-        self, mock_db_session: MagicMock
-    ) -> None:
-        user_id = uuid4()
-
-        update_user_voice_settings(mock_db_session, user_id, playback_speed=1.5)
-
-        mock_db_session.execute.assert_called_once()
-
-    def test_clamps_playback_speed_to_min(self, mock_db_session: MagicMock) -> None:
-        user_id = uuid4()
-
-        update_user_voice_settings(mock_db_session, user_id, playback_speed=0.1)
-
-        mock_db_session.execute.assert_called_once()
-        stmt = mock_db_session.execute.call_args[0][0]
-        compiled = stmt.compile(compile_kwargs={"literal_binds": True})
-        assert str(MIN_VOICE_PLAYBACK_SPEED) in str(compiled)
-
-    def test_clamps_playback_speed_to_max(self, mock_db_session: MagicMock) -> None:
-        user_id = uuid4()
-
-        update_user_voice_settings(mock_db_session, user_id, playback_speed=5.0)
-
-        mock_db_session.execute.assert_called_once()
-        stmt = mock_db_session.execute.call_args[0][0]
-        compiled = stmt.compile(compile_kwargs={"literal_binds": True})
-        assert str(MAX_VOICE_PLAYBACK_SPEED) in str(compiled)
-
-    def test_updates_multiple_settings(self, mock_db_session: MagicMock) -> None:
-        user_id = uuid4()
-
-        update_user_voice_settings(
-            mock_db_session,
-            user_id,
-            auto_send=True,
-            auto_playback=False,
-            playback_speed=1.25,
-        )
-
-        mock_db_session.execute.assert_called_once()
-        mock_db_session.flush.assert_called_once()
-
-    def test_does_nothing_when_no_settings_provided(
-        self, mock_db_session: MagicMock
-    ) -> None:
-        user_id = uuid4()
-
-        update_user_voice_settings(mock_db_session, user_id)
-
-        mock_db_session.execute.assert_not_called()
-        mock_db_session.flush.assert_not_called()
-
-
-class TestSpeedClampingLogic:
-    """Tests for the speed clamping constants and logic."""
-
-    def test_min_speed_constant(self) -> None:
-        assert MIN_VOICE_PLAYBACK_SPEED == 0.5
-
-    def test_max_speed_constant(self) -> None:
-        assert MAX_VOICE_PLAYBACK_SPEED == 2.0
-
-    def test_clamping_formula(self) -> None:
-        """Verify the clamping formula used in update_user_voice_settings."""
-        test_cases = [
-            (0.1, MIN_VOICE_PLAYBACK_SPEED),
-            (0.5, 0.5),
-            (1.0, 1.0),
-            (1.5, 1.5),
-            (2.0, 2.0),
-            (3.0, MAX_VOICE_PLAYBACK_SPEED),
-        ]
-        for speed, expected in test_cases:
-            clamped = max(
-                MIN_VOICE_PLAYBACK_SPEED, min(MAX_VOICE_PLAYBACK_SPEED, speed)
-            )
-            assert clamped == expected, (
-                f"speed={speed} expected={expected} got={clamped}"
-            )

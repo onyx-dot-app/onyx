@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsRandomUser, apiLogin } from "@tests/e2e/utils/auth";
+import { OnboardingNamePromptPage } from "@tests/e2e/pages/OnboardingNamePromptPage";
+import { AppSidebarPage } from "@tests/e2e/pages/AppSidebarPage";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
@@ -88,9 +90,7 @@ test.describe("Onboarding Flow @exclusive", () => {
 
       const header = page.locator('[data-label="onboarding-header"]');
       await expect(header).toBeVisible();
-      await expect(
-        header.getByRole("button", { name: "Let's Go" })
-      ).toBeVisible();
+      await expect(header.getByRole("button", { name: "Next" })).toBeVisible();
 
       await expectElementScreenshot(header, {
         name: "onboarding-welcome-step",
@@ -107,8 +107,10 @@ test.describe("Onboarding Flow @exclusive", () => {
 
       const chatInput = page.locator("#onyx-chat-input");
       await expect(chatInput).toBeVisible();
-      // Disabled wrapper is the parent div with data-opal-disabled
-      const disabledWrapper = chatInput.locator("..");
+      // The Disabled region that contains the input, however deep it sits.
+      const disabledWrapper = page
+        .locator("[data-opal-disabled]")
+        .filter({ has: chatInput });
       await expect(disabledWrapper).toHaveAttribute(
         "data-opal-disabled",
         "true"
@@ -125,7 +127,7 @@ test.describe("Onboarding Flow @exclusive", () => {
 
       const header = page.locator('[data-label="onboarding-header"]');
       await expect(header).toBeVisible({ timeout: 15000 });
-      await header.getByRole("button", { name: "Let's Go" }).click();
+      await header.getByRole("button", { name: "Next" }).click();
 
       const nameStep = page.locator('[aria-label="onboarding-name-step"]');
       await expect(nameStep).toBeVisible({ timeout: 10000 });
@@ -145,6 +147,53 @@ test.describe("Onboarding Flow @exclusive", () => {
       await expectElementScreenshot(llmStep, {
         name: "onboarding-llm-step",
       });
+    });
+
+    test("the input lands in one place after a slow load and after leaving a chat", async ({
+      page,
+    }) => {
+      const client = new OnyxApiClient(page.request);
+      const namePromptPage = new OnboardingNamePromptPage(page);
+
+      const sessionId = await client.createChatSession("Onboarding return");
+      try {
+        // The user arrives after the first render
+        await namePromptPage.gotoBeforeUserLoads();
+        await expect(namePromptPage.namePrompt).toBeVisible();
+        const freshTop = await namePromptPage.settledChatInputTop();
+
+        await namePromptPage.gotoChat(sessionId);
+        // From the chat's layout, where the bottom row is empty
+        await new AppSidebarPage(page).newSession();
+        await expect(namePromptPage.namePrompt).toBeVisible();
+        await expect
+          .poll(async () =>
+            Math.abs((await namePromptPage.chatInputTop()) - freshTop)
+          )
+          .toBeLessThanOrEqual(2);
+        // Stops there instead of sliding through
+        expect(
+          Math.abs((await namePromptPage.settledChatInputTop()) - freshTop)
+        ).toBeLessThanOrEqual(2);
+      } finally {
+        await client.deleteChatSession(sessionId);
+      }
+    });
+
+    test("a new step keeps the input in place after the agents load late", async ({
+      page,
+    }) => {
+      const namePromptPage = new OnboardingNamePromptPage(page);
+      // The page mounts only after a retry of the agents request
+      await namePromptPage.gotoAfterAgentsFail();
+      await expect(namePromptPage.onboardingHeader).toBeVisible();
+      const welcomeTop = await namePromptPage.settledChatInputTop();
+
+      await namePromptPage.advanceOnboarding();
+      await expect(namePromptPage.nameStep).toBeVisible();
+      expect(
+        Math.abs((await namePromptPage.settledChatInputTop()) - welcomeTop)
+      ).toBeLessThanOrEqual(2);
     });
   });
 
@@ -195,11 +244,10 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      const chatInputParent = chatInput.locator("..");
-      await expect(chatInputParent).not.toHaveAttribute(
-        "aria-disabled",
-        "true"
-      );
+      // No disabled region contains the input.
+      await expect(
+        page.locator('[aria-disabled="true"]').filter({ has: chatInput })
+      ).toHaveCount(0);
     });
   });
 
@@ -251,8 +299,10 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      // Disabled wrapper is the parent div with data-opal-disabled
-      const disabledWrapper = chatInput.locator("..");
+      // The Disabled region that contains the input, however deep it sits.
+      const disabledWrapper = page
+        .locator("[data-opal-disabled]")
+        .filter({ has: chatInput });
       await expect(disabledWrapper).toHaveAttribute(
         "data-opal-disabled",
         "true"
@@ -301,25 +351,22 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      const chatInputParent = chatInput.locator("..");
-      await expect(chatInputParent).not.toHaveAttribute(
-        "aria-disabled",
-        "true"
-      );
+      // No disabled region contains the input.
+      await expect(
+        page.locator('[aria-disabled="true"]').filter({ has: chatInput })
+      ).toHaveCount(0);
     });
 
     test("after setting name, shows confirmation then no onboarding UI", async ({
       page,
     }) => {
-      const namePrompt = page.locator('[aria-label="non-admin-name-prompt"]');
+      const onboarding = new OnboardingNamePromptPage(page);
+      const { namePrompt, confirmation } = onboarding;
       await expect(namePrompt).toBeVisible({ timeout: 15000 });
 
       await namePrompt.getByPlaceholder("Your name").fill("E2E User");
       await namePrompt.getByRole("button", { name: "Save" }).click();
 
-      const confirmation = page.locator(
-        '[aria-label="non-admin-confirmation"]'
-      );
       await expect(confirmation).toBeVisible({ timeout: 10000 });
 
       await expectElementScreenshot(confirmation, {
@@ -329,6 +376,15 @@ test.describe("Onboarding Flow @exclusive", () => {
       await confirmation.getByRole("button").first().click();
       await expect(namePrompt).not.toBeVisible({ timeout: 5000 });
       await expect(confirmation).not.toBeVisible();
+
+      // The name is saved as the preferred name, so a page load keeps it.
+      // A user without a full name gets it as the full name too, which admin
+      // views and search show.
+      const personalization = await onboarding.fetchPersonalization();
+      expect(personalization.preferred_name).toBe("E2E User");
+      expect(personalization.name).toBe("E2E User");
+      await onboarding.reload();
+      await expect(namePrompt).not.toBeVisible();
     });
   });
 });

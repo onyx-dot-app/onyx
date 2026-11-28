@@ -133,10 +133,13 @@ class BraintrustTracingProcessor(TracingProcessor):
         }
 
     def _function_log_data(self, span: Span[FunctionSpanData]) -> Dict[str, Any]:
-        return {
+        data: Dict[str, Any] = {
             "input": span.span_data.input,
             "output": span.span_data.output,
         }
+        if span.span_data.metadata:
+            data["metadata"] = dict(span.span_data.metadata)
+        return data
 
     def _generation_log_data(self, span: Span[GenerationSpanData]) -> Dict[str, Any]:
         metrics = {}
@@ -191,6 +194,7 @@ class BraintrustTracingProcessor(TracingProcessor):
             output_tokens = int(completion_tokens or 0)
             input_cents, output_cents = compute_cost_cents(
                 model=model_name,
+                served_model=span.span_data.routed_model,
                 provider=provider,
                 prompt_tokens=input_tokens,
                 completion_tokens=output_tokens,
@@ -207,6 +211,8 @@ class BraintrustTracingProcessor(TracingProcessor):
             "model": span.span_data.model,
             "model_config": span.span_data.model_config,
         }
+        if span.span_data.routed_model:
+            metadata["routed_model"] = span.span_data.routed_model
 
         # Include reasoning in metadata if present
         if span.span_data.reasoning:
@@ -249,7 +255,12 @@ class BraintrustTracingProcessor(TracingProcessor):
         )
         trace_metadata = self._trace_metadata.get(span.trace_id)
         if isinstance(span.span_data, GenerationSpanData):
-            span_name = _generation_span_name(span)
+            flow = (span.span_data.model_config or {}).get("flow")
+            if isinstance(flow, str) and flow.strip():
+                span_name = flow
+                trace_metadata = {**(trace_metadata or {}), "flow": flow}
+            else:
+                span_name = _span_name(span)
         else:
             span_name = _span_name(span)
         span_kwargs: Dict[str, Any] = {
@@ -298,14 +309,3 @@ class BraintrustTracingProcessor(TracingProcessor):
             self._logger.flush()
         else:
             braintrust.flush()
-
-
-def _generation_span_name(span: Span[SpanData]) -> str:
-    data = span.span_data
-    if isinstance(data, GenerationSpanData):
-        model_config = data.model_config
-        if isinstance(model_config, dict):
-            flow = model_config.get("flow")
-            if isinstance(flow, str) and flow.strip():
-                return flow
-    return _span_name(span)

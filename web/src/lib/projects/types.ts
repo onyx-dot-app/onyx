@@ -1,4 +1,4 @@
-import { ChatFileType, ChatSession } from "@/app/app/interfaces";
+import { ChatFileType, ChatSession } from "@/app/app/types";
 
 export interface Project {
   id: number;
@@ -58,6 +58,8 @@ export interface UserFileDeleteResult {
 export enum UserFileStatus {
   UPLOADING = "UPLOADING", //UI only
   PROCESSING = "PROCESSING",
+  // Lite mode (no vector DB) equivalent of PROCESSING.
+  INDEXING = "INDEXING",
   COMPLETED = "COMPLETED",
   SKIPPED = "SKIPPED",
   FAILED = "FAILED",

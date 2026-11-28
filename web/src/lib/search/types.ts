@@ -1,5 +1,9 @@
 import { InputDateRangePickerValue } from "@opal/components";
-import { Tag, ValidSources } from "../types";
+import { Tag } from "@/lib/types";
+import type {
+  SourceMetadata,
+  ValidSources,
+} from "@/lib/connectors/types/source";
 import { Agent } from "@/lib/agents/types";
 
 export const FlowType = {
@@ -60,6 +64,7 @@ export interface MinimalOnyxDocument {
 export interface OnyxDocument extends MinimalOnyxDocument {
   link: string;
   source_type: ValidSources;
+  source_types?: ValidSources[] | null;
   blurb: string;
   boost: number;
   hidden: boolean;
@@ -116,33 +121,6 @@ export interface SearchResponse {
   error: string | null;
   messageId: number | null;
   additional_relevance?: Relevance;
-}
-
-export enum SourceCategory {
-  Wiki = "Knowledge Base & Wikis",
-  Storage = "Cloud Storage",
-  TicketingAndTaskManagement = "Ticketing & Task Management",
-  Messaging = "Messaging",
-  Sales = "Sales",
-  CodeRepository = "Code Repository",
-  AiObservability = "AI & Observability",
-  Other = "Other",
-}
-
-export interface SourceMetadata {
-  icon: React.FC<{ size?: number; className?: string }>;
-  displayName: string;
-  category: SourceCategory;
-  shortDescription?: string;
-  internalName: ValidSources;
-  adminUrl: string;
-  isPopular?: boolean;
-  oauthSupported?: boolean;
-  federated?: boolean;
-  federatedTooltip?: string;
-  uniqueKey?: string;
-  // For federated connectors, this stores the base source type for the icon
-  baseSourceType?: ValidSources;
 }
 
 export interface SearchDefaultOverrides {
@@ -247,6 +225,7 @@ export interface SearchDocWithContent {
   link: string | null;
   blurb: string;
   source_type: ValidSources;
+  source_types?: ValidSources[] | null;
   boost: number;
   hidden: boolean;
   metadata: Record<string, string | string[]>;

@@ -1,11 +1,14 @@
 import datetime
+from enum import Enum
 from typing import Generic, Optional, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from onyx.db.enums import AccountType
 from onyx.db.models import User
+from onyx.db.usage import UsageType
+from onyx.server.tenant_usage_limits import TenantUsageLimitKeys
 
 DataT = TypeVar("DataT")
 
@@ -42,6 +45,7 @@ class FullUserSnapshot(BaseModel):
     is_active: bool
     password_configured: bool
     personal_name: str | None
+    profile_image_file_id: str | None = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
     # Most recent chat activity. None when the user has never chatted. Distinct
@@ -69,6 +73,7 @@ class FullUserSnapshot(BaseModel):
             is_active=user.is_active,
             password_configured=user.password_configured,
             personal_name=user.personal_name,
+            profile_image_file_id=user.profile_image_file_id,
             created_at=user.created_at,
             updated_at=user.updated_at,
             last_active=last_active,
@@ -84,3 +89,86 @@ class DisplayPriorityRequest(BaseModel):
 
 class InvitedUserSnapshot(BaseModel):
     email: str
+
+
+"""
+Tenant usage limit policies (enforced in ``onyx.server.usage_limits``)
+"""
+
+
+class LimitScope(str, Enum):
+    """Whose usage a limit counts."""
+
+    TENANT = "tenant"
+
+
+class LimitMeasure(str, Enum):
+    """Where a limit's current usage is read from."""
+
+    # A tenant_usage column. Checked before the call, added after it, so one
+    # call can pass the line; callers that need an exact stop pass the amount
+    # they are about to use as ``pending_amount``.
+    COUNTER = "counter"
+
+
+class WindowAnchor(str, Enum):
+    """Where a limit's windows are counted from."""
+
+    # A grid shared by every tenant, from ``onyx.db.usage.get_current_window_start``:
+    # with the default USAGE_LIMIT_WINDOW_SECONDS, the calendar week from Monday
+    # 00:00 UTC. Not counted from the tenant's sign-up.
+    CALENDAR = "calendar"
+
+
+class LimitWindow(BaseModel):
+    """The period a limit's usage is counted over before it starts from zero."""
+
+    model_config = ConfigDict(frozen=True)
+
+    anchor: WindowAnchor
+    # Length of one window. None means one window that never resets.
+    length_seconds: int | None = None
+
+    @model_validator(mode="after")
+    def _calendar_has_length(self) -> "LimitWindow":
+        if self.anchor == WindowAnchor.CALENDAR and self.length_seconds is None:
+            raise ValueError("A calendar window needs a length")
+        return self
+
+
+class LimitPolicyName(str, Enum):
+    """The plans a tenant can be held to. Fixed in code; one ``LimitPolicy`` each."""
+
+    CLOUD_TRIAL = "cloud_trial"
+    CLOUD_PAID = "cloud_paid"
+
+
+class Allowance(BaseModel):
+    """One usage type under one policy: how much, over what window, whose usage,
+    read from where, and which override field can replace the amount."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # NO_LIMIT for unlimited, 0 for nothing allowed.
+    limit: int
+    scope: LimitScope = LimitScope.TENANT
+    measure: LimitMeasure = LimitMeasure.COUNTER
+    # Required for a COUNTER; it names the tenant_usage row the count lives in.
+    window: LimitWindow | None = None
+    # Field of cloud's override record that replaces ``limit`` for one tenant.
+    override_field: TenantUsageLimitKeys | None = None
+
+    @model_validator(mode="after")
+    def _counter_has_window(self) -> "Allowance":
+        if self.measure == LimitMeasure.COUNTER and self.window is None:
+            raise ValueError("A counter allowance needs a window")
+        return self
+
+
+class LimitPolicy(BaseModel):
+    """Everything one plan allows. A usage type with no allowance is unlimited."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: LimitPolicyName
+    allowances: dict[UsageType, Allowance]

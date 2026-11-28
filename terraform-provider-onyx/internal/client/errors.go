@@ -31,6 +31,20 @@ func IsNotFound(err error) bool {
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }
 
+// IsForbidden reports whether err is an APIError with HTTP 403.
+func IsForbidden(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusForbidden
+}
+
+// IsSyncing reports whether err is Onyx's RESOURCE_SYNCING conflict: the
+// resource is busy with a background sync and accepts the write later.
+func IsSyncing(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict &&
+		apiErr.ErrorCode == "RESOURCE_SYNCING"
+}
+
 func checkResponse(resp *http.Response) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil

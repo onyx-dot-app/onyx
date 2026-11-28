@@ -1,4 +1,54 @@
-import { stripSessionPrefix, sanitizePathsInText } from "./pathSanitizer";
+import {
+  stripSessionPrefix,
+  sanitizePathsInText,
+  parseOutputLink,
+} from "@/app/craft/utils/pathSanitizer";
+
+describe("parseOutputLink", () => {
+  it.each([
+    ["outputs/slides/deck.pptx", "outputs/slides/deck.pptx"],
+    ["./outputs/Scenic%20Route.pptx", "outputs/Scenic Route.pptx"],
+    ["outputs/%E6%97%85%E8%A1%8C.pdf", "outputs/旅行.pdf"],
+  ])("accepts a session-relative output: %s", (href, expected) => {
+    expect(parseOutputLink(href)).toBe(expected);
+  });
+
+  it.each([
+    "outputs",
+    "outputs/",
+    "outputs//deck.pptx",
+    "outputs/../secret",
+    "outputs/./deck.pptx",
+    "outputs/%2e%2e/secret",
+    "outputs/%252e%252e/secret",
+    "outputs/nested%2f..%2fsecret",
+    "outputs/nested%5c..%5csecret",
+    "outputs/..\\secret",
+    "outputs/\\evil.example/x",
+    "outputs/.env",
+    "outputs/deck.pptx?session_id=another",
+    "outputs/deck.pptx#fragment",
+    "outputs/deck.pptx%3Fsession_id=another",
+    "outputs/deck.pptx%23fragment",
+    "outputs/%00deck.pptx",
+    "outputs/%0adeck.pptx",
+    "outputs/\u0000deck.pptx",
+    "outputs/%zz.pptx",
+    "outputs/%E0%A4.pptx",
+    "outputs/https:evil",
+    "outputs/%252fetc/passwd",
+    "/outputs/deck.pptx",
+    "../outputs/deck.pptx",
+    "attachments/deck.pptx",
+    "https://evil.example/outputs/deck.pptx",
+    "//evil.example/outputs/deck.pptx",
+    "file:///outputs/deck.pptx",
+    "javascript:alert(1)",
+    "/api/build/sessions/another/artifacts/outputs/deck.pptx",
+  ])("rejects an unsafe or unsupported path: %s", (href) => {
+    expect(parseOutputLink(href)).toBeNull();
+  });
+});
 
 // =============================================================================
 // stripSessionPrefix

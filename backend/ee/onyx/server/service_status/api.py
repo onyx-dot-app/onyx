@@ -1,0 +1,87 @@
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_shared_cache_backend
+from onyx.cache.interface import CacheBackend
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
+from onyx.db.models import User
+from onyx.document_index.opensearch.cluster_status import (
+    collect_cluster_status,
+    onyx_index_refs,
+)
+from onyx.document_index.opensearch.models import (
+    ClusterStatus,
+    SearchActivity,
+)
+from onyx.document_index.opensearch.search_samples import read_search_activity
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
+
+logger = setup_logger()
+
+router = APIRouter(prefix="/admin/service-status")
+
+CLUSTER_STATUS_KEY = "opensearch_cluster_status"
+# Each read costs several cluster API calls, so page loads share one result.
+CLUSTER_STATUS_TTL_SECONDS = 60
+# A refresh skips the shared result only when it is at least this old.
+CLUSTER_STATUS_MIN_REFRESH_SECONDS = 10
+
+
+def _check_available() -> None:
+    # Cloud shares the cluster across tenants, so its numbers are not a tenant's.
+    if MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.SINGLE_TENANT_ONLY,
+            "Service status is only available on self-hosted deployments.",
+        )
+    if DISABLE_VECTOR_DB:
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_DISABLED,
+            "This deployment runs without a document index.",
+        )
+
+
+@router.get("/opensearch")
+def read_opensearch_status(
+    refresh: bool = False,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ClusterStatus:
+    _check_available()
+    cache: CacheBackend = get_shared_cache_backend()
+    raw: bytes | None = cache.get(CLUSTER_STATUS_KEY)
+    if raw is not None:
+        cached: ClusterStatus = ClusterStatus.model_validate_json(raw)
+        age: float = (datetime.now(timezone.utc) - cached.checked_at).total_seconds()
+        if not refresh or age < CLUSTER_STATUS_MIN_REFRESH_SECONDS:
+            return cached
+
+    try:
+        status: ClusterStatus = collect_cluster_status(onyx_index_refs(db_session))
+    except Exception as e:
+        logger.exception("Unable to read the OpenSearch cluster status")
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "OpenSearch did not return its status. Check that the cluster is reachable.",
+        ) from e
+    cache.set(
+        CLUSTER_STATUS_KEY, status.model_dump_json(), ex=CLUSTER_STATUS_TTL_SECONDS
+    )
+    return status
+
+
+@router.get("/opensearch/searches")
+def read_opensearch_searches(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> SearchActivity:
+    """The searches of the last minutes: rate per minute, percentiles, samples."""
+    _check_available()
+    return read_search_activity()

@@ -19,6 +19,10 @@ spec:
     metadata:
       labels:
         app: onyx-mock-llm
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: mock-llm
@@ -30,6 +34,8 @@ spec:
             - containerPort: 8000
           # Default timing knobs; per-request knobs ride in the model name.
           env:
+            - name: MOCK_WORKLOAD_SEED
+              value: "0"
             - name: MOCK_TTFT_MS
               value: "300"
             - name: MOCK_ITL_MS

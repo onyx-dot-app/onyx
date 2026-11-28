@@ -1,0 +1,659 @@
+import {
+  render,
+  screen,
+  setupUser,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
+import type { MemberIntegration } from "@/lib/integrations/types";
+import type { PluginNeed } from "@/lib/plugins/types";
+import MemberPluginDetailPage from "@/sections/plugins/MemberPluginDetailPage";
+import { customFixture } from "@/lib/skills/__fixtures__/picker";
+import { mockFetch } from "@tests/setup/integrationTestUtils";
+
+const PLUGIN_ID = "11111111-1111-4111-8111-111111111111";
+const NOT_FOUND = "This plugin is not available to you.";
+
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  usePathname: () => window.location.pathname,
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({
+    isGlobalHolder: false,
+    isScopedManager: false,
+  }),
+}));
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({ user: { email: "me@example.com" } }),
+}));
+
+afterEach(() => jest.restoreAllMocks());
+
+test("a plugin that is one skill opens the skill page", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  mockFetch({
+    "/api/skills": {
+      builtins: [],
+      customs: [
+        customFixture({
+          id: PLUGIN_ID,
+          name: "report-writer",
+          user_permission: "OWNER",
+        }),
+      ],
+    },
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+  await waitFor(() =>
+    expect(window.location.pathname).toBe(`/app/customize/skills/${PLUGIN_ID}`)
+  );
+  expect(
+    screen.queryByRole("tab", { name: /^Skills/ })
+  ).not.toBeInTheDocument();
+});
+
+test("the member page does not open a plugin that members cannot see", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  mockFetch({
+    "/api/skills": {
+      builtins: [],
+      customs: [
+        customFixture({
+          id: PLUGIN_ID,
+          name: "private-kit",
+          kind: "plugin",
+          member_visible: false,
+        }),
+      ],
+    },
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(await screen.findByText(NOT_FOUND)).toBeInTheDocument();
+  expect(screen.queryByText("private-kit")).not.toBeInTheDocument();
+});
+
+test("an uploaded plugin lists its needs and turning it on shows the ones not on", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const needs: PluginNeed[] = [
+    {
+      kind: "mcp",
+      name: "linear",
+      url: "https://mcp.linear.app/mcp",
+      transport: "http",
+      url_problem: null,
+      supported: true,
+      state: "not_added",
+      integration_id: null,
+    },
+    {
+      kind: "mcp",
+      name: "git",
+      url: null,
+      transport: "stdio",
+      url_problem: null,
+      supported: false,
+      state: "not_supported",
+      integration_id: null,
+    },
+  ];
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    enabled: false,
+    kind: "plugin",
+    needed_count: 1,
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+        { path: "skills/plan", name: "plan", description: "Plan." },
+      ],
+      needs,
+    },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/integrations": [],
+    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: { ...plugin, enabled: true },
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByRole("tab", { name: "Integrations · 2" })
+  ).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Skills · 2" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("switch", { name: "Use review-kit" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByText("review-kit is on")).toBeInTheDocument();
+  expect(within(dialog).getByText("Not added")).toBeInTheDocument();
+  expect(within(dialog).getByText("Not supported")).toBeInTheDocument();
+});
+
+test("turning on a plugin whose skill name is taken asks to switch", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    enabled: false,
+    kind: "plugin",
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+      ],
+      needs: [],
+    },
+  });
+  const fetchMock = mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: (init?: RequestInit) =>
+      typeof init?.body === "string" && JSON.parse(init.body).replace_conflict
+        ? { ...plugin, enabled: true }
+        : new Response(
+            JSON.stringify({
+              error_code: "SKILL_NAME_CONFLICT",
+              detail: "Another skill is named review.",
+              conflict_names: ["other-kit"],
+            }),
+            { status: 409 }
+          ),
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  await user.click(
+    await screen.findByRole("switch", { name: "Use review-kit" })
+  );
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByText("Turn on “review-kit”?")).toBeInTheDocument();
+  expect(
+    within(dialog).getByText("Turning on “review-kit” turns off “other-kit”.")
+  ).toBeInTheDocument();
+
+  await user.click(within(dialog).getByRole("button", { name: "Switch" }));
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.filter(
+        ([, init]) =>
+          typeof init?.body === "string" &&
+          JSON.parse(init.body).replace_conflict === true
+      )
+    ).toHaveLength(1)
+  );
+});
+
+test("turning on a plugin refreshes the integration rows it turned on", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${PLUGIN_ID}?tab=integrations`
+  );
+  const searchNeed = (state: PluginNeed["state"]): PluginNeed => ({
+    kind: "mcp",
+    name: "search",
+    url: "https://example.com/search",
+    transport: "http",
+    url_problem: null,
+    supported: true,
+    state,
+    integration_id: 3,
+  });
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    enabled: false,
+    kind: "plugin",
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+      ],
+      needs: [searchNeed("turn_on")],
+    },
+  });
+  let enabled = false;
+  const integration = (): MemberIntegration => ({
+    id: 3,
+    kind: "mcp",
+    shape: "mcp_server",
+    name: "Search",
+    description: null,
+    preset_id: null,
+    auth_mode: "none",
+    auth_method: null,
+    credential_fields: [],
+    status: { state: "connected", reason: null },
+    access: {
+      state: enabled ? "on" : "turn_on",
+      installation_policy: "AVAILABLE",
+      user_choice: null,
+      user_enabled: enabled,
+      owner_email: null,
+      is_owner: false,
+      can_manage: false,
+      shared_with_everyone: true,
+    },
+    users_can_save_always_allow: false,
+    credential_values: {},
+    external_app_id: null,
+    service_urls: [],
+    mcp_server_id: null,
+    server_url: null,
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/integrations": () => [integration()],
+    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: () => {
+      enabled = true;
+      return {
+        ...plugin,
+        enabled: true,
+        plugin: { ...plugin.plugin, needs: [searchNeed("on")] },
+      };
+    },
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  const row = await screen.findByLabelText("search");
+  expect(await within(row).findByText("Turn on")).toBeInTheDocument();
+  await user.click(screen.getByRole("switch", { name: "Use review-kit" }));
+
+  await waitFor(() => expect(within(row).getByText("On")).toBeInTheDocument());
+});
+
+test("the turn-on dialog lists only the integrations that are not on", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const need = (name: string, state: PluginNeed["state"]): PluginNeed => ({
+    kind: "mcp",
+    name,
+    url: `https://example.com/${name}`,
+    transport: "http",
+    url_problem: null,
+    supported: true,
+    state,
+    integration_id: null,
+  });
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    enabled: false,
+    kind: "plugin",
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+      ],
+      needs: [need("search", "on"), need("docs", "not_added")],
+    },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/integrations": [],
+    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: { ...plugin, enabled: true },
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  await user.click(
+    await screen.findByRole("switch", { name: "Use review-kit" })
+  );
+
+  const dialog = await screen.findByRole("dialog");
+  expect(await within(dialog).findByLabelText("docs")).toBeInTheDocument();
+  expect(within(dialog).queryByLabelText("search")).not.toBeInTheDocument();
+});
+
+test("the owner shares, uploads a new version and deletes the plugin from its page", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    can_delete: true,
+    enabled: false,
+    name_held_by: ["company-kit"],
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+      ],
+      needs: [],
+    },
+  });
+  const fetchMock = mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    [`DELETE /api/skills/custom/${PLUGIN_ID}`]: new Response(null, {
+      status: 204,
+    }),
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByRole("button", { name: "Share" })
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  expect(
+    await screen.findByRole("menuitem", { name: "Upload New Version" })
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("menuitem", { name: "Delete Plugin" }));
+  const dialog = await screen.findByRole("dialog");
+  await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+  await waitFor(() =>
+    expect(window.location.pathname).toBe("/app/customize/plugins")
+  );
+  expect(
+    fetchMock.mock.calls.some(
+      ([url, init]) =>
+        String(url).endsWith(`/api/skills/custom/${PLUGIN_ID}`) &&
+        init?.method === "DELETE"
+    )
+  ).toBe(true);
+});
+
+test("the Skills tab opens the instructions of one skill", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${PLUGIN_ID}?tab=skills`
+  );
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+        { path: "skills/plan", name: "plan", description: "Plan." },
+      ],
+      needs: [],
+    },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    [`/api/skills/${PLUGIN_ID}/plugin-skill?path=skills%2Fplan`]: {
+      instructions_markdown: "Write the plan first.",
+    },
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  await user.click(
+    await screen.findByRole("button", { name: "Read the plan skill" })
+  );
+
+  expect(await screen.findByText("Write the plan first.")).toBeInTheDocument();
+});
+
+test("a synced plugin says it changes in GitHub and hides restore and publish", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${PLUGIN_ID}?tab=versions`
+  );
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    current_version_id: "version-2",
+    current_version_number: 2,
+    published_version_number: 1,
+    content_locked: true,
+    marketplace: {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme/plugins",
+      kind: "github",
+      repository: "acme/plugins",
+      personal: true,
+    },
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    [`/api/skills/custom/${PLUGIN_ID}/versions`]: [
+      {
+        id: "version-2",
+        version_number: 2,
+        created_at: "2026-11-02T10:00:00Z",
+        created_by_email: "me@example.com",
+        is_current: true,
+        review_status: "draft",
+      },
+      {
+        id: "version-1",
+        version_number: 1,
+        created_at: "2026-11-01T10:00:00Z",
+        created_by_email: "me@example.com",
+        is_current: false,
+        review_status: "published",
+      },
+    ],
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText(
+      "This plugin syncs from GitHub, so you change it in GitHub."
+    )
+  ).toBeInTheDocument();
+  expect(await screen.findByText("Version 1")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Restore version 1" })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Publish update" })
+  ).not.toBeInTheDocument();
+});
+
+test("a synced plugin names its marketplace and says that GitHub holds it", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    owner: { id: "me", email: "me@example.com" },
+    content_locked: true,
+    marketplace: {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme-tools",
+      kind: "github",
+      repository: "acme/plugins",
+      personal: true,
+    },
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Managed by the acme-tools marketplace")
+  ).toBeInTheDocument();
+  // The managed card names the marketplace, so no Location fact repeats it.
+  expect(screen.queryByText("Location")).toBeNull();
+  expect(
+    screen.getByRole("link", { name: "Open Marketplaces" })
+  ).toHaveAttribute("href", "/app/customize/plugins#marketplaces");
+  expect(screen.queryByText("My uploads")).not.toBeInTheDocument();
+});
+
+test("a personal synced plugin offers neither Share nor Upload New Version", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    can_delete: false,
+    content_locked: true,
+    marketplace: {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme-tools",
+      kind: "github",
+      repository: "acme/plugins",
+      personal: true,
+    },
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Managed by the acme-tools marketplace")
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+});
+
+test("in the admin panel the back link returns to the admin plugin list", async () => {
+  window.history.replaceState(null, "", `/admin/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(await screen.findByRole("link", { name: "Plugins" })).toHaveAttribute(
+    "href",
+    "/admin/plugins"
+  );
+});
+
+test("the overview says why the switch of a required plugin is disabled", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    enabled: true,
+    can_toggle: false,
+    required_for_user: true,
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText(
+      "Your admin made this plugin required. You cannot turn it off."
+    )
+  ).toBeVisible();
+  expect(
+    screen.getByRole("switch", { name: "Use review-kit" })
+  ).toHaveAttribute("aria-disabled", "true");
+});
+
+test("the overview says which plugin holds the skill name of an off plugin", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    enabled: true,
+    name_held_by: ["company-kit"],
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Off: company-kit uses the same skill name")
+  ).toBeVisible();
+});
+
+describe("a plugin deleted in another tab", () => {
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    enabled: true,
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+
+  function mockDeletedAfterLoad(route: string) {
+    let deleted = false;
+    mockFetch({
+      "/api/skills": () => ({
+        builtins: [],
+        customs: deleted ? [] : [{ ...plugin, plugin: null }],
+      }),
+      [`/api/skills/${PLUGIN_ID}`]: plugin,
+      [route]: () => {
+        deleted = true;
+        return new Response(
+          JSON.stringify({ detail: "Skill is not visible." }),
+          { status: 404 }
+        );
+      },
+    });
+  }
+
+  beforeEach(() =>
+    window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`)
+  );
+
+  test("a switch that gets a 404 shows the not-found state", async () => {
+    mockDeletedAfterLoad(`PUT /api/skills/${PLUGIN_ID}/enabled`);
+    const user = setupUser();
+    render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+    await user.click(
+      await screen.findByRole("switch", { name: "Use review-kit" })
+    );
+
+    expect(
+      await screen.findByText("This plugin is not available to you.")
+    ).toBeInTheDocument();
+  });
+
+  test("Share that gets a 404 shows the not-found state", async () => {
+    mockDeletedAfterLoad(`/api/skills/custom/${PLUGIN_ID}/share`);
+    const user = setupUser();
+    render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+    await user.click(await screen.findByRole("button", { name: "Share" }));
+
+    expect(
+      await screen.findByText("This plugin is not available to you.")
+    ).toBeInTheDocument();
+  });
+});

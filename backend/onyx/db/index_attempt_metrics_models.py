@@ -10,9 +10,8 @@ stage timing aggregates) without creating a circular import.
 
 The ordering of `IndexAttemptStage` members is intentional and represents
 the natural temporal order of the pipeline (docfetching first, then
-docprocessing). Both the API ordering and the frontend "Pipeline order"
-sort rely on this ordering, so do not reorder members without updating
-those consumers.
+docconversion, then docprocessing). Both the API ordering and the frontend's stage list rely on
+this ordering, so do not reorder members without updating those consumers.
 """
 
 from enum import Enum as PyEnum
@@ -23,7 +22,7 @@ class IndexAttemptStage(str, PyEnum):
 
     Member declaration order matches the natural temporal order of the
     pipeline (docfetching first, then docprocessing). Both backend
-    serialization and frontend "Pipeline order" display rely on this.
+    serialization and the frontend's stage list rely on this.
     """
 
     # --- Docfetching (one process per attempt) ---
@@ -35,6 +34,14 @@ class IndexAttemptStage(str, PyEnum):
     DOC_BATCH_STORE = "DOC_BATCH_STORE"
     DOC_BATCH_ENQUEUE = "DOC_BATCH_ENQUEUE"
 
+    # --- Docconversion (one task per stub batch; only with the conversion
+    # stage on) ---
+    CONVERSION_QUEUE_WAIT = "CONVERSION_QUEUE_WAIT"
+    STUB_BATCH_LOAD = "STUB_BATCH_LOAD"
+    CONVERSION = "CONVERSION"
+    CONVERSION_DOC_BATCH_STORE = "CONVERSION_DOC_BATCH_STORE"
+    CONVERSION_DISPATCH = "CONVERSION_DISPATCH"
+
     # --- Docprocessing (one task per batch, many tasks per attempt) ---
     QUEUE_WAIT = "QUEUE_WAIT"
     DOCPROCESSING_SETUP = "DOCPROCESSING_SETUP"
@@ -44,10 +51,14 @@ class IndexAttemptStage(str, PyEnum):
     CHUNKING = "CHUNKING"
     CONTEXTUAL_RAG = "CONTEXTUAL_RAG"
     EMBEDDING = "EMBEDDING"
+    # Parts of EMBEDDING, summed over embedding threads, so they can exceed it.
+    EMBEDDING_RATE_LIMIT_WAIT = "EMBEDDING_RATE_LIMIT_WAIT"
+    EMBEDDING_PROVIDER_THROTTLE_WAIT = "EMBEDDING_PROVIDER_THROTTLE_WAIT"
     DOC_LOCK_ACQUIRE_WAIT = "DOC_LOCK_ACQUIRE_WAIT"
     ENRICHMENT_PREP = "ENRICHMENT_PREP"
     VECTOR_DB_WRITE = "VECTOR_DB_WRITE"
     POST_INDEX_DB_UPDATE = "POST_INDEX_DB_UPDATE"
+    # No longer recorded; kept so stored rows from older attempts still load.
     COORD_LOCK_ACQUIRE_WAIT = "COORD_LOCK_ACQUIRE_WAIT"
     COORDINATION_UPDATE = "COORDINATION_UPDATE"
     FINALIZATION = "FINALIZATION"
@@ -85,6 +96,11 @@ STAGE_SCOPE: dict[IndexAttemptStage, StageScope] = {
     IndexAttemptStage.HIERARCHY_UPSERT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.DOC_BATCH_STORE: StageScope.BATCH_LEVEL,
     IndexAttemptStage.DOC_BATCH_ENQUEUE: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.CONVERSION_QUEUE_WAIT: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.STUB_BATCH_LOAD: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.CONVERSION: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.CONVERSION_DOC_BATCH_STORE: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.CONVERSION_DISPATCH: StageScope.BATCH_LEVEL,
     IndexAttemptStage.QUEUE_WAIT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.DOCPROCESSING_SETUP: StageScope.BATCH_LEVEL,
     IndexAttemptStage.BATCH_LOAD: StageScope.BATCH_LEVEL,
@@ -93,6 +109,8 @@ STAGE_SCOPE: dict[IndexAttemptStage, StageScope] = {
     IndexAttemptStage.CHUNKING: StageScope.BATCH_LEVEL,
     IndexAttemptStage.CONTEXTUAL_RAG: StageScope.BATCH_LEVEL,
     IndexAttemptStage.EMBEDDING: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.EMBEDDING_RATE_LIMIT_WAIT: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.EMBEDDING_PROVIDER_THROTTLE_WAIT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.ENRICHMENT_PREP: StageScope.BATCH_LEVEL,
     IndexAttemptStage.VECTOR_DB_WRITE: StageScope.BATCH_LEVEL,

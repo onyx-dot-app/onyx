@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.github import GitHubAction
@@ -154,26 +154,24 @@ def test_rest_request_does_not_trigger_graphql_match() -> None:
 @pytest.mark.parametrize(
     "action, expected_policy",
     [
-        (GitHubAction.USER_READ, EndpointPolicy.ALWAYS),
-        (GitHubAction.REPOS_READ, EndpointPolicy.ALWAYS),
-        (GitHubAction.ISSUES_READ, EndpointPolicy.ALWAYS),
-        (GitHubAction.PULLS_READ, EndpointPolicy.ALWAYS),
-        (GitHubAction.SEARCH_READ, EndpointPolicy.ALWAYS),
-        (GitHubAction.REPO_GRAPHQL_READ, EndpointPolicy.ALWAYS),
-        (GitHubAction.REFS_READ, EndpointPolicy.ALWAYS),
-        (GitHubAction.CONTENTS_READ, EndpointPolicy.ALWAYS),
-        (GitHubAction.GIT_DATA_READ, EndpointPolicy.ALWAYS),
-        (GitHubAction.RELEASES_READ, EndpointPolicy.ALWAYS),
+        (GitHubAction.USER_READ, ActionPolicy.ALWAYS),
+        (GitHubAction.REPOS_READ, ActionPolicy.ALWAYS),
+        (GitHubAction.ISSUES_READ, ActionPolicy.ALWAYS),
+        (GitHubAction.PULLS_READ, ActionPolicy.ALWAYS),
+        (GitHubAction.SEARCH_READ, ActionPolicy.ALWAYS),
+        (GitHubAction.REPO_GRAPHQL_READ, ActionPolicy.ALWAYS),
+        (GitHubAction.REFS_READ, ActionPolicy.ALWAYS),
+        (GitHubAction.CONTENTS_READ, ActionPolicy.ALWAYS),
+        (GitHubAction.GIT_DATA_READ, ActionPolicy.ALWAYS),
+        (GitHubAction.RELEASES_READ, ActionPolicy.ALWAYS),
         # Writes require approval out of the box.
-        (GitHubAction.ISSUES_CREATE, EndpointPolicy.ASK),
-        (GitHubAction.COMMENTS_CREATE, EndpointPolicy.ASK),
-        (GitHubAction.CONTENTS_WRITE, EndpointPolicy.ASK),
-        (GitHubAction.REFS_WRITE, EndpointPolicy.ASK),
-        (GitHubAction.PULLS_CREATE, EndpointPolicy.ASK),
+        (GitHubAction.ISSUES_CREATE, ActionPolicy.ASK),
+        (GitHubAction.COMMENTS_CREATE, ActionPolicy.ASK),
+        (GitHubAction.CONTENTS_WRITE, ActionPolicy.ASK),
+        (GitHubAction.REFS_WRITE, ActionPolicy.ASK),
+        (GitHubAction.PULLS_CREATE, ActionPolicy.ASK),
     ],
 )
-def test_default_policies(
-    action: GitHubAction, expected_policy: EndpointPolicy
-) -> None:
+def test_default_policies(action: GitHubAction, expected_policy: ActionPolicy) -> None:
     by_id = {endpoint.id: endpoint for endpoint in _CATALOG}
     assert by_id[action].default_policy == expected_policy

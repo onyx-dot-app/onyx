@@ -10,6 +10,12 @@ export const widgetStyles = css`
     font-family: var(--onyx-font-family);
   }
 
+  /* Without a host height, the inline container's height: 100% resolves to
+     auto and the panel grows with its content instead of filling the parent. */
+  :host([mode="inline"]) {
+    height: 100%;
+  }
+
   .launcher {
     position: fixed;
     background: var(--background-neutral-00);
@@ -533,6 +539,45 @@ export const widgetStyles = css`
     letter-spacing: -0.02em;
   }
 
+  /* Copy and rating buttons under an answer */
+  .answer-actions {
+    display: flex;
+    gap: 2px;
+  }
+
+  .answer-action {
+    background: none;
+    border: none;
+    color: var(--text-04);
+    cursor: pointer;
+    padding: 0;
+    border-radius: var(--onyx-radius-08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    opacity: 0.6;
+    transition:
+      background var(--onyx-transition-fast),
+      opacity var(--onyx-transition-fast);
+  }
+
+  .answer-action:hover {
+    background: var(--background-neutral-03);
+    opacity: 1;
+  }
+
+  .answer-action.selected {
+    color: var(--theme-primary-05);
+    opacity: 1;
+  }
+
+  .answer-action.selected svg {
+    fill: currentColor;
+    fill-opacity: 0.15;
+  }
+
   /* Citation source row */
   .citation-list {
     display: flex;
@@ -632,5 +677,304 @@ export const widgetStyles = css`
 
   .citation-list.expanded .citation-overflow {
     display: flex;
+  }
+
+  /* Tool-call approvals */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .approval {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .approval svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .approval-card {
+    border: 1px solid var(--theme-primary-05);
+    border-radius: var(--onyx-radius-08);
+    background: var(--background-neutral-00);
+    color: var(--text-04);
+    font-size: var(--onyx-font-size-sm);
+    line-height: var(--onyx-line-height-secondary);
+    overflow: hidden;
+  }
+
+  .approval-source {
+    margin: 0;
+    padding: var(--onyx-space-xs) var(--onyx-space-sm) 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+
+  .approval-header {
+    display: flex;
+    align-items: center;
+    gap: var(--onyx-space-xs);
+    padding: var(--onyx-space-xs) var(--onyx-space-sm);
+  }
+
+  .approval-spinner {
+    display: flex;
+    color: var(--theme-primary-05);
+    animation: approval-spin 1s linear infinite;
+  }
+
+  @keyframes approval-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .approval-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--onyx-font-size-main);
+    line-height: var(--onyx-line-height-main);
+    font-weight: var(--onyx-weight-medium);
+  }
+
+  .approval-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--onyx-space-xs);
+    padding: 0 var(--onyx-space-sm) var(--onyx-space-xs) 36px;
+  }
+
+  .approval-args {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--onyx-space-sm);
+    row-gap: var(--onyx-space-2xs);
+    margin: 0;
+  }
+
+  .approval-args dt {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+
+  .approval-args dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .approval-args .arg-value {
+    white-space: pre-wrap;
+  }
+
+  .approval-args dd.mono {
+    font-family: var(--onyx-font-family-mono);
+    font-size: var(--onyx-font-size-secondary);
+  }
+
+  .arg-toggle {
+    display: block;
+    margin-left: auto;
+    padding: 2px 4px;
+    border: none;
+    background: none;
+    color: var(--theme-primary-05);
+    font: inherit;
+    font-family: var(--onyx-font-family);
+    font-size: var(--onyx-font-size-secondary);
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .approval-empty {
+    margin: 0;
+    opacity: 0.7;
+  }
+
+  .approval-error {
+    margin: 0;
+    color: var(--status-error-05);
+  }
+
+  .approval-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--onyx-space-2xs);
+    padding: var(--onyx-space-2xs) var(--onyx-space-sm) var(--onyx-space-sm);
+  }
+
+  .approval-button {
+    padding: 4px 10px;
+    border: 1px solid var(--border-01);
+    border-radius: var(--onyx-radius-08);
+    background: var(--background-neutral-00);
+    color: var(--text-04);
+    font-family: var(--onyx-font-family);
+    font-size: var(--onyx-font-size-sm);
+    line-height: var(--onyx-line-height-secondary);
+    cursor: pointer;
+    transition: background var(--onyx-transition-fast);
+  }
+
+  .approval-button:hover:not(:disabled) {
+    background: var(--background-neutral-03);
+  }
+
+  .approval-button.primary {
+    border-color: var(--theme-primary-05);
+    background: var(--theme-primary-05);
+    color: var(--text-light-05);
+  }
+
+  .approval-button.primary:hover:not(:disabled) {
+    background: var(--theme-primary-06);
+  }
+
+  .approval-button:focus-visible,
+  .arg-toggle:focus-visible {
+    outline: 2px solid var(--theme-primary-05);
+    outline-offset: 2px;
+  }
+
+  .approval-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .approval-record {
+    display: flex;
+    align-items: center;
+    gap: var(--onyx-space-xs);
+    font-size: var(--onyx-font-size-main);
+    line-height: var(--onyx-line-height-main);
+    color: var(--text-04);
+    opacity: 0.75;
+    min-width: 0;
+  }
+
+  .approval-record span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .approval-notice {
+    padding: var(--onyx-space-xs) var(--onyx-space-md) 0;
+    font-size: var(--onyx-font-size-secondary);
+    line-height: var(--onyx-line-height-secondary);
+    color: var(--text-04);
+  }
+
+  /* The agent's questions, in the approval card's frame */
+  .question {
+    display: flex;
+    flex-direction: column;
+    gap: var(--onyx-space-2xs);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  .question legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--onyx-space-xs);
+    margin-bottom: var(--onyx-space-2xs);
+    padding: 0;
+  }
+
+  .question-page {
+    flex-basis: 100%;
+    font-size: var(--onyx-font-size-secondary);
+    opacity: 0.7;
+  }
+
+  .question-unanswered {
+    margin: 0;
+    font-size: var(--onyx-font-size-secondary);
+    opacity: 0.7;
+  }
+
+  .question-header {
+    padding: 0 6px;
+    border-radius: var(--onyx-radius-08);
+    background: var(--background-neutral-03);
+    font-size: var(--onyx-font-size-secondary);
+  }
+
+  .question-text {
+    font-weight: var(--onyx-weight-medium);
+    overflow-wrap: anywhere;
+  }
+
+  .question-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--onyx-space-xs);
+    cursor: pointer;
+  }
+
+  .question-option input {
+    margin: 3px 0 0;
+    accent-color: var(--theme-primary-05);
+  }
+
+  .question-option-label {
+    overflow-wrap: anywhere;
+  }
+
+  .question-option-description {
+    display: block;
+    opacity: 0.7;
+    overflow-wrap: anywhere;
+  }
+
+  .question:disabled .question-option {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .question-note {
+    padding: 4px 8px;
+    border: 1px solid var(--border-01);
+    border-radius: var(--onyx-radius-08);
+    background: var(--background-neutral-00);
+    color: var(--text-04);
+    font-family: var(--onyx-font-family);
+    font-size: var(--onyx-font-size-sm);
+  }
+
+  .question-option input:focus-visible,
+  .question-note:focus-visible {
+    outline: 2px solid var(--theme-primary-05);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .approval-spinner {
+      animation: none;
+    }
   }
 `;

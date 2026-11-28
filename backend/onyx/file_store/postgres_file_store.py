@@ -29,6 +29,7 @@ from onyx.db.file_record import (
     FileRecordNotFoundError,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
+    get_filerecord_by_file_id_for_update,
     get_filerecord_by_file_id_optional,
     get_filerecord_by_prefix,
     upsert_filerecord,
@@ -132,10 +133,8 @@ class PostgresBackedFileStore(FileStore):
             file_id = str(uuid.uuid4())
 
         file_bytes = self._read_content_bytes(content)
-        created_lo = False
 
         with get_session_with_current_tenant_if_none(db_session) as session:
-            raw_conn, oid = None, None
             try:
                 raw_conn = _get_raw_connection(session)
 
@@ -147,7 +146,6 @@ class PostgresBackedFileStore(FileStore):
                 old_oid = existing.lobj_oid if existing else None
 
                 oid = _create_large_object(raw_conn, file_bytes)
-                created_lo = True
 
                 upsert_filerecord(
                     file_id=file_id,
@@ -179,16 +177,11 @@ class PostgresBackedFileStore(FileStore):
                         )
 
                 session.commit()
-            except Exception as e:
+            except Exception:
+                # The Large Object belongs to the transaction, so the rollback
+                # drops it and leaves the connection idle.
                 session.rollback()
-                try:
-                    if created_lo and raw_conn is not None and oid is not None:
-                        _delete_large_object(raw_conn, oid)
-                except Exception:
-                    logger.exception(
-                        "Failed to delete large object %s for file %s", oid, file_id
-                    )
-                raise e
+                raise
 
         return file_id
 
@@ -240,8 +233,16 @@ class PostgresBackedFileStore(FileStore):
     ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as session:
             try:
-                file_content = get_file_content_by_file_id_optional(
+                # Serializes with a concurrent rename of the same file.
+                file_record = get_filerecord_by_file_id_for_update(
                     file_id=file_id, db_session=session
+                )
+                file_content = (
+                    get_file_content_by_file_id_optional(
+                        file_id=file_id, db_session=session
+                    )
+                    if file_record is not None
+                    else None
                 )
                 if file_content is None:
                     if error_on_missing:
@@ -286,14 +287,16 @@ class PostgresBackedFileStore(FileStore):
 
     def change_file_id(
         self, old_file_id: str, new_file_id: str, db_session: Session | None = None
-    ) -> None:
+    ) -> bool:
         if old_file_id == new_file_id:
-            return
+            return True
         with get_session_with_current_tenant_if_none(db_session) as session:
             try:
-                old_record = get_filerecord_by_file_id(
+                old_record = get_filerecord_by_file_id_for_update(
                     file_id=old_file_id, db_session=session
                 )
+                if old_record is None:
+                    return False
                 file_metadata = cast(dict[Any, Any] | None, old_record.file_metadata)
 
                 # 1. Create the new file_record so the FK target exists
@@ -321,6 +324,7 @@ class PostgresBackedFileStore(FileStore):
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=session)
 
                 session.commit()
+                return True
             except Exception as e:
                 session.rollback()
                 logger.exception(

@@ -1,5 +1,7 @@
 # ruff: noqa: E501, W605 start
-# If there are any tools, this section is included, the sections below are for the available tools
+# The system prompt's section of guidance that spans tools: the search
+# guidance, URL reading after a web search, code mode and the sandbox. Each
+# tool's own guidance is in its description.
 TOOL_SECTION_HEADER = "\n# Tools\n\n"
 
 
@@ -19,67 +21,109 @@ If it is unclear which tool to use, consider using multiple in parallel to be ef
 """.lstrip()
 
 
-INTERNAL_SEARCH_GUIDANCE = """
-## internal_search
-Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
+# `{name}` is the code mode run tool's name in the model's shape.
+CODE_MODE_GUIDANCE = """
+## {name}
+Call tools from Python programs with `{name}`; its description lists the functions. Batch independent calls in one `{name}` with `asyncio.gather`, and inspect every result. Keep dependent or judgment-based follow-ups in a later call. Avoid unnecessary output.
+""".lstrip()
+
+
+# Included when web search and the URL reading tool are both offered; `{name}`
+# is the name that the model calls the URL reading tool by in the turn.
+OPEN_URL_AFTER_WEB_SEARCH_GUIDANCE = """
+You should almost always use {name} after a web search.
+""".lstrip()
+
+
+# The descriptions below carry each tool's usage guidance. They name no tool,
+# so they read the same for every tool family and as code mode functions.
+INTERNAL_SEARCH_DESCRIPTION = """
+Search connected applications for information. Some examples of when to use this tool include:
 - Internal information: any time where there may be some information stored in internal applications that could help better answer the query.
 - Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.
 - Ambiguity: questions about something that is not widely known or understood.
-Never provide more than 3 queries at once to `internal_search`.
-""".lstrip()
+""".strip()
+
+# The internal_search stub's note in code mode: each call runs its own retrieval
+# pipeline.
+CODE_MODE_SEARCH_USAGE = (
+    "Each call runs a full retrieval pipeline with several model calls, so it is "
+    "expensive. Pass the queries for one information need in one call, for example "
+    '`await tools.internal_search(queries=["first phrasing", "second phrasing"])`. Do not '
+    "split them into one call per query, and do not `asyncio.gather` single-query "
+    "calls. Search again when earlier results are insufficient or when a follow-up "
+    "depends on them."
+)
 
 
-WEB_SEARCH_GUIDANCE = """
-## web_search
-Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use `web_search` include:
+WEB_SEARCH_DESCRIPTION = """
+Search the web for information. Returns a list of search results with titles, metadata, and snippets.
+Use this tool to access up-to-date information from the web. Some examples of when to use this tool include:
 - Freshness: when the answer might be enhanced by up-to-date information on a topic. Very important for topics that are changing or evolving.
 - Accuracy: if the cost of outdated/inaccurate information is high.
-- Niche Information: when detailed info is not widely known or understood (but is likely found on the internet).{site_colon_disabled}
-""".lstrip()
+- Niche Information: when detailed info is not widely known or understood (but is likely found on the internet).
+""".strip()
 
+# The end of the web search description when the provider has no site filter.
 WEB_SEARCH_SITE_DISABLED_GUIDANCE = """
 Do not use the "site:" operator in your web search queries.
-""".lstrip()
+""".strip()
 
 
+# The URL reading tool's guidance, after its first sentence.
 OPEN_URLS_GUIDANCE = """
-## open_url
-Use the `open_url` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your web searches or user specified URLs. \
+Use this tool to access the contents of the most promising web pages from your web searches or user specified URLs. \
 You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources. \
 Do not open URLs that are image files like .png, .jpg, etc.
-You should almost always use open_url after a web_search call. Use this tool when a user asks about a specific provided URL.
-""".lstrip()
+Use this tool when a user asks about a specific provided URL.
+""".strip()
 
-PYTHON_TOOL_GUIDANCE = """
-## run_python
-Use the `run_python` tool to execute Python code in an isolated sandbox. The tool will respond with the output of the execution or time out after 60.0 seconds.
+PYTHON_TOOL_DESCRIPTION = """
+Execute Python code in an isolated sandbox environment. The tool will respond with the output of the execution or time out after 60.0 seconds.
 Any files uploaded to the chat will be automatically be available in the execution environment's current directory. \
+Word (.docx), PowerPoint (.pptx), Excel (.xlsx, .xlsm), and CSV files attached to the agent or project are also available there under their file names (list the directory if a name does not resolve). \
+File count and size limits apply to each run; the result's staging notice names any files that were not staged. \
 The current directory in the file system can be used to save and persist user files. Files written to the current directory will be returned with a `file_link`. \
 Use this to give the user a way to download the file OR to display generated images.
 Internet access for this session is disabled. Do not make external web requests or API calls as they will fail.
-Use `openpyxl` to read and write Excel files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
+Use `openpyxl`, `python-docx`, and `python-pptx` to read and write Excel, Word, and PowerPoint files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
 Write chart titles, axis labels, legends, and other text rendered into images in the language you reply in. \
 The sandbox fonts cannot shape Arabic or render CJK glyphs (they come out as disconnected letters or boxes), so for those languages write the rendered text in English and explain the labels in your reply.
 IMPORTANT: each call to this tool runs in a fresh, stateless sandbox. Variables, imports, and in-memory state from previous calls will NOT be available, \
 and files written by a previous call will NOT be available in later calls. \
 Therefore batch multi-step work into a single script per call: e.g. load a workbook once, read all needed sheets, apply all edits, and save the result in one execution — not one small step per call.
-""".lstrip()
+""".strip()
 
-GENERATE_IMAGE_GUIDANCE = """
-## generate_image
-NEVER use generate_image unless the user specifically requests an image.
+GENERATE_IMAGE_DESCRIPTION = """
+Generate an image based on a prompt. NEVER use this tool unless the user specifically requests an image.
 To edit, restyle, or vary an existing image, pass its file_id in `reference_image_file_ids`. \
-File IDs come from `[attached image — file_id: <id>]` tags on user-attached images or from prior `generate_image` tool results — never invent one. \
+File IDs come from `[attached image — file_id: <id>]` tags on user-attached images or from prior results of this tool — never invent one. \
 Leave `reference_image_file_ids` unset for a fresh generation.
-""".lstrip()
+""".strip()
 
-MEMORY_GUIDANCE = """
-## add_memory
-Use the `add_memory` tool for facts shared by the user that should be remembered for future conversations. \
+MEMORY_DESCRIPTION = """
+Save memories about the user for future conversations. Use this tool for facts shared by the user that should be remembered for future conversations. \
 Only add memories that are specific, likely to remain true, and likely to be useful later. \
 Focus on enduring preferences, long-term goals, stable constraints, and explicit "remember this" type requests.
-""".lstrip()
+""".strip()
+
+POSTGRES_QUERY_DESCRIPTION = """
+Run an exact, structured query over Onyx's metadata tables instead of semantic search. \
+It can also browse source folder structure. \
+With content_contains it also lists or counts every document whose text contains a phrase; that is slow, so use it only for exhaustive listings or counts by content. \
+Results are permission-scoped to the current user.
+Use this tool for questions about metadata, counts, or the user's own chat history — things top-k search cannot answer exhaustively:
+- Counting/aggregation: "how many Salesforce docs changed last month", document counts broken down by source or owner.
+- Exhaustive listing by metadata: every document matching a title substring, date range, owner, source, or folder — when completeness matters.
+- The user's own history: finding past conversations or messages, and which documents a past answer cited.
+- Verifying absence by metadata: before stating that no documents match a source, owner, date range, title, or folder, confirm with a count. A zero count says nothing about what documents discuss; check content with search.
+It sees metadata only (titles, dates, owners, sources, folder structure) — for questions about document *content* or meaning, use the internal search tool. \
+When the user asks for every matching document, keep the user's filters and page through all of them: call again with the returned `next_cursor` as `cursor` and the same filters until no `next_cursor` comes back. \
+When the user wants only the first few in some order (the newest, the oldest, or by title), set `order_by` and `limit` instead of paging. \
+Otherwise, when the result-set size is unknown, run with `count=true` first and narrow the filters before listing rows. \
+Listed documents carry citation numbers like [3]; cite the ones you mention the same way as search results.
+""".strip()
 
 TOOL_CALL_FAILURE_PROMPT = """
 LLM attempted to call a tool but failed. Most likely the tool name or arguments were misspelled.

@@ -26,23 +26,24 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import MessageType
+from onyx.db.build_session import (
+    create_message,
+    get_build_session,
+    get_build_session_by_id,
+    update_session_activity,
+    upsert_agent_plan,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
+from onyx.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
-)
-from onyx.server.features.build.db.build_session import (
-    create_message,
-    get_build_session,
-    update_session_activity,
-    upsert_agent_plan,
-)
-from onyx.server.features.build.db.sandbox import (
-    get_sandbox_by_user_id,
-    update_sandbox_heartbeat,
 )
 from onyx.server.features.build.packets import (
     ApprovalRequestedPacket,
@@ -83,7 +84,6 @@ logger = setup_logger()
 class BuildStreamingState:
     """Container for accumulating state during sandbox-event streaming.
 
-    Similar to ChatStateContainer but adapted for sandbox event packet types.
     Accumulates chunks and tracks pending tool calls until completion.
 
     Usage:
@@ -108,7 +108,7 @@ class BuildStreamingState:
         """
         self.turn_index = turn_index
 
-        # Accumulated text chunks (similar to answer_tokens in ChatStateContainer)
+        # Accumulated text chunks
         self.message_chunks: list[str] = []
         self.thought_chunks: list[str] = []
 
@@ -157,7 +157,9 @@ class BuildStreamingState:
             "content": {"type": "text", "text": full_text},
             "sessionUpdate": "agent_message",
         }
-        chunk_routing_meta = routing_meta or self._last_chunk_routing_meta
+        chunk_routing_meta = dict(self._last_chunk_routing_meta or {})
+        if routing_meta:
+            chunk_routing_meta.update(routing_meta)
         if chunk_routing_meta:
             result["_meta"] = dict(chunk_routing_meta)
         self.message_chunks.clear()
@@ -183,7 +185,9 @@ class BuildStreamingState:
             "content": {"type": "text", "text": full_text},
             "sessionUpdate": "agent_thought",
         }
-        chunk_routing_meta = routing_meta or self._last_chunk_routing_meta
+        chunk_routing_meta = dict(self._last_chunk_routing_meta or {})
+        if routing_meta:
+            chunk_routing_meta.update(routing_meta)
         if chunk_routing_meta:
             result["_meta"] = dict(chunk_routing_meta)
         self.thought_chunks.clear()
@@ -198,7 +202,7 @@ class BuildStreamingState:
 
         We finalize when the packet type changes from message/thought chunks
         to something else (or to a different chunk type), and when routing
-        changes between parent and subagent chunks.
+        changes between parts or parent and subagent chunks.
         """
         if self._last_chunk_type is None:
             return False
@@ -351,26 +355,39 @@ def merge_events_with_announces(
 
     def drive_connect_app_announces() -> None:
         cache = get_cache_backend(tenant_id=tenant_id)
+        restore_pending = True
+        seen_requests: set[str] = set()
         while not stop.is_set():
             try:
-                request = connect_app.pop_announcement(
-                    str(session_id), timeout_s=1, cache=cache
-                )
+                if restore_pending:
+                    requests = connect_app.list_pending_requests(str(session_id), cache)
+                    restore_pending = False
+                else:
+                    request = connect_app.pop_announcement(
+                        str(session_id), timeout_s=1, cache=cache
+                    )
+                    requests = [request] if request is not None else []
+                for request in requests:
+                    if request.request_id in seen_requests:
+                        continue
+                    pending = connect_app.load_pending(request.request_id, cache)
+                    if pending is None or pending.build_session_id != str(session_id):
+                        continue
+                    output.put(
+                        ConnectAppRequestPacket(
+                            request_id=request.request_id,
+                            external_app_id=request.external_app_id,
+                            reason=request.reason,
+                        )
+                    )
+                    seen_requests.add(request.request_id)
             except Exception:
+                # A failed read may follow a consumed announcement. Restore it on retry.
+                restore_pending = True
                 logger.exception(
                     "connect_app.announce_poll_failed session_id=%s", session_id
                 )
-                time.sleep(1)
-                continue
-            if request is None:
-                continue
-            output.put(
-                ConnectAppRequestPacket(
-                    request_id=request.request_id,
-                    external_app_id=request.external_app_id,
-                    reason=request.reason,
-                )
-            )
+                stop.wait(1)
 
     # Spawn via the context-preserving helper so the event iterator's lazy
     # tenant-scoped DB access (e.g. event-bus creation) sees the caller's
@@ -449,6 +466,9 @@ def _routing_meta_from_event(sandbox_event: Any) -> dict[str, Any] | None:
     routing_meta: dict[str, Any] = {}
     session_id = field_meta.get("sessionId")
     parent_session_id = field_meta.get("parentSessionId")
+    part_id = field_meta.get("partId")
+    if isinstance(part_id, str) and part_id:
+        routing_meta["partId"] = part_id
     if isinstance(session_id, str) and session_id:
         routing_meta["sessionId"] = session_id
     if isinstance(parent_session_id, str) and parent_session_id:
@@ -469,9 +489,7 @@ def load_turn_session(
     holds; headless callers (scheduled-tasks executor) use this so they
     can pass fully-resolved values into :func:`yield_sandbox_events`.
     """
-    build_session = (
-        db_session.query(BuildSession).filter(BuildSession.id == session_id).first()
-    )
+    build_session = get_build_session_by_id(db_session, session_id)
     if build_session is None:
         logger.warning(
             "[SESSION-LIFECYCLE] preflight: BuildSession %s not found", session_id
@@ -600,9 +618,7 @@ def _persist_opencode_session_id(
     BuildSession row. Called from the transport's
     ``on_opencode_session_resolved`` callback when the persisted id
     was stale (404) or absent."""
-    build_session = (
-        db_session.query(BuildSession).filter(BuildSession.id == session_id).first()
-    )
+    build_session = get_build_session_by_id(db_session, session_id)
     if build_session is None:
         logger.warning(
             "[SESSION-LIFECYCLE] callback: BuildSession %s vanished before "
@@ -674,7 +690,9 @@ def persist_sandbox_event(
 
     # Flush any pending chunks if the event type changed.
     event_type = _get_event_type(sandbox_event)
-    event_routing_meta = _routing_meta_from_event(sandbox_event) or routing_meta
+    merged_routing_meta = dict(routing_meta or {})
+    merged_routing_meta.update(_routing_meta_from_event(sandbox_event) or {})
+    event_routing_meta = merged_routing_meta or None
     if state.should_finalize_chunks(event_type, event_routing_meta):
         _save_pending_chunks(db_session, session_id, state)
 

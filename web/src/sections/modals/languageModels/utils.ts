@@ -53,13 +53,12 @@ export function useInitialValues(
   const testModelName =
     modelConfigurations.find((m) => m.is_visible)?.name ??
     wellKnownLLMProvider?.recommended_default_model?.name;
-
   return {
     id: existingLlmProvider?.id,
     provider: existingLlmProvider?.provider ?? providerName,
-    name: isOnboarding
-      ? providerName
-      : (existingLlmProvider?.name ?? undefined),
+    // Editing keeps the saved name; a new onboarding provider takes the type.
+    name:
+      existingLlmProvider?.name ?? (isOnboarding ? providerName : undefined),
     api_key: existingLlmProvider?.api_key ?? undefined,
     api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,

@@ -1,108 +1,106 @@
 import { test, expect } from "@playwright/test";
-import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import { apiLogin } from "@tests/e2e/utils/auth";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
   startMcpPerUserKeyServer,
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
-import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
-import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
+import { ChatIntegrationsPopover } from "@tests/e2e/pages/ChatIntegrationsPopover";
+import { IntegrationConnectPrompt } from "@tests/e2e/pages/IntegrationConnectPrompt";
+import { CustomizeIntegrationPage } from "@tests/e2e/pages/CustomizeIntegrationPage";
 
-// API keys baked into run_mcp_server_per_user_key.py. The script's middleware
-// also requires every /mcp/* request to carry a non-empty `X-Username` header
-// when launched with `--require-header X-Username`, which is exactly the
-// scenario this spec exercises end-to-end.
+// API keys baked into run_mcp_server_per_user_key.py. Launched with
+// `--require-header X-Username`, the server also needs that header.
 const ADMIN_API_KEY =
   process.env.MCP_PER_USER_KEY_ADMIN_KEY ||
   "mcp_live-kid_alice_001-S3cr3tAlice";
-const BASIC_USER_API_KEY =
+const MEMBER_API_KEY =
   process.env.MCP_PER_USER_KEY_USER_KEY || "mcp_live-kid_bob_001-S3cr3tBob";
-const ADMIN_USERNAME = "admin-pw";
-const BASIC_USERNAME = "basic-pw";
 const REQUIRED_USERNAME_HEADER = "X-Username";
-const DEFAULT_PORT = Number(process.env.MCP_PER_USER_KEY_TEST_PORT || "8007");
+const PORT = process.env.MCP_PER_USER_KEY_TEST_PORT
+  ? Number(process.env.MCP_PER_USER_KEY_TEST_PORT)
+  : undefined;
 const MCP_PER_USER_KEY_TEST_URL = process.env.MCP_PER_USER_KEY_TEST_URL;
-
-const AUTH_TEMPLATE = {
-  headers: {
-    Authorization: "Bearer {api_key}",
-    [REQUIRED_USERNAME_HEADER]: "{username}",
-  },
-  required_fields: ["api_key", "username"],
-};
+const FIELDS = { "API Key": MEMBER_API_KEY, Username: "basic-pw" };
 
 /**
- * MCP per-user API key auth with a multi-field credential template.
- *
- * The shared server is provisioned + attached to the default agent via the API
- * in `beforeAll`. One UI "create-flow" test exercises the multi-field header
- * builder; the remaining tests are the credential-gating regressions that must
- * run against the real UI.
+ * An MCP server where each user signs in with an API key and a user name. A
+ * member connects it from the integration page and from the chat connect
+ * prompt.
  */
-test.describe("MCP per-user API key auth (multi-field template)", () => {
+test.describe("MCP per-user API key auth (two credential fields)", () => {
   test.describe.configure({ mode: "serial" });
 
   let serverProcess: McpServerProcess | null = null;
-  let serverId: number;
+  let integrationId: number;
   let serverName: string;
   let serverUrl: string;
-  let basicUserEmail: string;
-  let basicUserPassword: string;
+  let agentId: number | null = null;
+  const users: { email: string; password: string }[] = [];
   let createdProviderId: number | null = null;
-  // Throwaway server created by the UI create-flow test; cleaned up in afterAll.
-  let uiServerId: number | null = null;
 
   test.beforeAll(async ({ browser }) => {
     if (MCP_PER_USER_KEY_TEST_URL) {
       serverUrl = MCP_PER_USER_KEY_TEST_URL;
     } else {
       serverProcess = await startMcpPerUserKeyServer({
-        port: DEFAULT_PORT,
+        port: PORT,
         requiredHeaders: [REQUIRED_USERNAME_HEADER],
       });
       serverUrl = `http://${serverProcess.address.host}:${serverProcess.address.port}/mcp`;
     }
-
-    serverName = `PW Per-User Key Server ${Date.now()}`;
+    serverName = `PW Per-User Key ${Date.now()}`;
 
     const adminContext = await browser.newContext({
       storageState: "admin_auth.json",
     });
     const adminClient = new OnyxApiClient(adminContext.request);
-
     createdProviderId = await adminClient.ensurePublicProvider();
-
-    try {
-      const existingServers = await adminClient.listMcpServers();
-      for (const server of existingServers) {
-        if (server.server_url === serverUrl) {
-          await adminClient.deleteMcpServer(server.id);
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to cleanup existing MCP servers", error);
-    }
-
-    // Provision the per-user template server (with the admin's own credentials)
-    // and attach its tools to the default agent — all via API.
-    serverId = await adminClient.createMcpServerWithAuth({
+    const created = await adminClient.createIntegration({
+      for_organization: true,
       name: serverName,
-      description: "Per-user multi-field API key MCP server (e2e)",
-      server_url: serverUrl,
-      auth_type: "API_TOKEN",
-      auth_performer: "PER_USER",
-      auth_template: AUTH_TEMPLATE,
-      admin_credentials: { api_key: ADMIN_API_KEY, username: ADMIN_USERNAME },
-      admin_credentials_changed: { api_key: true, username: true },
+      description: "Per-user API key MCP server (e2e)",
+      auth_mode: "individual",
+      auth_method: "api_key",
+      credential_fields: [
+        { key: "api_key", label: "API Key", secret: true },
+        { key: "username", label: "Username", secret: false },
+      ],
+      header_template: {
+        Authorization: "Bearer {api_key}",
+        [REQUIRED_USERNAME_HEADER]: "{username}",
+      },
+      oauth_client: null,
+      config: {
+        shape: "mcp_server",
+        server_url: serverUrl,
+        transport: "STREAMABLE_HTTP",
+      },
     });
-    const tools = await adminClient.discoverMcpTools(serverId);
-    await adminClient.addToolsToDefaultAssistant(tools.map((tool) => tool.id));
+    integrationId = created.id;
+    // MCP actions load after a connection: the admin connects their own account.
+    const connect = await adminContext.request.put(
+      `/api/integrations/${integrationId}/connection`,
+      { data: { fields: { api_key: ADMIN_API_KEY, username: "admin-pw" } } }
+    );
+    expect(connect.ok(), await connect.text()).toBeTruthy();
+    await adminClient.refreshIntegrationActions(integrationId);
+    // The connect prompt test chats with an agent that links the
+    // integration. The default agent runs only the integrations that a member
+    // turned on.
+    agentId = await adminClient.createAgentWithIntegrations(
+      `PW Per-User Key Agent ${Date.now()}`,
+      [integrationId],
+      { isPublic: true }
+    );
 
-    basicUserEmail = `pw-per-user-key-${Date.now()}@example.com`;
-    basicUserPassword = "BasicUserPass123!";
-    await adminClient.registerUser(basicUserEmail, basicUserPassword);
-
+    for (const name of ["page", "chat"]) {
+      const email = `pw-per-user-${name}-${Date.now()}@example.com`;
+      const password = "BasicUserPass123!";
+      await adminClient.registerUser(email, password);
+      users.push({ email, password });
+    }
     await adminContext.close();
   });
 
@@ -111,134 +109,50 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
       storageState: "admin_auth.json",
     });
     const adminClient = new OnyxApiClient(adminContext.request);
-
-    if (createdProviderId !== null) {
+    if (agentId !== null) await adminClient.deleteAgent(agentId);
+    if (integrationId) await adminClient.deleteIntegration(integrationId);
+    if (createdProviderId !== null)
       await adminClient.deleteProvider(createdProviderId);
-    }
-    if (uiServerId) {
-      await adminClient.deleteMcpServer(uiServerId);
-    }
-    if (serverId) {
-      await adminClient.deleteMcpServer(serverId);
-    }
     await adminContext.close();
-
-    if (serverProcess) {
-      await serverProcess.stop();
-    }
+    if (serverProcess) await serverProcess.stop();
   });
 
-  test("Admin can configure a per-user server with two template fields via the UI", async ({
+  test("A member connects from the integration page with every credential field", async ({
     page,
   }) => {
+    const member = users[0]!;
     await page.context().clearCookies();
-    await loginAs(page, "admin");
+    await apiLogin(page, member.email, member.password);
 
-    const adminMcp = new AdminMcpServersPage(page);
-    await adminMcp.goto();
+    const detail = new CustomizeIntegrationPage(page);
+    await detail.goto(integrationId);
+    await detail.expectStatus("Not connected");
+    await detail.connectWithCredentials(serverName, FIELDS);
+    await detail.expectStatus("Connected");
 
-    const uiServerName = `${serverName} (UI)`;
-    await adminMcp.openAddServerModal();
-    await adminMcp.fillServerDetails({
-      name: uiServerName,
-      description: "Test per-user multi-field API key MCP server",
-      url: serverUrl,
-    });
-    uiServerId = await adminMcp.submitAddServer();
-
-    await adminMcp.selectAuthMethod("API Key");
-    // Per-user is the default tab for API Key; click it explicitly so the test
-    // fails loudly if that default ever changes.
-    await adminMcp.selectApiKeyTab("per-user");
-
-    // Header row 1 is pre-populated with Authorization / Bearer {api_key}.
-    await adminMcp.expectFirstHeaderPrefilled();
-    // Add a second row for the X-Username placeholder.
-    await adminMcp.addHeaderRow();
-    await adminMcp.fillHeaderRow(2, REQUIRED_USERNAME_HEADER, "{username}");
-
-    // The "only for your own account" section reveals once placeholders are
-    // detected. Fill the admin's own credentials so the backend can validate
-    // against the live server during the upsert.
-    await adminMcp.fillOwnCredentials({
-      apiKey: ADMIN_API_KEY,
-      username: ADMIN_USERNAME,
-    });
-
-    await adminMcp.connectAndWaitForUpsert();
-
-    await adminMcp.expectServerCard(uiServerName);
-    await adminMcp.refreshTools();
+    await detail.disconnect(serverName);
+    await detail.expectStatus("Not connected");
+    await detail.connectWithCredentials(serverName, FIELDS);
   });
 
-  test("Basic user is prompted for every template field and can authenticate", async ({
-    page,
-  }) => {
+  test("A member connects from the chat connect prompt", async ({ page }) => {
+    const member = users[1]!;
     await page.context().clearCookies();
-    await apiLogin(page, basicUserEmail, basicUserPassword);
-
-    await page.goto("/app");
-    await page.waitForURL("**/app**");
+    await apiLogin(page, member.email, member.password);
+    await page.goto(`/app?agentId=${agentId}`);
     await ensureOnboardingComplete(page);
 
-    const actions = new ToolsPopover(page);
-    await actions.expectServerVisible(serverName);
+    const prompt = new IntegrationConnectPrompt(page);
+    await prompt.expectCount(1);
+    await prompt.open();
+    await prompt.dialog.startConnect(serverName);
+    await prompt.dialog.submitCredentials(FIELDS);
+    await prompt.dialog.expectConnected(serverName);
+    await prompt.dialog.close();
+    await prompt.expectHidden();
 
-    // Clicking before authenticating opens the credentials modal.
-    await actions.clickServer(serverName);
-
-    const modal = actions.credentialsModal;
-    await modal.expectOpen(/Enter Credentials/i);
-
-    // === The actual regression check ===
-    // Both required fields must render. Before the `required_fields`
-    // persistence fix, only `api_key` showed and the user could submit without
-    // `username`, leaving the literal `{username}` in the X-Username header.
-    await modal.expectFieldsVisible();
-
-    // The save button stays disabled until both fields are non-empty.
-    await expect(modal.saveButton).toBeVisible();
-    await expect(modal.saveButton).toBeDisabled();
-    await modal.fillApiKey(BASIC_USER_API_KEY);
-    await expect(modal.saveButton).toBeDisabled();
-    await modal.fillUsername(BASIC_USERNAME);
-    await expect(modal.saveButton).toBeEnabled();
-
-    await modal.save();
-
-    // Now authenticated: clicking the row drills into the tool list instead of
-    // reopening the auth modal. The popover closed with the modal, so reopen.
-    await actions.openServer(serverName);
-  });
-
-  test("Re-authenticate row exposes the multi-field modal with the same gating", async ({
-    page,
-  }) => {
-    await page.context().clearCookies();
-    await apiLogin(page, basicUserEmail, basicUserPassword);
-
-    await page.goto("/app");
-    await page.waitForURL("**/app**");
-    await ensureOnboardingComplete(page);
-
-    const actions = new ToolsPopover(page);
-    await actions.expectServerVisible(serverName);
-
-    // Already authenticated from the previous test, so this drills into tools.
-    await actions.openServer(serverName);
-    await actions.clickReauthRow();
-
-    const modal = actions.credentialsModal;
-    await modal.expectOpen(/Manage Credentials/i);
-    await modal.expectFieldsVisible();
-
-    // Gating still enforces "all-or-nothing".
-    await modal.fillApiKey("");
-    await modal.fillUsername("");
-    await expect(modal.updateButton).toBeDisabled();
-    await modal.fillApiKey(BASIC_USER_API_KEY);
-    await expect(modal.updateButton).toBeDisabled();
-    await modal.fillUsername(BASIC_USERNAME);
-    await expect(modal.updateButton).toBeEnabled();
+    const popover = new ChatIntegrationsPopover(page);
+    await popover.expectConnected(serverName);
+    await popover.expectIntegrationEnabled(serverName, true);
   });
 });

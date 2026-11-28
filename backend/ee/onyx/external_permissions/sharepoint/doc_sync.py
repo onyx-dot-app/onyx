@@ -4,9 +4,14 @@ from ee.onyx.external_permissions.perm_sync_types import (
     FetchAllDocumentsFunction,
     FetchAllDocumentsIdsFunction,
 )
-from ee.onyx.external_permissions.utils import credential_json, generic_doc_sync
+from ee.onyx.external_permissions.utils import (
+    credential_json,
+    generic_doc_sync,
+    set_shared_source_api_limiter,
+)
 from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -24,9 +29,12 @@ def sharepoint_doc_sync(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[ElementExternalAccess, None, None]:
     sharepoint_connector = SharepointConnector(
-        **cc_pair.connector.connector_specific_config,
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
     )
     sharepoint_connector.load_credentials(credential_json(cc_pair))
+    set_shared_source_api_limiter(sharepoint_connector, cc_pair, callback)
 
     yield from generic_doc_sync(
         cc_pair=cc_pair,

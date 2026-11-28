@@ -6,7 +6,6 @@ chart-dirs:
 
 # must be kept in sync with Chart.yaml
 chart-repos:
-  - vespa=https://onyx-dot-app.github.io/vespa-helm-charts
   - opensearch=https://opensearch-project.github.io/helm-charts
   - ingress-nginx=https://kubernetes.github.io/ingress-nginx
   - postgresql=https://cloudnative-pg.github.io/charts

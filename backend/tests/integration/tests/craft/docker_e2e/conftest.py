@@ -10,12 +10,26 @@ from uuid import UUID
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy, ExternalAppType, SandboxStatus
+from onyx.db.enums import (
+    ExternalAppType,
+    IntegrationActionPolicyValue,
+    IntegrationAuthMethod,
+    IntegrationAuthMode,
+    IntegrationKind,
+    PluginInstallationPolicy,
+    SandboxStatus,
+)
 from onyx.db.external_app import (
     associate_built_in_skill__no_commit,
-    create_external_app,
     get_built_in_external_app,
 )
+from onyx.db.integration import create_external_app_row__no_commit
+from onyx.db.integration_connection import upsert_connection__no_commit
+from onyx.db.models import (
+    Integration,
+    IntegrationActionPolicy,
+)
+from onyx.integrations.connection_models import ConnectionSecret
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     SANDBOX_EXEC_ENV,
     SANDBOX_EXEC_USER,
@@ -77,7 +91,7 @@ def remove_container(container_name: str) -> None:
         print(f"WARNING: failed to remove container {container_name!r}: {exc}")
 
 
-def _docker_exec(
+def exec_container(
     container: str,
     cmd: list[str],
     *,
@@ -136,7 +150,7 @@ def start_session_webapp(container: str, session_id: UUID) -> str:
     """
     started_at = time.monotonic()
     try:
-        result = _docker_exec(
+        result = exec_container(
             container,
             ["sh", "-c", webapp_bootstrap_command(session_id)],
             timeout=WEBAPP_BOOTSTRAP_TIMEOUT_S,
@@ -151,7 +165,7 @@ def start_session_webapp(container: str, session_id: UUID) -> str:
         )
     elapsed_s = time.monotonic() - started_at
     output = f"{result.stdout}{result.stderr}"
-    install_state = _docker_exec(
+    install_state = exec_container(
         container,
         ["sh", "-c", webapp_install_check_command(session_id)],
         user=SANDBOX_EXEC_USER,
@@ -167,7 +181,7 @@ def start_session_webapp(container: str, session_id: UUID) -> str:
 
 
 def session_webapp_logs(container: str, session_id: UUID) -> str:
-    result = _docker_exec(
+    result = exec_container(
         container,
         ["sh", "-c", webapp_logs_command(session_id)],
         user=SANDBOX_EXEC_USER,
@@ -178,7 +192,7 @@ def session_webapp_logs(container: str, session_id: UUID) -> str:
 
 @pytest.fixture(scope="session")
 def docker_exec() -> DockerExec:
-    return _docker_exec
+    return exec_container
 
 
 @pytest.fixture(scope="session")
@@ -189,8 +203,8 @@ def provision_sandbox() -> ProvisionSandbox:
 @pytest.fixture(scope="module")
 def slack_external_app() -> None:
     """
-    Seeds Slack directly with an ``ASK`` policy on
-    ``slack.messages.write`` so the gate matcher claims ``chat.postMessage``.
+    Seeds Slack directly with an ``ASK`` row on ``slack.messages.write`` so
+    the gate matcher claims ``chat.postMessage``.
 
     Unlike the cloud migration that seeds built-in apps per tenant (when
     ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS=true``), this skips real credentials
@@ -200,14 +214,42 @@ def slack_external_app() -> None:
     with get_session_with_tenant(tenant_id="public") as db:
         existing = get_built_in_external_app(db, ExternalAppType.SLACK)
         if existing is None:
-            app = create_external_app(
-                db_session=db,
+            app = create_external_app_row__no_commit(
                 name="Slack",
                 app_type=ExternalAppType.SLACK,
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
-                organization_credentials={"access_token": "fake-test-token"},
-                action_policies={"slack.messages.write": EndpointPolicy.ASK},
+                db_session=db,
+            )
+            integration = Integration(
+                kind=IntegrationKind.API,
+                name="Slack",
+                auth_mode=IntegrationAuthMode.SHARED,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"Authorization": "Bearer {access_token}"},
+                external_app_id=app.id,
+                # The proxy matches only the integrations that are on for the
+                # sandbox owner. Installed by default is on for each user.
+                installation_policy=PluginInstallationPolicy.DEFAULT,
+            )
+            db.add(integration)
+            db.flush()
+            upsert_connection__no_commit(
+                db,
+                integration_id=integration.id,
+                user_id=None,
+                secret=ConnectionSecret(
+                    fields={"access_token": "fake-test-token"}
+                ).model_dump(mode="json"),
+                expires_at=None,
+                granted_scopes=None,
+            )
+            db.add(
+                IntegrationActionPolicy(
+                    integration_id=integration.id,
+                    action="slack.messages.write",
+                    policy=IntegrationActionPolicyValue.ASK,
+                )
             )
             associate_built_in_skill__no_commit(db, app)
             db.commit()

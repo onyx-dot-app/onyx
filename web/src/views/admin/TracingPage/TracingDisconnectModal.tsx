@@ -5,8 +5,7 @@ import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
-import { ConfirmationModalLayout } from "@opal/layouts";
+import { ConfirmationModalLayout, Section } from "@opal/layouts";
 import { useModalClose } from "@opal/components";
 import { toast } from "@opal/layouts";
 import { disconnectTracingProvider } from "@/lib/tracing/svc";
@@ -29,11 +28,12 @@ export function TracingDisconnectModal({
     setIsSubmitting(true);
     try {
       await disconnectTracingProvider(target.providerType, target.config);
-      toast.success(t("toasts.disconnected", { label: target.label }));
       onClose?.();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t("toasts.unexpectedError")
+        error instanceof Error && error.message
+          ? error.message
+          : t("toasts.unexpectedError")
       );
     } finally {
       // Refresh regardless; swallow refresh errors so they can't misreport the
@@ -46,6 +46,9 @@ export function TracingDisconnectModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
+      // A pending request keeps the modal open: its close would otherwise
+      // close whichever modal is open when it finishes.
+      onClose={isSubmitting ? undefined : onClose}
       title={t("disconnectModal.title", { label: target.label })}
       description={t("disconnectModal.description")}
       submit={
@@ -59,7 +62,7 @@ export function TracingDisconnectModal({
       }
     >
       <Section alignItems="start" gap={2}>
-        <Text color="text-03">
+        <Text as="p" color="text-03">
           {markdown(t("disconnectModal.body", { label: target.label }))}
         </Text>
       </Section>

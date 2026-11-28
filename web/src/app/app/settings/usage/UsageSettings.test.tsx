@@ -2,6 +2,7 @@ import { render, screen } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import UsageSettings from "@/app/app/settings/usage/UsageSettings";
 import { useUserUsage } from "@/app/app/settings/usage/lib";
+import { Period } from "@/lib/spendingLimits/types";
 
 jest.mock("@/app/app/settings/usage/lib", () => ({
   useUserUsage: jest.fn(),
@@ -19,7 +20,7 @@ describe("UsageSettings", () => {
         window_cost_cents: 0,
         budget_cents: null,
         budget_remaining_cents: null,
-        budget_period_hours: null,
+        budget_period: null,
         budget_reset_at: null,
         selected_model_price: null,
         available_model_prices: [],
@@ -36,18 +37,30 @@ describe("UsageSettings", () => {
     jest.clearAllMocks();
   });
 
-  it("keeps the shared date range picker inline with the usage title", () => {
+  it("shows the date range picker in the usage title row", () => {
     render(<UsageSettings />);
 
     const picker = screen.getByRole("group", { name: "Date range" });
+    const titleRow = screen
+      .getByText("Usage This Period")
+      .closest(".opal-content-action");
 
-    expect(picker).toBeInTheDocument();
-    expect(picker.parentElement).toHaveClass(
-      "flex-wrap",
-      "items-center",
-      "justify-between"
-    );
-    expect(screen.getByText("Usage").parentElement).toBe(picker.parentElement);
+    expect(titleRow).toContainElement(picker);
+  });
+
+  it("shows the load error inside the usage card, without the other sections", () => {
+    mockUseUserUsage.mockReturnValue({
+      data: undefined,
+      error: new Error("boom"),
+      isLoading: false,
+      isValidating: false,
+      mutate: jest.fn(),
+    } as unknown as ReturnType<typeof useUserUsage>);
+
+    render(<UsageSettings />);
+
+    expect(screen.getByText("Couldn't load usage")).toBeInTheDocument();
+    expect(screen.queryByText("Budget")).not.toBeInTheDocument();
   });
 
   it("shows the fixed budget reset date", () => {
@@ -58,7 +71,7 @@ describe("UsageSettings", () => {
         window_cost_cents: 897.2,
         budget_cents: 1500,
         budget_remaining_cents: 602.8,
-        budget_period_hours: 720,
+        budget_period: Period.MONTHLY,
         budget_reset_at: "2026-09-01T00:00:00Z",
         selected_model_price: null,
         available_model_prices: [],
@@ -123,7 +136,7 @@ describe("UsageSettings", () => {
         window_cost_cents: 28,
         budget_cents: null,
         budget_remaining_cents: null,
-        budget_period_hours: null,
+        budget_period: null,
         budget_reset_at: null,
         selected_model_price: null,
         available_model_prices: [],

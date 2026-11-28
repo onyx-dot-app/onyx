@@ -1,6 +1,6 @@
 name: Run Jest Tests
 concurrency:
-  group: Run-Jest-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  group: Run-Jest-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
   cancel-in-progress: true
 
 on:
@@ -14,9 +14,20 @@ permissions:
   contents: read
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   jest-tests:
     name: Jest Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     timeout-minutes: 10
     steps:
       - name: Checkout code
@@ -24,21 +35,39 @@ jobs:
         with:
           persist-credentials: false
 
+      # Jest Tests is a required check, so it must still report when no Jest
+      # input changed; skip the work instead of the job. The Jest inputs are
+      # web/ (with the vendored packages in web/lib/) and the backend fixtures
+      # that Jest tests read.
+      - name: Detect web changes
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        with:
+          filters: |
+            code:
+              - 'web/**'
+              - 'backend/tests/unit/onyx/tools/sandbox/artifact_links.json'
+              - '.github/workflows/pr-jest-tests.yml'
+
       - name: Setup bun
+        if: steps.filter.outputs.code != 'false'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] test-only workflow; no deploy artifacts
         with:
           bun-version: "1.3.13"
 
       - name: Install node dependencies
+        if: steps.filter.outputs.code != 'false'
         working-directory: ./web
         run: bun install --frozen-lockfile
 
       - name: Run Jest tests
+        if: steps.filter.outputs.code != 'false'
         working-directory: ./web
         run: bun run test -- --ci --coverage --maxWorkers=50%
 
       - name: Upload coverage reports
-        if: always()
+        if: always() && steps.filter.outputs.code != 'false'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: jest-coverage-${{ github.run_id }}

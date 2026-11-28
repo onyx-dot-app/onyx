@@ -31,11 +31,10 @@ import {
   InputKeyValue as KeyValueInput,
   type KeyValue,
 } from "@opal/components";
-import { InputSingleSelect } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Card, EmptyMessageCard } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
+import { Button, Card, EmptyMessageCard, Text } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
@@ -45,8 +44,8 @@ import {
   InputPadder,
   InputVertical,
   toast,
+  Section,
 } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 
 // ─── Model Configuration List ─────────────────────────────────────────────────
 
@@ -59,6 +58,8 @@ type CustomModelConfiguration = Pick<
   | "max_input_tokens"
   | "supports_image_input"
   | "supports_reasoning"
+  | "supports_chat"
+  | "supports_decisions"
   | "supported_reasoning_efforts"
   | "reasoning_effort_max"
   | "reasoning_effort_default"
@@ -93,24 +94,18 @@ function ModelConfigurationItem({
         value={model.display_name}
         onChange={(e) => onChange({ ...model, display_name: e.target.value })}
       />
-      <InputSelect
+      <InputSingleSelect
         value={model.supports_image_input ? "text-image" : "text-only"}
         onValueChange={(value) =>
           onChange({ ...model, supports_image_input: value === "text-image" })
         }
-      >
-        <InputSelect.Trigger
-          placeholder={t("custom.modelRow.inputTypePlaceholder")}
-        />
-        <InputSelect.Content>
-          <InputSelect.Item value="text-only">
-            {t("custom.modelRow.textOnly.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="text-image">
-            {t("custom.modelRow.textImage.label")}
-          </InputSelect.Item>
-        </InputSelect.Content>
-      </InputSelect>
+        defaultOption="text-only"
+        placeholder={t("custom.modelRow.inputTypePlaceholder")}
+        options={[
+          { value: "text-only", title: t("custom.modelRow.textOnly.label") },
+          { value: "text-image", title: t("custom.modelRow.textImage.label") },
+        ]}
+      />
       <InputTypeIn
         placeholder={t("custom.modelRow.maxTokensPlaceholder")}
         value={model.max_input_tokens?.toString() ?? ""}
@@ -175,11 +170,19 @@ function ModelConfigurationList() {
       {models.length > 0 ? (
         <div className={`grid items-center gap-1 ${MODEL_GRID_COLS}`}>
           <div className="pb-1">
-            <Text mainUiAction>{t("custom.modelTable.name.header")}</Text>
+            <Text font="main-ui-action" color="text-05">
+              {t("custom.modelTable.name.header")}
+            </Text>
           </div>
-          <Text mainUiAction>{t("custom.modelTable.displayName.header")}</Text>
-          <Text mainUiAction>{t("custom.modelTable.inputType.header")}</Text>
-          <Text mainUiAction>{t("custom.modelTable.maxTokens.header")}</Text>
+          <Text font="main-ui-action" color="text-05">
+            {t("custom.modelTable.displayName.header")}
+          </Text>
+          <Text font="main-ui-action" color="text-05">
+            {t("custom.modelTable.inputType.header")}
+          </Text>
+          <Text font="main-ui-action" color="text-05">
+            {t("custom.modelTable.maxTokens.header")}
+          </Text>
           <div aria-hidden />
           <div aria-hidden />
 
@@ -235,14 +238,14 @@ function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
     () =>
       (customProviderNames ?? []).map((opt) => ({
         value: opt.value,
-        label: opt.value,
+        title: opt.value,
         description: opt.label,
       })),
     [customProviderNames]
   );
 
   return (
-    <InputSingleSelect
+    <InputSingleComboBox
       mode="open"
       value={values.provider}
       onValueChange={(value) => setFieldValue("provider", value)}
@@ -303,6 +306,8 @@ export default function CustomModal({
         max_input_tokens: mc.max_input_tokens ?? null,
         supports_image_input: mc.supports_image_input,
         supports_reasoning: mc.supports_reasoning,
+        supports_chat: mc.supports_chat,
+        supports_decisions: mc.supports_decisions,
         supported_reasoning_efforts: mc.supported_reasoning_efforts,
         reasoning_effort_max: mc.reasoning_effort_max,
         reasoning_effort_default: mc.reasoning_effort_default,
@@ -318,6 +323,8 @@ export default function CustomModal({
         supports_image_input: false,
         supports_reasoning: false,
         supported_reasoning_efforts: undefined,
+        supports_chat: undefined,
+        supports_decisions: undefined,
         reasoning_effort_max: null,
         reasoning_effort_default: null,
         temperature_default: null,
@@ -376,6 +383,8 @@ export default function CustomModal({
             max_input_tokens: mc.max_input_tokens ?? null,
             supports_image_input: mc.supports_image_input,
             supports_reasoning: mc.supports_reasoning,
+            supports_chat: mc.supports_chat,
+            supports_decisions: mc.supports_decisions,
             supported_reasoning_efforts: mc.supported_reasoning_efforts,
             reasoning_effort_max: mc.reasoning_effort_max,
             reasoning_effort_default: mc.reasoning_effort_default,
@@ -435,6 +444,7 @@ export default function CustomModal({
       <InputPadder>
         <InputVertical
           withLabel="provider"
+          disabled={!!existingLlmProvider}
           title={t("custom.providerField.title")}
           subDescription={markdown(t("custom.providerField.description"))}
         >
@@ -462,11 +472,10 @@ export default function CustomModal({
       <InputPadder>
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("custom.envVars.title")}
             description={markdown(t("custom.envVars.description"))}
             width="full"
-            variant="section"
-            sizePreset="main-content"
           />
 
           <CustomConfigKeyValue />
@@ -484,10 +493,9 @@ export default function CustomModal({
       <Section gap={2}>
         <InputPadder>
           <Content
+            font="main-content-emphasis"
             title={t("custom.models.title")}
             description={t("custom.models.description")}
-            variant="section"
-            sizePreset="main-content"
             width="full"
           />
         </InputPadder>

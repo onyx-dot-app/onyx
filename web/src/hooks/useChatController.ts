@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import {
   buildChatUrl,
-  getAvailableContextTokens,
   nameChatSession,
   setPreferredResponse,
   updateLlmOverrideForChatSession,
@@ -11,17 +11,13 @@ import {
   applyPreferredResponse,
   chooseImplicitPreferred,
   getMostVisibleResponseId,
-  getMultiModelChildren,
   getUnresolvedMultiModelTurn,
-} from "@/app/app/message/multiModel";
-import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
-import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
+} from "@/lib/timeline/chat/message/multiModel";
 import { StreamStopInfo } from "@/lib/search/types";
-import type { SourceMetadata } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
+import { getNewSessionNavigation } from "@/lib/navigation/hooks";
 import {
-  getLastSuccessfulMessageId,
   getLatestMessageChain,
   MessageTreeState,
   upsertMessages,
@@ -31,13 +27,13 @@ import {
 } from "@/app/app/services/messageTree";
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
   ChatFileType,
   CitationMap,
+  ChatStream,
   FileChatDisplay,
   FileDescriptor,
   Message,
@@ -48,9 +44,9 @@ import {
   StreamingError,
   ToolCallMetadata,
   UserKnowledgeFilePacket,
-} from "@/app/app/interfaces";
+} from "@/app/app/types";
 import { StreamStopReason } from "@/lib/search/types";
-import { createChatSession } from "@/app/app/services/lib";
+import { createChatSession, endIncognitoSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
   modelSupportsImageInput,
@@ -60,42 +56,51 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import {
-  agentDeclaresOwnSources,
-  buildFilters,
-  effectiveAvailableSourcesFor,
-  selectedSourcesFrom,
-} from "@/lib/searchFilters/utils";
+import { useChatSearchFiltersRequest } from "@/lib/searchFilters/hooks";
 import { toast } from "@opal/layouts";
 import {
-  ReadonlyURLSearchParams,
-  usePathname,
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
+  isStillOnLocation,
+  locationKey,
+} from "@/app/app/services/submitLocation";
+import { useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
+  openBrowserInChat,
   useChatSessionStore,
   useCurrentMessageTree,
-  useCurrentChatState,
   useCurrentMessageHistory,
+  type SessionError,
 } from "@/app/app/stores/useChatSessionStore";
+import { isBrowserOpenStart } from "@/lib/chat/browser/stream";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { effectiveChatPreference } from "@/lib/tools/chat";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import { useAvailableSources } from "@/lib/connectors/hooks";
-import { getConfiguredSources } from "@/lib/sources";
+import { projectsFileToFileDescriptor } from "@/lib/projects/utils";
+import {
+  claimStreamReader,
+  releaseStreamReader,
+  writesAnswer,
+  settleChatSession,
+} from "@/lib/chat/settleChatSession";
+import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
+import {
+  stopChatSession,
+  STOP_BEFORE_DISPATCH,
+} from "@/lib/chat/stopChatSession";
+import { useShowPendingRequest } from "@/lib/chat/hooks";
 
 const SYSTEM_MESSAGE_ID = -3;
 
-export interface OnSubmitProps {
-  message: string;
+// `mentions` is what the question tagged. An edit sends the recorded mentions
+// its new text still has; a resend or regeneration sends the question's
+// recorded mentions.
+export interface OnSubmitProps extends ComposedMessage {
   //from chat input bar
   currentMessageFiles: ProjectFile[];
   // from the chat bar???
@@ -105,7 +110,6 @@ export interface OnSubmitProps {
   // optional params
   messageIdToResend?: number;
   queryOverride?: string;
-  forceSearch?: boolean;
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
@@ -118,7 +122,6 @@ export interface OnSubmitProps {
 interface RegenerationRequest {
   messageId: number;
   parentMessage: Message;
-  forceSearch?: boolean;
 }
 
 interface UseChatControllerProps {
@@ -129,21 +132,10 @@ interface UseChatControllerProps {
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
-  searchParams: ReadonlyURLSearchParams;
+  searchParams: URLSearchParams;
   resetInputBar: () => void;
-}
-
-async function stopChatSession(chatSessionId: string): Promise<void> {
-  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to stop chat session: ${response.statusText}`);
-  }
+  /** Puts a question back after a send fails before it starts. */
+  restoreInputBar: (unsent: UnsentMessage) => void;
 }
 
 export default function useChatController({
@@ -154,34 +146,23 @@ export default function useChatController({
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
+  restoreInputBar,
 }: UseChatControllerProps) {
-  // The chat's search filters ride the tool configuration, resolved against
-  // the sources the active agent can reach. An explicit selection resolves
-  // only against a complete roster — `settled` allows stale data (a failed
-  // revalidation must not drop a restriction) but never a partial first
-  // load, which would narrow the send wrongly. An agent declaring its own
-  // knowledge_sources carries its complete roster and never waits.
-  const { availableSources, settled: sourcesSettled } = useAvailableSources();
-  const selectedSearchSources = useMemo<SourceMetadata[] | null>(
-    () =>
-      activeAgent && (sourcesSettled || agentDeclaresOwnSources(activeAgent))
-        ? selectedSourcesFrom(
-            toolConfiguration.filters,
-            getConfiguredSources(
-              effectiveAvailableSourcesFor(activeAgent, availableSources)
-            )
-          )
-        : null,
-    [activeAgent, sourcesSettled, availableSources, toolConfiguration.filters]
+  const t = useTranslations("chat.app");
+  // The chat's search filters ride the tool configuration.
+  const searchFilters = useChatSearchFiltersRequest(
+    activeAgent,
+    toolConfiguration.filters
   );
   const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const navigation = useNavigation();
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
-  const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
+  const { incognitoEnabledRef, incognitoSessionId, incognitoSessionIdRef } =
+    useIncognito();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -192,9 +173,6 @@ export default function useChatController({
   // Store actions - these don't cause re-renders
   const updateChatStateAction = useChatSessionStore(
     (state) => state.updateChatState
-  );
-  const setLatestMessageRenderComplete = useChatSessionStore(
-    (state) => state.setLatestMessageRenderComplete
   );
   const updateRegenerationStateAction = useChatSessionStore(
     (state) => state.updateRegenerationState
@@ -230,7 +208,8 @@ export default function useChatController({
   // Use custom hooks for accessing store data
   const currentMessageTree = useCurrentMessageTree();
   const currentMessageHistory = useCurrentMessageHistory();
-  const currentChatState = useCurrentChatState();
+  const tReadiness = useTranslations("chat.readiness");
+  const showPendingRequest = useShowPendingRequest();
 
   const navigatingAway = useRef(false);
 
@@ -268,7 +247,8 @@ export default function useChatController({
 
   const updateStatesWithNewSessionId = (
     newSessionId: string,
-    incognito = false
+    incognito = false,
+    select = true
   ) => {
     // Create new session in store if it doesn't exist
     const existingSession = sessions.get(newSessionId);
@@ -279,7 +259,7 @@ export default function useChatController({
     }
 
     // Set as current session
-    setCurrentSession(newSessionId);
+    if (select) setCurrentSession(newSessionId);
   };
 
   const handleNewSessionNavigation = (chatSessionId: string) => {
@@ -298,8 +278,9 @@ export default function useChatController({
     const isOnChatPage = pathname === "/app";
 
     if (isOnChatPage && !navigatingAway.current) {
-      // SAFETY: buildChatUrl with search=false builds `/app?...`.
-      router.push(newUrl as Route, { scroll: false });
+      // SAFETY: buildChatUrl with search=false builds `/app?...`. AppPage
+      // renders the query itself, so writing the URL is the whole switch.
+      navigation.go(newUrl as Route, { scroll: false, shallow: true });
     }
 
     // Refresh sidebar - the chat was already optimistically added via addPendingChatSession
@@ -370,70 +351,60 @@ export default function useChatController({
   };
 
   const stopGenerating = useCallback(async () => {
-    const currentSession = getCurrentSessionId();
-    const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
-
-    // Call the backend stop endpoint to set the Redis fence
-    // This signals the backend to stop processing as soon as possible
-    // The backend will emit a STOP packet when it detects the fence
     try {
-      await stopChatSession(currentSession);
+      await stopChatSession(getCurrentSessionId(), tReadiness("checkFailed"));
     } catch (error) {
       console.error("Failed to stop chat session:", error);
-      // Continue with UI cleanup even if backend call fails
+      toast.error(tReadiness("stopFailed"));
     }
-
-    // Clean up incomplete tool calls for immediate UI feedback
-    if (
-      lastMessage &&
-      lastMessage.type === "assistant" &&
-      lastMessage.toolCall &&
-      lastMessage.toolCall.tool_result === undefined
-    ) {
-      const newMessageTree = new Map(currentMessageTree);
-      const updatedMessage = { ...lastMessage, toolCall: null };
-      newMessageTree.set(lastMessage.nodeId, updatedMessage);
-      updateSessionMessageTree(currentSession, newMessageTree);
-    }
-
-    // Update chat state to input immediately for good UX
-    // The stream will close naturally when the backend sends the STOP packet
-    setStreamingStartTime(currentSession, null);
-    updateChatStateAction(currentSession, "input");
-    // On stop nothing else flips the queue gate, so release it here or queued follow-ups never auto-send.
-    setLatestMessageRenderComplete(currentSession, true);
-  }, [currentMessageHistory, currentMessageTree]);
+  }, [currentSessionId, existingChatSessionId, tReadiness]);
 
   const onSubmit = useCallback(
     async ({
       message,
       currentMessageFiles,
       deepResearch,
+      mentions,
       messageIdToResend,
       queryOverride,
-      forceSearch,
       isSeededChat,
       modelOverride,
       regenerationRequest,
       additionalContext,
       selectedModels,
     }: OnSubmitProps) => {
+      const submissionStore = useChatSessionStore.getState();
+      if (
+        (submissionStore.sessions.get(getCurrentSessionId())?.chatState ??
+          "input") !== "input"
+      )
+        return;
+      const newSessionAtSubmit = getNewSessionNavigation();
+      const stillOnComposer = () =>
+        getNewSessionNavigation() === newSessionAtSubmit;
+      const controller = new AbortController();
+      const submissionSessionId = getCurrentSessionId();
+      if (submissionSessionId) {
+        submissionStore.setAbortController(submissionSessionId, controller);
+      }
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
+      const restoreSubmittedInput = () => {
+        if ((incognitoEnabledRef.current ?? false) !== incognito) return;
+        const unsent: UnsentMessage = {
+          message,
+          mentions,
+          files: currentMessageFiles,
+        };
+        // A rejected edit comes back as the same edit.
+        if (messageIdToResend !== undefined && !regenerationRequest)
+          unsent.messageIdToResend = messageIdToResend;
+        restoreInputBar(unsent);
+      };
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
       const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-      {
-        const params = new URLSearchParams(searchParams?.toString() || "");
-        if (params.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
-          params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-          const newUrl = params.toString()
-            ? `${pathname}?${params.toString()}`
-            : pathname;
-          // SAFETY: built from the current pathname, which is a route of this app.
-          router.replace(newUrl as Route, { scroll: false });
-        }
-      }
+      const startUrl = locationKey(pathname, searchParams.toString());
 
       updateSubmittedMessage(getCurrentSessionId(), message);
 
@@ -443,90 +414,9 @@ export default function useChatController({
       setUncaughtError(frozenSessionId, null);
       setLoadingError(frozenSessionId, null);
 
-      // Check if the last message was an error and remove it before proceeding with a new message
-      // Ensure this isn't a regeneration or resend, as those operations should preserve the history leading up to the point of regeneration/resend.
       let currentMessageTreeLocal =
         currentMessageTree || new Map<number, Message>();
-      let currentHistory = getLatestMessageChain(currentMessageTreeLocal);
-      let lastMessage = currentHistory[currentHistory.length - 1];
-
-      // A multi-model turn whose chain-tip panel errored can still have usable
-      // siblings. Keep the turn so the implicit-preferred pick below can
-      // continue the chain through a successful sibling.
-      const errorTurnUserMsg =
-        lastMessage?.type === "error" && lastMessage.parentNodeId != null
-          ? currentMessageTreeLocal.get(lastMessage.parentNodeId)
-          : undefined;
-      const errorTurnHasUsableSibling = errorTurnUserMsg
-        ? (getMultiModelChildren(
-            errorTurnUserMsg,
-            currentMessageTreeLocal
-          )?.some((m) => m.type === "assistant" && m.messageId != null) ??
-          false)
-        : false;
-
-      if (
-        lastMessage &&
-        lastMessage.type === "error" &&
-        !messageIdToResend &&
-        !regenerationRequest &&
-        !errorTurnHasUsableSibling
-      ) {
-        const newMessageTree = new Map(currentMessageTreeLocal);
-        const parentNodeId = lastMessage.parentNodeId;
-
-        // Remove the error message itself
-        newMessageTree.delete(lastMessage.nodeId);
-
-        // Remove the parent message + update the parent of the parent to no longer
-        // link to the parent
-        if (parentNodeId !== null && parentNodeId !== undefined) {
-          const parentOfError = newMessageTree.get(parentNodeId);
-          if (parentOfError) {
-            const grandparentNodeId = parentOfError.parentNodeId;
-            if (grandparentNodeId !== null && grandparentNodeId !== undefined) {
-              const grandparent = newMessageTree.get(grandparentNodeId);
-              if (grandparent) {
-                // Update grandparent to no longer link to parent
-                const updatedGrandparent = {
-                  ...grandparent,
-                  childrenNodeIds: (grandparent.childrenNodeIds || []).filter(
-                    (id: number) => id !== parentNodeId
-                  ),
-                  latestChildNodeId:
-                    grandparent.latestChildNodeId === parentNodeId
-                      ? null
-                      : grandparent.latestChildNodeId,
-                };
-                newMessageTree.set(grandparentNodeId, updatedGrandparent);
-              }
-            }
-            // Remove the parent message
-            newMessageTree.delete(parentNodeId);
-          }
-        }
-        // Update the state immediately so subsequent logic uses the cleaned map
-        updateSessionMessageTree(frozenSessionId, newMessageTree);
-        console.log(
-          "Removed previous error message ID:",
-          lastMessage.messageId
-        );
-
-        // update state for the new world (with the error message removed)
-        currentHistory = getLatestMessageChain(newMessageTree);
-        currentMessageTreeLocal = newMessageTree;
-        lastMessage = currentHistory[currentHistory.length - 1];
-      }
-
-      if (currentChatState != "input") {
-        if (currentChatState == "uploading") {
-          toast.error("Please wait for the content to upload");
-        } else {
-          toast.error("Please wait for the response to complete");
-        }
-
-        return;
-      }
+      const currentHistory = getLatestMessageChain(currentMessageTreeLocal);
 
       // Auto-pin the agent to sidebar when sending a message if not already pinned
       if (activeAgent) {
@@ -556,13 +446,49 @@ export default function useChatController({
       if (isNewSession) {
         // There is no incognito agent chat, so incognito pins the default
         // assistant regardless of any selected agent.
-        currChatSessionId = await createChatSession(
-          incognito ? 0 : activeAgent?.id || 0,
-          searchParamBasedChatSessionName,
-          projectId ? parseInt(projectId) : null,
-          incognito,
-          incognito ? incognitoSessionId : null
-        );
+        // The caller already cleared the input bar, so a failure here must
+        // give the message back instead of dropping it.
+        try {
+          currChatSessionId = await createChatSession(
+            incognito ? 0 : activeAgent?.id || 0,
+            searchParamBasedChatSessionName,
+            projectId ? parseInt(projectId) : null,
+            incognito,
+            incognito ? incognitoSessionId : null
+          );
+        } catch (error) {
+          console.error("Failed to create chat session:", error);
+          toast.error(t("createSessionFailed.toast"));
+          // The user moved to a different page while the request was pending.
+          // Do not take them back or put the message into that page.
+          if (
+            !stillOnComposer() ||
+            !isStillOnLocation([startUrl], window.location)
+          ) {
+            return;
+          }
+          restoreSubmittedInput();
+          return;
+        }
+
+        if (
+          incognito &&
+          (controller.signal.aborted ||
+            !stillOnComposer() ||
+            !incognitoEnabledRef.current ||
+            // Back/forward restore or a new private session replaced the one
+            // this send created its chat for.
+            incognitoSessionIdRef.current !== incognitoSessionId ||
+            !isStillOnLocation([startUrl], window.location))
+        ) {
+          try {
+            await endIncognitoSession(currChatSessionId);
+          } catch (error) {
+            console.error("Failed to end abandoned incognito session:", error);
+          }
+          return;
+        }
+        if (controller.signal.aborted) return;
 
         // This send is what created the chat, so the configuration chosen for
         // it moves onto the session before the id reaches the composer.
@@ -611,10 +537,14 @@ export default function useChatController({
       );
 
       // mark the session as the current session
-      updateStatesWithNewSessionId(currChatSessionId, incognito);
+      updateStatesWithNewSessionId(
+        currChatSessionId,
+        incognito,
+        stillOnComposer()
+      );
 
       // Navigate immediately for new sessions (before streaming starts)
-      if (isNewSession) {
+      if (isNewSession && stillOnComposer()) {
         handleNewSessionNavigation(currChatSessionId);
       }
 
@@ -624,12 +554,14 @@ export default function useChatController({
         !sessions.get(currChatSessionId)?.description;
 
       // set the ability to cancel the request
-      const controller = new AbortController();
       setAbortController(currChatSessionId, controller);
 
-      const messageToResend = currentHistory.find(
-        (message) => message.messageId === messageIdToResend
-      );
+      const messageToResend =
+        messageIdToResend === undefined
+          ? undefined
+          : currentHistory.find(
+              (message) => message.messageId === messageIdToResend
+            );
       if (messageIdToResend && regenerationRequest) {
         updateRegenerationState(
           { regenerating: true, finalMessageIndex: messageIdToResend + 1 },
@@ -660,18 +592,21 @@ export default function useChatController({
         ? messageToResend?.message || message
         : message;
 
-      // When editing a message that had files attached, preserve the original files.
-      // Skip for regeneration — the regeneration path reuses the existing user node
-      // (and its files), so merging here would send duplicates.
-      const effectiveFileDescriptors = [
-        ...projectFilesToFileDescriptors(currentMessageFiles),
-        ...(!regenerationRequest ? (messageToResend?.files ?? []) : []),
-      ];
+      // A resent message sends the files the caller passes. A file kept from
+      // the original keeps its original descriptor.
+      const originalFiles = new Map(
+        (messageToResend?.files ?? []).map((file) => [
+          file.user_file_id ?? file.id,
+          file,
+        ])
+      );
+      const effectiveFileDescriptors = currentMessageFiles.map(
+        (file) =>
+          originalFiles.get(file.id) ?? projectsFileToFileDescriptor(file)
+      );
 
       updateChatStateAction(frozenSessionId, "loading");
-      setLatestMessageRenderComplete(frozenSessionId, false);
 
-      // find the parent
       const currMessageHistory =
         messageToResendIndex !== null
           ? currentHistory.slice(0, messageToResendIndex)
@@ -726,8 +661,7 @@ export default function useChatController({
                 return;
               }
               // Clear only the preference so the retry re-runs the PUT. The
-              // chain tip stays on the assumed response, keeping the failed
-              // follow-up reachable in the rendered chat.
+              // chain tip stays on the assumed response.
               const reverted = applyPreferredResponse(
                 currentMessageTreeLocal,
                 originalUserMessage.nodeId,
@@ -750,12 +684,15 @@ export default function useChatController({
         }
       }
 
+      // A failed turn the server saved stays in the conversation, so the next
+      // message continues after it. A turn the server rejected before saving
+      // has no row to continue from.
       let parentMessage =
         messageToResendParent ||
         implicitPreference?.message ||
-        (currMessageHistory.length > 0
-          ? currMessageHistory[currMessageHistory.length - 1]
-          : null) ||
+        currMessageHistory.findLast(
+          (message) => message.messageId !== undefined
+        ) ||
         (currentMessageTreeLocal.size === 1
           ? Array.from(currentMessageTreeLocal.values())[0]
           : null);
@@ -785,7 +722,8 @@ export default function useChatController({
           effectiveFileDescriptors,
           messageToResend
         );
-        initialUserNode = result.initialUserNode;
+        // The chips show at once; the server's record replaces them.
+        initialUserNode = { ...result.initialUserNode, mentions };
         initialAgentNode = result.initialAgentNode;
 
         // In multi-model mode, create N assistant placeholder nodes (one per model).
@@ -815,12 +753,62 @@ export default function useChatController({
       } else {
         messagesToUpsert = [initialUserNode, initialAgentNode];
       }
+      const historyBeforeSend = currentMessageTreeLocal;
       currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
-      resetInputBar();
+      if (stillOnComposer() && !messageToResend) resetInputBar();
+      // The server saved nothing for this turn: drop its nodes, restore the
+      // links of the node they hung from, and give the text back for a retry.
+      // Other live changes, such as a preference pick, stay.
+      const restoreTreeBeforeSend = () => {
+        const store = useChatSessionStore.getState();
+        const live =
+          store.sessions.get(frozenSessionId)?.messageTree ??
+          currentMessageTreeLocal;
+        const restored = new Map(
+          [...live].filter(([nodeId]) => historyBeforeSend.has(nodeId))
+        );
+        const anchorNodeId = regenerationRequest
+          ? initialUserNode.nodeId
+          : initialUserNode.parentNodeId;
+        const anchorBefore =
+          anchorNodeId == null
+            ? undefined
+            : historyBeforeSend.get(anchorNodeId);
+        const anchorLive =
+          anchorNodeId == null ? undefined : restored.get(anchorNodeId);
+        if (anchorBefore && anchorLive) {
+          restored.set(anchorBefore.nodeId, {
+            ...anchorLive,
+            childrenNodeIds: anchorBefore.childrenNodeIds,
+            latestChildNodeId: anchorBefore.latestChildNodeId,
+          });
+        }
+        currentMessageTreeLocal = restored;
+        store.updateSessionMessageTree(frozenSessionId, restored);
+        if (
+          stillOnComposer() &&
+          store.currentSessionId === frozenSessionId &&
+          !regenerationRequest
+        ) {
+          restoreSubmittedInput();
+        }
+      };
+      const discardUnsentTurn = () => {
+        if (
+          controller.signal.reason !== STOP_BEFORE_DISPATCH ||
+          useChatSessionStore.getState().sessions.get(frozenSessionId)
+            ?.abortController !== controller
+        )
+          return;
+        restoreTreeBeforeSend();
+      };
+      controller.signal.addEventListener("abort", discardUnsentTurn, {
+        once: true,
+      });
 
       let answer = "";
 
@@ -846,7 +834,11 @@ export default function useChatController({
       let packetsVersion = 0;
 
       let newUserMessageId: number | null = null;
+      // The server names a new chat while it answers and sends the name here.
+      let serverNamedChat = false;
       let newAgentMessageId: number | null = null;
+      // What the saved question mentioned, as the server recorded it.
+      let recordedMentions = initialUserNode.mentions;
 
       // Multi-model per-model state (indexed by model_index from backend)
       const numModels = selectedModels?.length ?? 0;
@@ -919,10 +911,20 @@ export default function useChatController({
         return nodes;
       }
 
+      function ownsStream(): boolean {
+        const session = useChatSessionStore
+          .getState()
+          .sessions.get(frozenSessionId);
+        return (
+          session?.abortController === controller &&
+          session.chatState !== "input"
+        );
+      }
+
       /** Flush accumulated packet state into the tree as one Zustand
        *  update. No-op when nothing is pending. */
       function flushPendingUpdates() {
-        if (!pendingFlush) return;
+        if (!pendingFlush || !ownsStream()) return;
         pendingFlush = false;
 
         parentMessage =
@@ -948,6 +950,7 @@ export default function useChatController({
               ...currentUserNode,
               messageId: newUserMessageId ?? undefined,
               files: files,
+              mentions: recordedMentions,
             };
             messagesToUpsert = [updatedUserNode, ...dirtyNodes];
           } else {
@@ -964,11 +967,16 @@ export default function useChatController({
               ...initialUserNode,
               messageId: newUserMessageId ?? undefined,
               files: files,
+              mentions: recordedMentions,
             },
             {
               ...initialAgentNode,
               messageId: newAgentMessageId ?? undefined,
-              message: error || answer,
+              message: answer,
+              errorMessage: error,
+              errorCode,
+              isRetryable,
+              errorDetails,
               type: error ? "error" : "assistant",
               retrievalType,
               query: finalMessage?.rephrased_query || query,
@@ -995,10 +1003,24 @@ export default function useChatController({
           ];
         }
 
+        writeAnswers(messagesToUpsert);
+      }
+
+      /** Merges the send's updates into the chat's current tree. An answer
+       *  that a newer stream writes, such as its continuation, keeps its
+       *  rows, and rows that others added stay. */
+      function writeAnswers(messages: Message[]) {
+        const streamId = claimedStream?.stream_id ?? null;
         currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: messagesToUpsert,
-          completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId!,
+          messages: messages.filter(
+            (message) =>
+              message.type === "user" ||
+              writesAnswer(streamId, message.messageId)
+          ),
+          completeMessageTreeOverride:
+            useChatSessionStore.getState().sessions.get(frozenSessionId)
+              ?.messageTree ?? currentMessageTreeLocal,
+          chatSessionId: frozenSessionId,
         });
       }
 
@@ -1023,6 +1045,17 @@ export default function useChatController({
       }
 
       let streamSucceeded = false;
+      let saveFailed = false;
+      let stack: CurrentMessageFIFO | null = null;
+      let rejectedSendError: SessionError | undefined;
+      let resolveReaderFinished: (error?: SessionError) => void = () => {};
+      const readerFinished = new Promise<SessionError | void>((resolve) => {
+        resolveReaderFinished = resolve;
+      });
+      // The send reads its own stream, so a decision that names it as the
+      // continuation does not start a second reader.
+      let claimedStream: ChatStream | null = null;
+      let readerDone = false;
 
       try {
         // Selection-time override writes are best-effort. Await confirmation
@@ -1030,11 +1063,13 @@ export default function useChatController({
         // selections. A failed write surfaces as a chat error and the next
         // send re-persists.
         await llmManager.persistOverrides(currChatSessionId);
+        if (controller.signal.aborted || !ownsStream()) return;
 
         // The send's mainline walk must see the assumed preference. An
         // unconfirmed write can 400 with "not on the latest mainline".
         if (implicitPreference) {
           const res = await implicitPreference.persist;
+          if (controller.signal.aborted || !ownsStream()) return;
           if (!res?.ok) {
             implicitPreference.revert();
             const data = res ? await res.json().catch(() => ({})) : {};
@@ -1044,60 +1079,53 @@ export default function useChatController({
           }
         }
 
-        const lastSuccessfulMessageId = getLastSuccessfulMessageId(
-          currentMessageTreeLocal
-        );
-
-        // Find the search tool's numeric ID for forceSearch
-        const searchToolNumericId = activeAgent?.tools.find(
-          (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
-        )?.id;
-
-        // The tool this message is made to use: the search tool when the
-        // caller asked for a search, otherwise whatever the chat has forced.
-        //
-        // Only if the agent still has it. A configuration outlives the agent
-        // being edited, and a chat can be handed one that named a tool this
-        // agent does not have; the backend raises on a forced tool it cannot
-        // find, so an id nobody can act on would fail the whole message rather
-        // than the model simply choosing for itself.
-        const requestedForcedToolId = forceSearch
-          ? (searchToolNumericId ?? null)
-          : toolConfiguration.forcedToolId;
-        const effectiveForcedToolId =
-          requestedForcedToolId !== null &&
-          activeAgent?.tools.some((tool) => tool.id === requestedForcedToolId)
-            ? requestedForcedToolId
-            : null;
+        const effectivePreference = deepResearch
+          ? null
+          : effectiveChatPreference({
+              requestedToolId: toolConfiguration.preferredToolId,
+              requestedAction: toolConfiguration.preferredAction,
+              agent: activeAgent,
+              isIntegrationEnabled: toolConfiguration.isIntegrationEnabled,
+            });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
         const { isExtension, context: extensionContext } =
           getExtensionContext();
         const messageOrigin = isExtension ? "chrome_extension" : "webapp";
 
-        const stack = new CurrentMessageFIFO();
+        if (controller.signal.aborted || !ownsStream()) return;
+        stack = new CurrentMessageFIFO();
+        useChatSessionStore.getState().updateSessionData(frozenSessionId, {
+          sendAcknowledged: stack.acknowledged,
+          readerFinished,
+        });
+        stack.acknowledged.then(
+          (stream) => {
+            if (stream && !readerDone && claimStreamReader(stream))
+              claimedStream = stream;
+          },
+          () => {}
+        );
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
           fileDescriptors: effectiveFileDescriptors,
+          mentions,
           parentMessageId: (() => {
             const parentId =
-              regenerationRequest?.parentMessage.messageId ||
-              messageToResendParent?.messageId ||
-              lastSuccessfulMessageId;
+              regenerationRequest?.parentMessage.messageId ??
+              parentMessage?.messageId ??
+              null;
             // Don't send SYSTEM_MESSAGE_ID (-3) as parent, use null instead
             // The backend expects null for "the first message in the chat"
             return parentId === SYSTEM_MESSAGE_ID ? null : parentId;
           })(),
           chatSessionId: currChatSessionId,
-          filters: buildFilters(
-            selectedSearchSources,
-            toolConfiguration.filters.documentSets,
-            toolConfiguration.filters.timeRange
-              ? { from: toolConfiguration.filters.timeRange.from }
-              : null,
-            toolConfiguration.filters.tags
-          ),
+          toolOptions: {
+            allowed: activeAgent ? toolConfiguration.allowed : null,
+            preferred: effectivePreference,
+            internal_search_filters: searchFilters,
+          },
           modelProvider: isMultiModel
             ? undefined
             : modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -1118,21 +1146,6 @@ export default function useChatController({
             ? llmManager.temperature
             : undefined,
           deepResearch,
-          // Only sent when something is actually disabled. To the backend an
-          // explicit list is a whitelist, and this one is built from the tools
-          // the frontend can see — which excludes those marked
-          // `expose_to_frontend=False`. Sending it always would quietly
-          // withhold tools nobody chose to disable.
-          enabledToolIds:
-            activeAgent && toolConfiguration.disabledToolIds.length > 0
-              ? activeAgent.tools
-                  .filter(
-                    (tool) =>
-                      !toolConfiguration.disabledToolIds.includes(tool.id)
-                  )
-                  .map((tool) => tool.id)
-              : undefined,
-          forcedToolId: effectiveForcedToolId,
           origin: messageOrigin,
           additionalContext,
           llmOverrides: isMultiModel
@@ -1160,7 +1173,11 @@ export default function useChatController({
             }
           }
 
-          if (!stack.isEmpty() && !controller.signal.aborted) {
+          if (!ownsStream() || controller.signal.aborted) {
+            controller.abort();
+            return;
+          }
+          if (!stack.isEmpty()) {
             const packet = stack.nextPacket();
             if (!packet) {
               continue;
@@ -1168,7 +1185,12 @@ export default function useChatController({
 
             // We've processed initial packets and are starting to stream content.
             // Transition from 'loading' to 'streaming'.
-            updateChatStateAction(frozenSessionId, "streaming");
+            if (
+              useChatSessionStore.getState().sessions.get(frozenSessionId)
+                ?.chatState !== "cancelling"
+            ) {
+              updateChatStateAction(frozenSessionId, "streaming");
+            }
             // Only set start time once (guard prevents reset on each packet)
             // Use getState() to avoid stale closure - sessions captured at render time becomes stale in async loop
             if (
@@ -1178,9 +1200,20 @@ export default function useChatController({
               setStreamingStartTime(frozenSessionId, Date.now());
             }
 
+            if (Object.hasOwn(packet, "chat_session_name")) {
+              // The turn's stream only carries the name of its own chat.
+              serverNamedChat = true;
+              void refreshChatSessions();
+              void fetchProjects();
+              continue;
+            }
+
             if ((packet as MessageResponseIDInfo).user_message_id) {
               newUserMessageId = (packet as MessageResponseIDInfo)
                 .user_message_id;
+              // SAFETY: only ID info lines carry user_message_id.
+              recordedMentions =
+                (packet as MessageResponseIDInfo).mentions ?? recordedMentions;
               userNodeDirty = true;
 
               // Track extension queries in PostHog (reuses isExtension/extensionContext from above)
@@ -1250,6 +1283,8 @@ export default function useChatController({
               (packet as any).error != null
             ) {
               const streamingError = packet as StreamingError;
+              saveFailed ||=
+                streamingError.error_code === "RESPONSE_SAVE_ERROR";
 
               // In multi-model mode, route per-model errors to the specific model's
               // node instead of killing the entire stream. Other models keep streaming.
@@ -1264,35 +1299,29 @@ export default function useChatController({
                   errorModelIndex >= 0 &&
                   errorModelIndex < initialAssistantNodes.length
                 ) {
-                  const errorNode = initialAssistantNodes[errorModelIndex]!;
+                  const failedPackets = packetsPerModel[errorModelIndex]!;
+                  failedPackets.push({
+                    placement: {
+                      turn_index: 0,
+                      tab_index: 0,
+                      model_index: errorModelIndex,
+                    },
+                    obj: { type: "stop" },
+                  });
                   erroredModelIndices.add(errorModelIndex);
                   dirtyModelIndices.delete(errorModelIndex);
-                  currentMessageTreeLocal = upsertToCompleteMessageTree({
-                    messages: [
-                      {
-                        ...errorNode,
-                        messageId:
-                          assistantMessageIds[errorModelIndex] ?? undefined,
-                        message: streamingError.error,
-                        type: "error",
-                        stackTrace: streamingError.stack_trace || null,
-                        errorCode: streamingError.error_code || null,
-                        isRetryable: streamingError.is_retryable ?? true,
-                        errorDetails: streamingError.details || null,
-                        overridden_model:
-                          selectedModels?.[errorModelIndex]?.modelName,
-                        modelDisplayName:
-                          modelDisplayNames[errorModelIndex] ||
-                          selectedModels?.[errorModelIndex]?.displayName ||
-                          null,
-                        packets: [],
-                        packetCount: 0,
-                        is_generating: false,
-                      },
-                    ],
-                    completeMessageTreeOverride: currentMessageTreeLocal,
-                    chatSessionId: frozenSessionId!,
-                  });
+                  writeAnswers([
+                    {
+                      ...buildAssistantNodeUpdate(errorModelIndex),
+                      errorMessage: streamingError.error,
+                      type: "error",
+                      stackTrace: streamingError.stack_trace || null,
+                      errorCode: streamingError.error_code || null,
+                      isRetryable: streamingError.is_retryable ?? true,
+                      errorDetails: streamingError.details || null,
+                      is_generating: false,
+                    },
+                  ]);
                 } else {
                   // Error without model_index in multi-model — can't route
                   // to a specific panel. Log and continue; the stream loop
@@ -1311,9 +1340,7 @@ export default function useChatController({
                 isRetryable = streamingError.is_retryable ?? true;
                 errorDetails = streamingError.details || null;
 
-                setUncaughtError(frozenSessionId, streamingError.error);
-                updateChatStateAction(frozenSessionId, "input");
-                updateSubmittedMessage(getCurrentSessionId(), "");
+                updateSubmittedMessage(frozenSessionId, "");
 
                 throw new Error(streamingError.error);
               }
@@ -1328,12 +1355,16 @@ export default function useChatController({
               const typedPacket = packet as Packet;
               const packetObj = typedPacket.obj;
 
+              // The agent opens a page: the live chat shows its Browser tab
+              if (isBrowserOpenStart(packetObj))
+                openBrowserInChat(frozenSessionId);
+
               if (isMultiModel) {
                 // Multi-model: route packet by placement.model_index.
                 // OverallStop (type "stop") has model_index=null — it's a
                 // global terminal packet that must be delivered to ALL
                 // models so each panel's AgentMessage sees the stop and
-                // exits "Thinking..." state.
+                // stops working.
                 const isGlobalStop =
                   packetObj.type === "stop" &&
                   typedPacket.placement?.model_index == null;
@@ -1419,100 +1450,152 @@ export default function useChatController({
             pendingFlush = true;
           }
         }
+        if (!ownsStream()) {
+          controller.abort();
+          return;
+        }
         // Flush any tail state from the final packet(s) before declaring
         // the stream complete. Without this, the last ≤1 frame of packets
         // could get stranded in local state.
         flushPendingUpdates();
 
-        // Surface FIFO errors (e.g. 429 before any packets arrive) so the
-        // catch block replaces the thinking placeholder with an error message.
-        if (stack.error) {
-          throw new Error(stack.error);
+        if (stack.approvalPending) {
+          restoreTreeBeforeSend();
+          showPendingRequest();
+        } else {
+          // Surface FIFO errors (e.g. 429 before any packets arrive) so the
+          // catch block replaces the thinking placeholder with an error message.
+          if (stack.error) {
+            throw new Error(stack.error);
+          }
+          streamSucceeded = true;
         }
-        streamSucceeded = true;
       } catch (e: any) {
+        if (controller.signal.aborted || !ownsStream()) return;
         console.log("Error:", e);
         const errorMsg = e.message;
-        const userErrorNode: Message = {
-          nodeId: initialUserNode.nodeId,
-          message: currMessage,
-          type: "user",
-          files: effectiveFileDescriptors,
-          toolCall: null,
-          parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
-          packets: [],
-          packetCount: 0,
-        };
+        // Null: the server answered without admitting the turn.
+        const admission = stack
+          ? await stack.acknowledged.catch(() => undefined)
+          : null;
+        if (controller.signal.aborted || !ownsStream()) return;
+        if (admission === null) {
+          restoreTreeBeforeSend();
+          rejectedSendError = {
+            error: errorMsg,
+            errorCode: errorCode ?? undefined,
+            isRetryable,
+            details: errorDetails ?? undefined,
+            stackTrace,
+          };
+        } else {
+          // Without a server error, the server can still run the turn.
+          const lostOutputs = new Set<Packet[]>();
+          for (const output of isMultiModel
+            ? packetsPerModel.filter(
+                (_, index) => !erroredModelIndices.has(index)
+              )
+            : [packets]) {
+            if (!output.some((packet) => packet.obj.type === "stop")) {
+              output.push({
+                placement: { turn_index: 0, tab_index: 0 },
+                obj: { type: "stop" },
+              });
+              if (error === null) lostOutputs.add(output);
+            }
+          }
+          // Keep the live question node: a regenerated question keeps its
+          // other answers, and a new one gets its saved ID.
+          const liveUserNode =
+            currentMessageTreeLocal.get(initialUserNode.nodeId) ??
+            initialUserNode;
+          const userErrorNode: Message = {
+            ...liveUserNode,
+            messageId: newUserMessageId ?? liveUserNode.messageId,
+            mentions: recordedMentions,
+          };
 
-        // In multi-model mode, mark non-errored assistant nodes as errors.
-        // Skip models that already have their own per-model error state.
-        // In single-model mode, mark the one agent node.
-        const errorAssistantNodes: Message[] = isMultiModel
-          ? buildNonErroredNodes({
-              message: errorMsg,
-              type: "error" as const,
-              packets: [],
-              packetCount: 0,
-              stackTrace,
-              errorCode,
-              isRetryable,
-              errorDetails,
-              is_generating: false,
-            })
-          : [
-              {
-                nodeId: initialAgentNode.nodeId,
-                message: errorMsg,
+          // In multi-model mode, mark non-errored assistant nodes as errors.
+          // Skip models that already have their own per-model error state.
+          // In single-model mode, mark the one agent node.
+          const errorAssistantNodes: Message[] = isMultiModel
+            ? buildNonErroredNodes({
+                errorMessage: errorMsg,
                 type: "error" as const,
-                files: aiMessageImages || [],
-                toolCall: null,
-                parentNodeId: initialUserNode.nodeId,
-                packets: [],
-                packetCount: 0,
-                stackTrace: stackTrace,
-                errorCode: errorCode,
-                isRetryable: isRetryable,
-                errorDetails: errorDetails,
-              },
-            ];
+                stackTrace,
+                errorCode,
+                isRetryable,
+                errorDetails,
+                is_generating: false,
+              }).map((node) => ({
+                ...node,
+                streamLost: lostOutputs.has(node.packets),
+              }))
+            : [
+                {
+                  ...(currentMessageTreeLocal.get(initialAgentNode.nodeId) ??
+                    initialAgentNode),
+                  messageId: newAgentMessageId ?? undefined,
+                  message: answer,
+                  errorMessage: errorMsg,
+                  type: "error" as const,
+                  files: aiMessageImages || [],
+                  documents,
+                  citations,
+                  toolCall,
+                  parentNodeId: initialUserNode.nodeId,
+                  is_generating: false,
+                  packets,
+                  packetCount: packets.length,
+                  streamLost: lostOutputs.has(packets),
+                  stackTrace: stackTrace,
+                  errorCode: errorCode,
+                  isRetryable: isRetryable,
+                  errorDetails: errorDetails,
+                },
+              ];
 
-        currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: [userErrorNode, ...errorAssistantNodes],
-          completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId,
-        });
+          writeAnswers([userErrorNode, ...errorAssistantNodes]);
+        }
+      } finally {
+        try {
+          // Finish every successful panel before Stop can release the input.
+          if (
+            isMultiModel &&
+            initialAssistantNodes.length > 0 &&
+            streamSucceeded
+          ) {
+            writeAnswers(buildNonErroredNodes({ is_generating: false }));
+          }
+        } finally {
+          controller.signal.removeEventListener("abort", discardUnsentTurn);
+          readerDone = true;
+          if (claimedStream !== null) releaseStreamReader(claimedStream);
+          resolveReaderFinished(rejectedSendError);
+        }
       }
 
-      // After streaming completes (normal or stop), mark all non-errored
-      // multi-model assistant nodes as done generating so panels exit
-      // "Thinking..." state.
-      if (isMultiModel && initialAssistantNodes.length > 0 && streamSucceeded) {
-        upsertToCompleteMessageTree({
-          messages: buildNonErroredNodes({ is_generating: false }),
-          completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId!,
-        });
-      }
+      const wasCancelling =
+        useChatSessionStore.getState().sessions.get(frozenSessionId)
+          ?.chatState === "cancelling";
+      await settleChatSession({
+        sessionId: frozenSessionId,
+        controller,
+        errorMessage: tReadiness("checkFailed"),
+        refreshHistory: !streamSucceeded || saveFailed || wasCancelling,
+        preparationError: stack === null ? rejectedSendError : undefined,
+      });
 
-      resetRegenerationState(frozenSessionId);
-      setStreamingStartTime(frozenSessionId, null);
-      updateChatStateAction(frozenSessionId, "input");
-      // Error paths replace the streaming node with an empty-packets error
-      // node, so MessageTextRenderer never fires streamFullyDisplayed and
-      // never flips the queue gate back to true. Reset it here so queued
-      // follow-ups aren't silently dropped after a stream failure.
-      if (!streamSucceeded) {
-        setLatestMessageRenderComplete(frozenSessionId, true);
-      }
-
-      // Name the chat now that we have the first AI response (navigation already happened before streaming)
-      if (shouldAutoNameChatSessionAfterResponse) {
+      // The server names a new chat while it answers. If its name did not
+      // arrive on the stream, ask for it; the server returns a saved name
+      // rather than generating another.
+      if (shouldAutoNameChatSessionAfterResponse && !serverNamedChat) {
         handleNewSessionNaming(currChatSessionId);
       }
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      selectedSearchSources,
+      searchFilters,
       llmManager.currentLlm,
       llmManager.temperature,
       llmManager.hasTemperatureOverride,
@@ -1521,12 +1604,16 @@ export default function useChatController({
       activeAgent,
       availableAgents,
       existingChatSessionId,
+      incognitoSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
+      restoreInputBar,
+      showPendingRequest,
+      t,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
-      currentChatState,
+      tReadiness,
       // Ensure the configuration the chat was given is what gets sent
       toolConfiguration,
       // Keep tool preference-derived values fresh
@@ -1559,15 +1646,25 @@ export default function useChatController({
         );
         return;
       }
-      updateChatStateAction(getCurrentSessionId(), "uploading");
+      const uploadSessionId = getCurrentSessionId();
+      const managesChatState =
+        (useChatSessionStore.getState().sessions.get(uploadSessionId)
+          ?.chatState ?? "input") === "input";
+      if (managesChatState) updateChatStateAction(uploadSessionId, "uploading");
       const uploadedMessageFiles = await beginUpload(
         Array.from(acceptedFiles),
         null
       );
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
-      updateChatStateAction(getCurrentSessionId(), "input");
+      if (
+        managesChatState &&
+        useChatSessionStore.getState().sessions.get(uploadSessionId)
+          ?.chatState === "uploading"
+      ) {
+        updateChatStateAction(uploadSessionId, "input");
+      }
     },
-    [activeAgent, llmManager, toolConfiguration]
+    [activeAgent, beginUpload, llmManager, toolConfiguration]
   );
 
   useEffect(() => {
@@ -1577,7 +1674,6 @@ export default function useChatController({
       const abortController = sessions.get(currentSession)?.abortController;
       if (abortController) {
         abortController.abort();
-        setAbortController(currentSession, new AbortController());
       }
     };
   }, [pathname]);
@@ -1610,7 +1706,7 @@ export default function useChatController({
 
         const data = await response.json();
 
-        router.push(data.redirect_url);
+        navigation.go(data.redirect_url);
       } catch (error) {
         console.error("Error seeding chat from Slack:", error);
         toast.error("Failed to load chat from Slack");
@@ -1618,65 +1714,7 @@ export default function useChatController({
     };
 
     handleSlackChatRedirect();
-  }, [searchParams, router]);
-
-  // Available context tokens: if a chat session exists, fetch from the session
-  // API (dynamic per session/model). Otherwise derive from the persona's max
-  // document tokens. The backend already accounts for system prompt, tools,
-  // and user-message reservations.
-  const [availableContextTokens, setAvailableContextTokens] = useState<number>(
-    DEFAULT_CONTEXT_TOKENS
-  );
-
-  useEffect(() => {
-    if (!llmManager.hasAnyProvider) return;
-
-    let cancelled = false;
-
-    const setIfActive = (tokens: number) => {
-      if (!cancelled) setAvailableContextTokens(tokens);
-    };
-
-    // Prefer the Zustand session ID, but fall back to the URL-derived prop
-    // so we don't incorrectly take the persona path while the store is
-    // still initialising on navigation to an existing chat.
-    const sessionId = currentSessionId || existingChatSessionId;
-
-    (async () => {
-      try {
-        if (sessionId) {
-          const available = await getAvailableContextTokens(
-            sessionId,
-            llmManager.currentLlm.modelConfigurationId
-          );
-          setIfActive(available ?? DEFAULT_CONTEXT_TOKENS);
-          return;
-        }
-
-        const personaId = activeAgent?.id;
-        if (personaId == null) {
-          setIfActive(DEFAULT_CONTEXT_TOKENS);
-          return;
-        }
-
-        const maxTokens = await getMaxSelectedDocumentTokens(personaId);
-        setIfActive(maxTokens ?? DEFAULT_CONTEXT_TOKENS);
-      } catch (e) {
-        console.error("Failed to fetch available context tokens:", e);
-        setIfActive(DEFAULT_CONTEXT_TOKENS);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    currentSessionId,
-    existingChatSessionId,
-    activeAgent?.id,
-    llmManager.hasAnyProvider,
-    llmManager.currentLlm.modelConfigurationId,
-  ]);
+  }, [searchParams, navigation]);
 
   // check if there's an image file in the message history so that we know
   // which LLMs are available to use
@@ -1705,7 +1743,5 @@ export default function useChatController({
     onSubmit,
     stopGenerating,
     handleMessageSpecificFileUpload,
-    // data
-    availableContextTokens,
   };
 }

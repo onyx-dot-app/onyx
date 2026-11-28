@@ -1,109 +1,9 @@
-import type { Tag } from "@/lib/types";
-import type React from "react";
-import type { IconProps } from "@opal/types";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
-
-// Generic action status for UI components
-export enum ActionStatus {
-  CONNECTED = "connected",
-  PENDING = "pending",
-  DISCONNECTED = "disconnected",
-  FETCHING = "fetching",
-}
-
-export enum MCPServerStatus {
-  CREATED = "CREATED",
-  AWAITING_AUTH = "AWAITING_AUTH",
-  FETCHING_TOOLS = "FETCHING_TOOLS",
-  CONNECTED = "CONNECTED",
-  DISCONNECTED = "DISCONNECTED",
-}
-
-export interface MCPServer {
-  id: number;
-  name: string;
-  description?: string;
-  server_url: string;
-  owner: string;
-  transport?: MCPTransportType;
-  auth_type?: MCPAuthenticationType;
-  auth_performer?: MCPAuthenticationPerformer;
-  oauth_provider_mode?: MCPOAuthProviderMode;
-  oauth_authorization_endpoint?: string;
-  oauth_token_endpoint?: string;
-  oauth_scopes_override?: string[];
-  oauth_additional_auth_params?: Record<string, string>;
-  // Whether this user's credentials resolve for the server right now (or the
-  // server needs no per-user auth). Absent when there is no user context.
-  user_can_authenticate?: boolean;
-  // Whether Craft will actually emit this server into the user's sessions, i.e.
-  // whether the sandbox proxy can authenticate them against it. Unlike the flag
-  // above it asks whether stored credentials yield auth headers, not whether a
-  // config row exists. Only the Craft listing computes it.
-  craft_connected?: boolean;
-  auth_template?: MCPAuthTemplate | null;
-  admin_credentials?: Record<string, string>;
-  user_credentials?: Record<string, string>;
-  status: MCPServerStatus;
-  is_public: boolean;
-  groups: number[];
-  users: string[];
-  available_in_craft?: boolean;
-  // Sparse per-tool Craft approval overrides (unlisted tools default to ASK).
-  // Present on owner/admin views only.
-  tool_policies?: Record<string, EndpointPolicy> | null;
-  last_refreshed_at?: string;
-  tool_count: number;
-  // Server-stamped affordance map; fail-closed (absent = denied).
-  permissions?: PermissionsOf<"MCPServer">;
-}
-
-export interface MCPAuthTemplate {
-  headers: Record<string, string>;
-  required_fields: string[];
-}
-
-export interface AgentEditorMCPServer extends MCPServer {
-  can_attach: boolean;
-}
-
-export interface MCPServersResponse {
-  assistant_id?: string | null;
-  mcp_servers: MCPServer[];
-}
-
-export interface MCPServerCreateRequest {
-  name: string;
-  description?: string;
-  server_url: string;
-  is_public: boolean;
-  groups: number[];
-  users: string[];
-}
-
-export interface MCPServerUpdateRequest {
-  name?: string;
-  description?: string;
-  server_url?: string;
-  // Omit to leave the server's existing access unchanged.
-  is_public?: boolean;
-  groups?: number[];
-  users?: string[];
-  available_in_craft?: boolean;
-  // Full replace of the stored per-tool overrides; omit to leave unchanged.
-  tool_policies?: Record<string, EndpointPolicy>;
-}
-
-export interface MCPTool {
-  id: string;
-  name: string;
-  description: string;
-  icon?: React.FunctionComponent<IconProps>;
-  isAvailable: boolean;
-  isEnabled: boolean;
-  permissions?: PermissionsOf<"Action">;
-}
+import type {
+  SearchFiltersRequest,
+  TagSelection,
+} from "@/lib/searchFilters/types";
 
 export interface MethodSpec {
   /* Defines a single method that is part of a custom tool. Each method maps to a single
@@ -127,7 +27,7 @@ export interface ToolSnapshot {
   definition: Record<string, any> | null;
 
   // only specified for Custom Tools. Custom headers to add to the tool's API requests.
-  custom_headers: { key: string; value: string }[];
+  custom_headers: { key: string; value: string }[] | null;
 
   // only specified for Custom Tools. ID of the tool in the codebase.
   in_code_tool_id: string | null;
@@ -142,6 +42,9 @@ export interface ToolSnapshot {
   // If this is an MCP tool, which server it belongs to
   mcp_server_id?: number | null;
   user_id?: string | null;
+  // The integration of an OpenAPI or MCP tool; chat tool options name it.
+  // Only the tool list sets it.
+  integration_id?: number | null;
 
   // Whether the tool is enabled
   enabled: boolean;
@@ -150,81 +53,16 @@ export interface ToolSnapshot {
   chat_selectable: boolean;
   agent_creation_selectable: boolean;
   default_enabled: boolean;
+  default_action_policy?: ActionPolicy | null;
 
   // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: PermissionsOf<"Action">;
-}
-
-export enum MCPAuthenticationType {
-  NONE = "NONE",
-  API_TOKEN = "API_TOKEN",
-  OAUTH = "OAUTH",
-  PT_OAUTH = "PT_OAUTH", // Pass-Through OAuth
-}
-
-export enum MCPAuthenticationPerformer {
-  ADMIN = "ADMIN",
-  PER_USER = "PER_USER",
-}
-
-export enum MCPOAuthProviderMode {
-  AUTO_DISCOVERY = "AUTO_DISCOVERY",
-  KNOWN_PROVIDER = "KNOWN_PROVIDER",
 }
 
 export interface ApiResponse<T> {
   data: T | null;
   error: string | null;
 }
-
-export interface OAuthConfig {
-  id: number;
-  name: string;
-  authorization_url: string;
-  token_url: string;
-  scopes: string[] | null;
-  has_client_credentials: boolean;
-  tool_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export enum MCPTransportType {
-  STDIO = "STDIO",
-  STREAMABLE_HTTP = "STREAMABLE_HTTP",
-  SSE = "SSE",
-}
-
-export interface OAuthConfigCreate {
-  name: string;
-  authorization_url: string;
-  token_url: string;
-  client_id: string;
-  client_secret: string;
-  scopes?: string[];
-  additional_params?: Record<string, any>;
-}
-
-export interface OAuthConfigUpdate {
-  name?: string;
-  authorization_url?: string;
-  token_url?: string;
-  client_id?: string;
-  client_secret?: string;
-  scopes?: string[];
-  additional_params?: Record<string, any>;
-}
-
-export interface OAuthTokenStatus {
-  oauth_config_id: number;
-  expires_at: number | null;
-  is_expired: boolean;
-}
-
-/** Which drill-down the actions popover is showing, if any. */
-export type SecondaryViewState =
-  | { type: "sources" }
-  | { type: "mcp"; serverId: number };
 
 /**
  * What a chat has been told to do about one tool.
@@ -234,7 +72,7 @@ export type SecondaryViewState =
  * after the choice was made is therefore already neutral, with nothing having
  * to go and enrol it.
  */
-export type ToolState = "forced" | "disabled";
+export type ToolState = "preferred" | "disabled";
 
 /**
  * The search-filter selection this chat sends with, in its stored form.
@@ -249,7 +87,34 @@ export interface ChatSearchFilters {
   /** `uniqueKey`s of the sources switched on; `null` means untouched (all on). */
   selectedSources: readonly string[] | null;
   documentSets: readonly string[];
-  tags: readonly Tag[];
-  /** ISO datetime strings, kept serializable rather than as `Date`s. */
-  timeRange: { from: string; to: string } | null;
+  tags: readonly TagSelection[];
+  /** An ISO datetime string, kept serializable rather than as a `Date`. */
+  timeRange: { from: string } | null;
+}
+
+/** A built-in tool by its id, or an integration with the action keys to
+ * keep. */
+export type ToolOptionsEntry =
+  | { type: "capability"; tool_id: number }
+  | { type: "integration"; integration_id: number; actions?: string[] | null };
+
+/** A built-in tool, or one action of an integration. */
+export type ToolPreference =
+  | { type: "capability"; tool_id: number }
+  | { type: "action"; integration_id: number; action: string };
+
+/** A preferred integration action. The web keeps it but has no control for
+ * it. */
+export type ActionPreference = Extract<ToolPreference, { type: "action" }>;
+
+/**
+ * The tools, integrations and search filters of a chat. A send carries them, and
+ * the server saves them on an existing chat: the chat-session detail returns
+ * them, and the tool-options PATCH is their only writer. Turns the server
+ * starts use them. `allowed` null means every tool and integration of the agent.
+ */
+export interface ChatToolOptions {
+  allowed: ToolOptionsEntry[] | null;
+  preferred: ToolPreference | null;
+  internal_search_filters: SearchFiltersRequest | null;
 }

@@ -17,6 +17,16 @@ const (
 	Timeout       Code = 7
 	ServerError   Code = 8
 	NotAvailable  Code = 9
+	// ApprovalRequired: a tool call needed approval that no one could give
+	// (ask --approve=fail, the default without a terminal). The CLI rejected it.
+	ApprovalRequired Code = 10
+	// ApprovalPending: ask was interrupted at an approval or question prompt
+	// while the response waited. The request still waits for the user.
+	ApprovalPending Code = 11
+	// QuestionUnanswered: the agent asked questions that no one could answer
+	// (ask --questions=fail, the default without a terminal). The CLI answered
+	// that it has no answer.
+	QuestionUnanswered Code = 12
 )
 
 // ForHTTPStatus maps an HTTP status code to a CLI exit code.

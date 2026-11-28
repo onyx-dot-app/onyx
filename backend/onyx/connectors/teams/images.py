@@ -69,10 +69,11 @@ def harvest_message_images(
     for url in urls:
         try:
             data = download_graph_url_with_cap(
-                session.access_token(),
+                session.access_token,
                 url,
                 TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
                 description=f"image of message {message.id}",
+                pacer=session.request_pacer,
             )
         except SizeCapExceeded:
             logger.warning("Skipping an oversized image of message %s", message.id)

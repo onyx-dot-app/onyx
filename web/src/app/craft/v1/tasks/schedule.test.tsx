@@ -1,9 +1,10 @@
 import type {
   DailyWeeklyPayload,
   IntervalPayload,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 import {
   compileLocalPayloadToUtcCron,
+  compileToCron,
   decodeUtcCronToLocalPayload,
   humanReadableScheduleFromCron,
 } from "@/app/craft/v1/tasks/schedule";
@@ -112,5 +113,37 @@ describe("scheduled task browser-local schedule helpers", () => {
       REFERENCE_DATE
     );
     expect(decoded).toEqual({ mode: "interval", payload });
+  });
+
+  it("returns a stable error code for each invalid schedule", () => {
+    const errorOf = (result: ReturnType<typeof compileToCron>) =>
+      result.ok ? null : result.error;
+
+    expect(
+      errorOf(compileToCron("interval", { unit: "hours", every: 0 }))
+    ).toBe("intervalNotPositiveInteger");
+    expect(
+      errorOf(compileToCron("interval", { unit: "minutes", every: 60 }))
+    ).toBe("minutesIntervalTooLong");
+    expect(
+      errorOf(compileToCron("interval", { unit: "hours", every: 24 }))
+    ).toBe("hoursIntervalTooLong");
+    expect(errorOf(compileToCron("interval", { unit: "days", every: 1 }))).toBe(
+      "dayIntervalTimeRequired"
+    );
+    expect(
+      errorOf(compileToCron("daily_weekly", { time_of_day: "", weekdays: [] }))
+    ).toBe("timeRequired");
+    expect(
+      errorOf(
+        compileToCron("daily_weekly", { time_of_day: "09:00", weekdays: [7] })
+      )
+    ).toBe("weekdayOutOfRange");
+    expect(errorOf(compileToCron("advanced", { cron: "  " }))).toBe(
+      "cronRequired"
+    );
+    expect(errorOf(compileToCron("advanced", { cron: "0 9 * *" }))).toBe(
+      "cronFieldCount"
+    );
   });
 });

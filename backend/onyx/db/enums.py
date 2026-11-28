@@ -118,6 +118,72 @@ class PermissionSyncStatus(str, PyEnum):
         )
 
 
+class CCPairRunKind(str, PyEnum):
+    """A kind of run in a pair's run history."""
+
+    INDEXING = "indexing"
+    DOC_PERMISSION_SYNC = "doc_permission_sync"
+    GROUP_SYNC = "group_sync"
+    PRUNING = "pruning"
+    CHECKS = "checks"
+
+
+class CCPairRunStatusGroup(str, PyEnum):
+    """How the run history buckets the attempt statuses of every kind."""
+
+    RUNNING = "running"
+    # Queued, not started yet.
+    SCHEDULED = "scheduled"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELED = "canceled"
+
+
+class CCPairRunErrors(str, PyEnum):
+    """Runs by their document errors: some still open, all of them resolved,
+    or none at all."""
+
+    UNRESOLVED = "unresolved"
+    RESOLVED = "resolved"
+    NONE = "none"
+
+
+class IndexAttemptErrorResolvedReason(str, PyEnum):
+    """How an index attempt error closed."""
+
+    # A targeted re-index indexed the document.
+    RETRY = "retry"
+    # A later run indexed the document or closed the pair's entity errors
+    # clean, or a later run other than a Retry failed the document again.
+    LATER_RUN = "later_run"
+    # An admin resolved it. ``is_resolved`` stays false, since the poll cursor
+    # and Retry read it and still treat the error as open.
+    WITHOUT_RETRY = "without_retry"
+
+
+class IndexAttemptErrorOrder(str, PyEnum):
+    """How a pair's errors list orders its rows."""
+
+    # Newest first.
+    TIME = "time"
+    # Open, then resolved without retry, then closed by a run, a Retry or a
+    # legacy resolve, each newest first.
+    STATE = "state"
+
+
+class SyncEntityKind(str, PyEnum):
+    """What a permission sync failed to read: a user or a group."""
+
+    USER = "user"
+    GROUP = "group"
+
+
+class SyncAttemptErrorResolvedReason(str, PyEnum):
+    """How a sync attempt error closed."""
+
+    WITHOUT_RETRY = "without_retry"
+
+
 class PortAttemptStatus(str, PyEnum):
     NOT_STARTED = "NOT_STARTED"
     IN_PROGRESS = "IN_PROGRESS"
@@ -243,7 +309,8 @@ class IndexReclaimStatus(str, PyEnum):
     SOAKING: the old index stopped being read; waiting out the retention window.
     DELETING: deleting the old index's data (loops until count-verified empty).
     RECLAIMED: terminal success — the old index's data is gone; the PAST row is kept
-        (not deleted) as the durable record that this index was reclaimed.
+        (not deleted) as the durable record that this index was reclaimed. Some rows
+        hold a shorter value for it; see IndexReclaimStatusType.
     BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
     """
 
@@ -286,18 +353,56 @@ class ConnectorCredentialPairStatus(str, PyEnum):
         return self in self.active_statuses()
 
 
+class ConnectorManageRole(str, PyEnum):
+    """A group's role on a cc-pair it manages. Editors change and delete the
+    configuration; Operators schedule and monitor indexing."""
+
+    EDITOR = "editor"
+    OPERATOR = "operator"
+
+
 class AccessType(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
     SYNC = "sync"
+    # Perm sync, narrowed to members of the connector's data-access groups.
+    SYNC_RESTRICTED = "sync_restricted"
+    # Only the credential owner reads the documents; takes no groups. Distinct
+    # from PRIVATE with no groups.
+    PERSONAL = "personal"
+
+    def is_perm_synced(self) -> bool:
+        return self in (AccessType.SYNC, AccessType.SYNC_RESTRICTED)
+
+    @classmethod
+    def perm_synced_types(cls) -> list["AccessType"]:
+        return [cls.SYNC, cls.SYNC_RESTRICTED]
+
+    @classmethod
+    def data_access_types(cls) -> list["AccessType"]:
+        """Types whose data-access groups decide who may read the documents."""
+        return [cls.PRIVATE, cls.SYNC_RESTRICTED]
 
 
 class EmbeddingPrecision(str, PyEnum):
-    # matches vespa tensor type
-    # only support float / bfloat16 for now, since there's not a
-    # good reason to specify anything else
+    """Unused. Kept only because old Alembic migrations import it."""
+
     BFLOAT16 = "bfloat16"
     FLOAT = "float"
+
+
+class VectorQuantization(str, PyEnum):
+    """Scalar quantization of the stored vectors in the OpenSearch index.
+
+    Fewer bits per dimension use less memory but lower recall. It is part of
+    the index mapping, so a change needs a reindex into a new index.
+    """
+
+    NONE = "none"
+    # 4x less vector memory.
+    SCALAR_7_BIT = "scalar_7_bit"
+    # 32x less vector memory. Needs OpenSearch 3.6 or later.
+    SCALAR_1_BIT = "scalar_1_bit"
 
 
 class UserFileStatus(str, PyEnum):
@@ -310,10 +415,52 @@ class UserFileStatus(str, PyEnum):
     DELETING = "DELETING"
 
 
+class ChatArtifactIndexStatus(str, PyEnum):
+    """Where a published file's newest version stands in the search index.
+    INDEXED means its document holds that version. REMOVED means its chat is
+    deleted and it has no document; nothing indexes it again."""
+
+    PENDING = "PENDING"
+    INDEXED = "INDEXED"
+    FAILED = "FAILED"
+    REMOVED = "REMOVED"
+
+
 class ThemePreference(str, PyEnum):
     LIGHT = "light"
     DARK = "dark"
     SYSTEM = "system"
+
+
+class InterfaceFont(str, PyEnum):
+    """Font for interface text. Values match web/src/lib/appearance/preferences.ts."""
+
+    DEFAULT = "default"
+    SYSTEM = "system"
+    OPENDYSLEXIC = "opendyslexic"
+    ATKINSON = "atkinson"
+
+
+class ResponseFont(str, PyEnum):
+    """Font for chat response text: the interface font, or the default font."""
+
+    MATCH = "match"
+    DEFAULT = "default"
+
+
+class MotionPreference(str, PyEnum):
+    """Follow the OS reduced-motion setting, or always reduce motion. Values
+    match web/src/lib/appearance/preferences.ts."""
+
+    SYSTEM = "system"
+    REDUCED = "reduced"
+
+
+class PopupDismissal(str, PyEnum):
+    """Whether toasts close by themselves or stay until the user closes them."""
+
+    AUTO_DISMISS = "auto_dismiss"
+    STAY_ON_SCREEN = "stay_on_screen"
 
 
 class SupportedLanguage(str, PyEnum):
@@ -352,22 +499,6 @@ class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
     INSTANT = "instant"
-
-
-class OpenSearchDocumentMigrationStatus(str, PyEnum):
-    """Status for Vespa to OpenSearch migration per document."""
-
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    PERMANENTLY_FAILED = "permanently_failed"
-
-
-class OpenSearchTenantMigrationStatus(str, PyEnum):
-    """Status for tenant-level OpenSearch migration."""
-
-    PENDING = "pending"
-    COMPLETED = "completed"
 
 
 # Onyx Build Mode Enums
@@ -422,6 +553,24 @@ class ApprovalDecidedVia(str, PyEnum):
     USER = "USER"
     PRE_APPROVAL = "PRE_APPROVAL"
     SESSION_GRANT = "SESSION_GRANT"
+    # The action policy blocked the action when the user approved it.
+    POLICY = "POLICY"
+    # Approved for the rest of one chat VM command (`action_approval` only).
+    COMMAND_GRANT = "COMMAND_GRANT"
+
+
+class QuestionOutcome(str, PyEnum):
+    """How a question that the agent asked the user ended; `outcome IS NULL`
+    means it waits."""
+
+    ANSWERED = "ANSWERED"
+    CANCELLED = "CANCELLED"
+
+
+class QuestionAnsweredVia(str, PyEnum):
+    # The question's card, or a message that the user typed in the chat.
+    CARD = "CARD"
+    MESSAGE = "MESSAGE"
 
 
 class ScheduledTaskStatus(str, PyEnum):
@@ -436,14 +585,20 @@ class ScheduledTaskRunStatus(str, PyEnum):
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"
     AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    CANCELLED = "CANCELLED"
 
     def is_terminal(self) -> bool:
-        """Terminal statuses produce no further state transitions in V1."""
+        """Terminal statuses produce no further state transitions."""
         return self in (
             ScheduledTaskRunStatus.SUCCEEDED,
             ScheduledTaskRunStatus.FAILED,
             ScheduledTaskRunStatus.SKIPPED,
+            ScheduledTaskRunStatus.CANCELLED,
         )
+
+    def has_results(self) -> bool:
+        """The owner has something new to open in the run's chat."""
+        return self.is_terminal() or self is ScheduledTaskRunStatus.AWAITING_APPROVAL
 
 
 class ScheduledTaskTriggerSource(str, PyEnum):
@@ -457,24 +612,29 @@ class ScheduledTaskErrorClass(str, PyEnum):
     Every code path that writes ``error_class`` must use a member of
     this enum — the column is intentionally a closed set so dashboards
     and triage queries can pivot on a known vocabulary. For unexpected
-    runtime failures inside the agent drive, use ``AGENT_EXCEPTION``
-    and put the actual exception class name + message in
-    ``error_detail``.
+    runtime failures of the chat turn, use ``AGENT_EXCEPTION`` and put
+    the message in ``error_detail``. Older rows can hold Craft-era values.
     """
 
-    TASK_MISSING = "task_missing"
-    SANDBOX_WAKE_FAILED = "sandbox_wake_failed"
-    EXECUTOR_ERROR = "executor_error"
-    TIMEOUT = "timeout"
     STUCK = "stuck"
+    # The turn reached the chat deadline (CHAT_EXECUTION_TIMEOUT_S).
+    TIMEOUT = "timeout"
     AGENT_EXCEPTION = "agent_exception"
+    # CANCELLED runs: an approval that nobody answered, or a user Stop.
+    SUPERSEDED_BY_NEXT_FIRE = "superseded_by_next_fire"
+    APPROVAL_TIMEOUT = "approval_timeout"
+    # The owner hard-deleted the run's chat; the run keeps no chat id.
+    CHAT_DELETED = "chat_deleted"
+    # The owner is inactive or lost chat access; the task is paused.
+    OWNER_CANNOT_CHAT = "owner_cannot_chat"
+    RATE_LIMITED = "rate_limited"
+    USER_CANCELLED = "user_cancelled"
 
 
 class ScheduledTaskSkipReason(str, PyEnum):
     """Well-known values for ``ScheduledTaskRun.skip_reason``."""
 
     PRIOR_IN_FLIGHT = "prior_in_flight"
-    OWNER_CRAFT_DISABLED = "owner_craft_disabled"
 
 
 class SandboxStatus(str, PyEnum):
@@ -515,6 +675,7 @@ class ExternalAppType(str, PyEnum):
     GITHUB = "GITHUB"
     HUBSPOT = "HUBSPOT"
     NOTION = "NOTION"
+    ZENDESK = "ZENDESK"
     CUSTOM = "CUSTOM"
 
     @property
@@ -525,7 +686,7 @@ class ExternalAppType(str, PyEnum):
         return self is not ExternalAppType.CUSTOM
 
 
-class EndpointPolicy(str, PyEnum):
+class ActionPolicy(str, PyEnum):
     """What the egress layer does with an outbound request once it has been
     matched to an action of a connected external app."""
 
@@ -537,10 +698,10 @@ class EndpointPolicy(str, PyEnum):
 # Strictness ordering: higher = stricter. When one request matches several
 # actions, the strictest policy governs (sort/`max` with this key); readers
 # of a persisted `actions` list rely on `actions[0]` being the strictest.
-POLICY_SEVERITY: dict[EndpointPolicy, int] = {
-    EndpointPolicy.ALWAYS: 0,
-    EndpointPolicy.ASK: 1,
-    EndpointPolicy.DENY: 2,
+POLICY_SEVERITY: dict[ActionPolicy, int] = {
+    ActionPolicy.ALWAYS: 0,
+    ActionPolicy.ASK: 1,
+    ActionPolicy.DENY: 2,
 }
 
 
@@ -635,7 +796,10 @@ class LLMModelFlowType(str, PyEnum):
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
+    SEARCH_SELECTION = "search_selection"
+    DECISION = "decision"
     CRAFT = "craft"
+    IMAGE_GENERATION = "image_generation"
 
 
 class HookPoint(str, PyEnum):
@@ -647,6 +811,11 @@ class HookPoint(str, PyEnum):
 class HookFailStrategy(str, PyEnum):
     HARD = "hard"  # exception propagates, pipeline aborts
     SOFT = "soft"  # log error, return original input, pipeline continues
+
+
+# Old values read as their new member. Remove "manage:skills" in the release after
+# the one that renamed it.
+LEGACY_PERMISSION_ALIASES: dict[str, str] = {"manage:skills": "manage:plugins"}
 
 
 class Permission(str, PyEnum):
@@ -690,7 +859,7 @@ class Permission(str, PyEnum):
     # Toggle tokens
     READ_AGENT_ANALYTICS = "read:agent_analytics"
     MANAGE_ACTIONS = "manage:actions"
-    MANAGE_SKILLS = "manage:skills"
+    MANAGE_PLUGINS = "manage:plugins"
     READ_QUERY_HISTORY = "read:query_history"
     MANAGE_USER_GROUPS = "manage:user_groups"
     CREATE_USER_API_KEYS = "create:user_api_keys"
@@ -707,6 +876,12 @@ class Permission(str, PyEnum):
     # Permissions that are implied by other grants and must never be stored
     # directly in the permission_grant table.
     IMPLIED: ClassVar[frozenset[Permission]]
+
+    @classmethod
+    def _missing_(cls, value: object) -> Permission | None:
+        if isinstance(value, str) and value in LEGACY_PERMISSION_ALIASES:
+            return cls(LEGACY_PERMISSION_ALIASES[value])
+        return None
 
 
 Permission.IMPLIED = frozenset(
@@ -748,8 +923,7 @@ class PersonaSharePermission(str, PyEnum):
 
 
 class SkillSharePermission(str, PyEnum):
-    """Level granted by a skill share row (user or group), or to the whole org
-    via `Skill.public_permission`."""
+    """Level granted by a plugin share row (user or group)."""
 
     EDITOR = "EDITOR"
     VIEWER = "VIEWER"
@@ -880,6 +1054,20 @@ class CapabilityCheckTrigger(str, PyEnum):
     INDEXING_ATTEMPT = "indexing_attempt"
     # Recorded from the blocking validation at doc-permission-sync run start.
     PERM_SYNC_ATTEMPT = "perm_sync_attempt"
+    # Recorded from the validation that applies an edit to an existing cc-pair.
+    CONNECTOR_CONFIG_UPDATE = "connector_config_update"
+    # The beat re-ran a pair's checks on its connector's check frequency.
+    SCHEDULED = "scheduled"
+
+
+class CapabilityCheckRunStatus(str, PyEnum):
+    """How one run in a pair's check history ended. FAILED means a required,
+    applicable check failed; other failures leave the run PASSED."""
+
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    FAILED_TO_RUN = "failed_to_run"
 
 
 class CapabilityReportRunStatus(str, PyEnum):
@@ -892,3 +1080,130 @@ class CapabilityReportRunStatus(str, PyEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED_TO_RUN = "failed_to_run"
+
+
+class MarketplaceKind(str, PyEnum):
+    """Where a plugin comes from. A marketplace grants no access."""
+
+    # One "My uploads" for each user.
+    USER_UPLOADS = "user_uploads"
+    # One for each tenant. A plugin here is published to the organization.
+    ORGANIZATION_LIBRARY = "organization_library"
+    GITHUB = "github"
+
+
+class PluginPublishingPolicy(str, PyEnum):
+    """The admin Publishing setting. It governs owners and editors; an
+    organization-wide plugin manager always publishes at once."""
+
+    OPEN = "OPEN"
+    REQUIRES_REVIEW = "REQUIRES_REVIEW"
+    OFF = "OFF"
+
+
+class PluginInstallationPolicy(str, PyEnum):
+    """Install setting of a plugin, a group override or a marketplace default.
+    A marketplace default cannot be REQUIRED."""
+
+    REQUIRED = "REQUIRED"
+    DEFAULT = "DEFAULT"
+    AVAILABLE = "AVAILABLE"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
+
+
+class IntegrationKind(str, PyEnum):
+    MCP = "mcp"
+    # An HTTP API: an OpenAPI custom tool or an external app.
+    API = "api"
+
+
+class ApiAppType(str, PyEnum):
+    REST = "rest"
+    GRAPHQL = "graphql"
+
+
+class IntegrationAuthMode(str, PyEnum):
+    NONE = "none"
+    # One connection for the organization.
+    SHARED = "shared"
+    # One connection for each user.
+    INDIVIDUAL = "individual"
+
+
+class IntegrationAuthMethod(str, PyEnum):
+    OAUTH2 = "oauth2"
+    API_KEY = "api_key"
+    # Onyx sends the user's own Onyx login token.
+    ONYX_LOGIN = "onyx_login"
+    MANAGED = "managed"
+
+
+class IntegrationActionSource(str, PyEnum):
+    """Where an integration_action row comes from. A sync from that source
+    rewrites it."""
+
+    # The tool list of an MCP server.
+    MCP = "mcp"
+    # An operation of an OpenAPI spec.
+    OPENAPI = "openapi"
+    # A query or mutation root field of a GraphQL schema.
+    GRAPHQL = "graphql"
+    # The action catalog of a built-in external app, in code.
+    EXTERNAL_APP = "external_app"
+
+
+class IntegrationOAuthProviderMode(str, PyEnum):
+    # Provider code owns the endpoints (a built-in external app).
+    PRESET = "preset"
+    # The admin entered the endpoints.
+    MANUAL = "manual"
+    # MCP auto-discovery, with dynamic client registration or CIMD.
+    DISCOVERY = "discovery"
+
+
+class IntegrationConnectionStatus(str, PyEnum):
+    CONNECTED = "connected"
+    NEEDS_RECONNECT = "needs_reconnect"
+
+
+class IntegrationLegacyFormat(str, PyEnum):
+    """The old secret format that the integration tables migration copied
+    as it was (``legacy_format``)."""
+
+    # mcp_connection_config.config
+    MCP_CONFIG = "mcp_config"
+    # external_app.organization_credentials
+    EXTERNAL_APP_ORG = "external_app_org"
+    # external_app_user_credential.user_credentials
+    EXTERNAL_APP_USER = "external_app_user"
+    # oauth_user_token.token_data
+    OAUTH_USER_TOKEN = "oauth_user_token"
+    # tool.custom_headers, plain JSON
+    TOOL_HEADERS = "tool_headers"
+
+
+class IntegrationActionPolicyValue(str, PyEnum):
+    ALLOW = "allow"
+    AUTO = "auto"
+    ASK = "ask"
+    BLOCKED = "blocked"
+
+
+class ConnectorEventType(str, PyEnum):
+    """What an inbound connector event says happened to one document."""
+
+    UPSERT = "upsert"
+    DELETE = "delete"
+
+
+class ConnectorEventStatus(str, PyEnum):
+    """Lifecycle of one row in `connector_event_inbox`.
+
+    IN_PROGRESS means an index attempt has claimed the row. The next run of the
+    same pair settles it against that attempt's outcome.
+    """
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"

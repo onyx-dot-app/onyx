@@ -2,7 +2,7 @@
 
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { ReportPeriod } from "@/views/admin/WorkspaceAnalyticsPage/interfaces";
+import { ReportPeriod } from "@/views/admin/WorkspaceAnalyticsPage/types";
 
 const USAGE_REPORT_URL = SWR_KEYS.usageReport;
 

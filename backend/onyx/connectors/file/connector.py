@@ -1,11 +1,10 @@
-import json
 import os
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import IO, Any
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, SKIP_SPREADSHEET_CONTENT
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
@@ -13,6 +12,12 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
     tabular_file_to_sections,
+)
+from onyx.connectors.file.metadata import (
+    file_document_id,
+    load_zip_metadata,
+    zip_metadata_entry,
+    zip_metadata_uploaded_at,
 )
 from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
 from onyx.connectors.models import (
@@ -22,8 +27,12 @@ from onyx.connectors.models import (
     TabularSection,
     TextSection,
 )
-from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.extract_file_text import (
+    ExtractionResult,
+    extract_text_and_images,
+    get_file_ext,
+)
+from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import RawFileCallback
@@ -83,6 +92,9 @@ def _process_file(
     pdf_pass: str | None,
     file_type: str | None,
     stage: RawFileCallback | None,
+    skip_spreadsheet_content: bool = False,
+    file_size: int | None = None,
+    uploaded_at: datetime | None = None,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
@@ -95,7 +107,7 @@ def _process_file(
     # Get file extension and determine file type
     extension = get_file_ext(file_name)
 
-    if extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+    if not is_indexable_file_type(file_name, None, allow_images=True):
         logger.warning(
             "Skipping file '%s' with unrecognized extension '%s'", file_name, extension
         )
@@ -104,7 +116,8 @@ def _process_file(
     # If a zip is uploaded with a metadata file, we can process it here
     onyx_metadata, custom_tags = process_onyx_metadata(metadata)
     file_display_name = onyx_metadata.file_display_name or os.path.basename(file_name)
-    time_updated = onyx_metadata.doc_updated_at or datetime.now(timezone.utc)
+    # Stable unless the file or its metadata changes, so the hash gate can skip.
+    time_updated = onyx_metadata.doc_updated_at or uploaded_at
     primary_owners = onyx_metadata.primary_owners
     secondary_owners = onyx_metadata.secondary_owners
     link = onyx_metadata.link
@@ -112,7 +125,7 @@ def _process_file(
     # These metadata items are not settable by the user
     source_type = onyx_metadata.source_type or DocumentSource.FILE
 
-    doc_id = onyx_metadata.document_id or f"FILE_CONNECTOR__{file_id}"
+    doc_id = file_document_id(file_id, onyx_metadata.document_id)
     title = metadata.get("title") or file_display_name
 
     # 1) If the file itself is an image, handle that scenario quickly
@@ -143,6 +156,8 @@ def _process_file(
                     primary_owners=primary_owners,
                     secondary_owners=secondary_owners,
                     metadata=custom_tags,
+                    source_mime_type=file_type,
+                    source_size_bytes=file_size,
                 )
             ]
         except Exception as e:
@@ -152,13 +167,24 @@ def _process_file(
     # 2) Otherwise: text-based approach. Possibly with embedded images.
     file.seek(0)
 
-    # Extract text and images from the file
-    extraction_result = extract_text_and_images(
-        file=file,
-        file_name=file_name,
-        pdf_pass=pdf_pass,
-        content_type=file_type,
-    )
+    # Extract text and images from the file. A skipped spreadsheet is not
+    # parsed: its content is replaced, and xlsx extraction yields no metadata.
+    # CSV/TSV still go through extraction, which reads their ONYX_METADATA.
+    extraction_result: ExtractionResult
+    if (
+        skip_spreadsheet_content
+        and extension in OnyxFileExtensions.SPREADSHEET_EXTENSIONS
+    ):
+        extraction_result = ExtractionResult(
+            text_content="", embedded_images=[], metadata={}
+        )
+    else:
+        extraction_result = extract_text_and_images(
+            file=file,
+            file_name=file_name,
+            pdf_pass=pdf_pass,
+            content_type=file_type,
+        )
 
     # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/admins/connectors/official/file
     # If so, we should add it to any metadata processed so far
@@ -223,6 +249,7 @@ def _process_file(
                     file_name=file_name,
                     stage=stage,
                     link=link or "",
+                    skip_content=skip_spreadsheet_content,
                 )
             )
         except Exception as e:
@@ -275,6 +302,8 @@ def _process_file(
             secondary_owners=secondary_owners,
             metadata=custom_tags,
             file_id=doc_file_id,
+            source_mime_type=file_type,
+            source_size_bytes=file_size,
         )
     ]
 
@@ -300,6 +329,9 @@ class LocalFileConnector(LoadConnector):
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.file_locations = [str(loc) for loc in file_locations]
+        # Not an __init__ parameter, so it stays out of the connector config.
+        # The user file loader sets it to False to keep spreadsheet content.
+        self.skip_spreadsheet_content: bool = SKIP_SPREADSHEET_CONTENT
         self.batch_size = batch_size
         self.pdf_pass: str | None = None
         self._zip_metadata_file_id = zip_metadata_file_id
@@ -315,27 +347,13 @@ class LocalFileConnector(LoadConnector):
         Iterates over each file path, fetches from Postgres, tries to parse text
         or images, and yields Document batches.
         """
-        # Load metadata dict at start (from file store or deprecated inline format)
-        zip_metadata: dict[str, Any] = {}
-        if self._zip_metadata_file_id:
-            try:
-                file_store = get_default_file_store()
-                metadata_io = file_store.read_file(
-                    file_id=self._zip_metadata_file_id, mode="b"
-                )
-                metadata_bytes = metadata_io.read()
-                loaded_metadata = json.loads(metadata_bytes)
-                if isinstance(loaded_metadata, list):
-                    zip_metadata = {d["filename"]: d for d in loaded_metadata}
-                else:
-                    zip_metadata = loaded_metadata
-            except Exception as e:
-                logger.warning("Failed to load metadata from file store: %s", e)
-        elif self._zip_metadata_deprecated:
-            logger.warning(
-                "Using deprecated inline zip_metadata dict. Re-upload files to use the new file store format."
-            )
-            zip_metadata = self._zip_metadata_deprecated
+        zip_metadata = load_zip_metadata(
+            self._zip_metadata_file_id, self._zip_metadata_deprecated
+        )
+        metadata_uploaded_at = zip_metadata_uploaded_at(self._zip_metadata_file_id)
+        if not self._zip_metadata_file_id and self._zip_metadata_deprecated:
+            # Inline metadata has no upload time, so keep the old always-advance date.
+            metadata_uploaded_at = datetime.now(timezone.utc)
 
         documents: list[Document | HierarchyNode] = []
 
@@ -349,9 +367,7 @@ class LocalFileConnector(LoadConnector):
                 )
                 continue
 
-            metadata = zip_metadata.get(
-                file_record.display_name, {}
-            ) or zip_metadata.get(os.path.basename(file_record.display_name), {})
+            metadata = zip_metadata_entry(zip_metadata, file_record.display_name)
             file_io = file_store.read_file(file_id=file_id, mode="b")
             new_docs = _process_file(
                 file_id=file_id,
@@ -361,6 +377,12 @@ class LocalFileConnector(LoadConnector):
                 pdf_pass=self.pdf_pass,
                 file_type=file_record.file_type,
                 stage=self.raw_file_callback,
+                skip_spreadsheet_content=self.skip_spreadsheet_content,
+                file_size=file_record.file_size,
+                uploaded_at=max(
+                    filter(None, [file_record.created_at, metadata_uploaded_at]),
+                    default=None,
+                ),
             )
             documents.extend(new_docs)
 

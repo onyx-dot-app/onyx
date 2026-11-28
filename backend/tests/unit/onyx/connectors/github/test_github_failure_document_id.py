@@ -10,74 +10,46 @@ back to documents:
   - failed_ids`
 - backend/onyx/background/celery/celery_utils.py: `_get_failure_id`
 
-For GitHub, `Document.id` is the PR or issue `html_url`, not its numeric `id`. If a
-failure path used the numeric id instead, these consumers would never recognize the
+For GitHub, `Document.id` is the PR or issue `html_url`, not its number. If a
+failure path used the number instead, these consumers would never recognize the
 failure as belonging to the same item, and a failed document would look like it was
 never attempted.
 """
 
 import time
 from collections.abc import Callable
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from onyx.connectors.github.connector import GithubConnector
-from onyx.connectors.github.models import SerializedRepository
-from onyx.connectors.models import ConnectorFailure
-from tests.unit.onyx.connectors.github.test_github_checkpointing import (
-    build_github_connector,
-    create_mock_issue,
-    create_mock_pr,
-    create_mock_repo,
-    mock_github_client,
-    repo_owner,
-    repositories,
+from onyx.connectors.github.models import (
+    GitHubCursorItem,
+    GitHubPullRequest,
+    GitHubRepository,
 )
+from onyx.connectors.github.source_operations import GitHubApiError
+from onyx.connectors.models import ConnectorFailure
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
-
-__all__ = [
-    "build_github_connector",
-    "create_mock_issue",
-    "create_mock_pr",
-    "create_mock_repo",
-    "mock_github_client",
-    "repo_owner",
-    "repositories",
-]
 
 
 def test_pr_conversion_failure_document_id_matches_html_url(
     build_github_connector: Callable[..., GithubConnector],
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
-    create_mock_pr: Callable[..., MagicMock],
+    mock_source_operations: MagicMock,
+    create_repo: Callable[..., GitHubRepository],
+    create_pr: Callable[..., GitHubPullRequest],
 ) -> None:
-    """A PR conversion failure must key on the PR's html_url, not its numeric id."""
+    """A PR conversion failure must key on the PR's html_url, not its number."""
     github_connector = build_github_connector()
-    mock_repo = create_mock_repo()
-    github_connector.github_client = mock_github_client
-    mock_github_client.get_repo.return_value = mock_repo
+    mock_source_operations.get_repository.return_value = create_repo()
+    pr = create_pr(number=7, html_url="https://github.com/test-org/test-repo/pull/7")
+    mock_source_operations.list_pull_requests.side_effect = [[pr], []]
 
-    mock_pr = create_mock_pr(
-        number=7, html_url="https://github.com/test-org/test-repo/pull/7"
-    )
-    mock_pr.id = 12345
-
-    mock_repo.get_pulls.return_value = MagicMock()
-    mock_repo.get_pulls.return_value.get_page.side_effect = [
-        [mock_pr],
-        [],
-    ]
-
-    with (
-        patch.object(SerializedRepository, "to_Repository", return_value=mock_repo),
-        patch(
-            "onyx.connectors.github.connector._convert_pr_to_document",
-            side_effect=RuntimeError("boom"),
-        ),
+    with patch(
+        "onyx.connectors.github.connector._convert_pr_to_document",
+        side_effect=RuntimeError("boom"),
     ):
-        end_time = time.time()
         outputs = load_everything_from_checkpoint_connector(
-            github_connector, 0, end_time
+            github_connector, 0, time.time()
         )
 
     failures = [
@@ -89,44 +61,28 @@ def test_pr_conversion_failure_document_id_matches_html_url(
     assert len(failures) == 1
     failed_document = failures[0].failed_document
     assert failed_document is not None
-    assert failed_document.document_id == mock_pr.html_url
-    assert failed_document.document_id != str(mock_pr.id)
+    assert failed_document.document_id == pr.html_url
+    assert failed_document.document_id != str(pr.number)
 
 
 def test_issue_conversion_failure_document_id_matches_html_url(
     build_github_connector: Callable[..., GithubConnector],
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
-    create_mock_issue: Callable[..., MagicMock],
+    mock_source_operations: MagicMock,
+    create_repo: Callable[..., GitHubRepository],
+    create_issue: Callable[..., Any],
 ) -> None:
-    """An issue conversion failure must key on the issue's html_url, not its numeric id."""
+    """An issue conversion failure must key on the issue's html_url, not its number."""
     github_connector = build_github_connector()
-    mock_repo = create_mock_repo()
-    github_connector.github_client = mock_github_client
-    mock_github_client.get_repo.return_value = mock_repo
+    mock_source_operations.get_repository.return_value = create_repo()
+    issue = create_issue(number=9)
+    mock_source_operations.list_issues.side_effect = [[issue], []]
 
-    mock_issue = create_mock_issue(number=9)
-    mock_issue.id = 54321
-    mock_issue.html_url = "https://github.com/test-org/test-repo/issues/9"
-
-    mock_repo.get_pulls.return_value = MagicMock()
-    mock_repo.get_pulls.return_value.get_page.return_value = []
-    mock_repo.get_issues.return_value = MagicMock()
-    mock_repo.get_issues.return_value.get_page.side_effect = [
-        [mock_issue],
-        [],
-    ]
-
-    with (
-        patch.object(SerializedRepository, "to_Repository", return_value=mock_repo),
-        patch(
-            "onyx.connectors.github.connector._convert_issue_to_document",
-            side_effect=RuntimeError("boom"),
-        ),
+    with patch(
+        "onyx.connectors.github.connector._convert_issue_to_document",
+        side_effect=RuntimeError("boom"),
     ):
-        end_time = time.time()
         outputs = load_everything_from_checkpoint_connector(
-            github_connector, 0, end_time
+            github_connector, 0, time.time()
         )
 
     failures = [
@@ -138,5 +94,41 @@ def test_issue_conversion_failure_document_id_matches_html_url(
     assert len(failures) == 1
     failed_document = failures[0].failed_document
     assert failed_document is not None
-    assert failed_document.document_id == mock_issue.html_url
-    assert failed_document.document_id != str(mock_issue.id)
+    assert failed_document.document_id == issue.html_url
+    assert failed_document.document_id != str(issue.number)
+
+
+def test_detail_failure_of_a_cursor_item_is_a_document_failure(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    create_repo: Callable[..., GitHubRepository],
+    create_pr: Callable[..., GitHubPullRequest],
+) -> None:
+    """A pull request read by cursor gets its details during conversion, so a
+    failed read fails only that document."""
+    github_connector = build_github_connector(include_issues=False)
+    mock_source_operations.get_repository.return_value = create_repo()
+    pr = create_pr(number=5)
+    mock_source_operations.list_pull_requests.side_effect = GitHubApiError(
+        "422", status_code=422, github_message="use cursor pagination"
+    )
+    mock_source_operations.iter_pull_requests_by_cursor.side_effect = [
+        iter([GitHubCursorItem(item=pr, next_url="https://api.github.com/next")])
+    ]
+    mock_source_operations.get_pull_request.side_effect = GitHubApiError(
+        "502", status_code=502
+    )
+
+    outputs = load_everything_from_checkpoint_connector(
+        github_connector, 0, time.time()
+    )
+
+    failures = [
+        item
+        for output in outputs
+        for item in output.items
+        if isinstance(item, ConnectorFailure)
+    ]
+    assert len(failures) == 1
+    assert failures[0].failed_document is not None
+    assert failures[0].failed_document.document_id == pr.html_url

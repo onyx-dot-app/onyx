@@ -43,12 +43,10 @@ class GuruConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        guru_user: str | None = None,
-        guru_user_token: str | None = None,
     ) -> None:
         self.batch_size = batch_size
-        self.guru_user = guru_user
-        self.guru_user_token = guru_user_token
+        self.guru_user: str | None = None
+        self.guru_user_token: str | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.guru_user = credentials["guru_user"]

@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 
 from sqlalchemy.orm import Session
 
@@ -20,12 +20,22 @@ from onyx.context.search.pipeline import merge_individual_chunks, search_pipelin
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.llm.factory import get_default_llm
+from onyx.document_index.interfaces import DocumentIndex
+from onyx.llm.factory import get_default_llm, get_search_selection_llm
+from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
+from onyx.utils.audit import (
+    AuditAction,
+    AuditActor,
+    AuditOutcome,
+    actor_from_user,
+    document_id_fields,
+    emit_audit_event,
+)
+from onyx.utils.fleet_query_telemetry import QueryMode, telemetry_query
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -66,10 +76,14 @@ def _run_single_search(
     )
 
 
+@telemetry_query(mode=QueryMode.SEARCH)
 def stream_search_query(
     request: SendSearchQueryRequest,
     user: User,
     db_session: Session,
+    primary_llm: LLM | None = None,
+    selection_llm_factory: Callable[[], LLM] | None = None,
+    audit_actor: AuditActor | None = None,
 ) -> Generator[
     SearchQueriesPacket | SearchDocsPacket | LLMSelectedDocsPacket | SearchErrorPacket,
     None,
@@ -81,8 +95,7 @@ def stream_search_query(
     """
     # Get document index.
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     # Determine queries to execute
     original_query = request.search_query
@@ -90,10 +103,11 @@ def stream_search_query(
 
     if request.run_query_expansion:
         try:
-            llm = get_default_llm()
+            if primary_llm is None:
+                primary_llm = get_default_llm()
             keyword_expansions = expand_keywords(
                 user_query=original_query,
-                llm=llm,
+                llm=primary_llm,
             )
             if keyword_expansions:
                 logger.debug(
@@ -206,14 +220,21 @@ def stream_search_query(
     llm_selection_failed = False
     if run_llm_selection and sections:
         try:
-            llm = get_default_llm()
+            if primary_llm is None:
+                primary_llm = get_default_llm()
+            selection_llm = (
+                selection_llm_factory()
+                if selection_llm_factory is not None
+                else get_search_selection_llm(fallback=primary_llm)
+            )
             sections_to_evaluate = sections[: request.num_docs_fed_to_llm_selection]
             selected_sections, _ = select_sections_for_expansion(
                 sections=sections_to_evaluate,
                 user_query=original_query,
-                llm=llm,
+                llm=selection_llm,
                 max_sections=TARGET_NUM_SECTIONS_FOR_LLM_SELECTION,
                 try_to_fill_to_max=True,
+                enforce_llm_input_budget=selection_llm is not primary_llm,
             )
             # Extract unique document IDs from selected sections (may be empty)
             llm_selected_doc_ids = list(
@@ -240,6 +261,25 @@ def stream_search_query(
         sections,
         include_content=request.include_content,
         is_internet=False,
+    )
+
+    emit_audit_event(
+        AuditAction.SEARCH_QUERY,
+        AuditOutcome.SUCCESS,
+        actor=audit_actor or actor_from_user(user),
+        extra={
+            "api": "search_page",
+            "query_expansion_count": len(keyword_expansions),
+            **document_id_fields(
+                "retrieved_document_ids", (doc.document_id for doc in search_docs)
+            ),
+            **(
+                document_id_fields("selected_document_ids", llm_selected_doc_ids)
+                if llm_selected_doc_ids
+                else {}
+            ),
+        },
+        query_text=original_query,
     )
 
     # Yield queries packet

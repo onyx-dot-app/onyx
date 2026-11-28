@@ -1,26 +1,65 @@
 "use client";
 
 import "@opal/components/inputs/texts/input-type-in/styles.css";
-import { useCallback } from "react";
 import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
-import type { InputVariants, WithoutStyles } from "@opal/types";
+import {
+  InputContainer,
+  InputTitleLine,
+} from "@opal/components/inputs/container";
+import { useOpalStrings } from "@opal/strings";
+import type { InputVariants, RichStr, WithoutStyles } from "@opal/types";
+import {
+  InputTooltip,
+  useInputDisabled,
+} from "@opal/components/inputs/disabled";
+
+/**
+ * Clears an input through the browser, so React sends its `onChange` a real
+ * change event, as for typing.
+ */
+function clearNativeInput(input: HTMLInputElement) {
+  Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  )?.set?.call(input, "");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
 export interface InputTypeInProps extends WithoutStyles<
   Omit<React.InputHTMLAttributes<HTMLInputElement>, "disabled" | "readOnly">
 > {
   ref?: React.Ref<HTMLInputElement>;
   variant?: InputVariants;
-  prefixText?: string;
-  searchIcon?: boolean;
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
+  /**
+   * Leading icon. `"search"` shows the search icon and renders a native
+   * `type="search"` field; a component shows that icon (a select's chosen
+   * option icon).
+   */
+  icon?: "search" | IconFunctionComponent;
+  /** Content before the text, after the leading icon (a chosen value shown as a tag). */
+  leftChildren?: React.ReactNode;
   rightChildren?: React.ReactNode;
   /** Show the clear (×) button when the field has a value. */
   clearButton?: boolean;
+  /**
+   * Read-only regardless of `variant`, for a field that is only a trigger
+   * (a select's button trigger). `variant="readOnly"` implies it.
+   */
+  readOnly?: boolean;
+  /**
+   * The list this field opens is open. The field keeps its focused border,
+   * even when focus moves into the list.
+   */
+  open?: boolean;
 }
 
 /**
- * A styled text input with support for a search icon, prefix text,
+ * A styled text input with support for a leading icon,
  * a clear button, and an optional right section slot.
  *
  * @example
@@ -29,7 +68,7 @@ export interface InputTypeInProps extends WithoutStyles<
  * <InputTypeIn value={value} onChange={(e) => setValue(e.target.value)} />
  *
  * // With search icon
- * <InputTypeIn searchIcon placeholder="Search..." value={q} onChange={...} />
+ * <InputTypeIn icon="search" placeholder="Search..." value={q} onChange={...} />
  *
  * // Error state
  * <InputTypeIn variant="error" value={value} onChange={...} />
@@ -47,83 +86,99 @@ export interface InputTypeInProps extends WithoutStyles<
  *   rightChildren={<Button icon={SvgEye} onClick={toggle} />}
  * />
  * ```
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` sets the
+ * `"disabled"` variant and its `disabledTooltip` applies too.
  */
 export default function InputTypeIn({
   ref,
-  variant = "primary",
-  prefixText,
-  searchIcon,
+  variant: variantProp = "primary",
+  tooltip,
+  leftChildren,
+  icon: Icon,
   rightChildren,
   clearButton = false,
+  readOnly = false,
+  open = false,
   value,
   onChange,
   name,
+  type = "text",
   ...props
 }: InputTypeInProps) {
+  const strings = useOpalStrings();
+  const variant: InputVariants = useInputDisabled(false)
+    ? "disabled"
+    : variantProp;
   const disabled = variant === "disabled";
-  const isReadOnly = variant === "readOnly";
-
-  const handleClear = useCallback(() => {
-    onChange?.({
-      target: { value: "", name: name ?? "" },
-      currentTarget: { value: "", name: name ?? "" },
-      type: "change",
-      bubbles: true,
-      cancelable: true,
-    } as React.ChangeEvent<HTMLInputElement>);
-  }, [onChange, name]);
+  const isReadOnly = readOnly || variant === "readOnly";
 
   return (
-    <div
-      role="presentation"
-      data-variant={variant}
-      className="opal-input"
-      onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
-    >
-      {searchIcon && (
-        <div className="px-1">
-          <SvgSearch className="w-4 h-4 stroke-text-02" />
-        </div>
-      )}
+    <InputTooltip tooltip={tooltip}>
+      <InputContainer
+        variant={variant}
+        open={open}
+        focusTarget={(root) => root.querySelector("input")}
+        onKeyDown={(e) => {
+          // Escape on a control beside the field (the clear button, a reveal
+          // toggle, a chevron) returns focus to the field. It does so even when
+          // a tooltip or popover consumed the key to close itself.
+          if (e.key !== "Escape") return;
+          const input = e.currentTarget.querySelector("input");
+          if (input && e.target !== input) input.focus();
+        }}
+      >
+        <InputTitleLine
+          icon={Icon === "search" ? SvgSearch : Icon}
+          iconMuted={Icon === "search"}
+        >
+          {leftChildren}
 
-      {prefixText && (
-        <span className="select-none pointer-events-none text-text-02 ps-0.5">
-          {prefixText}
-        </span>
-      )}
-
-      <input
-        ref={ref}
-        type="text"
-        // dir="auto": typed text decides the direction so punctuation sits on the
-        // correct side. While empty it inherits the page direction (see styles.css).
-        dir="auto"
-        name={name}
-        disabled={disabled}
-        readOnly={isReadOnly}
-        value={value}
-        onChange={onChange}
-        className="opal-input-field"
-        {...props}
-      />
-
-      {clearButton && !rightChildren && !disabled && !isReadOnly && (
-        <div className={cn(value === "" && "invisible")}>
-          <Button
-            icon={SvgX}
+          <input
+            ref={ref}
+            // Chrome ignores autocomplete="off" when it guesses a text field takes
+            // a saved card; it does not offer cards in search fields.
+            type={Icon === "search" ? "search" : type}
+            // dir="auto": typed text decides the direction so punctuation sits on the
+            // correct side. While empty it inherits the page direction (see styles.css).
+            dir="auto"
+            name={name}
             disabled={disabled}
-            onClick={(event) => {
-              event.stopPropagation();
-              handleClear();
-            }}
-            type="button"
-            prominence="internal"
-            size="sm"
+            readOnly={isReadOnly}
+            value={value}
+            onChange={onChange}
+            className="opal-input-field"
+            {...props}
           />
-        </div>
-      )}
+        </InputTitleLine>
 
-      {rightChildren}
-    </div>
+        {clearButton && !rightChildren && !disabled && !isReadOnly && (
+          <div className={cn(value === "" && "invisible")}>
+            <Button
+              icon={SvgX}
+              aria-label={strings.clear}
+              disabled={disabled}
+              onClick={(event) => {
+                event.stopPropagation();
+                const input = event.currentTarget
+                  .closest(".opal-input")
+                  ?.querySelector("input");
+                if (!input) return;
+                clearNativeInput(input);
+                // The button hides once the field is empty; keep focus in the
+                // field rather than losing it to the page.
+                input.focus();
+              }}
+              type="button"
+              prominence="tertiary"
+              size="sm"
+              tooltip={strings.clear}
+            />
+          </div>
+        )}
+
+        {rightChildren}
+      </InputContainer>
+    </InputTooltip>
   );
 }

@@ -102,6 +102,7 @@ def test_reuse_existing_pod_clears_stale_tombstone() -> None:
     with (
         mock.patch.object(k8s_mod, "ONYX_SERVER_URL", "http://api"),
         mock.patch.object(k8s_mod, "SANDBOX_PROXY_HOST", "proxy.local"),
+        mock.patch.object(k8s_mod, "sandbox_provision_lock"),
         mock.patch.object(mgr, "_pod_exists_and_healthy", return_value=True),
         mock.patch.object(mgr, "_ensure_service_exists"),
         mock.patch.object(mgr, "_wait_for_pod_ready", return_value=True),

@@ -12,6 +12,7 @@ were absorbed from their former sibling modules: they subclass slack_sdk types,
 so the fence requires them to live here.
 """
 
+import json
 import random
 import threading
 import time
@@ -23,6 +24,8 @@ from urllib.error import URLError
 from urllib.request import Request
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# no-direct-redis: allow retry delay shared with Celery; use_redis=False opts out
 from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError as SlackApiError  # Re-export, see below.
@@ -37,14 +40,20 @@ from slack_sdk.http_retry.state import RetryState
 from slack_sdk.web import SlackResponse
 
 from onyx.configs.constants import DocumentSource
+from onyx.configs.slack_configs import SLACK_API_URL
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
+from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.source_operations import (
     OperationConsumes,
     SourceOperations,
     source_operation,
 )
+
+# no-direct-redis: allow retry delay shared with Celery; use_redis=False opts out
 from onyx.redis.redis_pool import get_redis_client
+
+# no-direct-redis: allow retry delay shared with Celery; use_redis=False opts out
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
@@ -376,6 +385,7 @@ def make_slack_web_client(
         delay_key=delay_key,
         r=r,
         token=token,
+        base_url=SLACK_API_URL,
         retry_handlers=custom_retry_handlers,
     )
     return client
@@ -446,6 +456,9 @@ class SlackAuthTestResponse(SlackResponseModel):
     ok: bool = False
     error: str | None = None
     url: str | None = None
+    # The workspace name and the bot user's name.
+    team: str | None = None
+    user: str | None = None
     enterprise_id: str | None = None
     # Parsed from the ``X-OAuth-Scopes`` response header, not the payload; None
     # when the header is absent. Lets checks verify scopes whose functional
@@ -468,6 +481,28 @@ class SlackChannelInfoResponse(SlackResponseModel):
 class SlackUserInfoResponse(SlackResponseModel):
     ok: bool = False
     user: dict[str, Any] = {}
+
+
+def slack_api_error_detail(error: SlackApiError) -> SourceApiError | None:
+    """The request and response of a ``SlackApiError``, for a check's Error
+    Details, chained to the error. None when it carries no ``SlackResponse``."""
+    response = error.response
+    if not isinstance(response, SlackResponse):
+        return None
+    body: str = (
+        json.dumps(response.data)
+        if isinstance(response.data, dict)
+        else response.data.decode(errors="replace")
+    )
+    detail = SourceApiError(
+        str(error),
+        status_code=response.status_code,
+        method=response.http_verb,
+        url=response.api_url,
+        body=body,
+    )
+    detail.__cause__ = error
+    return detail
 
 
 _PageT = TypeVar("_PageT", bound=SlackPage)
@@ -556,6 +591,7 @@ class SlackSourceOperations(SourceOperations):
 
     source = DocumentSource.SLACK
     sdk_modules = ("slack_sdk",)
+    config_keys = frozenset(SlackSourceOperationsConfig.model_fields)
 
     _cached_client: WebClient | None = None
     _cached_fast_client: WebClient | None = None
@@ -578,7 +614,9 @@ class SlackSourceOperations(SourceOperations):
             with self._client_build_lock:
                 if self._cached_fast_client is None:
                     self._cached_fast_client = WebClient(
-                        token=self._bot_token(), timeout=_FAST_TIMEOUT
+                        token=self._bot_token(),
+                        base_url=SLACK_API_URL,
+                        timeout=_FAST_TIMEOUT,
                     )
         return self._cached_fast_client
 
@@ -592,6 +630,7 @@ class SlackSourceOperations(SourceOperations):
         if not self._config().use_redis:
             return WebClient(
                 token=token,
+                base_url=SLACK_API_URL,
                 retry_handlers=[_connection_error_retry_handler(_MAX_RETRIES)],
             )
         tenant_id = self.credentials_provider.get_tenant_id()
@@ -599,7 +638,11 @@ class SlackSourceOperations(SourceOperations):
             raise ValueError("tenant_id cannot be None!")
         prefix = make_credential_prefix(self.credentials_provider.get_provider_key())
         return make_slack_web_client(
-            prefix, token, _MAX_RETRIES, get_redis_client(tenant_id=tenant_id)
+            prefix,
+            token,
+            _MAX_RETRIES,
+            # no-direct-redis: allow retry delay shared with Celery; use_redis=False opts out
+            get_redis_client(tenant_id=tenant_id),
         )
 
     def _client_for(self, fast: bool) -> WebClient:

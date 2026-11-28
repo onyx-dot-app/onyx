@@ -6,6 +6,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import (
     EXTERNAL_USER_EMAILS,
@@ -21,12 +22,12 @@ from tests.integration.common_utils.constants import (
     MOCK_CONNECTOR_SERVER_HOST,
     MOCK_CONNECTOR_SERVER_PORT,
 )
+from tests.integration.common_utils.document_index import DocumentIndexClient
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.test_document_utils import create_test_document
 from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def _setup_mock_connector(
@@ -84,12 +85,12 @@ def _setup_mock_connector(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync is enterprise only",
 )
 def test_mock_connector_initial_permission_sync(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    document_index_client: DocumentIndexClient,
     admin_user: DATestUser,
 ) -> None:
     """Test that the MockConnector fetches and sets permissions during initial indexing
@@ -101,7 +102,7 @@ def test_mock_connector_initial_permission_sync(
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
-            vespa_client=vespa_client,
+            document_index_client=document_index_client,
         )
     assert len(documents) == 1
     assert documents[0].id == test_doc.id
@@ -123,7 +124,11 @@ def test_mock_connector_initial_permission_sync(
         assert db_doc.external_user_emails is not None
         assert db_doc.external_user_group_ids is not None
         assert set(db_doc.external_user_emails) == EXTERNAL_USER_EMAILS
-        assert set(db_doc.external_user_group_ids) == EXTERNAL_USER_GROUP_IDS
+        # Storage adds the source prefix to the connector's bare ids.
+        assert set(db_doc.external_user_group_ids) == {
+            build_ext_group_name_for_onyx(group_id, DocumentSource.MOCK_CONNECTOR)
+            for group_id in EXTERNAL_USER_GROUP_IDS
+        }
         assert db_doc.is_public is False
 
     # After initial indexing, the beat task detects last_time_perm_sync is None
@@ -140,7 +145,7 @@ def test_mock_connector_initial_permission_sync(
         number_of_updated_docs=1,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     updated_cc_pair_info = CCPairManager.get_single(
@@ -151,12 +156,11 @@ def test_mock_connector_initial_permission_sync(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync attempt tracking is enterprise only",
 )
 def test_permission_sync_attempt_tracking_integration(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test that permission sync attempts are properly tracked during real sync workflows."""
@@ -175,7 +179,7 @@ def test_permission_sync_attempt_tracking_integration(
         number_of_updated_docs=1,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     with get_session_with_current_tenant() as db_session:
@@ -198,12 +202,11 @@ def test_permission_sync_attempt_tracking_integration(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync attempt tracking is enterprise only",
 )
 def test_permission_sync_attempt_status_success(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test that permission sync attempts are marked as SUCCESS when sync completes without errors."""
@@ -222,7 +225,7 @@ def test_permission_sync_attempt_status_success(
         number_of_updated_docs=1,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     with get_session_with_current_tenant() as db_session:

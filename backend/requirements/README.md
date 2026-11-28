@@ -33,11 +33,10 @@ backend/
 
 ### 1. Installing uv
 
-If you don't have `uv` installed:
+If you don't have `uv` installed, follow the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/). On macOS/Linux:
 
 ```bash
-# On macOS/Linux
-curl -LsSf https://astral.py/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ### 2. Adding/Updating Dependencies

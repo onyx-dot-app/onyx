@@ -1,4 +1,4 @@
-import { SvgAzure, SvgElevenLabs, SvgOpenai, SvgZoom } from "@opal/logos";
+import { SvgAzure, SvgElevenLabs, SvgOpenAI, SvgZoom } from "@opal/logos";
 import { SvgMicrophone } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import type { JsonValue } from "@/lib/json";
@@ -103,7 +103,7 @@ const DEFAULT_VOICE_PROVIDER_DETAIL: VoiceProviderDetail = {
 export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
   openai: {
     label: "OpenAI",
-    icon: SvgOpenai,
+    icon: SvgOpenAI,
     apiKeyUrl: "https://platform.openai.com/api-keys",
     docsUrl: "https://platform.openai.com/docs/guides/text-to-speech",
     voiceDocsUrl: {
@@ -132,10 +132,10 @@ export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
     },
   },
   zoom: {
-    label: "Zoom Scribe",
+    label: "Zoom AI Services",
     icon: SvgZoom,
-    apiKeyUrl: "https://developers.zoom.us/docs/ai-services/build-platform/",
-    docsUrl: "https://developers.zoom.us/docs/ai-services/scribe/",
+    apiKeyUrl: "https://developers.zoom.us/docs/ai-services/",
+    docsUrl: "https://developers.zoom.us/docs/ai-services/",
     sttModels: [{ id: "scribe-live", name: "Scribe Live" }],
     requiresApiSecret: true,
     sttLanguageOptions: [

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.user_tenant_mapping import (
@@ -6,12 +8,23 @@ from ee.onyx.db.user_tenant_mapping import (
     remove_users_from_tenant,
 )
 from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
+from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import User
+from onyx.auth.users import User, finish_user_delete_in_own_session
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.users import delete_user_from_db, get_user_by_email
+from onyx.db.sandbox import get_sandbox_purge_targets
+from onyx.db.users import (
+    delete_user_from_db,
+    delete_user_from_db__no_commit,
+    get_user_by_email,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.sandbox.firecracker.purge import (
+    purge_harness_sandboxes,
+)
 from onyx.server.manage.models import UserByEmail
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -32,13 +45,14 @@ async def leave_organization(
     tenant_id = get_current_tenant_id()
 
     if current_user.email != user_email.user_email:
-        raise HTTPException(
-            status_code=403, detail="You can only leave the organization as yourself"
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "You can only leave the organization as yourself",
         )
 
     user_to_delete = get_user_by_email(user_email.user_email, db_session)
     if user_to_delete is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     num_admin_users = await get_user_count(only_admin_users=True)
 
@@ -48,24 +62,41 @@ async def leave_organization(
         logger.info(
             "Last admin user is leaving the organization. Deleting tenant from control plane."
         )
+        # The tenant goes: purge every harness sandbox after the commit.
+        purge_targets = get_sandbox_purge_targets(db_session)
+        # Validate and stage local cleanup before the irreversible remote call.
+        # Keep it uncommitted so a remote failure preserves the local account.
+        try:
+            cleanup = delete_user_from_db__no_commit(user_to_delete, db_session)
+        except Exception:
+            db_session.rollback()
+            raise
         try:
             await delete_user_from_control_plane(tenant_id, user_to_delete.email)
             logger.debug("User deleted from control plane")
         except Exception as e:
+            db_session.rollback()
             logger.exception(
                 "Failed to delete user from control plane for tenant %s: %s",
                 tenant_id,
                 e,
             )
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to remove user from control plane: {str(e)}",
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                f"Failed to remove user from control plane: {str(e)}",
             )
+
+        db_session.commit()
+        try:
+            remove_user_from_invited_users(user_email.user_email)
+            remove_all_users_from_tenant(tenant_id)
+        finally:
+            try:
+                await asyncio.to_thread(finish_user_delete_in_own_session, cleanup)
+            finally:
+                await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
+        return
 
     db_session.expunge(user_to_delete)
     delete_user_from_db(user_to_delete, db_session)
-
-    if should_delete_tenant:
-        remove_all_users_from_tenant(tenant_id)
-    else:
-        remove_users_from_tenant([user_to_delete.email], tenant_id)
+    remove_users_from_tenant([user_to_delete.email], tenant_id)

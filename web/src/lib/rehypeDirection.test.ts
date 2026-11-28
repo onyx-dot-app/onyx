@@ -58,7 +58,7 @@ describe("rehypeDirection", () => {
   });
 
   it("skips weak characters (digits, punctuation) before the first letter", () => {
-    const p = el("p", [txt('42% — "עברית"')]);
+    const p = el("p", [txt('42%: "עברית"')]);
     run(p);
     expect(dirOf(p)).toBe("rtl");
   });

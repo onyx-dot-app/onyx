@@ -40,7 +40,7 @@ resource "onyx_llm_provider" "wo" {
   api_key_wo_version = 1
 
   model_configurations = [
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-luna" },
   ]
 }
 `,
@@ -66,7 +66,7 @@ resource "onyx_llm_provider" "wo" {
   api_key_wo_version = 1
 
   model_configurations = [
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-luna" },
   ]
 }
 `,
@@ -82,7 +82,7 @@ resource "onyx_llm_provider" "wo" {
   api_key_wo_version = 2
 
   model_configurations = [
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-luna" },
   ]
 }
 `,
@@ -110,7 +110,7 @@ resource "onyx_llm_provider" "conflict" {
   api_key_wo    = "sk-write-only"
 
   model_configurations = [
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-luna" },
   ]
 }
 `,

@@ -10,11 +10,15 @@ from office365.graph_client import GraphClient
 
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
-    acquire_graph_token,
+    acquire_app_token,
     build_msal_app,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
+from onyx.connectors.microsoft_utils.request_pacer import (
+    MicrosoftRequestPacer,
+    prepare_sdk_client,
+)
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.teams.utils import UserDirectory
 
@@ -33,6 +37,11 @@ class TeamsSession:
         self.allow_images = False
         self._user_directory: UserDirectory | None = None
         self._directory_lock = threading.Lock()
+        # SDK queries queue on their client, so a worker that runs them
+        # gets a client of its own.
+        self._thread_clients: threading.local = threading.local()
+        # Paces every Graph and REST call. None: the calls are not limited.
+        self.request_pacer: MicrosoftRequestPacer | None = None
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self._azure_environment = resolved_env.environment
@@ -67,16 +76,19 @@ class TeamsSession:
             if self.msal_app is None:
                 raise RuntimeError("MSAL app is not initialized")
 
-            token = acquire_graph_token(self.msal_app, self.graph_api_host)
+            token = acquire_app_token(self.msal_app, self.graph_api_host)
 
             if not isinstance(token, dict):
                 raise RuntimeError("`token` instance must be of type dict")
 
             return token
 
-        self.graph_client = GraphClient(
-            _acquire_token_func, environment=self._azure_environment
+        self.graph_client = prepare_sdk_client(
+            GraphClient(_acquire_token_func, environment=self._azure_environment),
+            lambda: self.request_pacer,
         )
+        # Clients built for an earlier credential must not outlive it.
+        self._thread_clients: threading.local = threading.local()
         # File downloads stream outside the SDK and carry the token themselves.
         self._acquire_token = _acquire_token_func
 
@@ -101,6 +113,22 @@ class TeamsSession:
             raise ConnectorMissingCredentialError("Teams")
         return self.graph_client
 
+    def graph_for_thread(self) -> GraphClient:
+        """A client for SDK queries from a worker thread. The shared client is
+        fine for direct requests, which build their own options, but a query
+        queues on the client it was built from and another thread's
+        execute_query would run it."""
+        if self._acquire_token is None:
+            raise ConnectorMissingCredentialError("Teams")
+        client: GraphClient | None = self._thread_clients.__dict__.get("client")
+        if client is None:
+            client = prepare_sdk_client(
+                GraphClient(self._acquire_token, environment=self._azure_environment),
+                lambda: self.request_pacer,
+            )
+            self._thread_clients.client = client
+        return client
+
     def access_token(self) -> str:
         if self._acquire_token is None:
             raise ConnectorMissingCredentialError("Teams")
@@ -109,4 +137,6 @@ class TeamsSession:
     def graph_api_client(self) -> GraphApiClient:
         if self._acquire_token is None:
             raise ConnectorMissingCredentialError("Teams")
-        return GraphApiClient(self.access_token, self.graph_root)
+        return GraphApiClient(
+            self.access_token, self.graph_root, lambda: self.request_pacer
+        )

@@ -6,6 +6,7 @@ tests pin that decision and the knobs the other call sites need."""
 
 import pytest
 
+from onyx.file_processing.file_types import SPREADSHEET_MACRO_MIME_TYPE
 from onyx.file_store.serving import (
     ATTACHMENT_SAFE_MIME_TYPES,
     INLINE_SAFE_IMAGE_MIME_TYPES,
@@ -87,12 +88,13 @@ def test_the_fallback_disposition_can_be_omitted() -> None:
     assert "Content-Disposition" not in headers
 
 
-def test_office_types_keep_their_type_when_allowed() -> None:
+@pytest.mark.parametrize("media_type", [PPTX_MIME_TYPE, SPREADSHEET_MACRO_MIME_TYPE])
+def test_office_types_keep_their_type_when_allowed(media_type: str) -> None:
     resolved, headers = resolve_inline_disposition(
-        PPTX_MIME_TYPE, attachment_types=ATTACHMENT_SAFE_MIME_TYPES
+        media_type, attachment_types=ATTACHMENT_SAFE_MIME_TYPES
     )
 
-    assert resolved == PPTX_MIME_TYPE
+    assert resolved == media_type
     assert headers["Content-Disposition"] == "attachment"
 
 

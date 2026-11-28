@@ -1,81 +1,118 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
+  RootLayout,
+  RootLayoutRightPanelSlotContext,
+  Section,
+} from "@opal/layouts";
 import { cn, markdown } from "@opal/utils";
-import { INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
+import { INTERACTIVE_SELECTOR } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import { useProjectsContext } from "@/lib/projects/providers";
 import useChatSessions from "@/hooks/useChatSessions";
-import {
-  shouldShowMoveModal,
-  showErrorNotification,
-} from "@/lib/sidebar/utils";
-import { handleMoveOperation } from "@/lib/sidebar/svc";
-import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
-import { deleteChatSession, endIncognitoSession } from "@/app/app/services/lib";
-import {
-  exportChatSession,
-  ChatExportFormat,
-} from "@/lib/chat/exportChatSession";
-import { UNNAMED_CHAT } from "@/lib/constants";
-import { useRouter } from "next/navigation";
-import { MoveCustomAgentChatModal } from "@/lib/agents/components";
-import { ConfirmationModalLayout } from "@opal/layouts";
+import { showErrorNotification } from "@/lib/sidebar/utils";
+import { endIncognitoSession } from "@/app/app/services/lib";
+import { useChatExportMenu, useChatSubagents } from "@/lib/chat/hooks";
+import { subagentName, useSubagentNavigation } from "@/lib/chat/subagents";
+import ChatActivity from "@/sections/chat/ChatActivity";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,
-  LineItemButton,
-  OpenButton,
-  Popover,
-  PopoverMenu,
+  Dropdown,
+  SelectButton,
   Text,
+  useCreateModal,
 } from "@opal/components";
-import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
-import SimplePopover from "@/refresh-components/SimplePopover";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
-  SvgChevronLeft,
-  SvgDownload,
-  SvgFileText,
   SvgEyeOff,
-  SvgFitWidth,
-  SvgFolderIn,
-  SvgFullWidth,
-  SvgHash,
-  SvgMoreHorizontal,
   SvgSearchMenu,
   SvgShare,
   SvgSidebar,
-  SvgTrash,
   SvgX,
 } from "@opal/icons";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/position/hooks";
+import {
+  getNewSessionNavigation,
+  useAppPosition,
+} from "@/lib/navigation/hooks";
+import { PendingRoute, useNavigation } from "@opal/navigation";
+import { AppChromeLoader } from "@/layouts/chromes/AppChromeLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
-import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useIncognito } from "@/providers/IncognitoProvider";
+import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
+import { PANEL_TOGGLE_ROOM } from "@/lib/outputPanel/layout";
 
 // ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
+
+interface ChatTitleProps {
+  sessionId: string;
+  title: string;
+}
+
+/** The chat's title; with a subagent open, `chat / subagent`, as T3 Code. */
+function ChatTitle({ sessionId, title }: ChatTitleProps) {
+  const { shownId } = useSubagentNavigation();
+  const { agents } = useChatSubagents(sessionId);
+  const agent = shownId
+    ? agents.find((candidate) => candidate.id === shownId)
+    : undefined;
+  if (!agent)
+    return (
+      <Text
+        as="p"
+        font="main-ui-action"
+        color="text-04"
+        maxLines={1}
+        overflowTooltip
+      >
+        {title}
+      </Text>
+    );
+  return (
+    <Section flexDirection="row" justifyContent="start" gap={0.5} height="fit">
+      {/* The chat's title gives way to the subagent's */}
+      <Section alignItems="stretch" height="fit" grow={0}>
+        <Text
+          as="p"
+          font="main-ui-action"
+          color="text-03"
+          maxLines={1}
+          overflowTooltip
+        >
+          {title}
+        </Text>
+      </Section>
+      <Text font="main-ui-action" color="text-03">
+        /
+      </Text>
+      <Section width="fit" height="fit">
+        <Text
+          as="p"
+          font="main-ui-action"
+          color="text-04"
+          wordWrap="whitespace-nowrap"
+        >
+          {subagentName(agent.path)}
+        </Text>
+      </Section>
+    </Section>
+  );
+}
 
 function Header() {
   const t = useTranslations("chat.appChrome");
@@ -86,147 +123,48 @@ function Header() {
   const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
-  const { fullWidthChat, toggleFullWidthChat } = useFullWidthChat();
+  // The store's chat, whose requests, agents and files the activity card shows
+  const storeSessionId = useChatSessionStore((state) => state.currentSessionId);
   const {
     incognitoAvailable,
     incognitoEnabled,
     incognitoLocked,
+    incognitoSessionId,
     toggleIncognito,
     setIncognitoEnabled,
   } = useIncognito();
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
-  const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
-    number | null
-  >(null);
-  const [showMoveOptions, setShowMoveOptions] = useState(false);
-  const [showExportOptions, setShowExportOptions] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
+  const shareModal = useCreateModal();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
-  const {
-    projects,
-    fetchProjects,
-    refreshCurrentProjectDetails,
-    currentProjectId,
-    setCurrentMessageFiles,
-  } = useProjectsContext();
-  const {
-    currentChatSession,
-    currentChatSessionId,
-    refreshChatSessions,
-    removeSession,
-  } = useChatSessions();
-  const router = useRouter();
+  const { setCurrentMessageFiles } = useProjectsContext();
+  const { currentChatSession, currentChatSessionId, removeSession } =
+    useChatSessions();
+  const { exportItems } = useChatExportMenu(currentChatSession);
+  const navigation = useNavigation();
+
+  const showIncognitoStart =
+    appPosition.isNewSession() &&
+    incognitoAvailable &&
+    !incognitoEnabled &&
+    !incognitoLocked;
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
-  const pageWithHeaderContent =
-    appPosition.isChat() || appPosition.isNewSession() || appPosition.isAgent();
+  const showHeaderContent =
+    !!customHeaderContent &&
+    (appPosition.isChat() ||
+      appPosition.isNewSession() ||
+      appPosition.isAgent());
 
   const effectiveMode: AppMode =
     appPosition.isNewSession() && state.phase === "idle"
       ? state.appMode
       : "chat";
 
-  const availableProjects = useMemo(() => {
-    if (!projects) return [];
-    return projects.filter((project) => project.id !== currentProjectId);
-  }, [projects, currentProjectId]);
-
-  const filteredProjects = useMemo(() => {
-    if (!searchTerm) return availableProjects;
-    const term = searchTerm.toLowerCase();
-    return availableProjects.filter((project) =>
-      project.name.toLowerCase().includes(term)
-    );
-  }, [availableProjects, searchTerm]);
-
-  const resetMoveState = useCallback(() => {
-    setShowMoveOptions(false);
-    setSearchTerm("");
-    setPendingMoveProjectId(null);
-    setShowMoveCustomAgentModal(false);
-  }, []);
-
-  const performMove = useCallback(
-    async (targetProjectId: number) => {
-      if (!currentChatSession) return;
-      try {
-        await handleMoveOperation({
-          chatSession: currentChatSession,
-          targetProjectId,
-          refreshChatSessions,
-          refreshCurrentProjectDetails,
-          fetchProjects,
-          currentProjectId,
-        });
-        resetMoveState();
-        setPopoverOpen(false);
-      } catch (error) {
-        console.error("Failed to move chat session:", error);
-      }
-    },
-    [
-      currentChatSession,
-      refreshChatSessions,
-      refreshCurrentProjectDetails,
-      fetchProjects,
-      currentProjectId,
-      resetMoveState,
-    ]
-  );
-
-  const handleMoveClick = useCallback(
-    (projectId: number) => {
-      if (!currentChatSession) return;
-      if (shouldShowMoveModal(currentChatSession)) {
-        setPendingMoveProjectId(projectId);
-        setShowMoveCustomAgentModal(true);
-        return;
-      }
-      void performMove(projectId);
-    },
-    [currentChatSession, performMove]
-  );
-
-  const handleDeleteChat = useCallback(async () => {
-    if (!currentChatSession) return;
-    try {
-      const response = await deleteChatSession(currentChatSession.id);
-      if (!response.ok) {
-        throw new Error("Failed to delete chat session");
-      }
-      removeSession(currentChatSession.id);
-      await Promise.all([refreshChatSessions(), fetchProjects()]);
-      router.replace("/app");
-      setDeleteModalOpen(false);
-    } catch (error) {
-      console.error("Failed to delete chat:", error);
-      showErrorNotification("Failed to delete chat. Please try again.");
-    }
-  }, [
-    currentChatSession,
-    refreshChatSessions,
-    removeSession,
-    fetchProjects,
-    router,
-  ]);
-
-  const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
-    setDeleteModalOpen(open);
-    if (open) {
-      setPopoverOpen(false);
-    }
-  }, []);
-
   // Incognito stays on until teardown returns, so the composer cannot submit
   // into a session being torn down. The server deletes that session's uploads
   // itself, including any that landed late.
   const handleExitIncognito = useCallback(async () => {
-    const sessionId = currentChatSessionId;
+    const sessionId = currentChatSessionId ?? incognitoSessionId;
+    const navigationAtExit = getNewSessionNavigation();
     if (sessionId) {
       let tornDown = false;
       try {
@@ -240,169 +178,38 @@ function Header() {
         showErrorNotification("Could not end the incognito chat. Try again.");
         return;
       }
-      removeSession(sessionId);
+      if (currentChatSessionId) removeSession(currentChatSessionId);
+    }
+    if (navigationAtExit !== getNewSessionNavigation()) return;
+    const liveChatId = useChatSessionStore.getState().currentSessionId;
+    if (!currentChatSessionId && liveChatId === sessionId && liveChatId) {
+      removeSession(liveChatId);
+      useChatSessionStore.getState().setCurrentSession(null);
     }
     setIncognitoEnabled(false);
     setCurrentMessageFiles([]);
-    if (sessionId) {
-      router.replace("/app");
+    if (currentChatSessionId || (liveChatId && liveChatId === sessionId)) {
+      navigation.go("/app", { replace: true });
     }
   }, [
     currentChatSessionId,
+    incognitoSessionId,
     setIncognitoEnabled,
     setCurrentMessageFiles,
     removeSession,
-    router,
-  ]);
-
-  const handleExport = useCallback(
-    async (format: ChatExportFormat) => {
-      if (!currentChatSession) return;
-      try {
-        await exportChatSession(
-          currentChatSession.id,
-          currentChatSession.name || UNNAMED_CHAT,
-          format
-        );
-      } catch (error) {
-        console.error("Failed to export chat:", error);
-        showErrorNotification(t("exportFailed.message"));
-      }
-    },
-    [currentChatSession, t]
-  );
-
-  useEffect(() => {
-    let items: ReactNode[];
-    if (showMoveOptions) {
-      items = [
-        <PopoverSearchInput
-          key="search"
-          setShowMoveOptions={setShowMoveOptions}
-          onSearch={setSearchTerm}
-        />,
-        ...filteredProjects.map((project) => (
-          <LineItemButton
-            key={project.id}
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgFolderIn}
-            title={project.name}
-            onClick={noProp(() => handleMoveClick(project.id))}
-          />
-        )),
-      ];
-    } else if (showExportOptions) {
-      items = [
-        <LineItemButton
-          key="export-back"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgChevronLeft}
-          title={t("exportAs.label")}
-          onClick={noProp(() => setShowExportOptions(false))}
-        />,
-        <Popover.Close asChild key="export-plaintext">
-          <LineItemButton
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgFileText}
-            title={t("exportPlaintext.label")}
-            onClick={noProp(() => handleExport("text"))}
-          />
-        </Popover.Close>,
-        <Popover.Close asChild key="export-markdown">
-          <LineItemButton
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgHash}
-            title={t("exportMarkdown.label")}
-            onClick={noProp(() => handleExport("markdown"))}
-          />
-        </Popover.Close>,
-      ];
-    } else {
-      items = [
-        <LineItemButton
-          key="move"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgFolderIn}
-          title={t("moveToProject.label")}
-          onClick={noProp(() => setShowMoveOptions(true))}
-        />,
-        <LineItemButton
-          key="export"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgDownload}
-          title={t("exportAs.label")}
-          onClick={noProp(() => setShowExportOptions(true))}
-        />,
-        null,
-        <LineItemButton
-          key="delete"
-          sizePreset="main-ui"
-          rounding={2}
-          color="danger"
-          icon={SvgTrash}
-          title={t("delete.label")}
-          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-        />,
-      ];
-    }
-
-    setPopoverItems(items);
-  }, [
-    showMoveOptions,
-    showExportOptions,
-    filteredProjects,
-    currentChatSession,
-    setDeleteConfirmationModalOpen,
-    handleMoveClick,
-    handleExport,
+    navigation,
   ]);
 
   return (
     <>
-      {showShareModal && currentChatSession && (
-        <ShareChatSessionModal
-          chatSession={currentChatSession}
-          onClose={() => setShowShareModal(false)}
-        />
-      )}
-
-      {showMoveCustomAgentModal && (
-        <MoveCustomAgentChatModal
-          onCancel={resetMoveState}
-          onConfirm={async (doNotShowAgain: boolean) => {
-            if (doNotShowAgain && typeof window !== "undefined") {
-              window.localStorage.setItem(
-                LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
-                "true"
-              );
-            }
-            if (pendingMoveProjectId != null) {
-              await performMove(pendingMoveProjectId);
-            }
-          }}
-        />
-      )}
-
-      {deleteModalOpen && (
-        <ConfirmationModalLayout
-          title={t("deleteModal.title")}
-          icon={SvgTrash}
-          onClose={() => setDeleteModalOpen(false)}
-          submit={
-            <Button variant="danger" onClick={handleDeleteChat}>
-              {t("deleteModal.submitButton.label")}
-            </Button>
-          }
-        >
-          {t("deleteModal.description")}
-        </ConfirmationModalLayout>
-      )}
+      <shareModal.Provider>
+        {currentChatSession && (
+          <ShareChatSessionModal
+            chatSession={currentChatSession}
+            onClose={() => shareModal.toggle(false)}
+          />
+        )}
+      </shareModal.Provider>
 
       {(appPosition.isChat() ||
         appPosition.isNewSession() ||
@@ -411,13 +218,23 @@ function Header() {
         isMobile) &&
         !appPosition.isSharedChat() && (
           <RootLayout.Header>
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4">
+            {/* A chat's header keeps out of the room for the chat's right
+                panel toggle, which the closed panel places over the header's
+                end */}
+            <div
+              className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4"
+              style={
+                appPosition.isChat()
+                  ? { paddingInlineEnd: `max(1rem, ${PANEL_TOGGLE_ROOM})` }
+                  : undefined
+              }
+            >
               {/*
           Left:
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-              <div className="flex-1 flex flex-row items-center gap-2">
+              <div className="flex-1 min-w-0 self-stretch flex flex-row items-center gap-2">
                 {isMobile && (
                   <Button
                     prominence="internal"
@@ -428,71 +245,77 @@ function Header() {
                 )}
                 {incognitoEnabled &&
                   (appPosition.isChat() || appPosition.isNewSession()) && (
-                    <OpenButton
+                    <SelectButton
+                      chevron
                       disabled
                       icon={SvgEyeOff}
                       aria-label={t("incognitoPill.ariaLabel")}
                       data-testid="incognito-chat-pill"
                     >
                       {t("incognitoPill.label")}
-                    </OpenButton>
+                    </SelectButton>
                   )}
                 {businessTier &&
                   isSearchModeAvailable &&
                   !incognitoEnabled &&
                   appPosition.isNewSession() &&
                   state.phase === "idle" && (
-                    <Popover
+                    <Dropdown
                       open={modePopoverOpen}
                       onOpenChange={setModePopoverOpen}
                     >
-                      <Popover.Trigger asChild>
-                        <OpenButton
+                      <Dropdown.Trigger asChild>
+                        <SelectButton
+                          chevron
                           aria-label={t("modeButton.ariaLabel")}
                           icon={
                             effectiveMode === "search"
                               ? SvgSearchMenu
                               : SvgBubbleText
                           }
+                          interaction={modePopoverOpen ? "hover" : "rest"}
                         >
                           {effectiveMode === "search"
                             ? t("mode.search.label")
                             : t("mode.chat.label")}
-                        </OpenButton>
-                      </Popover.Trigger>
-                      <Popover.Content align="start" width="lg">
-                        <Popover.Menu>
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding={2}
-                            icon={SvgSearchMenu}
-                            state={
-                              effectiveMode === "search" ? "selected" : "empty"
-                            }
-                            title={t("mode.search.label")}
-                            description={t("mode.search.description")}
-                            onClick={noProp(() => {
-                              setAppMode("search");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding={2}
-                            icon={SvgBubbleText}
-                            state={
-                              effectiveMode === "chat" ? "selected" : "empty"
-                            }
-                            title={t("mode.chat.label")}
-                            description={t("mode.chat.description")}
-                            onClick={noProp(() => {
-                              setAppMode("chat");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                        </Popover.Menu>
-                      </Popover.Content>
-                    </Popover>
+                        </SelectButton>
+                      </Dropdown.Trigger>
+                      <Dropdown.Data
+                        label={t("modeButton.ariaLabel")}
+                        value={effectiveMode}
+                        onSelect={(option) =>
+                          setAppMode(
+                            option.value === "search" ? "search" : "chat"
+                          )
+                        }
+                        items={[
+                          {
+                            kind: "option",
+                            value: "search",
+                            icon: SvgSearchMenu,
+                            title: t("mode.search.label"),
+                            description: t("mode.search.description"),
+                          },
+                          {
+                            kind: "option",
+                            value: "chat",
+                            icon: SvgBubbleText,
+                            title: t("mode.chat.label"),
+                            description: t("mode.chat.description"),
+                          },
+                        ]}
+                      />
+                    </Dropdown>
+                  )}
+                {appPosition.isChat() &&
+                  currentChatSession?.id === appPosition.chat() &&
+                  currentChatSession.name && (
+                    <div className="min-w-0 px-2">
+                      <ChatTitle
+                        sessionId={currentChatSession.id}
+                        title={currentChatSession.name}
+                      />
+                    </div>
                   )}
               </div>
 
@@ -501,57 +324,37 @@ function Header() {
           - custom-header-content
           - Wraps to its own row below left/right on mobile when content is present
         */}
-              <div
-                className={cn(
-                  "flex flex-col items-center overflow-hidden",
-                  pageWithHeaderContent && customHeaderContent
-                    ? "order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1"
-                    : "flex-1"
-                )}
-              >
-                {pageWithHeaderContent && customHeaderContent && (
+              {showHeaderContent && (
+                <div className="flex flex-col items-center overflow-hidden order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1">
                   <span className="text-center w-full">
                     <Text color="text-03">{customHeaderContent}</Text>
                   </span>
-                )}
-              </div>
+                </div>
+              )}
 
               {/*
           Right:
-          - share button
-          - more-options buttons
+          - share menu
+          - activity card toggle
         */}
-              <div className="flex flex-1 justify-end items-center">
-                {(appPosition.isChat() || appPosition.isNewSession()) && (
+              {/* Without center content, the left side takes the free room */}
+              <div
+                className={cn(
+                  "flex justify-end items-center",
+                  showHeaderContent ? "flex-1" : "shrink-0"
+                )}
+              >
+                {(showIncognitoStart ||
+                  (incognitoEnabled &&
+                    (appPosition.isChat() || appPosition.isNewSession()))) && (
                   <FrostedDiv className="flex shrink flex-row items-center">
-                    {incognitoAvailable && !incognitoEnabled && (
+                    {showIncognitoStart && (
                       <Button
                         icon={SvgEyeOff}
                         prominence="tertiary"
                         onClick={toggleIncognito}
-                        disabled={incognitoLocked}
                         aria-label={t("incognitoStart.ariaLabel")}
-                        tooltip={
-                          incognitoLocked
-                            ? t("incognitoStart.lockedTooltip")
-                            : t("incognitoStart.tooltip")
-                        }
-                      />
-                    )}
-                    {/* On mobile widths the reading-width cap never applies
-                        (chat is always full width), so the toggle is hidden. */}
-                    {!isMobile && (
-                      <Button
-                        icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
-                        prominence="tertiary"
-                        onClick={toggleFullWidthChat}
-                        tooltip={
-                          fullWidthChat
-                            ? t("fullWidth.fitTooltip")
-                            : t("fullWidth.fullTooltip")
-                        }
-                        aria-label={t("fullWidth.ariaLabel")}
-                        aria-pressed={fullWidthChat}
+                        tooltip={t("incognitoStart.tooltip")}
                       />
                     )}
                     {incognitoEnabled && (
@@ -565,41 +368,53 @@ function Header() {
                     )}
                   </FrostedDiv>
                 )}
+                {/* Only for the chat on screen: during a navigation to another
+                    chat, the URL's session is still the one these act on. */}
                 {appPosition.isChat() &&
                   currentChatSession &&
+                  currentChatSession.id === appPosition.chat() &&
                   !incognitoEnabled && (
                     <FrostedDiv className="flex shrink flex-row items-center">
-                      <Button
-                        icon={SvgShare}
-                        prominence="tertiary"
-                        interaction={showShareModal ? "hover" : "rest"}
-                        responsiveHideText
-                        onClick={() => setShowShareModal(true)}
-                        aria-label="share-chat-button"
-                      >
-                        {t("share.label")}
-                      </Button>
-                      <SimplePopover
-                        trigger={
+                      <Dropdown width={60} align="end">
+                        <Dropdown.Trigger asChild>
                           <Button
-                            icon={SvgMoreHorizontal}
+                            icon={SvgShare}
                             prominence="tertiary"
-                            interaction={popoverOpen ? "hover" : "rest"}
+                            interaction={
+                              shareModal.isOpen ? "hover" : undefined
+                            }
+                            aria-label={t("shareMenu.label")}
+                            tooltip={t("shareMenu.label")}
+                            data-testid="share-chat-button"
                           />
-                        }
-                        onOpenChange={(state) => {
-                          setPopoverOpen(state);
-                          if (!state) {
-                            setShowMoveOptions(false);
-                            setShowExportOptions(false);
-                            setSearchTerm("");
-                          }
-                        }}
-                        side="bottom"
-                        align="end"
-                      >
-                        <PopoverMenu>{popoverItems}</PopoverMenu>
-                      </SimplePopover>
+                        </Dropdown.Trigger>
+                        <Dropdown.Data
+                          label={t("shareMenu.label")}
+                          items={[
+                            {
+                              kind: "action",
+                              id: "share",
+                              icon: SvgShare,
+                              title: t("share.label"),
+                              onSelect: () => shareModal.toggle(true),
+                            },
+                            ...exportItems,
+                          ]}
+                        />
+                      </Dropdown>
+                    </FrostedDiv>
+                  )}
+                {/* After the share menu. Once the store holds the chat on
+                    screen, also for a chat outside the loaded Recents */}
+                {appPosition.isChat() &&
+                  storeSessionId !== null &&
+                  storeSessionId === appPosition.chat() &&
+                  !incognitoEnabled && (
+                    <FrostedDiv className="flex shrink flex-row items-center">
+                      <ChatActivity
+                        key={storeSessionId}
+                        sessionId={storeSessionId}
+                      />
                     </FrostedDiv>
                   )}
               </div>
@@ -664,12 +479,27 @@ function Footer() {
 // AppChrome
 // ---------------------------------------------------------------------------
 
-interface AppChromeProps {
+export interface AppChromeProps {
   children: React.ReactNode;
 }
 
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [panelToggleSlot, setPanelToggleSlot] = useState<HTMLElement | null>(
+    null
+  );
+  const [activitySlot, setActivitySlot] = useState<HTMLElement | null>(null);
+  const workspaceElements = useMemo(
+    () => ({
+      workspace: workspaceRef,
+      page: pageRef,
+      panelToggleSlot,
+      activitySlot,
+    }),
+    [panelToggleSlot, activitySlot]
+  );
 
   const appPosition = useAppPosition();
   useAppDocumentTitle();
@@ -726,63 +556,91 @@ export default function AppChrome({ children }: AppChromeProps) {
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
       >
-        <div className="flex flex-row flex-1 min-h-0">
-          <div
-            className={cn(
-              "@container relative isolate flex-1 flex flex-col min-h-0",
-              showBackground && "bg-cover bg-center bg-fixed"
-            )}
-            style={
-              showBackground
-                ? { backgroundImage: `url(${appBackgroundUrl})` }
-                : undefined
-            }
-          >
-            {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
+        <div
+          ref={workspaceRef}
+          className="@container/workspace relative flex flex-row flex-1 min-h-0"
+        >
+          <AppWorkspaceElementsContext.Provider value={workspaceElements}>
+            <div ref={setPanelToggleSlot} />
+            <div
+              ref={pageRef}
+              data-app-page
+              className={cn(
+                "@container relative isolate flex-1 flex flex-col min-h-0",
+                // A docked activity card covers the workspace's end below the
+                // header: the chat's scrolled content, its input row
+                // (`data-activity-room`) and the footer make room. The header
+                // and the scroller keep their width, so the buttons and the
+                // scrollbar stay at the end. Each keeps its 1rem end gutter
+                // (`CHAT_GUTTER`) as the least, so docking never moves the
+                // column on a wide screen; it adds only what the card
+                // (21.5rem) needs beyond the centered column's room
+                // (`--app-chat-column-width`, reading or wide): 2 * 21.5rem +
+                // 1rem start gutter + column - 100%, and never more than the
+                // card itself.
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-chat-scroll]>*]:pe-[clamp(1rem,calc(44rem_+_var(--app-chat-column-width,45rem)_-_100%),21.5rem)]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&_[data-activity-room]]:pe-[clamp(1rem,calc(44rem_+_var(--app-chat-column-width,45rem)_-_100%),21.5rem)]",
+                "@min-[64rem]/workspace:has-[[data-activity-docked]]:[&>footer]:pe-[clamp(1rem,calc(44rem_+_var(--app-chat-column-width,45rem)_-_100%),21.5rem)]",
+                showBackground && "bg-cover bg-center bg-fixed"
+              )}
+              style={
+                showBackground
+                  ? { backgroundImage: `url(${appBackgroundUrl})` }
+                  : undefined
+              }
+            >
+              {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
               z-[-1] keeps overlays below the normal-flow header/content/footer. */}
-            {showBackground && !isLightMode && (
-              <div
-                className="absolute z-[-1] inset-0 pointer-events-none"
-                style={{
-                  background: `
+              {showBackground && !isLightMode && (
+                <div
+                  className="absolute z-[-1] inset-0 pointer-events-none"
+                  style={{
+                    background: `
                   linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
                   linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
                 `,
-                }}
-              />
-            )}
-            {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
-            {showBackground && appPosition.isChat() && (
-              <>
-                <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
-                {isSafari ? (
-                  <div
-                    className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
-                    style={{
-                      backgroundImage: `url(${appBackgroundUrl})`,
-                      filter: "blur(16px)",
-                      maskImage: horizontalBlurMask,
-                      WebkitMaskImage: horizontalBlurMask,
-                    }}
-                  />
-                ) : (
-                  <div
-                    className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-                    style={{
-                      maskImage: horizontalBlurMask,
-                      WebkitMaskImage: horizontalBlurMask,
-                    }}
-                  />
-                )}
-              </>
-            )}
+                  }}
+                />
+              )}
+              {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
+              {showBackground && appPosition.isChat() && (
+                <>
+                  <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
+                  {isSafari ? (
+                    <div
+                      className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
+                      style={{
+                        backgroundImage: `url(${appBackgroundUrl})`,
+                        filter: "blur(16px)",
+                        maskImage: horizontalBlurMask,
+                        WebkitMaskImage: horizontalBlurMask,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+                      style={{
+                        maskImage: horizontalBlurMask,
+                        WebkitMaskImage: horizontalBlurMask,
+                      }}
+                    />
+                  )}
+                </>
+              )}
 
-            {/* Header */}
-            <Header />
-            <RootLayout.MainContent>{children}</RootLayout.MainContent>
-            <Footer />
-          </div>
-          {rightPanel}
+              {/* Header */}
+              <Header />
+              <RootLayout.MainContent>
+                <PendingRoute base="/app" loader={<AppChromeLoader />}>
+                  {children}
+                </PendingRoute>
+              </RootLayout.MainContent>
+              <Footer />
+              <div ref={setActivitySlot} />
+            </div>
+            {/* The slot's panel measures the workspace and covers the page */}
+            {rightPanel}
+          </AppWorkspaceElementsContext.Provider>
         </div>
       </RootLayout.App>
     </RootLayoutRightPanelSlotContext.Provider>

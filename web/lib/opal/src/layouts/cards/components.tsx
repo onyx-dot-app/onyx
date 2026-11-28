@@ -41,8 +41,7 @@ interface CardHeaderProps {
  *     icon={SvgGlobe}
  *     title="Google"
  *     description="Search engine"
- *     sizePreset="main-ui"
- *     variant="section"
+ *     font="main-ui-action"
  *     padding={2}
  *     rightChildren={<Button>Connect</Button>}
  *   />

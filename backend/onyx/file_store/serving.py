@@ -11,6 +11,7 @@ from urllib.parse import quote
 
 from onyx.file_processing.file_types import (
     PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MACRO_MIME_TYPE,
     SPREADSHEET_MIME_TYPE,
     WORD_PROCESSING_MIME_TYPE,
 )
@@ -37,6 +38,7 @@ ATTACHMENT_SAFE_MIME_TYPES: frozenset[str] = frozenset(
     {
         WORD_PROCESSING_MIME_TYPE,
         SPREADSHEET_MIME_TYPE,
+        SPREADSHEET_MACRO_MIME_TYPE,
         PRESENTATION_MIME_TYPE,
         "application/msword",
         "application/vnd.ms-excel",
@@ -55,7 +57,7 @@ _FILENAME_EXTENSION = re.compile(r"\.[^./\\\s]+$")
 # cache their responses mix this into the ETag, so bump it whenever the headers
 # or the allowlist change: that is the only way to make clients drop entries
 # cached under the old policy.
-RESPONSE_POLICY_VERSION: str = "v3"
+RESPONSE_POLICY_VERSION: str = "v4"
 
 
 def resolve_inline_disposition(

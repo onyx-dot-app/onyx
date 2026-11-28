@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NUM_DAYS_TO_KEEP_CHECKPOINTS, FileOrigin
@@ -9,7 +8,9 @@ from onyx.connectors.interfaces import BaseConnector, CheckpointedConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.index_attempt import (
+    add_index_attempt__no_commit,
     get_index_attempt,
+    get_index_attempts_with_checkpoint_created_before,
     get_recent_completed_attempts_for_cc_pair,
 )
 from onyx.db.models import IndexAttempt
@@ -18,6 +19,10 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.object_size_check import deep_getsizeof
 
 logger = setup_logger()
+
+# Connectors should cap per-document checkpoint state well under the warn limit.
+CHECKPOINT_SIZE_WARN_BYTES = 100_000_000
+CHECKPOINT_SIZE_LIMIT_BYTES = 200_000_000
 
 _NUM_RECENT_ATTEMPTS_TO_CONSIDER = 50
 
@@ -45,7 +50,7 @@ def save_checkpoint(
     if not index_attempt:
         raise RuntimeError(f"Index attempt {index_attempt_id} not found in DB.")
     index_attempt.checkpoint_pointer = checkpoint_pointer
-    db_session.add(index_attempt)
+    add_index_attempt__no_commit(db_session, index_attempt)
     db_session.commit()
     return checkpoint_pointer
 
@@ -65,6 +70,17 @@ def load_checkpoint(
     return ConnectorCheckpoint.model_validate_json(checkpoint_data)
 
 
+def attempt_config_differs(
+    attempt: IndexAttempt, connector_config_hash: str | None
+) -> bool:
+    """True if the attempt ran with a config other than the given one. An
+    attempt created before config hashes were stored (NULL hash) never differs."""
+    return (
+        attempt.connector_config_hash is not None
+        and attempt.connector_config_hash != connector_config_hash
+    )
+
+
 def get_latest_valid_checkpoint(
     db_session: Session,
     cc_pair_id: int,
@@ -72,8 +88,17 @@ def get_latest_valid_checkpoint(
     window_start: datetime,
     window_end: datetime,
     connector: BaseConnector,
+    connector_config_hash: str | None,
+    uses_conversion_stage: bool,
 ) -> tuple[ConnectorCheckpoint, bool]:
-    """Get the latest valid checkpoint for a given connector credential pair"""
+    """Get the latest valid checkpoint for a given connector credential pair.
+
+    ``connector_config_hash`` is the hash of the config the new run uses. A
+    candidate built with a different config is not valid.
+    ``uses_conversion_stage`` is the mode of the new run. A listing and a
+    fetch share one checkpoint model, but a checkpoint of one cannot continue
+    the other, so a candidate of the other mode is not valid.
+    """
     checkpoint_candidates = get_recent_completed_attempts_for_cc_pair(
         cc_pair_id=cc_pair_id,
         search_settings_id=search_settings_id,
@@ -102,6 +127,21 @@ def get_latest_valid_checkpoint(
             )
             return connector.build_dummy_checkpoint(), False
 
+    # a checkpoint can cache config-derived state (e.g. Slack channel IDs), so
+    # never resume one built with another config
+    config_matched_candidates = [
+        candidate
+        for candidate in checkpoint_candidates
+        if not attempt_config_differs(candidate, connector_config_hash)
+    ]
+    if len(config_matched_candidates) < len(checkpoint_candidates):
+        logger.info(
+            "Skipping checkpoints of %s attempt(s) for cc_pair=%s: the connector config changed since they ran.",
+            len(checkpoint_candidates) - len(config_matched_candidates),
+            cc_pair_id,
+        )
+    checkpoint_candidates = config_matched_candidates
+
     # filter out any candidates that don't meet the criteria
     checkpoint_candidates = [
         candidate
@@ -109,6 +149,7 @@ def get_latest_valid_checkpoint(
         if (
             candidate.poll_range_start == window_start
             and candidate.poll_range_end == window_end
+            and candidate.uses_conversion_stage == uses_conversion_stage
             and candidate.status.should_reuse_checkpoint()
             and candidate.checkpoint_pointer is not None
             # NOTE: There are a couple connectors that may make progress but not have
@@ -173,19 +214,7 @@ def get_index_attempts_with_old_checkpoints(
     """
     cutoff_date = get_db_current_time(db_session) - timedelta(days=days_to_keep)
 
-    # Find all index attempts with checkpoints older than cutoff_date
-    old_attempts = (
-        db_session.query(IndexAttempt)
-        .filter(
-            and_(
-                IndexAttempt.checkpoint_pointer.isnot(None),
-                IndexAttempt.time_created < cutoff_date,
-            )
-        )
-        .all()
-    )
-
-    return old_attempts
+    return get_index_attempts_with_checkpoint_created_before(db_session, cutoff_date)
 
 
 def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
@@ -201,16 +230,28 @@ def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
     file_store.delete_file(index_attempt.checkpoint_pointer)
 
     index_attempt.checkpoint_pointer = None
-    db_session.add(index_attempt)
+    add_index_attempt__no_commit(db_session, index_attempt)
     db_session.commit()
 
     return None
 
 
 def check_checkpoint_size(checkpoint: ConnectorCheckpoint) -> None:
-    """Check if the checkpoint content size exceeds the limit (200MB)"""
+    """Warn above CHECKPOINT_SIZE_WARN_BYTES; raise above CHECKPOINT_SIZE_LIMIT_BYTES.
+
+    The warning flags a connector whose per-document state is unbounded before
+    it reaches the hard limit, which fails the index attempt.
+    """
     content_size = deep_getsizeof(checkpoint.model_dump())
-    if content_size > 200_000_000:  # 200MB in bytes
+    if content_size > CHECKPOINT_SIZE_LIMIT_BYTES:
         raise ValueError(
-            f"Checkpoint content size ({content_size} bytes) exceeds 200MB limit"
+            f"Checkpoint content size ({content_size} bytes) exceeds "
+            f"{CHECKPOINT_SIZE_LIMIT_BYTES} byte limit"
+        )
+    if content_size > CHECKPOINT_SIZE_WARN_BYTES:
+        logger.warning(
+            "Checkpoint content size (%s bytes) exceeds the %s byte warn limit. "
+            "The connector should cap its per-document state.",
+            content_size,
+            CHECKPOINT_SIZE_WARN_BYTES,
         )

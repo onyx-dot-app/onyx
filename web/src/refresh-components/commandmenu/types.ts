@@ -27,6 +27,8 @@ export interface CommandMenuProps {
  */
 export interface CommandMenuContentProps {
   children: React.ReactNode;
+  /** Runs when the closed menu would return focus; `preventDefault` keeps focus where it is. */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 /**
@@ -61,7 +63,6 @@ export interface CommandMenuFilterProps {
    */
   value: string;
   children: string;
-  icon?: React.FunctionComponent<IconProps>;
   isApplied?: boolean; // When true, renders as non-interactive group label
   onSelect?: () => void;
 }

@@ -11,9 +11,11 @@ jobs:
     # Pin Node by image digest. The container ships with Node baked in, so npm publish
     # and its OIDC trusted-publishing flow work without any toolcache restore —
     # mitigates zizmor's cache-poisoning class of finding at the source rather than
-    # suppressing it. Bumping Node = bump the digest.
+    # suppressing it. Bumping Node = bump the digest. Use the slim Debian 13 image
+    # the web and sandbox images pin: the full image carries hundreds of OS
+    # packages that the nightly CVE scan flags.
     container:
-      image: node:24@sha256:be23f54a88d34e8824c741b19b91064094f92c1c97b194144bfc8b50d67258e2
+      image: node:24-trixie-slim@sha256:4d00acb4bcc42c454c4eb801526f7ad7f772ea3bd4fd168c5cc2e384abcbb9d4
     environment:
       name: release-opal
     permissions:
@@ -27,6 +29,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      # setup-bun extracts the bun zip with `unzip`, which the slim image lacks.
+      - name: Install unzip
+        run: apt-get update && apt-get install -y --no-install-recommends unzip
 
       - name: Setup bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]

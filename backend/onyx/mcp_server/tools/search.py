@@ -2,19 +2,22 @@
 
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import httpx
+import pydantic_core
 from fastmcp.server.auth.auth import AccessToken
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from fastmcp.tools import ToolResult
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from onyx.configs.app_configs import (
     MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS,
+    MCP_SERVER_SEARCH_RETRIEVAL_ONLY,
     OPEN_URLS_MAX_URLS_PER_REQUEST,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import Tag
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
     AgentEntry,
@@ -25,6 +28,9 @@ from onyx.mcp_server.utils import (
     require_access_token,
 )
 from onyx.server.features.search.models import (
+    PostgresQueryRequest,
+    PostgresQueryResponse,
+    RawSearchRequest,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -81,6 +87,8 @@ def _to_mcp_dict(result: SearchResult) -> dict[str, Any]:
         "source_type": result.source_type,
         "content": result.content,
         "updated_at": result.updated_at,
+        # Omitted when empty to keep results small.
+        **({"metadata": result.metadata} if result.metadata else {}),
     }
 
 
@@ -102,6 +110,11 @@ def _extract_error_detail(response: httpx.Response) -> str:
 def _error_payload(error: str) -> dict[str, Any]:
     """Build the standard MCP error response envelope used by every tool."""
     return {"error": error, "results": []}
+
+
+def _as_tool_result(payload: dict[str, Any]) -> ToolResult:
+    """Send the payload once, as text, instead of text plus structuredContent."""
+    return ToolResult(content=pydantic_core.to_json(payload, fallback=str).decode())
 
 
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
@@ -150,8 +163,9 @@ class _FilterError(Exception):
     """
 
 
-@dataclass
-class _ResolvedFilters:
+class _ResolvedFilters(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     persona_id: int | None
     source_types: list[DocumentSource] | None
 
@@ -277,10 +291,12 @@ async def search_indexed_documents(
     query: str,
     source_types: list[str] | None = None,
     document_set_names: list[str] | None = None,
+    tags: list[Tag] | None = None,
     time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
     agent: str | None = None,
-) -> dict[str, Any]:
+    retrieval_only: bool = False,
+) -> ToolResult:
     """
     Search the user's knowledge base indexed in Onyx.
     Use this tool for information that is not public knowledge and specific to the user,
@@ -296,6 +312,9 @@ async def search_indexed_documents(
     the user gave you; no lookup call is needed first. A value that does not
     resolve returns an error naming close matches or what is available, so you
     can retry with a valid one rather than searching unscoped.
+    `tags` restricts results to documents with any of the given metadata
+    key/value pairs, for example `{"tag_key": "assignee", "tag_value": "Jane Doe"}`.
+    Take keys and values from the `metadata` of earlier results.
     `time_cutoff` accepts an ISO 8601 timestamp; only documents updated on or
     after that moment are returned. Naive (timezone-less) timestamps are
     treated as UTC server-side.
@@ -308,12 +327,20 @@ async def search_indexed_documents(
     `agent` and `document_set_names` are mutually exclusive: explicit document
     sets replace an agent's knowledge scope rather than narrowing it, so passing
     both is rejected.
+    `retrieval_only` skips every LLM step (query expansion, filter detection,
+    federated Slack search and document selection) and returns up to 10
+    sections in retrieval order, each with up to 5 chunks of surrounding
+    context on each side. Use it when you rank results yourself: it is faster and has no LLM
+    cost. The server can force it on.
 
-    Returns ``{"results": [{title, url, source_type, content, updated_at},
-    ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
-    full chunk of the document the LLM selected; in the rare case the LLM
+    Returns ``{"results": [{title, url, source_type, content, updated_at,
+    metadata}, ...]}``. ``metadata`` holds source fields such as a Jira
+    reporter or assignee, and is omitted when the document has none.
+    Results are ordered by LLM-judged relevance. ``content`` is the full
+    chunk of the document the LLM selected; in the rare case the LLM
     selection step yields no full chunk for a doc, it falls back to the
-    short search blurb.
+    short search blurb. With `retrieval_only`, results keep retrieval order
+    and ``content`` is the retrieved section and its surrounding chunks.
 
     Example usage:
     ```
@@ -335,12 +362,14 @@ async def search_indexed_documents(
     """
     _start = time.monotonic()
     tool = MCPServerToolName.SEARCH_INDEXED_DOCUMENTS
+    use_retrieval_only = retrieval_only or MCP_SERVER_SEARCH_RETRIEVAL_ONLY
     logger.info(
-        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s",
+        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s, retrieval_only=%s",
         query,
         source_types,
         document_set_names,
         agent,
+        use_retrieval_only,
     )
 
     _record_requested_sources(source_types)
@@ -350,6 +379,7 @@ async def search_indexed_documents(
     # through as a filter would read as a scoped search that is not scoped.
     source_types = source_types or None
     document_set_names = document_set_names or None
+    tags = tags or None
     agent = (agent or "").strip() or None
 
     # Get authenticated user from FastMCP's access token
@@ -366,14 +396,16 @@ async def search_indexed_documents(
                 agent=agent,
             )
         except _FilterError as err:
-            return _error_payload(str(err))
+            return _as_tool_result(_error_payload(str(err)))
         except _NoIndexedSources:
             logger.info("Onyx MCP Server: No indexed sources available for tenant")
             outcome = MCPToolCallStatus.SUCCESS
             result_count = 0
-            return _error_payload(
-                "No document sources are indexed yet. Add connectors or upload data "
-                "through Onyx before calling search_indexed_documents."
+            return _as_tool_result(
+                _error_payload(
+                    "No document sources are indexed yet. Add connectors or upload "
+                    "data through Onyx before calling search_indexed_documents."
+                )
             )
 
         try:
@@ -386,18 +418,32 @@ async def search_indexed_documents(
             )
             parsed_cutoff = None
 
-        request = SearchRequest(
-            query=query,
-            sources=filters.source_types,
-            document_sets=document_set_names,
-            time_cutoff=parsed_cutoff,
-            skip_query_expansion=skip_query_expansion,
-            persona_id=filters.persona_id,
-        )
-        endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
+        request: SearchRequest | RawSearchRequest
+        if use_retrieval_only:
+            route = "/search/raw"
+            request = RawSearchRequest(
+                query=query,
+                sources=filters.source_types,
+                document_sets=document_set_names,
+                tags=tags,
+                time_cutoff=parsed_cutoff,
+                persona_id=filters.persona_id,
+            )
+        else:
+            route = "/search"
+            request = SearchRequest(
+                query=query,
+                sources=filters.source_types,
+                document_sets=document_set_names,
+                tags=tags,
+                time_cutoff=parsed_cutoff,
+                skip_query_expansion=skip_query_expansion,
+                persona_id=filters.persona_id,
+            )
+        endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}{route}"
         response = await _post_model(endpoint, request, access_token)
         if not response.is_success:
-            return _error_payload(_extract_error_detail(response))
+            return _as_tool_result(_error_payload(_extract_error_detail(response)))
 
         payload = SearchResponse.model_validate_json(response.content)
         results = [_to_mcp_dict(result) for result in payload.results]
@@ -406,14 +452,191 @@ async def search_indexed_documents(
         logger.info(
             "Onyx MCP Server: Internal search returned %s results", len(results)
         )
-        return {"results": results}
+        return _as_tool_result({"results": results})
     except Exception as err:
         logger.error("Onyx MCP Server: Document search error: %s", err, exc_info=True)
-        return _error_payload(f"Document search failed: {str(err)}")
+        return _as_tool_result(_error_payload(f"Document search failed: {str(err)}"))
     finally:
         record_mcp_server_tool_outcome(tool, _start, outcome)
         if result_count is not None:
             record_mcp_search_results(tool, result_count)
+
+
+@mcp_server.tool()
+async def query_metadata(
+    table: Literal[
+        "document", "hierarchy_node", "chat_session", "chat_message", "search_doc"
+    ],
+    count: bool = False,
+    group_by: Literal["source", "owner", "month"] | None = None,
+    limit: int | None = None,
+    cursor: str | None = None,
+    order_by: Literal[
+        "updated_desc",
+        "updated_asc",
+        "created_desc",
+        "created_asc",
+        "title_asc",
+        "title_desc",
+    ]
+    | None = None,
+    source_type: str | list[str] | None = None,
+    title_contains: str | list[str] | None = None,
+    updated_after: str | None = None,
+    updated_before: str | None = None,
+    owned_by: str | list[str] | None = None,
+    parent_hierarchy_node_id: int | list[int] | None = None,
+    name_contains: str | list[str] | None = None,
+    parent_id: int | list[int] | None = None,
+    node_type: str | list[str] | None = None,
+    description_contains: str | list[str] | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    chat_session_id: str | list[str] | None = None,
+    content_contains: str | list[str] | None = None,
+    message_type: Literal["user", "assistant"] | None = None,
+    sent_after: str | None = None,
+    sent_before: str | None = None,
+    chat_message_id: int | None = None,
+    cited_only: bool | None = None,
+    agent: str | None = None,
+) -> dict[str, Any]:
+    """
+    Exact counts and listings over the metadata of the user's Onyx knowledge
+    base, and over the user's own Onyx chat history. Use it for questions that
+    top-k search cannot answer completely: "how many Jira tickets changed last
+    week", "list every doc with 'pricing' in the title", "the 10 oldest
+    Confluence pages", "documents by owner", "every doc that mentions
+    'SOC 2'". It filters on metadata (titles, dates, owners, sources,
+    folders) and, with `content_contains`, on the words in a document's text;
+    use `search_indexed_documents` for what documents say.
+
+    Tables and their filters:
+    - `document`: `source_type`, `title_contains`, `updated_after`,
+      `updated_before`, `owned_by`, `parent_hierarchy_node_id`,
+      `content_contains`. Listings take `order_by` and return `next_cursor`
+      when more match: pass it back as `cursor` with the same filters and
+      `order_by` for the next page. `group_by`: `source` or `owner` (with `count`).
+      `content_contains` matches whole words or phrases in the text, the start
+      of the title, the metadata values in the indexed text, and any AI-generated
+      summaries, matched together as one string; with the default settings, case and word form do not
+      matter. It searches Salesforce only under public connectors. Each
+      indexed section of a document is matched on its own, so a phrase that
+      crosses two sections can be missed. Each value takes at most 200
+      characters, and a value that the index analyzer reduces to no words
+      (with the default settings, "the and") is an error. It is slow: use it
+      only for an exhaustive list or count by content, and add date, source or
+      folder filters when you can. Lists with it sort by date only; counts take
+      no `order_by`. It does not work with `group_by`. A broad count can return "At
+      least N", and a count can be higher than the rows a listing
+      returns; a slow page can hold fewer rows, or none, and still return
+      `next_cursor`, so keep paging while it is set. Deployments without the
+      document index refuse it.
+    - `hierarchy_node` (folders, spaces, channels): `source_type`,
+      `name_contains`, `parent_id`, `node_type`.
+    - `chat_session`: `description_contains`, `created_after`,
+      `created_before`. `group_by`: `month`.
+    - `chat_message`: `chat_session_id`, `content_contains`, `message_type`,
+      `sent_after`, `sent_before`. `group_by`: `month`.
+    - `search_doc`: `chat_message_id` (required), `cited_only` — the
+      documents a past answer cited or retrieved.
+    The chat-history tables (`chat_session`, `chat_message`, `search_doc`)
+    need a token that allows `read:chat`. Apps connected before Onyx added
+    `read:chat`, and tokens with only `read:search`, get an error for them.
+
+    List filters take one value or a list, and a list matches any of its
+    values; different filters are all applied. Dates are ISO 8601 (`2026-06-01`); `*_before` bounds are
+    exclusive. `count` returns only the number of matches. `limit` is the row
+    or page size (default 25, max 100). `agent` keeps document queries inside
+    that Onyx agent's knowledge, resolved the same way as for
+    `search_indexed_documents`.
+
+    Returns ``{"result": "<rows or count as text>"}``; listed documents carry
+    their links.
+
+    Example usage:
+    ```
+    {
+        "table": "document",
+        "source_type": ["jira", "linear"],
+        "updated_after": "2026-11-01",
+        "count": true,
+        "group_by": "source"
+    }
+    ```
+    """
+    _start = time.monotonic()
+    tool = MCPServerToolName.QUERY_METADATA
+    arguments: dict[str, Any] = {
+        name: value
+        for name, value in {
+            "table": table,
+            "group_by": group_by,
+            "limit": limit,
+            "cursor": cursor,
+            "order_by": order_by,
+            "source_type": source_type,
+            "title_contains": title_contains,
+            "updated_after": updated_after,
+            "updated_before": updated_before,
+            "owned_by": owned_by,
+            "parent_hierarchy_node_id": parent_hierarchy_node_id,
+            "name_contains": name_contains,
+            "parent_id": parent_id,
+            "node_type": node_type,
+            "description_contains": description_contains,
+            "created_after": created_after,
+            "created_before": created_before,
+            "chat_session_id": chat_session_id,
+            "content_contains": content_contains,
+            "message_type": message_type,
+            "sent_after": sent_after,
+            "sent_before": sent_before,
+            "chat_message_id": chat_message_id,
+            "cited_only": cited_only,
+        }.items()
+        if value is not None
+    }
+    if count:
+        arguments["count"] = True
+    agent = (agent or "").strip() or None
+    logger.info(
+        "Onyx MCP Server: metadata query: table=%s, count=%s, agent=%s",
+        table,
+        count,
+        agent,
+    )
+
+    access_token = require_access_token()
+    outcome = MCPToolCallStatus.ERROR
+    try:
+        try:
+            persona_id = await _resolve_agent(agent, access_token) if agent else None
+        except _FilterError as err:
+            return _error_payload(str(err))
+
+        endpoint = (
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}"
+            "/search/postgres-query"
+        )
+        response = await _post_model(
+            endpoint,
+            PostgresQueryRequest(arguments=arguments, persona_id=persona_id),
+            access_token,
+        )
+        if not response.is_success:
+            return _error_payload(_extract_error_detail(response))
+        payload = PostgresQueryResponse.model_validate_json(response.content)
+        # A rejected query is a usable answer: it says how to fix the call.
+        outcome = MCPToolCallStatus.SUCCESS
+        if payload.is_error:
+            return _error_payload(payload.result)
+        return {"result": payload.result}
+    except Exception as err:
+        logger.error("Onyx MCP Server: metadata query error: %s", err, exc_info=True)
+        return _error_payload(f"Metadata query failed: {str(err)}")
+    finally:
+        record_mcp_server_tool_outcome(tool, _start, outcome)
 
 
 @mcp_server.tool()

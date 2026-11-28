@@ -1,12 +1,12 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgMinusCircle } from "@opal/icons";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
-import { Section } from "@/layouts/general-layouts";
 
 export interface InputTypeInElementFieldProps extends Omit<
   InputTypeInProps,

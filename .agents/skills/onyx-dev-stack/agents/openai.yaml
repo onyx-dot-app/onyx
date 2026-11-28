@@ -1,0 +1,4 @@
+interface:
+  display_name: "Onyx dev stack"
+  short_description: "Start and stop the local Onyx development stack"
+  default_prompt: "Use $onyx-dev-stack to start the local Onyx development stack."

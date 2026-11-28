@@ -1,21 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ensureHrefProtocol, noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { useState } from "react";
+import { ensureHrefProtocol } from "@/lib/utils";
+import { cn, richNodes } from "@opal/utils";
 import type { Components } from "react-markdown";
-import Text from "@/refresh-components/texts/Text";
-import { Button, LineItemButton, OpenButton, Popover } from "@opal/components";
+import { Button, Dropdown, SelectButton, Text } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useCustomFooterContent } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useSidebarState } from "@opal/layouts";
+import { usePublishedHeight } from "@opal/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useTranslations } from "next-intl";
 
@@ -23,9 +23,11 @@ const NRF_FOOTER_HEIGHT_VAR = "--nrf-footer-height";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="p" text03 secondaryAction className="my-0! text-center">
-      {children}
-    </Text>
+    <p className="my-0! text-center">
+      <Text font="secondary-action" color="text-03">
+        {richNodes(children)}
+      </Text>
+    </p>
   ),
   a: ({
     href,
@@ -42,8 +44,8 @@ const footerMarkdownComponents = {
         {...rest}
         className={cn(className, "underline underline-offset-2")}
       >
-        <Text text03 secondaryAction>
-          {children}
+        <Text font="secondary-action" color="text-03">
+          {richNodes(children)}
         </Text>
       </a>
     );
@@ -68,28 +70,10 @@ export default function NRFChrome() {
   const { setFolded } = useSidebarState();
   const appPosition = useAppPosition();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
-  const footerRef = useRef<HTMLElement>(null);
+  const [footer, setFooter] = useState<HTMLElement | null>(null);
 
-  // Publishes the footer height so NRFPage can keep scrollable content clear of it
-  useEffect(() => {
-    const footer = footerRef.current;
-    const host = footer?.parentElement;
-    if (!footer || !host) return;
-
-    const update = () =>
-      host.style.setProperty(
-        NRF_FOOTER_HEIGHT_VAR,
-        `${footer.getBoundingClientRect().height}px`
-      );
-    update();
-
-    const observer = new ResizeObserver(update);
-    observer.observe(footer);
-    return () => {
-      observer.disconnect();
-      host.style.removeProperty(NRF_FOOTER_HEIGHT_VAR);
-    };
-  }, []);
+  // NRFPage keeps its scrollable content clear of the footer
+  usePublishedHeight(footer, NRF_FOOTER_HEIGHT_VAR);
 
   const effectiveMode: AppMode =
     appPosition.isNewSession() && state.phase === "idle"
@@ -120,54 +104,52 @@ export default function NRFChrome() {
             />
           )}
           {showModeToggle && (
-            <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
-              <Popover.Trigger asChild>
-                <OpenButton
+            <Dropdown open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
+              <Dropdown.Trigger asChild>
+                <SelectButton
+                  chevron
+                  aria-label={t("appChrome.modeButton.ariaLabel")}
                   icon={
                     effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                   }
+                  interaction={modePopoverOpen ? "hover" : "rest"}
                 >
                   {effectiveMode === "search"
                     ? t("appChrome.mode.search.label")
                     : t("appChrome.mode.chat.label")}
-                </OpenButton>
-              </Popover.Trigger>
-              <Popover.Content align="start" width="lg">
-                <Popover.Menu>
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgSearchMenu}
-                    state={effectiveMode === "search" ? "selected" : "empty"}
-                    description={t("appChrome.mode.search.description")}
-                    onClick={noProp(() => {
-                      setAppMode("search");
-                      setModePopoverOpen(false);
-                    })}
-                    title={t("appChrome.mode.search.label")}
-                  />
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgBubbleText}
-                    state={effectiveMode === "chat" ? "selected" : "empty"}
-                    description={t("appChrome.mode.chat.description")}
-                    onClick={noProp(() => {
-                      setAppMode("chat");
-                      setModePopoverOpen(false);
-                    })}
-                    title={t("appChrome.mode.chat.label")}
-                  />
-                </Popover.Menu>
-              </Popover.Content>
-            </Popover>
+                </SelectButton>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("appChrome.modeButton.ariaLabel")}
+                value={effectiveMode}
+                onSelect={(option) =>
+                  setAppMode(option.value === "search" ? "search" : "chat")
+                }
+                items={[
+                  {
+                    kind: "option",
+                    value: "search",
+                    icon: SvgSearchMenu,
+                    title: t("appChrome.mode.search.label"),
+                    description: t("appChrome.mode.search.description"),
+                  },
+                  {
+                    kind: "option",
+                    value: "chat",
+                    icon: SvgBubbleText,
+                    title: t("appChrome.mode.chat.label"),
+                    description: t("appChrome.mode.chat.description"),
+                  },
+                ]}
+              />
+            </Dropdown>
           )}
         </div>
       )}
 
       {/* Footer — bottom-center, transparent background */}
       <footer
-        ref={footerRef}
+        ref={setFooter}
         className="absolute bottom-0 start-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto"
       >
         <MinimalMarkdown

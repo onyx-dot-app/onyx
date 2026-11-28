@@ -1,5 +1,4 @@
 import io
-import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import NamedTuple
@@ -12,10 +11,22 @@ from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
     build_single_file_bundle,
+    check_skill_md_size,
+    compute_bundle_manifest,
     compute_bundle_sha256,
     normalize_custom_bundle,
+    normalize_stored_bundle,
+    open_bundle_zip,
+    rename_bundle_skill_md,
 )
-from onyx.skills.metadata import parse_skill_document
+from onyx.skills.metadata import frontmatter_for_jsonb, parse_skill_document
+from onyx.skills.models import (
+    PluginBundle,
+    PluginManifest,
+    PluginNeed,
+    PluginSkillContent,
+    PluginVersionContent,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -26,6 +37,8 @@ class IngestedBundle(NamedTuple):
     bundle_file_id: str
     bundle_sha256: str
     description: str
+    # What a plugin version made from this bundle stores.
+    content: PluginVersionContent
 
 
 def save_skill_bundle_bytes(
@@ -48,6 +61,8 @@ def ingest_skill_bundle(
     file_store: FileStore,
     *,
     expected_name: str | None = None,
+    public_name: str | None = None,
+    upload_limits: bool = True,
 ) -> IngestedBundle:
     """Validate, parse, hash, and store a custom skill bundle.
 
@@ -55,49 +70,120 @@ def ingest_skill_bundle(
     use their frontmatter ``name`` as canonical identity and are stored as ZIPs.
 
     Pass ``expected_name`` to keep an existing row's identity when replacing a
-    bundle. On creation, both ZIPs and standalone files use the validated
+    bundle. A renamed skill passes its new ``public_name`` too: an upload
+    with that name is stored under ``expected_name``. On creation, both ZIPs and standalone files use the validated
     frontmatter name; the upload filename is not an identity source.
 
     Prefer ``ingested_skill_bundle`` when the stored blob should be cleaned up
-    automatically if the caller's transaction fails.
+    automatically if the caller's transaction fails. Pass ``upload_limits=False``
+    for an edit of a saved bundle whose producer already applied the limits
+    that fit the edit.
     """
     is_standalone_skill_md = filename is not None and filename.lower() == "skill.md"
     if is_standalone_skill_md:
         bundle_bytes = build_single_file_bundle(SKILL_MD_NAME, bundle_bytes)
 
-    normalized = normalize_custom_bundle(bundle_bytes)
-    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+    normalized = (
+        normalize_custom_bundle(bundle_bytes)
+        if upload_limits
+        else normalize_stored_bundle(bundle_bytes)
+    )
+    with open_bundle_zip(normalized.content) as bundle_zip:
         raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
+    check_skill_md_size(raw_skill_md)
     document = parse_skill_document(
         raw_skill_md,
         directory_name=normalized.source_directory,
     )
     name = document.metadata.name
     description = document.metadata.description
+    bundle_content = normalized.content
     if expected_name is not None and name != expected_name:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Replacement SKILL.md frontmatter field 'name' must remain "
-            f"'{expected_name}'",
-        )
+        if name != public_name:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Replacement SKILL.md frontmatter field 'name' must remain "
+                f"'{public_name or expected_name}'",
+            )
+        bundle_content = rename_bundle_skill_md(bundle_content, expected_name)
+        with open_bundle_zip(bundle_content) as bundle_zip:
+            raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
+        check_skill_md_size(raw_skill_md)
+        document = parse_skill_document(raw_skill_md)
+        name = expected_name
     if name in BUILT_IN_SKILLS:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"skill name '{name}' is reserved",
         )
-    sha = compute_bundle_sha256(normalized.content)
-
-    bundle_file_id = save_skill_bundle_bytes(
-        normalized.content,
+    content = store_version_content(
+        bundle_content,
         display_name=f"{name}.zip",
+        skills=[
+            PluginSkillContent(
+                path="",
+                skill_md=raw_skill_md.decode("utf-8"),
+                frontmatter=frontmatter_for_jsonb(document),
+            )
+        ],
         file_store=file_store,
     )
     return IngestedBundle(
         canonical_name=name,
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=sha,
+        bundle_file_id=content.bundle_file_id,
+        bundle_sha256=compute_bundle_sha256(bundle_content),
         description=description,
+        content=content,
     )
+
+
+def store_version_content(
+    normalized_bundle: bytes,
+    *,
+    display_name: str,
+    skills: list[PluginSkillContent],
+    file_store: FileStore,
+    manifest: PluginManifest | None = None,
+    needs: list[PluginNeed] | None = None,
+) -> PluginVersionContent:
+    bundle_file_id = save_skill_bundle_bytes(
+        normalized_bundle, display_name=display_name, file_store=file_store
+    )
+    try:
+        file_manifest = compute_bundle_manifest(normalized_bundle)
+        return PluginVersionContent(
+            bundle_file_id=bundle_file_id,
+            bundle_sha256=compute_bundle_sha256(normalized_bundle),
+            is_valid=True,
+            file_manifest=file_manifest,
+            unpacked_size_bytes=sum(entry.size for entry in file_manifest),
+            file_count=len(file_manifest),
+            skills=skills,
+            manifest=manifest,
+            needs=needs,
+        )
+    except Exception:
+        delete_bundle_blob(file_store, bundle_file_id)
+        raise
+
+
+@contextmanager
+def stored_plugin_bundle(
+    bundle: PluginBundle, file_store: FileStore
+) -> Iterator[PluginVersionContent]:
+    content = store_version_content(
+        bundle.content,
+        display_name=f"{bundle.manifest.name}.zip",
+        skills=[skill.content for skill in bundle.skills],
+        file_store=file_store,
+        manifest=bundle.manifest,
+        needs=bundle.needs,
+    )
+    try:
+        yield content
+    except Exception:
+        delete_bundle_blob(file_store, content.bundle_file_id)
+        raise
 
 
 @contextmanager
@@ -107,12 +193,16 @@ def ingested_skill_bundle(
     file_store: FileStore,
     *,
     expected_name: str | None = None,
+    public_name: str | None = None,
+    upload_limits: bool = True,
 ) -> Iterator[IngestedBundle]:
     ingested = ingest_skill_bundle(
         bundle_bytes,
         filename,
         file_store,
         expected_name=expected_name,
+        public_name=public_name,
+        upload_limits=upload_limits,
     )
     try:
         yield ingested

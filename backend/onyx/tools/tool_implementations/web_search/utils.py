@@ -1,3 +1,8 @@
+import re
+from collections.abc import Iterable
+
+from pydantic import BaseModel
+
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk, InferenceSection, SearchDoc
 from onyx.tools.tool_implementations.open_url.models import WebContent
@@ -194,7 +199,7 @@ def inference_section_from_internet_search_result(
     )
 
 
-def extract_url_snippet_map(documents: list[SearchDoc]) -> dict[str, str]:
+def extract_url_snippet_map(documents: Iterable[SearchDoc]) -> dict[str, str]:
     """
     Given a list of SearchDocs, this will extract the url -> summary map.
     """
@@ -203,3 +208,34 @@ def extract_url_snippet_map(documents: list[SearchDoc]) -> dict[str, str]:
         if document.source_type == DocumentSource.WEB and document.link:
             url_snippet_map[document.link] = document.blurb
     return url_snippet_map
+
+
+_SITE_OPERATOR_RE = re.compile(r"(?<!\S)(-?)site:\s*(\S+)", re.IGNORECASE)
+
+
+class SiteOperators(BaseModel):
+    query: str
+    include_domains: list[str]
+    exclude_domains: list[str]
+
+
+def extract_site_operators(query: str) -> SiteOperators:
+    """Split `site:` and `-site:` operators out of a query.
+
+    Domains keep any path, for example "reddit.com/r/leagueoflegends". With
+    only include operators, the first include domain becomes the query.
+    """
+    include_domains: list[str] = []
+    exclude_domains: list[str] = []
+    for negated, domain in _SITE_OPERATOR_RE.findall(query):
+        (exclude_domains if negated else include_domains).append(domain)
+    cleaned_query = " ".join(_SITE_OPERATOR_RE.sub(" ", query).split())
+
+    if not cleaned_query and include_domains:
+        cleaned_query = include_domains[0]
+
+    return SiteOperators(
+        query=cleaned_query,
+        include_domains=include_domains,
+        exclude_domains=exclude_domains,
+    )

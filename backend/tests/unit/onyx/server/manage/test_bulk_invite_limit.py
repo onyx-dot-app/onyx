@@ -63,7 +63,7 @@ def test_trial_tenant_cannot_exceed_invite_limit(*_mocks: None) -> None:
     new_callable=lambda: _make_shared_session_mock(next_total=3),
 )
 @patch("onyx.server.manage.users.enforce_invite_rate_limit")
-@patch("onyx.server.manage.users.get_redis_client")
+@patch("onyx.server.manage.users.get_cache_backend")
 @patch("onyx.server.manage.users.MULTI_TENANT", True)
 @patch("onyx.server.manage.users.DEV_MODE", True)
 @patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
@@ -142,6 +142,7 @@ def _with_common_patches(fn: object) -> object:
     return fn
 
 
+@pytest.mark.usefixtures("enterprise_audit")
 @_with_common_patches
 @patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
 def test_bulk_invite_emits_user_create(
@@ -166,6 +167,7 @@ def test_bulk_invite_emits_user_create(
     assert events[0]["extra"]["invited_emails"] == ["new@example.com"]
 
 
+@pytest.mark.usefixtures("enterprise_audit")
 # Explicit patches (not _with_common_patches): this case needs
 # get_invited_users to report the email as already-invited, which the helper
 # hardcodes to [] and re-patching from inside the stack doesn't override.
@@ -270,7 +272,7 @@ def test_paid_tenant_bypasses_remove_invited_rate_limit(
 
 @patch("onyx.server.manage.users.enforce_remove_invited_rate_limit")
 @patch("onyx.server.manage.users.remove_user_from_invited_users", return_value=0)
-@patch("onyx.server.manage.users.get_redis_client")
+@patch("onyx.server.manage.users.get_cache_backend")
 @patch("onyx.server.manage.users.MULTI_TENANT", True)
 @patch("onyx.server.manage.users.DEV_MODE", True)
 @patch("onyx.server.manage.users.is_tenant_on_trial_fn", return_value=True)

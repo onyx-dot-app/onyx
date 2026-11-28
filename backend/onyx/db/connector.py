@@ -1,19 +1,22 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, exists, func, select
+from sqlalchemy import and_, delete, exists, func, select, update
 from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.event_inbox.source_registry import webhook_source_for
+from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.models import InputType
 from onyx.db.enums import IndexingMode
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
     FederatedConnector,
     IndexAttempt,
+    UserGroup__ConnectorCredentialPair,
 )
-from onyx.kg.models import KGConnectorData
 from onyx.server.documents.models import ConnectorBase, ObjectCreationIdResponse
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
@@ -82,6 +85,40 @@ def fetch_connector_by_id(connector_id: int, db_session: Session) -> Connector |
     return connector
 
 
+def delete_connector_if_unpaired(db_session: Session, connector_id: int) -> bool:
+    """Remove a connector nobody has paired, inside the caller's transaction.
+    The row lock makes a pair being inserted concurrently either show up here
+    or wait behind the delete and fail on the missing connector. Returns
+    whether the row is gone."""
+    connector = db_session.execute(
+        select(Connector).where(Connector.id == connector_id).with_for_update()
+    ).scalar_one_or_none()
+    if connector is None:
+        return True
+    paired = db_session.scalar(
+        select(exists().where(ConnectorCredentialPair.connector_id == connector_id))
+    )
+    if paired:
+        return False
+    db_session.delete(connector)
+    return True
+
+
+def discard_connector_if_unpaired(db_session: Session, connector_id: int) -> bool:
+    """The cleanup behind a failed creation validation: it runs in its own
+    transaction and never raises, because the caller is inside an exception
+    handler whose validation error is what the user needs to see."""
+    try:
+        with db_session.begin():
+            return delete_connector_if_unpaired(db_session, connector_id)
+    except Exception:
+        logger.exception(
+            "Left connector %s behind after a failed validation", connector_id
+        )
+        db_session.rollback()
+        return False
+
+
 def fetch_ingestion_connector_by_name(
     connector_name: str, db_session: Session
 ) -> Connector | None:
@@ -106,6 +143,8 @@ def create_connector(
             "Connector by this name already exists, duplicate naming not allowed."
         )
 
+    _settle_event_input_type(connector_data)
+
     connector = Connector(
         name=connector_data.name,
         source=connector_data.source,
@@ -113,12 +152,38 @@ def create_connector(
         connector_specific_config=connector_data.connector_specific_config,
         refresh_freq=connector_data.refresh_freq,
         indexing_start=connector_data.indexing_start,
-        prune_freq=connector_data.prune_freq,
+        # Omitted takes the default; an explicit null never prunes.
+        prune_freq=(
+            connector_data.prune_freq
+            if "prune_freq" in connector_data.model_fields_set
+            else DEFAULT_PRUNING_FREQ
+        ),
+        check_freq=connector_data.check_freq,
     )
+    connector.validate_prune_freq()
+    connector.validate_check_freq()
     db_session.add(connector)
     db_session.commit()
 
     return ObjectCreationIdResponse(id=connector.id)
+
+
+def _settle_event_input_type(connector_data: ConnectorBase) -> None:
+    """A source with a webhook spec is always EVENT: as `poll` it would never
+    drain its queue. Decided here so every route that writes a connector
+    agrees."""
+    load_event_sources()
+    if webhook_source_for(connector_data.source) is None:
+        return
+    if connector_data.input_type != InputType.EVENT:
+        logger.info(
+            "Storing %s connector %r as %s, not the requested %s",
+            connector_data.source.value,
+            connector_data.name,
+            InputType.EVENT.value,
+            connector_data.input_type.value,
+        )
+    connector_data.input_type = InputType.EVENT
 
 
 def update_connector(
@@ -137,19 +202,40 @@ def update_connector(
             "Connector by this name already exists, duplicate naming not allowed."
         )
 
+    _settle_event_input_type(connector_data)
+
     connector.name = connector_data.name
     connector.source = connector_data.source
     connector.input_type = connector_data.input_type
     connector.connector_specific_config = connector_data.connector_specific_config
     connector.refresh_freq = connector_data.refresh_freq
-    connector.prune_freq = (
-        connector_data.prune_freq
-        if connector_data.prune_freq is not None
-        else DEFAULT_PRUNING_FREQ
-    )
+    # As check_freq: omitted keeps the schedule, an explicit null clears it
+    # (the connector then never prunes).
+    if "prune_freq" in connector_data.model_fields_set:
+        connector.prune_freq = connector_data.prune_freq
+        connector.validate_prune_freq()
+    # Omitted keeps the schedule (Terraform's upsert never sends it), an explicit null clears it.
+    if "check_freq" in connector_data.model_fields_set:
+        connector.check_freq = connector_data.check_freq
+        connector.validate_check_freq()
 
     db_session.commit()
     return connector
+
+
+def set_connector_check_frequency(
+    db_session: Session, connector: Connector, seconds: int | None
+) -> None:
+    """Schedules the connector's checks every ``seconds``, or None for on request only. Commits."""
+    connector.check_freq = seconds
+    connector.validate_check_freq()
+    db_session.commit()
+
+
+def delete_connector_row__no_commit(db_session: Session, connector: Connector) -> None:
+    """Marks the connector for deletion and nothing else. The caller has
+    already removed what depends on it."""
+    db_session.delete(connector)
 
 
 def delete_connector(
@@ -165,6 +251,17 @@ def delete_connector(
             success=True, message="Connector was already deleted", data=connector_id
         )
 
+    # Manage rows have no ON DELETE CASCADE, so the cc-pair delete below
+    # would fail on them.
+    db_session.execute(
+        delete(UserGroup__ConnectorCredentialPair).where(
+            UserGroup__ConnectorCredentialPair.cc_pair_id.in_(
+                select(ConnectorCredentialPair.id).where(
+                    ConnectorCredentialPair.connector_id == connector_id
+                )
+            )
+        )
+    )
     db_session.delete(connector)
     return StatusResponse(
         success=True, message="Connector deleted successfully", data=connector_id
@@ -248,7 +345,9 @@ _INTERNAL_ONLY_SOURCES = {
 }
 
 
-def fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
+def fetch_unique_document_sources(
+    db_session: Session, *, include_ingestion_api: bool = False
+) -> list[DocumentSource]:
     distinct_sources = db_session.query(Connector.source).distinct().all()
 
     sources = [
@@ -256,6 +355,17 @@ def fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
         for source in distinct_sources
         if source[0] not in _INTERNAL_ONLY_SOURCES
     ]
+    # The default Ingestion API connector always exists, so list its source
+    # only once documents were pushed to an Ingestion API connector.
+    if include_ingestion_api and db_session.scalar(
+        select(
+            exists().where(
+                DocumentByConnectorCredentialPair.connector_id == Connector.id,
+                Connector.source == DocumentSource.INGESTION_API,
+            )
+        )
+    ):
+        sources.append(DocumentSource.INGESTION_API)
 
     return sources
 
@@ -299,7 +409,13 @@ def create_initial_default_connector(db_session: Session) -> None:
     db_session.commit()
 
 
-def mark_ccpair_as_pruned(cc_pair_id: int, db_session: Session) -> None:
+def mark_ccpair_as_pruned(
+    cc_pair_id: int,
+    db_session: Session,
+    served_prune_request_at: datetime | None,
+) -> None:
+    """Records a successful prune. Clears the pair's prune request only when
+    the prune was dispatched for that request, so a newer one stays."""
     stmt = select(ConnectorCredentialPair).where(
         ConnectorCredentialPair.id == cc_pair_id
     )
@@ -308,6 +424,15 @@ def mark_ccpair_as_pruned(cc_pair_id: int, db_session: Session) -> None:
         raise ValueError(f"No cc_pair with ID: {cc_pair_id}")
 
     cc_pair.last_pruned = datetime.now(timezone.utc)
+    if served_prune_request_at is not None:
+        db_session.execute(
+            update(ConnectorCredentialPair)
+            .where(
+                ConnectorCredentialPair.id == cc_pair_id,
+                ConnectorCredentialPair.prune_requested_at == served_prune_request_at,
+            )
+            .values(prune_requested_at=None)
+        )
     db_session.commit()
 
 
@@ -372,29 +497,3 @@ def mark_ccpair_with_indexing_trigger(
     except Exception:
         db_session.rollback()
         raise
-
-
-def get_kg_enabled_connectors(db_session: Session) -> list[KGConnectorData]:
-    """
-    Retrieves a list of connector IDs that have not been KG processed for a given tenant.
-    Args:
-        db_session (Session): The database session to use
-    Returns:
-        list[KGConnectorData]: List of connector IDs with KG extraction enabled but have unprocessed documents
-    """
-    try:
-        stmt = select(Connector.id, Connector.source, Connector.kg_coverage_days).where(
-            Connector.kg_processing_enabled
-        )
-        result = db_session.execute(stmt)
-
-        connector_results = [
-            KGConnectorData(id=row[0], source=row[1].lower(), kg_coverage_days=row[2])
-            for row in result.fetchall()
-        ]
-
-        return connector_results
-
-    except Exception as e:
-        logger.error("Error fetching unprocessed connector IDs: %s", str(e))
-        raise e

@@ -1,14 +1,24 @@
+import asyncio
 import contextvars
 import threading
 import time
-from collections.abc import Generator, Iterator
+from collections.abc import Coroutine, Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 
+from onyx.connectors.models import ConnectorStopSignal
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.utils import threadpool_concurrency
 from onyx.utils.threadpool_concurrency import (
+    BoundedParallelRunner,
     ThreadSafeDict,
+    call_later,
     parallel_yield,
+    run_calls_in_parallel,
+    run_functions_tuples_in_parallel,
     run_in_background,
     run_with_timeout,
     wait_on_background,
@@ -393,3 +403,245 @@ def test_parallel_yield_non_blocking() -> None:
     # Verify no values are missing
     assert len(results) == 300  # Should have all values from 0 to 299
     assert sorted(results) == list(range(300))
+
+
+def test_already_cancelled_call_does_not_start() -> None:
+    cancellation = CancellationSignal()
+    cancellation.cancel()
+
+    async def operation() -> None:
+        pytest.fail("A cancelled request must not start")
+
+    with pytest.raises(AgentCancelled):
+        threadpool_concurrency.run_until_cancelled(
+            operation(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
+
+
+@pytest.mark.parametrize("cancel_during_operation", [False, True])
+def test_completed_call_keeps_its_result(cancel_during_operation: bool) -> None:
+    cancellation = CancellationSignal()
+
+    async def operation() -> str:
+        if cancel_during_operation:
+            cancellation.cancel()
+        return "completed"
+
+    assert (
+        threadpool_concurrency.run_until_cancelled(
+            operation(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
+        == "completed"
+    )
+    assert not cancellation._callbacks
+    cancellation.cancel()
+
+
+def test_failed_call_keeps_its_error() -> None:
+    cancellation = CancellationSignal()
+    failure = ValueError("server failed")
+
+    async def operation() -> None:
+        raise failure
+
+    with pytest.raises(ValueError) as error:
+        threadpool_concurrency.run_until_cancelled(
+            operation(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
+    assert error.value is failure
+    assert not cancellation._callbacks
+    cancellation.cancel()
+
+
+def test_cancellation_before_event_loop_starts_does_not_start_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cancellation = CancellationSignal()
+    run = threadpool_concurrency.run_async_sync_no_cancel
+
+    def cancel_before_running(coroutine: Coroutine[Any, Any, object]) -> object:
+        cancellation.cancel()
+        return run(coroutine)
+
+    async def operation() -> None:
+        pytest.fail("A cancelled request must not start")
+
+    monkeypatch.setattr(
+        threadpool_concurrency, "run_async_sync_no_cancel", cancel_before_running
+    )
+    with pytest.raises(AgentCancelled):
+        threadpool_concurrency.run_until_cancelled(
+            operation(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
+    assert not cancellation._callbacks
+
+
+def test_cancellation_logs_unexpected_cleanup_failure() -> None:
+    cancellation = CancellationSignal()
+
+    async def operation() -> None:
+        try:
+            asyncio.get_running_loop().call_soon(cancellation.cancel)
+            await asyncio.sleep(30)
+        finally:
+            raise ValueError("cleanup failed")
+
+    with patch.object(threadpool_concurrency.logger, "exception") as log:
+        with pytest.raises(AgentCancelled):
+            threadpool_concurrency.run_until_cancelled(
+                operation(),
+                is_cancelled=lambda: cancellation.cancelled,
+                on_cancel=cancellation.on_cancel,
+                cancellation_error=AgentCancelled,
+            )
+    log.assert_called_once_with("Coroutine cleanup failed after cancellation")
+    assert not cancellation._callbacks
+
+
+def test_bounded_parallel_runner_caps_pending_calls() -> None:
+    running = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def work(n: int) -> int:
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        time.sleep(0.02)
+        with lock:
+            running -= 1
+        return n
+
+    results: list[int] = []
+    with BoundedParallelRunner[int](max_workers=8, max_in_flight=3) as runner:
+        for n in range(20):
+            results.extend(runner.submit(work, n))
+            assert len(runner._pending) <= 3
+        results.extend(runner.drain())
+
+    assert sorted(results) == list(range(20))
+    assert peak <= 3
+
+
+def test_bounded_parallel_runner_raises_the_call_error() -> None:
+    def fail() -> int:
+        raise ValueError("boom")
+
+    with BoundedParallelRunner[int](max_workers=2) as runner:
+        runner.submit(fail)
+        with pytest.raises(ValueError, match="boom"):
+            list(runner.drain())
+
+
+def test_call_later_runs_due_callbacks_in_order_on_one_thread() -> None:
+    request = contextvars.ContextVar("request", default="none")
+    request.set("caller")
+    ran: list[tuple[str, str, int]] = []
+    done = threading.Event()
+
+    def record(name: str) -> None:
+        ran.append((name, request.get(), threading.get_ident()))
+        if name == "last":
+            done.set()
+
+    call_later(0.2, lambda: record("last"))
+    cancel = call_later(0.05, lambda: record("cancelled"))
+    call_later(0.1, lambda: record("second"))
+    call_later(0.0, lambda: record("first"))
+    cancel()
+
+    assert done.wait(5)
+    assert [name for name, _, _ in ran] == ["first", "second", "last"]
+    assert {context for _, context, _ in ran} == {"caller"}
+    assert len({thread for _, _, thread in ran}) == 1
+    assert threading.get_ident() not in {thread for _, _, thread in ran}
+
+
+class _RecordingLogger:
+    def __init__(self) -> None:
+        self.lines: list[tuple[str, str]] = []
+        self.tracebacks: list[bool] = []
+
+    def __getattr__(self, level: str) -> Any:
+        def record(message: str, *args: Any, **kwargs: Any) -> None:
+            self.lines.append((level, message % args if args else message))
+            self.tracebacks.append(
+                level == "exception" or kwargs.get("exc_info") is not None
+            )
+
+        return record
+
+
+def _stop() -> None:
+    raise ConnectorStopSignal("Stop signal while waiting for the API budget")
+
+
+def _fail() -> None:
+    raise ValueError("a real error")
+
+
+@pytest.mark.parametrize("timeout", [None, 30.0])
+def test_a_stop_signal_logs_one_info_line_and_propagates(
+    monkeypatch: pytest.MonkeyPatch, timeout: float | None
+) -> None:
+    """A stop is no failure: no ERROR line and no traceback."""
+    recorder = _RecordingLogger()
+    monkeypatch.setattr(threadpool_concurrency, "logger", recorder)
+
+    with pytest.raises(ConnectorStopSignal):
+        run_functions_tuples_in_parallel([(_stop, ())], timeout=timeout)
+
+    assert [level for level, _ in recorder.lines] == ["info"]
+    assert recorder.tracebacks == [False]
+    assert "stopped" in recorder.lines[0][1]
+
+
+def test_a_real_error_keeps_its_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorder = _RecordingLogger()
+    monkeypatch.setattr(threadpool_concurrency, "logger", recorder)
+
+    with pytest.raises(ValueError):
+        run_functions_tuples_in_parallel([(_fail, ())])
+
+    assert [level for level, _ in recorder.lines] == ["error"]
+    assert recorder.tracebacks == [True]
+
+
+def test_run_calls_in_parallel_keeps_the_order_of_the_calls() -> None:
+    last_done = threading.Event()
+
+    def first() -> str:
+        # Finishes after the last call, so that completion order differs.
+        assert last_done.wait(timeout=5)
+        return "first"
+
+    def last() -> str:
+        last_done.set()
+        return "last"
+
+    assert run_calls_in_parallel([first, lambda: "middle", last], 3) == [
+        "first",
+        "middle",
+        "last",
+    ]
+
+
+def test_run_calls_in_parallel_raises_a_failure() -> None:
+    def fail() -> int:
+        raise ValueError("boom")
+
+    with pytest.raises(ValueError):
+        run_calls_in_parallel([lambda: 1, fail])

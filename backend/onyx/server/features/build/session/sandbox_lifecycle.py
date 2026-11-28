@@ -22,25 +22,24 @@ external I/O:
 """
 
 import time
-from dataclasses import dataclass
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
 
-from redis.lock import Lock as RedisLock
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session as DBSession
 
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox, User
-from onyx.db.users import fetch_user_by_id
-from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.db.build_session import (
+from onyx.cache.interface import CacheLock
+from onyx.db.build_session import (
     clear_nextjs_ports_for_user,
     get_orphan_build_session_ids,
+    get_webapp_session_ids,
     mark_user_sessions_idle__no_commit,
 )
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.enums import SandboxStatus
+from onyx.db.models import Sandbox, User
+from onyx.db.sandbox import (
     begin_provisioning_attempt__no_commit,
     begin_recovery_attempt__no_commit,
     create_sandbox__no_commit,
@@ -52,14 +51,24 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
     get_sandbox_user_map,
     get_snapshots_for_session,
+    has_active_craft_pat,
+    record_cleanup_checkpoint__no_commit,
     set_sandbox_mcp_config_hashes__no_commit,
-    set_sandbox_skills_hashes__no_commit,
+    set_sandbox_skills_states__no_commit,
     sleep_running_sandbox__no_commit,
 )
+from onyx.db.users import fetch_user_by_id
+from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
+from onyx.server.features.build.preview_activity import latest_preview_activity
 from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
     FileSet,
+    SandboxCleanupCheckpoint,
     SandboxProvisionContentionError,
+    SandboxResource,
+    SandboxResourceKind,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
@@ -81,6 +90,8 @@ from onyx.server.features.build.timeouts import (
     POLL_INTERVAL_SECONDS,
     PROVISION_WAIT_SECONDS,
     RECOVERY_HISTORY_SNAPSHOT_SECONDS,
+    RUNTIME_TEARDOWN_SECONDS,
+    SANDBOX_CLEANUP_DEADLINE_SECONDS,
 )
 from onyx.server.metrics.craft_sandbox import (
     SandboxProvisionPhase,
@@ -89,11 +100,8 @@ from onyx.server.metrics.craft_sandbox import (
     time_provision_phase,
     track_sandbox_provision_in_progress,
 )
-from onyx.skills.push import (
-    SKILLS_MOUNT_PATH,
-    build_user_skills_payload,
-    compute_skill_runtime_hash,
-)
+from onyx.skills.models import SandboxSkillsState
+from onyx.skills.push import SKILLS_MOUNT_PATH, build_user_skills_payload
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -115,11 +123,12 @@ _REPROVISIONABLE_STATUSES: frozenset[SandboxStatus] = frozenset(
 )
 
 
-@dataclass(frozen=True)
-class SandboxReservation:
+class SandboxReservation(BaseModel):
     """Committed identity of a sandbox provisioning attempt. Carries plain
     values only — never a live SQLAlchemy model or session — so external
     reconciliation cannot touch the reservation transaction."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     sandbox_id: UUID
     tenant_id: str
@@ -136,14 +145,15 @@ class SandboxReservation:
     terminate_before_provision: bool
 
 
-@dataclass(frozen=True)
-class ManagedContentPayload:
+class ManagedContentPayload(BaseModel):
     """Sandbox-level managed content, prebuilt from database state so the
     external push runs without an open transaction."""
 
+    model_config = ConfigDict(strict=True, frozen=True)
+
     connectable_apps_section: str
     skills_files: FileSet
-    skills_hash: str
+    skills_state: SandboxSkillsState
     mcp_fingerprint: str
     library_files: FileSet
 
@@ -194,6 +204,10 @@ def create_session_snapshot_keep_latest(
         storage_path=result.storage_path,
         size_bytes=result.size_bytes,
     )
+    db_session.commit()
+
+    if not prior_snapshots:
+        return result
 
     snapshot_manager = SnapshotManager(get_default_file_store())
     for old in prior_snapshots:
@@ -220,11 +234,11 @@ def build_managed_content_payload(
 ) -> ManagedContentPayload:
     """Read-only assembly of the skills/user-library payload and its hashes.
     Callers must close the read transaction before pushing externally."""
-    connectable_apps_section, skills_files = build_user_skills_payload(user, db_session)
+    skills = build_user_skills_payload(user, db_session)
     return ManagedContentPayload(
-        connectable_apps_section=connectable_apps_section,
-        skills_files=skills_files,
-        skills_hash=compute_skill_runtime_hash(skills_files, connectable_apps_section),
+        connectable_apps_section=skills.connectable_apps_section,
+        skills_files=skills.files,
+        skills_state=skills.state,
         mcp_fingerprint=craft_mcp_fingerprint(
             resolve_craft_mcp_servers(db_session, user)
         ),
@@ -282,13 +296,15 @@ def record_managed_content_hashes__no_commit(
 ) -> None:
     """Stamp the sandbox with the content state that was actually pushed.
     The MCP fingerprint is recorded regardless of the skill push (MCP config
-    is written per session), the skills hash only when the push landed."""
+    is written per session), the skills hash and the skills the run-time limit
+    left out only when the push landed."""
     set_sandbox_mcp_config_hashes__no_commit(
         db_session, {sandbox_id: payload.mcp_fingerprint}
     )
     if skills_hydrated:
-        set_sandbox_skills_hashes__no_commit(
-            db_session, {sandbox_id: payload.skills_hash}
+        set_sandbox_skills_states__no_commit(
+            db_session,
+            {sandbox_id: payload.skills_state},
         )
 
 
@@ -415,6 +431,11 @@ def reserve_sandbox__no_commit(
     if requires_provisioning:
         with time_provision_phase(SandboxProvisionPhase.ENSURE_PAT):
             onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
+    elif not has_active_craft_pat(db_session, user.id):
+        # A password reset revokes every PAT. The proxy reads the stored PAT
+        # per request, so a new one restores a running sandbox's API access.
+        with time_provision_phase(SandboxProvisionPhase.ENSURE_PAT):
+            ensure_sandbox_pat(db_session, sandbox, user)
 
     return SandboxReservation(
         sandbox_id=sandbox.id,
@@ -763,11 +784,26 @@ def is_sandbox_idle(sandbox: Sandbox, now: datetime) -> bool:
     return reference < now - timedelta(seconds=SANDBOX_IDLE_TIMEOUT_SECONDS)
 
 
+def is_sandbox_idle_after_preview_activity(
+    db_session: DBSession, sandbox: Sandbox, now: datetime
+) -> bool:
+    """``is_sandbox_idle`` that also counts app preview requests, which the
+    webapp proxy records only in the cache."""
+    if not is_sandbox_idle(sandbox, now):
+        return False
+    preview_at = latest_preview_activity(
+        get_webapp_session_ids(db_session, sandbox.user_id)
+    )
+    return preview_at is None or preview_at < now - timedelta(
+        seconds=SANDBOX_IDLE_TIMEOUT_SECONDS
+    )
+
+
 def list_snapshotable_session_workspaces(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
     sandbox: Sandbox,
-    session_creation_lock: RedisLock,
+    session_creation_lock: CacheLock,
 ) -> list[UUID]:
     """List snapshotable workspaces while session creation is excluded."""
     if not session_creation_lock.owned():
@@ -807,46 +843,124 @@ def list_snapshotable_session_workspaces(
     return existing_session_ids
 
 
+def _require_owned_storage_inventory(
+    sandbox_id: UUID,
+    storage_exists: bool,
+    resources: list[SandboxResource],
+) -> None:
+    if storage_exists and not any(
+        resource.kind
+        in {
+            SandboxResourceKind.POD,
+            SandboxResourceKind.CONTAINER,
+            SandboxResourceKind.VOLUME,
+        }
+        for resource in resources
+    ):
+        raise RuntimeError(
+            f"Cannot verify workspace storage inventory for sandbox {sandbox_id}"
+        )
+
+
+def _require_cleanup_ownership(
+    claim: CacheLock, session_creation_lock: CacheLock
+) -> None:
+    if not claim.owned() or not session_creation_lock.owned():
+        raise RuntimeError("Sandbox cleanup ownership lost")
+
+
+def _record_verified_cleanup_checkpoint(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox_id: UUID,
+    tenant_id: str,
+    attempt_number: int,
+    storage_identity: str | None,
+    resume_deletion: bool,
+    last_heartbeat: datetime | None,
+) -> bool:
+    if (
+        sandbox_manager.workspace_storage_identity(sandbox_id, tenant_id)
+        != storage_identity
+    ):
+        logger.info(
+            "Sandbox %s workspace storage changed during checkpoint", sandbox_id
+        )
+        return False
+    if storage_identity is None or resume_deletion:
+        return True
+    if not record_cleanup_checkpoint__no_commit(
+        db_session,
+        sandbox_id,
+        SandboxCleanupCheckpoint(
+            provisioning_attempt_number=attempt_number,
+            storage_identity=storage_identity,
+            last_heartbeat=last_heartbeat,
+        ),
+    ):
+        db_session.rollback()
+        return False
+    db_session.commit()
+    return True
+
+
 def sleep_sandbox(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
     sandbox: Sandbox,
     tenant_id: str,
-    session_creation_lock: RedisLock,
+    session_creation_lock: CacheLock,
+    check_cleanup_ownership: Callable[[], None] | None = None,
+    cleanup_deadline: float | None = None,
 ) -> None:
     """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
     ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.
 
-    Invariant: snapshot before terminate, fail-closed — a snapshot failure on
-    a reachable pod aborts the reap so the next sweep retries, while an
-    unreachable pod is terminated anyway (its workspace is unrecoverable;
-    never pin it RUNNING forever). Idleness is re-checked right before the
-    kill since snapshotting can take minutes.
+    Snapshot or workspace discovery failures abort the reap and raise, so the
+    sweep reports the sandbox it could not sleep. Contention or new activity
+    skips the reap without raising. An unhealthy
+    endpoint does not prove that workspace storage is lost. Re-check idleness
+    before termination because snapshots can take minutes.
     """
     sandbox_id = sandbox.id
+    initial_attempt = sandbox.provisioning_attempt_number
+    deadline = (
+        cleanup_deadline
+        if cleanup_deadline is not None
+        else time.monotonic() + SANDBOX_CLEANUP_DEADLINE_SECONDS
+    )
+    resources = list(sandbox_manager.iter_resources(tenant_id, deadline, sandbox_id))
+    storage_exists = sandbox_manager.workspace_storage_exists(sandbox_id, tenant_id)
+    storage_identity = (
+        sandbox_manager.workspace_storage_identity(sandbox_id, tenant_id)
+        if storage_exists
+        else None
+    )
+    checkpoint = (
+        SandboxCleanupCheckpoint.model_validate(sandbox.cleanup_checkpoint)
+        if sandbox.cleanup_checkpoint is not None
+        else None
+    )
+    resume_deletion = (
+        checkpoint is not None
+        and checkpoint.provisioning_attempt_number == initial_attempt
+        and checkpoint.storage_identity == storage_identity
+        and checkpoint.last_heartbeat == sandbox.last_heartbeat
+        and not sandbox_manager.runtime_exists(sandbox_id, tenant_id)
+    )
+    _require_owned_storage_inventory(sandbox_id, storage_exists, resources)
+    needs_checkpoint = storage_exists and not resume_deletion
 
     # Chat history lives outside session workspaces; capture it before the
     # pod dies.
-    if sandbox_manager.supports_opencode_history_persistence:
+    if needs_checkpoint and sandbox_manager.supports_opencode_history_persistence:
         try:
             sandbox_manager.create_opencode_history_snapshot(sandbox_id, tenant_id)
         except Exception as e:
-            if sandbox_manager.health_check(
-                sandbox_id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
-            ):
-                logger.error(
-                    "opencode history snapshot failed for sandbox "
-                    "%s; leaving it RUNNING: %s",
-                    sandbox_id,
-                    e,
-                )
-                return
-            logger.warning(
-                "Sandbox %s pod unreachable; sleeping "
-                "without a fresh opencode history snapshot: %s",
-                sandbox_id,
-                e,
-            )
+            raise RuntimeError(
+                f"opencode history snapshot failed for sandbox {sandbox_id}; "
+                "leaving it RUNNING"
+            ) from e
 
     if not session_creation_lock.acquire(blocking=False):
         logger.info(
@@ -855,11 +969,15 @@ def sleep_sandbox(
         )
         return
     try:
-        session_ids = list_snapshotable_session_workspaces(
-            db_session,
-            sandbox_manager,
-            sandbox,
-            session_creation_lock,
+        session_ids = (
+            list_snapshotable_session_workspaces(
+                db_session,
+                sandbox_manager,
+                sandbox,
+                session_creation_lock,
+            )
+            if needs_checkpoint
+            else []
         )
     finally:
         if session_creation_lock.owned():
@@ -867,6 +985,8 @@ def sleep_sandbox(
 
     snapshot_failed = False
     for session_id in session_ids:
+        if check_cleanup_ownership is not None:
+            check_cleanup_ownership()
         try:
             snapshot_start = time.monotonic()
             snapshot_result = create_session_snapshot_keep_latest(
@@ -893,28 +1013,10 @@ def sleep_sandbox(
 
     logger.info("Putting sandbox %s to sleep", sandbox_id)
 
-    # Fail-closed: terminating with an unsnapshotted workspace loses it
-    # (restore falls back to a fresh template). Keep the sandbox RUNNING to
-    # retry next cycle — unless the pod is unreachable, where snapshots can
-    # never succeed and the workspace is already gone, so don't pin it
-    # RUNNING forever.
-    pod_unreachable = False
     if snapshot_failed:
-        if sandbox_manager.health_check(
-            sandbox_id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
-        ):
-            logger.error(
-                "Snapshot failed for sandbox %s; "
-                "leaving it RUNNING to retry next cycle",
-                sandbox_id,
-            )
-            return
-        pod_unreachable = True
-        logger.warning(
-            "Sandbox %s pod is unreachable; "
-            "terminating despite snapshot failure (cannot recover "
-            "its workspace, won't pin it RUNNING forever)",
-            sandbox_id,
+        raise RuntimeError(
+            f"Snapshot failed for sandbox {sandbox_id}; leaving it RUNNING to "
+            "retry next cycle"
         )
 
     # Do not block session creation during snapshots. Reacquire its lock before
@@ -926,35 +1028,83 @@ def sleep_sandbox(
         )
         return
     try:
-        if not pod_unreachable:
-            current_session_ids = list_snapshotable_session_workspaces(
+        current_session_ids = (
+            list_snapshotable_session_workspaces(
                 db_session,
                 sandbox_manager,
                 sandbox,
                 session_creation_lock,
             )
-            new_session_ids = set(current_session_ids) - set(session_ids)
-            if new_session_ids:
-                logger.info(
-                    "Sandbox %s gained %s session workspace(s) during snapshot; "
-                    "skipping reap",
-                    sandbox_id,
-                    len(new_session_ids),
-                )
-                return
+            if needs_checkpoint
+            else []
+        )
+        new_session_ids = set(current_session_ids) - set(session_ids)
+        if new_session_ids:
+            logger.info(
+                "Sandbox %s gained %s session workspace(s) during snapshot; skipping reap",
+                sandbox_id,
+                len(new_session_ids),
+            )
+            return
 
         # Snapshotting above can take minutes; re-check idleness right before
         # the kill and capture the attempt number the sleep must still match.
         db_session.refresh(sandbox)
-        if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
-            sandbox, datetime.now(timezone.utc)
+        if (
+            sandbox.status != SandboxStatus.RUNNING
+            or sandbox.provisioning_attempt_number != initial_attempt
+            or not is_sandbox_idle_after_preview_activity(
+                db_session, sandbox, datetime.now(timezone.utc)
+            )
         ):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
             return
         sleep_attempt_number = sandbox.provisioning_attempt_number
 
         # Terminate the pod (but keep the sandbox record).
-        sandbox_manager.terminate(sandbox_id)
+        with sandbox_provision_lock(sandbox_id, tenant_id) as claim:
+            if check_cleanup_ownership is not None:
+                check_cleanup_ownership()
+            db_session.refresh(sandbox)
+            if (
+                sandbox.status != SandboxStatus.RUNNING
+                or sandbox.provisioning_attempt_number != initial_attempt
+                or not is_sandbox_idle_after_preview_activity(
+                    db_session, sandbox, datetime.now(timezone.utc)
+                )
+            ):
+                return
+            current_resources = list(
+                sandbox_manager.iter_resources(tenant_id, deadline, sandbox_id)
+            )
+            if {(r.kind, r.name, r.instance_id) for r in current_resources} != {
+                (r.kind, r.name, r.instance_id) for r in resources
+            }:
+                logger.info(
+                    "Sandbox %s resource identity changed during checkpoint; skipping reap",
+                    sandbox_id,
+                )
+                return
+            _require_cleanup_ownership(claim, session_creation_lock)
+            if not _record_verified_cleanup_checkpoint(
+                db_session,
+                sandbox_manager,
+                sandbox_id,
+                tenant_id,
+                sleep_attempt_number,
+                storage_identity,
+                resume_deletion,
+                sandbox.last_heartbeat,
+            ):
+                return
+            _require_cleanup_ownership(claim, session_creation_lock)
+            if check_cleanup_ownership is not None:
+                check_cleanup_ownership()
+            sandbox_manager.terminate_observed_resources(
+                sandbox_id,
+                resources,
+                min(deadline, time.monotonic() + RUNTIME_TEARDOWN_SECONDS),
+            )
 
         # A recovery/create that started a newer attempt mid-terminate owns
         # the sandbox now; only claim ports/sessions if the sleep write

@@ -1,4 +1,3 @@
-import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -8,6 +7,8 @@ from exa_py.api import HighlightsContentsOptions
 from fastapi import HTTPException
 
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.open_url.models import (
     WebContent,
     WebContentProvider,
@@ -16,6 +17,7 @@ from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
     WebSearchResult,
 )
+from onyx.tools.tool_implementations.web_search.utils import extract_site_operators
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -89,21 +91,6 @@ class ExaWithTimeout(Exa):
         return response.json()
 
 
-def _extract_site_operators(query: str) -> tuple[str, list[str]]:
-    """Extract site: operators and return cleaned query + full domains.
-
-    Returns (cleaned_query, full_domains) where full_domains contains the full
-    values after site: (e.g., ["reddit.com/r/leagueoflegends"]).
-    """
-    full_domains = re.findall(r"site:\s*([^\s]+)", query, re.IGNORECASE)
-    cleaned_query = re.sub(r"site:\s*\S+\s*", "", query, flags=re.IGNORECASE).strip()
-
-    if not cleaned_query and full_domains:
-        cleaned_query = full_domains[0]
-
-    return cleaned_query, full_domains
-
-
 class ExaClient(WebSearchProvider, WebContentProvider):
     def __init__(self, api_key: str, num_results: int = 10) -> None:
         self.exa = ExaWithTimeout(api_key=api_key)
@@ -150,7 +137,9 @@ class ExaClient(WebSearchProvider, WebContentProvider):
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
-        cleaned_query, full_domains = _extract_site_operators(query)
+        site_operators = extract_site_operators(query)
+        cleaned_query = site_operators.query or query
+        full_domains = site_operators.include_domains
 
         if full_domains:
             # Try with include_domains using base domains (e.g., ["reddit.com"])
@@ -167,11 +156,11 @@ class ExaClient(WebSearchProvider, WebContentProvider):
         try:
             test_results = self.search("test")
             if not test_results or not any(result.link for result in test_results):
-                raise HTTPException(
-                    status_code=400,
-                    detail="API key validation failed: search returned no results.",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "API key validation failed: search returned no results.",
                 )
-        except HTTPException:
+        except (HTTPException, OnyxError):
             raise
         except Exception as e:
             error_msg = str(e)
@@ -180,13 +169,11 @@ class ExaClient(WebSearchProvider, WebContentProvider):
                 or "key" in error_msg.lower()
                 or "auth" in error_msg.lower()
             ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid Exa API key: {error_msg}",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST, f"Invalid Exa API key: {error_msg}"
                 ) from e
-            raise HTTPException(
-                status_code=400,
-                detail=f"Exa API key validation failed: {error_msg}",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST, f"Exa API key validation failed: {error_msg}"
             ) from e
 
         logger.info("Web search provider test succeeded for Exa.")

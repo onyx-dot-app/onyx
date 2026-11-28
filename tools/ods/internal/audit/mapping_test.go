@@ -123,27 +123,3 @@ func TestTruncate(t *testing.T) {
 		}
 	}
 }
-
-func TestRuleDescription(t *testing.T) {
-	if got := ruleDescription(Finding{ID: "GHSA-x", Package: "lodash", Title: "Prototype pollution"}); got != "Prototype pollution" {
-		t.Errorf("expected the title, got %q", got)
-	}
-	if got := ruleDescription(Finding{ID: "GHSA-x", Package: "lodash"}); got != "GHSA-x affects lodash" {
-		t.Errorf("expected a generated description, got %q", got)
-	}
-}
-
-func TestSecuritySeverityScore(t *testing.T) {
-	cases := map[Severity]string{
-		SeverityCritical: "9.0",
-		SeverityHigh:     "7.0",
-		SeverityModerate: "4.0",
-		SeverityLow:      "1.0",
-		SeverityUnknown:  "0.0",
-	}
-	for sev, want := range cases {
-		if got := securitySeverityScore(sev); got != want {
-			t.Errorf("securitySeverityScore(%q) = %q, want %q", sev, got, want)
-		}
-	}
-}

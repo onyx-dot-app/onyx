@@ -1,4 +1,4 @@
-"""Escalation suite for scoping agents, skills, actions and token limits to
+"""Escalation suite for scoping agents, skills, actions and spending limits to
 group managers.
 
 A scoped group manager may manage these resources only within the groups they
@@ -28,7 +28,7 @@ import httpx
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType, Permission
+from onyx.db.enums import Permission
 from onyx.db.models import User__UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -42,7 +42,7 @@ from tests.integration.tests.permissions._access_matrix import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Group manager scoping is an enterprise-only capability",
 )
 
@@ -141,46 +141,6 @@ def _create_custom_tool(user: DATestUser, oauth_config_id: int | None = None) ->
     return int(resp.json()["id"])
 
 
-def _create_oauth_config(user: DATestUser) -> int:
-    """Create an OAuth config as ``user`` (must succeed); returns its id."""
-    body = {
-        "name": f"oauth-{uuid4()}",
-        "authorization_url": "https://example.com/authorize",
-        "token_url": "https://example.com/token",
-        "client_id": "client-id",
-        "client_secret": "client-secret",
-    }
-    resp = call_endpoint(
-        "POST", "/admin/oauth-config/create", body, user.headers, user.cookies
-    )
-    assert resp.status_code == 200, resp.text
-    return int(resp.json()["id"])
-
-
-def _mcp_body(*, is_public: bool, groups: list[int]) -> dict[str, Any]:
-    return {
-        "name": f"mcp-{uuid4()}",
-        "description": "escalation test",
-        "server_url": "https://example.com/mcp",
-        "is_public": is_public,
-        "groups": groups,
-    }
-
-
-def _create_mcp_server(
-    user: DATestUser, *, is_public: bool = True, groups: list[int] | None = None
-) -> int:
-    """Create an MCP server as ``user`` (must succeed); returns its id.
-
-    is_public defaults True on the request model, which a scoped manager may never
-    set — so a manager has to pass its own group explicitly.
-    """
-    body = _mcp_body(is_public=is_public, groups=groups or [])
-    resp = call_endpoint("POST", "/admin/mcp/server", body, user.headers, user.cookies)
-    assert resp.status_code == 200, resp.text
-    return int(resp.json()["id"])
-
-
 def _persona_upsert_body(*, is_public: bool, groups: list[int]) -> dict[str, Any]:
     return {
         "name": f"agent-{uuid4()}",
@@ -193,13 +153,6 @@ def _persona_upsert_body(*, is_public: bool, groups: list[int]) -> dict[str, Any
         "is_public": is_public,
         "groups": groups,
     }
-
-
-_TOKEN_LIMIT_BODY: dict[str, Any] = {
-    "enabled": True,
-    "token_budget": 1000,
-    "period_hours": 24,
-}
 
 
 def _assert_manager(
@@ -547,274 +500,49 @@ def test_manager_cannot_delete_unowned_action(env: _ScopedEnv) -> None:
     _assert_manager(env, "DELETE", f"/admin/tool/custom/{tool_id}", "denied")
 
 
-def test_manager_links_own_oauth_config(env: _ScopedEnv) -> None:
-    # Nothing else references it, so it's theirs to take.
-    oauth_config_id = _create_oauth_config(env.manager)
-    _create_custom_tool(env.manager, oauth_config_id)
-
-
-def test_manager_cannot_link_unowned_oauth_config(env: _ScopedEnv) -> None:
-    # Linking in would authenticate as the admin's OAuth app, using credentials the manager
-    # never sees.
-    oauth_config_id = _create_oauth_config(env.admin)
-    _create_custom_tool(env.admin, oauth_config_id)
-    _assert_manager(
-        env, "POST", "/admin/tool/custom", "denied", _tool_body(oauth_config_id)
-    )
-
-
-def test_unknown_oauth_config_is_rejected_not_a_500(env: _ScopedEnv) -> None:
-    # An unknown id has no referencing actions, so the link gate would wave it through to
-    # the foreign key. Applies to the admin too — the global branch skips the reference read.
-    for actor in (env.manager, env.admin):
-        resp = call_endpoint(
-            "POST",
-            "/admin/tool/custom",
-            _tool_body(2_000_000_000),
-            actor.headers,
-            actor.cookies,
-        )
-        assert resp.status_code == 404, resp.text
-
-
-def test_manager_edits_own_action_keeping_shared_oauth_config(env: _ScopedEnv) -> None:
-    # An admin can link a second action to the manager's config, which makes it shared. The
-    # manager must still be able to edit their own action while re-sending the same id.
-    oauth_config_id = _create_oauth_config(env.manager)
-    tool_id = _create_custom_tool(env.manager, oauth_config_id)
-    _create_custom_tool(env.admin, oauth_config_id)
-    _assert_manager(
-        env,
-        "PUT",
-        f"/admin/tool/custom/{tool_id}",
-        "allowed",
-        _tool_body(oauth_config_id),
-    )
-
-
-def test_manager_cannot_repoint_own_action_at_unowned_oauth_config(
-    env: _ScopedEnv,
-) -> None:
-    # Owning the action doesn't extend to the credentials it points at.
-    oauth_config_id = _create_oauth_config(env.admin)
-    _create_custom_tool(env.admin, oauth_config_id)
-    tool_id = _create_custom_tool(env.manager)
-    _assert_manager(
-        env,
-        "PUT",
-        f"/admin/tool/custom/{tool_id}",
-        "denied",
-        _tool_body(oauth_config_id),
-    )
-
-
 # MCP servers: owner-or-admin gating (not group-scoped like skills/agents).
-def test_manager_creates_private_mcp_server_in_managed_group(
-    env: _ScopedEnv,
-) -> None:
-    _create_mcp_server(env.manager, is_public=False, groups=[env.managed_group.id])
 
 
-def test_manager_cannot_create_public_mcp_server(env: _ScopedEnv) -> None:
-    """Same rule as connectors and document sets: never widen to public."""
+# Disabled: these tests check the permission gate, not enforcement.
+_SPENDING_LIMIT_CARD: dict[str, Any] = {
+    "enabled": False,
+    "limits": [{"period": "MONTHLY", "cost_budget_cents": 500}],
+}
+
+
+def test_manager_sets_pool_on_managed_group(env: _ScopedEnv) -> None:
+    group_path = f"/admin/spending-limits/groups/{env.managed_group.id}"
+    _assert_manager(env, "PUT", f"{group_path}/pool", "allowed", _SPENDING_LIMIT_CARD)
+    _assert_manager(env, "GET", group_path, "allowed")
+
+
+def test_manager_cannot_lift_member_allowances(env: _ScopedEnv) -> None:
+    """A group allowance beats the workspace per-user default, so only a full
+    admin may set or delete one, even on the manager's own group."""
+    group_path = f"/admin/spending-limits/groups/{env.managed_group.id}"
     _assert_manager(
-        env,
-        "POST",
-        "/admin/mcp/server",
-        "denied",
-        _mcp_body(is_public=True, groups=[]),
+        env, "PUT", f"{group_path}/per-member", "denied", _SPENDING_LIMIT_CARD
     )
+    _assert_manager(env, "DELETE", group_path, "denied")
 
 
-def test_manager_cannot_create_public_mcp_server_by_omitting_access(
-    env: _ScopedEnv,
+@pytest.mark.parametrize("card", ["pool", "per-member"])
+def test_manager_cannot_set_spending_limits_on_unmanaged_group(
+    env: _ScopedEnv, card: str
 ) -> None:
-    # /servers/create defaults is_public=True when is_public/users/groups are omitted, so
-    # the create path must gate unconditionally — else a manager publishes org-wide simply
-    # by leaving the access fields out of the body.
-    # auth_performer is required; omitting it 422s before the gate runs
-    body = {
-        "name": f"mcp-{uuid4()}",
-        "server_url": "https://example.com/mcp",
-        "auth_type": MCPAuthenticationType.NONE.value,
-        "auth_performer": MCPAuthenticationPerformer.ADMIN.value,
-    }
-    _assert_manager(env, "POST", "/admin/mcp/servers/create", "denied_gate2", body)
+    group_path = f"/admin/spending-limits/groups/{env.other_group.id}"
+    _assert_manager(env, "PUT", f"{group_path}/{card}", "denied", _SPENDING_LIMIT_CARD)
+    _assert_manager(env, "GET", group_path, "denied")
+    _assert_manager(env, "DELETE", group_path, "denied")
 
 
-def test_manager_cannot_create_mcp_server_in_unmanaged_group(
-    env: _ScopedEnv,
-) -> None:
-    _assert_manager(
-        env,
-        "POST",
-        "/admin/mcp/server",
-        "denied",
-        _mcp_body(is_public=False, groups=[env.other_group.id]),
-    )
-
-
-def test_manager_deletes_own_mcp_server(env: _ScopedEnv) -> None:
-    server_id = _create_mcp_server(
-        env.manager, is_public=False, groups=[env.managed_group.id]
-    )
-    _assert_manager(env, "DELETE", f"/admin/mcp/server/{server_id}", "allowed")
-
-
-def test_manager_cannot_delete_unowned_mcp_server(env: _ScopedEnv) -> None:
-    server_id = _create_mcp_server(env.admin)
-    _assert_manager(env, "DELETE", f"/admin/mcp/server/{server_id}", "denied")
-
-
-def test_manager_update_via_servers_create_denied_not_masked(
-    env: _ScopedEnv,
-) -> None:
-    # Updating an unowned server through /servers/create must surface the gate's 403, not a
-    # 500 masked by the handler's blanket except.
-    server_id = _create_mcp_server(env.admin)
-    body = {
-        "name": f"mcp-{uuid4()}",
-        "server_url": "https://example.com/mcp",
-        "auth_type": MCPAuthenticationType.NONE.value,
-        "auth_performer": MCPAuthenticationPerformer.ADMIN.value,
-        "existing_server_id": server_id,
-    }
-    _assert_manager(env, "POST", "/admin/mcp/servers/create", "denied", body)
-
-
-def _group_limit_path(group_id: int, limit_id: int | None = None) -> str:
-    base = f"/admin/token-rate-limits/user-group/{group_id}"
-    return base if limit_id is None else f"{base}/rate-limit/{limit_id}"
-
-
-def _create_group_token_limit(user: DATestUser, group_id: int) -> int:
-    """Create a token limit on ``group_id`` as ``user`` (must succeed); returns its id."""
-    resp = call_endpoint(
-        "POST",
-        _group_limit_path(group_id),
-        _TOKEN_LIMIT_BODY,
-        user.headers,
-        user.cookies,
-    )
-    assert resp.status_code == 200, resp.text
-    return int(resp.json()["token_id"])
-
-
-def test_manager_sets_token_limit_on_managed_group(env: _ScopedEnv) -> None:
-    path = _group_limit_path(env.managed_group.id)
-    _assert_manager(env, "POST", path, "allowed", _TOKEN_LIMIT_BODY)
-
-
-def test_manager_cannot_set_token_limit_on_unmanaged_group(env: _ScopedEnv) -> None:
-    path = _group_limit_path(env.other_group.id)
-    _assert_manager(env, "POST", path, "denied", _TOKEN_LIMIT_BODY)
-
-
-def test_manager_reads_token_limits_on_managed_group(env: _ScopedEnv) -> None:
-    _assert_manager(env, "GET", _group_limit_path(env.managed_group.id), "allowed")
-
-
-def test_manager_cannot_read_token_limits_on_unmanaged_group(env: _ScopedEnv) -> None:
-    _assert_manager(env, "GET", _group_limit_path(env.other_group.id), "denied")
-
-
-def test_manager_updates_token_limit_on_managed_group(env: _ScopedEnv) -> None:
-    limit_id = _create_group_token_limit(env.manager, env.managed_group.id)
-    path = _group_limit_path(env.managed_group.id, limit_id)
-    _assert_manager(env, "PUT", path, "allowed", _TOKEN_LIMIT_BODY)
-
-
-def test_manager_cannot_update_token_limit_on_unmanaged_group(env: _ScopedEnv) -> None:
-    limit_id = _create_group_token_limit(env.admin, env.other_group.id)
-    path = _group_limit_path(env.other_group.id, limit_id)
-    _assert_manager(env, "PUT", path, "denied", _TOKEN_LIMIT_BODY)
-
-
-def test_manager_deletes_token_limit_on_managed_group(env: _ScopedEnv) -> None:
-    limit_id = _create_group_token_limit(env.manager, env.managed_group.id)
-    _assert_manager(
-        env, "DELETE", _group_limit_path(env.managed_group.id, limit_id), "allowed"
-    )
-
-
-def test_manager_cannot_delete_token_limit_on_unmanaged_group(env: _ScopedEnv) -> None:
-    limit_id = _create_group_token_limit(env.admin, env.other_group.id)
-    _assert_manager(
-        env, "DELETE", _group_limit_path(env.other_group.id, limit_id), "denied"
-    )
-
-
-def test_manager_action_listing_scoped_to_own_and_agent_connected(
-    env: _ScopedEnv,
-) -> None:
-    """An action carries no group, so an agent is the only path from a group to one.
-    The listing returned every action in the tenant before this was scoped."""
-    own = _create_custom_tool(env.manager)
-    connected = _create_custom_tool(env.admin)
-    unconnected = _create_custom_tool(env.admin)
-    elsewhere = _create_custom_tool(env.admin)
-
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=False,
-        groups=[env.managed_group.id],
-        tool_ids=[connected],
-    )
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=False,
-        groups=[env.other_group.id],
-        tool_ids=[elsewhere],
-    )
-
-    listed = {
-        tool["id"]
-        for tool in _assert_manager(env, "GET", "/tool/openapi", "allowed").json()
-    }
-    assert {own, connected} <= listed
-    assert not ({unconnected, elsewhere} & listed), "unreachable action leaked"
-
-    admin_resp = call_endpoint(
-        "GET", "/tool/openapi", None, env.admin.headers, env.admin.cookies
-    )
-    admin_listed = {tool["id"] for tool in admin_resp.json()}
-    assert {own, connected, unconnected, elsewhere} <= admin_listed
-
-
-def test_manager_reads_action_by_id_only_when_reachable(env: _ScopedEnv) -> None:
-    """The by-id route bound its user to ``_``, so any caller could read an action's
-    full schema and custom headers. It must answer exactly like the listing."""
-    connected = _create_custom_tool(env.admin)
-    unconnected = _create_custom_tool(env.admin)
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=False,
-        groups=[env.managed_group.id],
-        tool_ids=[connected],
-    )
-
-    _assert_manager(env, "GET", f"/tool/{connected}", "allowed")
-    _assert_manager(env, "GET", f"/tool/{unconnected}", "denied")
-
-
-def test_manager_mcp_server_listing_isolates_unmanaged_groups(
-    env: _ScopedEnv,
-) -> None:
-    """A server carries no group of its own, so the admin listing resolves reach the
-    same way the tool listing does: owned, or connected to a managed group via an
-    agent. This filter had no test at all."""
-    own = _create_mcp_server(
-        env.manager, is_public=False, groups=[env.managed_group.id]
-    )
-    foreign = _create_mcp_server(
-        env.admin, is_public=False, groups=[env.other_group.id]
-    )
-
-    resp = _assert_manager(env, "GET", "/admin/mcp/servers", "allowed")
-    listed = {server["id"] for server in resp.json()["mcp_servers"]}
-
-    assert own in listed, "manager lost the server they own"
-    assert foreign not in listed, "unmanaged group's server leaked"
+def test_manager_cannot_set_workspace_spending_limits(env: _ScopedEnv) -> None:
+    for path in (
+        "/admin/spending-limits/workspace/pool",
+        "/admin/spending-limits/workspace/per-user",
+    ):
+        _assert_manager(env, "PUT", path, "denied", _SPENDING_LIMIT_CARD)
+    _assert_manager(env, "GET", "/admin/spending-limits", "denied")
 
 
 def test_manager_agent_listing_isolates_unmanaged_groups(env: _ScopedEnv) -> None:

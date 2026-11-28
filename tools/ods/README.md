@@ -66,6 +66,31 @@ _Note: bash completion requires the [bash-completion](https://github.com/scop/ba
 
 ## Commands
 
+### Choose a development command
+
+| Task | Command | Lifetime |
+|------|---------|----------|
+| Frontend-only change with a healthy API already running | `ods web dev` | Foreground, stop with Ctrl-C |
+| Run the API or model server from source | `ods backend api` or `ods backend model-server` | Foreground, stop with Ctrl-C |
+| Run the application and its infrastructure | `ods stack up` | Background, inspect with `ods stack status` |
+| Use a separate dataset and infrastructure | `ods --isolated stack up` | Background, inspect with `ods --isolated stack status` |
+| Run a frontend build, test, or other package script | `ods web <script> [args...]` | Until the script exits |
+| Run Onyx in Docker containers | `ods compose [profile]` | Docker-managed containers |
+| Run Craft against the shared Firecracker dev cluster | `ods craft-dev api` and `ods craft-dev web` | Foreground, stop with Ctrl-C |
+
+Source commands use the selected project's ports and environment. Shared
+infrastructure is the default. `--project NAME` selects an existing project;
+`--isolated` selects separate worktree infrastructure. Neither option copies data.
+Keep container commands separate from source-process commands when troubleshooting.
+
+Managed stacks and frontend attachment require macOS or Linux. On Windows,
+`ods web dev` and `ods backend` use portable foreground launchers with configured
+connection variables. They do not provide managed-stack ownership or attachment.
+
+`ods env` updates connection variables from the selected project's running
+containers. It fails without changing `.vscode/.env` if that project's Postgres
+container has no published port.
+
 ### `compose` - Launch Docker Containers
 
 Launch Onyx docker containers using docker compose.
@@ -175,12 +200,19 @@ ods pull --tag edge
 
 ### `backend` - Run Backend Services
 
-Run backend services (API server, model server) with environment loaded from
+Run backend services in the foreground with environment loaded from
 `.vscode/.env`. On first run, copies `.vscode/env_template.txt` to `.vscode/.env`
 if the `.env` file does not already exist.
 
-Enterprise Edition features are enabled by default with license enforcement
-disabled, matching the `compose` command behavior.
+ODS retains terminal control and forwards line input through a pipe.
+Programs that require terminal stdin or direct `/dev/tty` input need a separate launch.
+
+Paid features need a license in the database. When `ONYX_DEV_LICENSE` is set, in
+the shell or in `.vscode/.env`, `backend api` seeds it before the server starts.
+`compose` reads it from the shell only and seeds it into the api_server once the
+stack is healthy, except with `--infra`, with `--wait=false`, and for the
+multitenant profile. With no license in the database Onyx runs as Community
+Edition.
 
 ```shell
 ods backend <subcommand>
@@ -189,14 +221,13 @@ ods backend <subcommand>
 **Subcommands:**
 
 - `api` - Start the FastAPI backend server (`uvicorn onyx.main:app --reload`)
-- `model_server` - Start the model server (`uvicorn model_server.main:app --reload`)
+- `model-server` - Start the model server (`uvicorn model_server.main:app --reload`). `model_server` remains an alias.
 
 **Flags:**
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--no-ee` | `false` | Disable Enterprise Edition features (enabled by default) |
-| `--port` | `8080` (api) / `9000` (model_server) | Port to listen on |
+| `--port` | Selected project's service port | Override the port to listen on |
 
 Shell environment takes precedence over `.env` file values, so inline overrides
 work as expected (e.g. `S3_ENDPOINT_URL=foo ods backend api`).
@@ -210,19 +241,334 @@ ods backend api
 # Start the API server on a custom port
 ods backend api --port 9090
 
-# Start without Enterprise Edition
-ods backend api --no-ee
-
 # Start the model server
-ods backend model_server
+ods backend model-server
 
 # Start the model server on a custom port
-ods backend model_server --port 9001
+ods backend model-server --port 9001
 ```
+
+### `craft-dev` - Run Craft Against the Firecracker Dev Cluster
+
+Run a local Craft API and web server against the shared remote Firecracker dev
+cluster, and work with your own sandbox VM there. The commands run the Python
+launchers in `deployment/helm/dev` with `uv run`. That directory's
+[README](../../deployment/helm/dev/README.md) has the full workflow.
+
+A profile file holds the cluster facts: `--profile`, else `CRAFT_DEV_PROFILE`,
+else `dev/craft-dev.yaml` in the onyx-internal checkout next to this repository.
+kubectl always gets an explicit context. `--context` (or `CRAFT_DEV_CONTEXT`)
+must be in the profile's `kube.allowed_contexts`.
+
+```shell
+ods craft-dev <subcommand>
+```
+
+**Subcommands:**
+
+- `doctor` - Check AWS SSO, VPN egress, kube access, Telepresence, host agent mTLS, and the Alembic head. Changes nothing.
+- `api` - Start the local API server. Needs `telepresence connect`. Arguments after `--` go to uvicorn.
+- `web` - Start the local web server against the local API.
+- `vms` - Show your VM.
+- `skills push <dir>` - Put a local directory on a managed mount of your VM (`--mount`, `--wake`).
+- `exec -- <command>` - Run a command in your VM as the sandbox user (`--wake`, `--cwd`).
+- `logs` - Show the guest and agent lines of your VM (`--guest`, `--agent`, `--since`, `--tail`, `-f`).
+- `reset` - Save your sessions, then stop your VM (`--force` skips the save).
+
+The VM commands act only on your user: `--user`, else `CRAFT_DEV_USER`, else
+`user.email` in the profile.
+
+**Examples:**
+
+```shell
+ods craft-dev doctor
+ods craft-dev api --port 8081
+ods craft-dev web --port 8081
+CRAFT_DEV_USER=me@example.com ods craft-dev skills push ./my-skills --wake
+ods craft-dev exec -- ls -la /mnt/skills
+```
+
+Until an `onyx-devtools` release includes `craft-dev`, run it from source at the
+repository root: `go -C tools/ods run . craft-dev doctor`.
+
+### `stack` - Run the Local Dev Stack of a Worktree
+
+Run the whole local dev stack from a source checkout without an editor:
+Compose infrastructure, migrations, and the application services from
+`.vscode/launch.json` as background processes. It is built for several agents
+and worktrees on one machine.
+
+The stack uses the same service specifications and process launchers as
+`ods web dev` and `ods backend`. It does not invoke those commands through a shell.
+
+```shell
+ods stack <up|start|restart|stop|down|status|ls|prune|logs|plan> [flags]
+```
+
+By default, worktrees of one repository share Postgres, Redis, search, object
+storage, model servers, and one active application checkout. Shared state and
+the lifecycle lock live under `git rev-parse --git-common-dir`, in
+`ods-stack-shared`. Running `up` from another checkout stops the previous
+managed application processes before migrations, then starts the new code.
+`status` reports the active checkout. Other lifecycle commands require that checkout.
+
+Use `ods --isolated stack up` for separate data, ports, and per-worktree state under
+`git rev-parse --git-path ods-stack`. Repeat this flag with status and shutdown
+commands. Existing isolated datasets remain intact. On first shared startup,
+ODS reuses a single existing legacy project. If several exist, choose one
+with `ods --project NAME stack up`. Stop that legacy stack with `--isolated`
+first. ODS remembers the selected project and never guesses between datasets.
+Project ownership is durable. An explicit `--project` that conflicts with another
+managed stack fails, including in isolated mode. Select a different project for
+independent infrastructure.
+
+Legacy discovery uses saved `ods stack` state. A setup created only with
+`ods compose dev` has no such state. To keep its data, select its previous
+Compose project explicitly before the first shared startup, for example
+`ods --project onyx stack up` for an uncustomized checkout named `onyx`.
+Shared startup saves that project for later commands. Until then, repeat
+`--project NAME` with Compose and database commands. Existing volumes are not deleted.
+
+For frontend-only diffs on macOS or Linux, prefer `ods web dev`. It starts the
+frontend against a healthy managed API. It does not start containers, install
+Python dependencies, run migrations, or start workers. Ctrl-C stops a preview
+started by this command. If a matching frontend already runs in this checkout,
+the command attaches to it, and Ctrl-C only detaches. The API keeps running.
+Ctrl-C also cancels dependency installation or library builds during startup.
+Restarting the API's stack can interrupt the
+preview. OAuth callbacks retain the API's original web origin. Use the full stack
+for backend changes and OAuth callback tests. `stack status` does not include
+standalone frontend previews. Starting the full stack in the same checkout
+replaces its preview with the managed frontend and retains its port.
+
+Port leases live in `~/.local/share/onyx-dev/stack/ports.json`. A stack keeps
+its ports while it runs. `stop` releases the application ports (web, API, MCP,
+model server and metrics) and keeps the infrastructure ports, because the
+containers still bind them. `down` releases every lease. When shared mode adopts
+a stopped legacy isolated stack, ODS releases that stack's leases first. A lease
+of another stack is reclaimed when that stack's state is stopped or missing, none
+of its process groups is alive, and, for a `*_HOST_PORT` lease, its Compose
+project has no running container. A stack that does not run moves down to the
+lowest free port from the preferred one (3000 for web, 8080 for the API). A leased
+port that something else took is replaced on the next start, so read the status
+again after a restart.
+
+`up` takes the selected stack's lifecycle lock, so two agents running `up` at the
+same time converge on one stack: the second waits and then finds everything
+running. It then:
+
+1. Creates `.vscode/.env` and `.vscode/.env.web` from the templates when they
+   are missing, with placeholders blanked, and turns a symlinked env file into
+   a worktree-local copy. It never prints or replaces a value.
+2. Checks `uv`, `bun` and `docker`, runs `uv sync --frozen` and `bun install`
+   when needed (`--skip-prepare` skips this step).
+3. Leases the infrastructure and application ports, writes the Compose port
+   variables, and runs `ods compose dev --infra` for this project.
+4. Writes the infrastructure port variables to `.vscode/.env` (as `ods env`
+   does) and checks migration state. Pending migrations stop managed application
+   services before `alembic upgrade head`. If the database is already at head,
+   unchanged healthy services keep running. Migrations use `POSTGRES_HOST=localhost`
+   and the actual published Postgres port.
+5. Reconciles the services: a service whose process is still the one started
+   earlier and whose command and environment are unchanged keeps running;
+   everything else is stopped and started. An interrupted `up` is finished
+   by the next one.
+6. Waits until the web server (`/api/auth/type`) and API server (`/health`)
+   answer, then prints the status.
+
+Services run in their own process groups with the shell, the launch
+configuration's `envFile` and `env`, and the stack's hosts and ports on top
+(`POSTGRES_HOST`, `REDIS_HOST`, `OPENSEARCH_HOST`, `MODEL_SERVER_HOST`,
+`PORT`, `WEB_DOMAIN`, `INTERNAL_URL`, `MCP_SERVER_PORT`, `MCP_INTERNAL_URL`,
+`MODEL_SERVER_PORT`). `stop` signals only the groups it started, checked by
+pid, group and start time, and waits for every descendant to exit before it
+forgets a service. `down` also stops the Compose containers; volumes are kept.
+
+**Profiles** (`--profile`):
+
+| Profile | Services |
+|---------|----------|
+| `minimal` | Web Server, API Server |
+| `default` | `minimal` plus the primary, light, beat, docfetching, docconversion, docprocessing and user_file_processing Celery workers |
+| `full` | Every service in the `Run All Onyx Services` compound |
+
+The model server comes from Compose and runs the `edge` image, which is built
+from `main` and bundles the checkout's default embedding model. The release
+image (`latest`) can lack that model, and the model server then downloads it
+from Hugging Face on the first embed. `up` pulls the current `edge` image and
+applies it when it creates or recreates the Compose containers; a failed pull
+keeps the cached image. `start` and `restart` do not touch the containers.
+Set `ONYX_MODEL_SERVER_IMAGE` or `IMAGE_TAG` in your shell to run another
+image. `--local-model-server` runs it from the checkout instead, on its own
+leased port, and leaves the Compose inference server down. The Slack bot (`full` only) binds its metrics server to port 8000;
+the stack never leases 8000 and skips the bot when the port is taken.
+
+**Flags** (`up`, `start`, `restart`):
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--profile` | `default` | `minimal`, `default` or `full` |
+| `--local-model-server` | `false` | Run the model server from the checkout |
+| `--timeout` | `3m` | How long to wait for the services to become healthy |
+| `--lock-wait` | `10m` | How long to wait for another lifecycle command on this worktree |
+| `--stop-timeout` | `20s` | Grace period before a stale service is killed |
+| `--skip-prepare` | `false` | Skip `uv sync` and `bun install` |
+| `--json` | `false` | Print the status as JSON |
+
+`--isolated` is a global option. Use it with status and shutdown commands too,
+for example `ods --isolated stack down`. Without it, commands use shared mode.
+
+`status --json` reports the project, profile, phase (`preparing`, `infra`,
+`migrating`, `starting`, `ready`, `degraded`, `stopped`, `failed`), the leased
+ports, the URLs, each service with its state (`running`, `exited`, `skipped`),
+pid, health and log path, and any errors. A service that exited or is
+unhealthy also carries `log_tail`, the last lines of its log, so an agent can
+read the failure from the status alone. Its exit code is 0 when the stack is
+ready, 2 when it is not, and 1 when the worktree has no stack.
+
+`up`, `start` and `restart` always print the status, also on failure. They
+exit 1 when startup fails, including a missing tool, dependency installation,
+Compose, migrations, or an exited required service. Migration diagnostics appear in `errors`.
+They exit 2 when running services do not become healthy within `--timeout`.
+They exit 3 when another lifecycle command still held the worktree lock after
+`--lock-wait`; the printed status is then the last recorded one.
+A service without a health check must stay alive for five seconds before the
+stack counts as ready, so a crash on startup is reported rather than hidden.
+
+**Find and stop old stacks:**
+
+`ods stack ls [--json] [--all] [--orphaned]` lists every dev stack on the
+machine, from any directory. It reads Docker, the project owner records in
+`~/.local/share/onyx-dev/stack/projects`, the stack state in each repository's
+Git directory, and the port leases. It takes no locks and changes nothing. If
+Docker is unavailable, it prints a warning and lists the stacks from their saved
+state.
+
+| Status | Meaning |
+|--------|---------|
+| `orphaned` | No worktree owns the stack: its checkout or Compose directory is gone, or the directory is no longer a git worktree |
+| `active` | Application processes run |
+| `app-stopped` | Containers run, and `ods stack stop` stopped the application |
+| `infra-only` | Containers run, and no application process does |
+| `stopped` | Nothing runs (with `--all`) |
+| `stale-lease` | Port leases that no stack uses (with `--all`) |
+
+By default `ls` shows stacks with a running process or container, and orphans
+that left only Docker volumes. `--all` adds
+stopped stacks, and `--orphaned` shows only orphaned stacks. `--json` prints an
+array with the project, root, branch, mode, profile, phase, application and
+container counts, web URL, age, status, leases, errors, and `next`, the command
+that stops the stack. The text output prints the same command under the table. The exit code is 3
+when `--orphaned` finds an orphan, and 1 when no source could be read.
+
+`ods stack down --project NAME` and `ods stack stop --project NAME` work from any
+directory, also when the checkout is gone. They find the project through its owner
+record and saved state, or else through its Docker labels. They stop the recorded
+processes, and `down` runs `docker compose -p NAME down` (volumes are kept),
+releases the stack's port leases, and removes the owner record of an orphan. They
+refuse a stack that still runs in an existing worktree unless you add `--force`.
+`ods stack prune` runs `down --project` for every orphaned stack after a
+confirmation (`--yes` skips it). `--volumes` also deletes their Docker volumes,
+after a separate confirmation. A removed worktree whose stack was already down
+leaves only its volumes. `ls` shows it as orphaned, plain `prune` leaves it,
+and `prune --volumes` deletes the volumes. Plain `prune` keeps the owner record
+of a project with volumes, because that record is the only link from the
+removed worktree to them. When Docker cannot list the volumes, `prune` keeps
+every owner record. Docker keeps a volume that a container still uses, so
+`prune --volumes` lists the volumes again and keeps the owner record if any is left.
+
+`ods stack prune --idle 6h` also stops each isolated stack whose worktree had no
+activity for 6 hours. Activity is the stack start, a Git operation in the
+worktree (commit, checkout, add, rebase), a change to a modified or untracked
+file, a deleted tracked file or directory, or a running coding agent (`claude`, `codex`, `opencode`, `cursor-agent`)
+whose working directory is in the worktree. Ignored files, such as service
+logs, do not count. ods finds agents through `/proc` on Linux and `lsof` on
+macOS. If ods cannot find the agents, `prune --idle` fails and stops nothing.
+If Git cannot read a worktree, prune warns and does not stop its stack.
+After the confirmation and the stack lock, prune checks the activity again and
+skips a stack that had activity since the listing. Shared stacks serve several
+worktrees, so prune never stops them as idle. Idle stacks keep their volumes, also with `--volumes`, so `ods stack up`
+in the worktree starts the stack again with its data. To prune on a schedule,
+run `ods stack prune --idle 6h --yes` from cron or a systemd timer.
+
+`ods stack restart` clears the current worktree's `web/.next/dev` cache after
+stopping the services. It then starts the services against the running infrastructure.
+If the other stack mode runs a web server in this worktree, restart returns an
+error before stopping services.
+
+**Examples:**
+
+```shell
+# Start everything a feature branch needs
+ods stack up
+
+# The whole compound, as JSON for an agent
+ods stack up --profile full --json
+
+# Inspect, follow one service, and restart with a clean Next.js cache
+ods stack status --json
+ods stack logs api --follow
+ods stack restart
+
+# Stop the services and keep the containers, or stop both
+ods stack stop
+ods stack down
+
+# See what a profile would run
+ods stack plan --profile full
+
+# List every stack on the machine, and stop the ones whose worktree is gone
+ods stack ls --all
+ods stack down --project fast-mode-93732ec3
+ods stack prune
+
+# Also stop isolated stacks with no work in their worktree for 6 hours
+ods stack prune --idle 6h --yes
+```
+
+### `object-store migrate` - Move a Dev MinIO's Files to the Object Store
+
+The dev stack runs the object store (SeaweedFS) only: `ods compose dev` keeps
+MinIO at zero replicas and points the app at the object store, and `ods env`
+drops `S3_LEGACY_ENDPOINT_URL`. A checkout that used MinIO before the object
+store still has its files in the `<project>_minio_data` volume. This command
+moves them across once and leaves MinIO stopped, so the app writes to one
+store only.
+
+```shell
+ods object-store migrate
+```
+
+It starts MinIO on a free port and retires it with the app's legacy copy, run
+from `backend` with `.vscode/.env` loaded: every object is copied (a
+multitenant checkout keeps its file records in tenant schemas), a quiet minute
+confirms nothing still writes to MinIO alone, and the retired marker stops
+running backend processes from using it. It then drops
+`S3_LEGACY_ENDPOINT_URL` from `.vscode/.env` and stops MinIO. The infra stack
+must be running (`ods compose dev --infra`). A failed copy leaves MinIO running
+and `.vscode/.env` untouched, so fix the cause and rerun; `ods compose dev
+--infra --down` stops it too.
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--keep-minio` | `false` | Leave MinIO running afterwards |
 
 ### `web` - Run Frontend Scripts
 
-Run bun scripts from `web/package.json` without manually changing directories.
+On macOS or Linux, use `ods web dev` for a frontend-only change with a healthy API already running.
+It resolves the selected project's managed API and starts Next.js in the foreground.
+It fails if the API is unavailable. Start a full stack first in that case.
+Keep the terminal open while testing. Ctrl-C stops a newly launched preview.
+With a matching frontend already running in this checkout, the command attaches
+instead. Ctrl-C then only detaches. The reused API keeps running in either case.
+`stack status` reports stack services, excluding standalone previews.
+On Windows, this command uses the portable foreground launcher and configured
+API connection variables instead of managed API discovery and attachment.
+
+Other scripts run from `web/package.json` without changing directories.
+Build and test commands keep their package-script behavior.
 
 ```shell
 ods web <script> [args...]
@@ -244,10 +590,10 @@ ods web lint
 ods web test --watch
 ```
 
-### `test` - Run Tests
+### `test` - Run Go tests
 
-Run the repo's test suites without changing directories or remembering which
-suite owns a file.
+Run the ODS, CLI, or Terraform-provider Go tests without changing directories.
+For frontend tests, use `ods web test`. Run backend tests with pytest.
 
 ```shell
 ods test <suite|path> [args...]
@@ -262,6 +608,7 @@ later arguments go to the suite's test runner.
 | `ods` | | `tools/ods` | `go test` |
 | `cli` | | `cli` | `go test` |
 | `terraform` | `tf` | `terraform-provider-onyx` | `go test` |
+| `microvm` | | `microvm` | `go test` |
 
 The Go suites run with `-race`, the same as `pr-golang-tests.yml`. A runner that
 takes packages rather than files, such as `go test`, runs the package that holds
@@ -293,8 +640,10 @@ ods coverage <suite|module-dir> [flags]
 
 The baseline is a `.coverage-baseline.yaml` at the module root recording each
 package's floor. `--check` fails when a package drops below its floor, which is
-what `pr-golang-tests.yml` runs on every PR. After adding tests, `--update`
-raises the floors.
+what `pr-golang-tests.yml` runs on every PR. A floor is a coarse minimum, not
+the last measurement: `--update` rounds each package down to a multiple of 5%
+and leaves out a package below 5%. Run `--update` when a package crosses the
+next 5% step.
 
 The floors are the gate, but they are not always a good comparison: they go
 stale, so the report shows gains the current change never made. Give `--base` a
@@ -306,8 +655,8 @@ number counts only its own tests. That is a number the package's owner can act
 on; a cross-package `-coverpkg` total would credit a package for statements its
 own tests never assert on.
 
-The suites are the same Go modules `ods test` knows: `ods`, `cli`, and
-`terraform`. A module directory such as `tools/ods` is accepted in place of a
+The suites are the same Go modules `ods test` knows: `ods`, `cli`,
+`terraform` and `microvm`. A module directory such as `tools/ods` is accepted in place of a
 suite name, which is what CI passes.
 
 **Flags:**
@@ -320,7 +669,7 @@ suite name, which is what CI passes.
 | `--from-profile` | | Report from this coverage profile instead of running the tests |
 | `--html` | | Render the profile as a browsable page at this path |
 | `--markdown` | | Write the changed packages as a markdown table at this path, for a PR comment |
-| `--tolerance` | `0.1` | Percentage points a package may drop below its floor without failing |
+| `--tolerance` | `1` | Percentage points a package may drop below its floor without failing |
 | `--base` | | Report against the coverage snapshot of this commit instead of the floors |
 | `--publish` | `false` | Record this run as the snapshot of `HEAD` (needs AWS credentials) |
 | `--snapshot-bucket` | `onyx-playwright-artifacts` | S3 bucket that holds the snapshots |
@@ -399,9 +748,10 @@ In CI, each module's `--markdown` report goes to the job summary, and its
 One PR comment, updated in place, lists the modules where a package moved, each
 with a link to its page.
 
-Floors are rounded down to one decimal, and a package may sit `--tolerance`
+Floors are rounded down to a multiple of 5%, and a package may sit `--tolerance`
 below its floor without failing. That absorbs the jitter from suites that depend
-on ports or timing; a real regression is far larger.
+on ports, timing or the runner image. The step is recorded as `step` in the
+baseline file.
 
 The package floors are the gate. The module total is reported with its delta
 but never fails the check: a package added without tests, or a well-covered
@@ -515,6 +865,25 @@ ods dc into
 ### `db` - Database Administration
 
 Manage PostgreSQL database dumps, restores, and migrations.
+
+ODS targets the selected project's exact Postgres or API container. It does not
+fall back to a legacy container or another project's image. Local migrations use
+the container's actual published Postgres port, overriding stale saved values.
+An explicit `POSTGRES_HOST` stays an explicit network target. Dump, restore, and
+drop reject network targets because these commands do not implement host clients.
+An explicit project that conflicts with the host target also fails.
+For migrations, an explicit loopback host and port are matched to their actual
+managed database owner. Another checkout cannot bypass ownership checks by
+specifying that owner's localhost port.
+
+Database operations use the shared state and project locks. Mutating commands
+refuse a project owned by another managed checkout. Drop and restore prompts
+identify the selected project and container before changing data.
+Stop managed services before running `ods db upgrade` or `ods db downgrade`.
+Use `ods stack up` to check revisions and stop services only when an upgrade is pending.
+Restore errors return failure. SQL restores stop at the first SQL error.
+Dump and restore remove their temporary container files on success or failure.
+Dump output names ending in `.sql` or `.dump` must match `--format`.
 
 ```shell
 ods db <subcommand>
@@ -705,7 +1074,96 @@ ods audit --python --format=sarif > audit.sarif
 
 # SARIF to a file for upload, readable report to the log (used by CI gates)
 ods audit --format=sarif,text > audit.sarif
+
+# Every tracked bun.lock and uv.lock, not just the root and web ones
+ods audit --all-lockfiles --web --python
 ```
+
+#### Rust-built PyPI tools in images
+
+The image scanner records the `uv` binary as the crates.io crate `uv`, but uv advisories are
+filed on PyPI. `ods audit image` also matches each such crate as the PyPI package of the same
+version. Add other tools of this kind to `pypiToolsFromCrates` in `internal/audit/image.go`.
+
+#### Audit software installed outside package managers
+
+Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.
+ODS scans the inventory with pinned Grype and combines its findings with the OSV image report.
+Docker must be available. Missing inventory, empty inventory, and scanner errors fail the audit.
+Use `--sbom-only` when a job checks only software from supplemental inventories.
+The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
+
+Deployment opts into update deadlines with `--update-policy s3://onyx-internal-tools/audit/updates.json`.
+PR audits and CVE collection scan vulnerabilities without reading update policy.
+Missing or invalid policy fails deployment audits.
+This state is separate from advisory exceptions. It records an emergency minimum and each release's first observation.
+Routine updates warn after 24 hours and block after 72 hours. Emergency minimums block immediately.
+Stale upstream observations warn without resetting recorded deadlines.
+Image scans leave freshness checks disabled unless `--update-policy` is supplied.
+`ods audit gate` includes freshness checks as part of its deployment checks.
+
+CVE Tracking owns policy observation and S3 writes. Its manual `minimum` input raises Chrome's emergency minimum.
+It saves this minimum before upstream discovery, preserving release timestamps even if discovery fails.
+It checks main and supported release branches. Update Sandbox Browser opens or updates pin PRs for stale branches.
+CI builds the audit binary from source. Installed ODS commands receive these features through the normal devtools release.
+
+#### Audit the Craft Firecracker guest kernel and Firecracker
+
+A scanner cannot read a bare `vmlinux` or the Firecracker binaries.
+`ods audit craft-fc` reads the `KERNEL_TAG` and `FC_VERSION` pins in
+`deployment/craft-fc/Dockerfile.artifacts` and matches them against advisory feeds:
+
+- The guest kernel is an `amazonlinux/linux` tag: the AL2023 kernel package source
+  (`kernel6.18-<version>`) or a `microvm-kernel` tag. Each Amazon Linux 2023 advisory (ALAS)
+  for the same kernel series, fixed in a newer package than the pin, is a finding.
+- Firecracker is matched against the GitHub security advisories of `firecracker-microvm/firecracker`.
+
+The allowlist, report formats and `--fail-on` work as for `ods audit image`.
+A feed that cannot be read fails the command. Set `GH_TOKEN` to raise the GitHub API rate limit.
+
+```shell
+ods audit craft-fc --fail-on=high
+```
+
+#### Checking a release branch before a tag
+
+`ods audit gate` runs the deploy gate on the checked-out tree: the lockfiles,
+Dependabot alerts, pinned Actions, and the OS layer each shipped image carries
+(the pinned runtime base for web and model-server, the apt stages of backend
+and the sandbox built from their Dockerfiles). A critical here is the one that would fail the tag
+build, so run it on the release branch at the commit you are about to tag. It
+scans the same hardened bases CI ships, so it needs Docker, `docker login
+dhi.io`, and a signed-in `gh` for the Dependabot alerts; every scan is strict,
+so a source it cannot read fails the gate.
+
+```shell
+git switch release/v4.7
+ods audit gate && git tag v4.7.11 && git push origin v4.7.11
+```
+
+#### Tracking issues for blocking findings
+
+`ods audit alert` keeps one open GitHub issue (label `cve-alert`) per package
+and branch with a blocking finding. It reads the JSON results of earlier scans, applies the
+allowlist, opens an issue for each newly blocking package, updates the issue
+when the package gains an advisory, and closes the issues of packages that no
+longer block. It prints the alerts that need announcing as JSON, including any
+still labelled `cve-alert-pending` from a run that never announced them. The
+[CVE Alerts workflow](../../.github/workflows/cve-alerts.yml) runs it daily and
+after a failed deploy audit, opens a fix PR when a pin applies, and posts each
+alert to Slack with the details in a thread.
+
+```shell
+ods audit --web --python --ignore-url "" --format=json > deps.json
+ods audit image docker.io/onyxdotapp/onyx-backend:edge --ignore-url "" --format=json > backend.json
+ods audit alert --results deps.json --results backend.json --dry-run
+```
+
+Pass the results of every scan: a package missing from all of them counts as
+resolved and has its issue closed. When a scan was skipped, pass `--keep-open`
+so no issue closes. `--scope <branch>` (default `main`) labels
+the issues with the branch the results came from, so a package's issues on
+`main` and on a release branch stay apart.
 
 #### Managing the allowlist
 
@@ -947,6 +1405,58 @@ ods trace --project admin
 ods trace --list
 ```
 
+### `deploy edge` - Deploy main or a Branch to Edge
+
+Build images from `origin/main` or a pushed branch, then deploy them to the
+edge environment.
+
+```shell
+ods deploy edge [flags]
+```
+
+Without `--ref`, or with `--ref main`, the command force-pushes the `edge` tag
+to `origin/main`. With `--ref <branch or commit>`, it pushes the tag
+`dev-build-<branch>-<short-sha>` on that commit. The tag starts
+`deployment.yml`, which publishes the images to Docker Hub. When the build
+succeeds, the command dispatches the configured deploy workflow with
+`version_tag=<tag>`.
+
+A `dev-build-` tag never moves. If the tag already points at the commit, the
+command waits for its build and does not push again. If the tag points at
+another commit, the command stops.
+
+On first run, the command asks for the deploy target repo and the workflow
+filename, and saves them in the ods config file.
+
+| Flag                | Default | Description                                                         |
+| ------------------- | ------- | ------------------------------------------------------------------- |
+| `--ref`             | `main`  | Branch name or full commit SHA on origin to build                   |
+| `--tag`             |         | Tag for `--ref` instead of the derived tag; must start `dev-build-`, and must not contain `cloud` or end in `-dev` |
+| `--dry-run`         | `false` | Resolve the ref and tag only; push and dispatch nothing             |
+| `--yes`             | `false` | Skip the confirmation prompt                                        |
+| `--no-wait-deploy`  | `false` | Do not wait for the deploy workflow to finish                       |
+| `--verify`          | `false` | Run pre-push hooks when you push the tag                            |
+| `--target-repo`     |         | Deploy workflow repo (owner/name); overrides saved config           |
+| `--target-workflow` |         | Deploy workflow filename; overrides saved config                    |
+
+> [!IMPORTANT]
+> For a branch deploy, the onyx repo's `release` environment must admit tags
+> that match `dev-build-*` (Settings > Environments > release > Deployment
+> branches and tags). Without this rule, GitHub rejects the build jobs. The
+> images are public on Docker Hub. The scheduled nightly deploy replaces a
+> branch deployment.
+
+```shell
+# Build and deploy origin/main
+ods deploy edge
+
+# Build and deploy a pushed branch
+ods deploy edge --ref user/my-feature
+
+# Show the tag, push nothing
+ods deploy edge --ref user/my-feature --dry-run
+```
+
 ### Testing Changes Locally (Dry Run)
 
 Both `run-ci` and `cherry-pick` support `--dry-run` to test without making remote changes:
@@ -1010,16 +1520,20 @@ UV_BUILD_CONSTRAINT="$(git rev-parse --show-toplevel)/tools/requirements/build-c
 ```
 
 `tools/requirements/build-constraints.txt` is compiled from its `.in` by the
-`pip-compile` pre-commit hook, so a plain `pre-commit run pip-compile` refreshes
+`pip-compile` pre-commit hook, so `prek run pip-compile --all-files` refreshes
 it. To upgrade a pinned build dependency, edit `build-constraints.in` and the
 matching `[build-system] requires` in all three `pyproject.toml` files; the
 `build-constraints-drift` hook fails if they disagree.
 
 `go-bin` ships the Go toolchain used to compile the binary. Bumping Go means
-moving it everywhere at once: the `go` directive in `go.mod`, `cli/Dockerfile`,
-the `setup-go` and `GO_VERSION` pins across `.github/workflows/`,
-`.devcontainer/Dockerfile`, the `go-bin` pin in all three `pyproject.toml` files
-and in `tools/requirements/build-constraints.in`, and the compiled `build-constraints.txt`.
+moving it everywhere at once: the `go` directive in every `go.mod`, the `golang`
+image tag and digest in `cli/Dockerfile` and `microvm/Dockerfile`, the `setup-go`
+and `GO_VERSION` pins across `.github/workflows/`, `GO_VERSION` and both tarball
+checksums in `.devcontainer/Dockerfile`, the `go-bin` pin in all three
+`pyproject.toml` files and in `tools/requirements/build-constraints.in`, the
+compiled `build-constraints.txt`, and the golangci-lint `language_version` in
+`.pre-commit-config.yaml`. A new Go release can need a newer golangci-lint, so
+run the hook on a file in each module after the bump.
 
 ## Deploy
 

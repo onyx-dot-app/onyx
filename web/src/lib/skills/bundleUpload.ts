@@ -1,3 +1,5 @@
+import { PLUGIN_MANIFEST_PATHS } from "@/lib/plugins/upload";
+
 const ZIP_MIME_TYPE = "application/zip";
 const IGNORED_FILE_NAMES = new Set([".DS_Store", "Thumbs.db"]);
 
@@ -85,8 +87,33 @@ async function packageFiles(
   return new File([zipBlob], archiveName, { type: ZIP_MIME_TYPE });
 }
 
+/** A folder without SKILL.md, or for a plugin upload also without a plugin
+ * manifest, at its top level; the picker words it in the user's language. */
+export class SkillFolderRootError extends Error {
+  constructor(readonly upload: "skill" | "plugin") {
+    super(
+      upload === "plugin"
+        ? "The selected folder must contain SKILL.md or a plugin.json manifest at its top level."
+        : "The selected folder must contain SKILL.md at its top level."
+    );
+  }
+}
+
+/** One file that is not a ZIP or SKILL.md. */
+export class SkillUnsupportedFileError extends Error {
+  constructor(readonly fileName: string) {
+    super(`${fileName} is not a ZIP or SKILL.md file.`);
+  }
+}
+
+export interface PrepareSkillBundleOptions {
+  /** Also take a folder with a plugin manifest at its top level. */
+  allowPlugin?: boolean;
+}
+
 export async function prepareSkillBundleUpload(
-  files: readonly SkillUploadFile[]
+  files: readonly SkillUploadFile[],
+  { allowPlugin = false }: PrepareSkillBundleOptions = {}
 ): Promise<PreparedSkillBundle> {
   if (files.length === 1) {
     const [file] = files;
@@ -105,6 +132,7 @@ export async function prepareSkillBundleUpload(
         source: "skill-md",
       };
     }
+    if (parts.length === 1) throw new SkillUnsupportedFileError(file!.name);
   }
 
   const filesWithParts = selectedFilesWithParts(files);
@@ -126,10 +154,10 @@ export async function prepareSkillBundleUpload(
     }
     entryPaths.add(entry.path);
   }
-  if (!entryPaths.has("SKILL.md")) {
-    throw new Error(
-      "The selected folder must contain SKILL.md at its top level."
-    );
+  const isPlugin =
+    allowPlugin && PLUGIN_MANIFEST_PATHS.some((path) => entryPaths.has(path));
+  if (!entryPaths.has("SKILL.md") && !isPlugin) {
+    throw new SkillFolderRootError(allowPlugin ? "plugin" : "skill");
   }
 
   entries.sort((left, right) => left.path.localeCompare(right.path));
@@ -207,4 +235,111 @@ export async function prepareSkillFilesUpload(
       (entry) => entry.path.split("/").at(-1)?.toLowerCase() === "skill.md"
     ),
   };
+}
+
+// The per-user write limits of `backend/onyx/skills/limits.py`. A merge stops
+// before it holds more than the server would take.
+const MERGE_MAX_BYTES = 500 * 1024 * 1024;
+const MERGE_MAX_FILES = 5_000;
+
+/** A merge past one of the limits; the page words it in the user's language. */
+export class SkillMergeLimitError extends Error {
+  constructor(
+    readonly limit: "files" | "bytes",
+    readonly max: number
+  ) {
+    super(`The skill files are past the ${limit} limit of ${max}.`);
+  }
+}
+
+export const SKILL_MERGE_MAX_MB = MERGE_MAX_BYTES / (1024 * 1024);
+
+class MergeBudget {
+  private bytes = 0;
+  private files = 0;
+
+  take(bytes: number): void {
+    this.bytes += bytes;
+    this.files += 1;
+    if (this.files > MERGE_MAX_FILES)
+      throw new SkillMergeLimitError("files", MERGE_MAX_FILES);
+    if (this.bytes > MERGE_MAX_BYTES)
+      throw new SkillMergeLimitError("bytes", SKILL_MERGE_MAX_MB);
+  }
+}
+
+/** The files in one upload, by their path in the skill. A SKILL.md bundle
+ * gives its SKILL.md at the root, with the files beside it, so the server
+ * keeps the frontmatter fields that the editor does not show. */
+async function filesOf(
+  upload: PreparedSkillFilesUpload,
+  budget: MergeBudget
+): Promise<SkillDirectoryEntry[]> {
+  if (!isZipFile(upload.file)) {
+    budget.take(upload.file.size);
+    const path = isSkillMd(upload.file)
+      ? "SKILL.md"
+      : (upload.entries?.[0]?.path ?? upload.file.name);
+    return [{ file: upload.file, path }];
+  }
+  const { BlobReader, BlobWriter, ZipReader } = await import("@zip.js/zip.js");
+  const reader = new ZipReader(new BlobReader(upload.file));
+  try {
+    const entries = (await reader.getEntries()).filter(
+      (entry) => !entry.directory
+    );
+    // A bundle's files sit beside its SKILL.md, which may be in one folder.
+    const skillMd = upload.containsSkillMd
+      ? entries.find(
+          (entry) =>
+            entry.filename.split("/").at(-1)?.toLowerCase() === "skill.md"
+        )
+      : undefined;
+    const root = skillMd
+      ? skillMd.filename.slice(0, skillMd.filename.lastIndexOf("/") + 1)
+      : "";
+    const wanted = entries.filter((entry) => {
+      if (!entry.filename.startsWith(root)) return false;
+      const path = entry.filename.slice(root.length);
+      const basename = path.split("/").at(-1) ?? path;
+      return !IGNORED_FILE_NAMES.has(basename) && !path.startsWith("__MACOSX/");
+    });
+    // Check the sizes the archive declares before unpacking any of it.
+    const declared = new MergeBudget();
+    for (const entry of wanted) declared.take(entry.uncompressedSize);
+    const files: SkillDirectoryEntry[] = [];
+    for (const entry of wanted) {
+      const path =
+        entry === skillMd ? "SKILL.md" : entry.filename.slice(root.length);
+      const blob = await entry.getData(new BlobWriter());
+      budget.take(blob.size);
+      files.push({
+        file: new File([blob], path.split("/").at(-1) ?? path, {
+          lastModified: entry.lastModDate.getTime(),
+        }),
+        path,
+      });
+    }
+    return files;
+  } finally {
+    await reader.close();
+  }
+}
+
+/** One ZIP of every upload's files, a later upload replacing an earlier file
+ * with the same path, without the removed paths. Undefined when no file is
+ * left. Stops at the server's per-user write limits. */
+export async function mergeSkillFilesUploads(
+  uploads: readonly PreparedSkillFilesUpload[],
+  removed: ReadonlySet<string>
+): Promise<File | undefined> {
+  const budget = new MergeBudget();
+  const byPath = new Map<string, SkillDirectoryEntry>();
+  for (const upload of uploads)
+    for (const entry of await filesOf(upload, budget))
+      byPath.set(entry.path, entry);
+  const kept = [...byPath.values()]
+    .filter((entry) => !removed.has(entry.path))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  return kept.length > 0 ? packageFiles("skill-files.zip", kept) : undefined;
 }

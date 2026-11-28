@@ -36,6 +36,7 @@ Install anything else with `pip install <pkg>`, or `bun install <pkg>` from
 ### Workspace layout
 
 Your working directory is the session root. Everything you produce goes under `outputs/`.
+For subdirectory commands, set `workdir` instead of using `cd` to avoid false path-traversal rejections.
 
 ```
 ./

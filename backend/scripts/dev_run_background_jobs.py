@@ -44,7 +44,7 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,opensearch_migration",
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,capability_checks_draft,suggested_questions",
     ]
 
     cmd_worker_docprocessing = [
@@ -58,6 +58,19 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
         "--queues=docprocessing,port",
+    ]
+
+    cmd_worker_docconversion = [
+        "celery",
+        "-A",
+        "onyx.background.celery.versioned_apps.docconversion",
+        "worker",
+        "--pool=threads",
+        "--concurrency=2",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=docconversion@%n",
+        "--queues=docconversion",
     ]
 
     cmd_worker_docfetching = [
@@ -142,6 +155,7 @@ def run_jobs() -> None:
         ("LIGHT", cmd_worker_light),
         ("DOCPROCESSING", cmd_worker_docprocessing),
         ("DOCFETCHING", cmd_worker_docfetching),
+        ("DOCCONVERSION", cmd_worker_docconversion),
         ("HEAVY", cmd_worker_heavy),
         ("MONITORING", cmd_worker_monitoring),
         ("USER_FILE_PROCESSING", cmd_worker_user_file_processing),

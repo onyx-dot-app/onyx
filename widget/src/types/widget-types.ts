@@ -3,6 +3,8 @@
  */
 
 import { ResolvedCitation } from "@/types/api-types";
+import type { ApprovalEntry } from "@/services/approvals";
+import type { QuestionEntry } from "@/services/questions";
 
 /**
  * Returns the bearer credential for a single request. Called before every
@@ -29,6 +31,8 @@ export interface WidgetConfig {
 
   // Optional - Display
   mode?: "launcher" | "inline";
+  // Inline mode: show the full chat panel before the first message.
+  startExpanded?: boolean;
 
   // Optional - Citations
   includeCitations?: boolean;
@@ -48,4 +52,14 @@ export interface ChatMessage {
   timestamp: number;
   isStreaming?: boolean;
   citations?: ResolvedCitation[];
+  // Tool calls of this response that asked for the user's approval
+  approvals?: ApprovalEntry[];
+  // Question calls of this response that asked the user
+  questions?: QuestionEntry[];
+  // The stream stopped while the response waits for decisions or answers
+  awaitingUser?: boolean;
+  // The visitor's rating of this response
+  feedback?: MessageFeedback;
 }
+
+export type MessageFeedback = "like" | "dislike";

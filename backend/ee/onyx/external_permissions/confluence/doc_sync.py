@@ -14,6 +14,7 @@ from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -37,11 +38,13 @@ def confluence_doc_sync(
     If a document exists in the DB but not in the Confluence fetch, it's marked as restricted.
     """
     confluence_connector = ConfluenceConnector(
-        **cc_pair.connector.connector_specific_config
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
     )
 
     provider = OnyxDBCredentialsProvider(
-        get_current_tenant_id(), "confluence", cc_pair.credential_id
+        get_current_tenant_id(), cc_pair.connector.source, cc_pair.credential_id
     )
     confluence_connector.set_credentials_provider(provider)
 

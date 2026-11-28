@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
@@ -13,6 +14,9 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 _instance_id_resolved = False
+# Set by `init_sentry`. This module ships in the model server image, which has
+# no KV store, so the entry point passes the lookup in.
+_instance_id_resolver: Callable[[], str] | None = None
 
 
 def _add_instance_tags(
@@ -21,8 +25,10 @@ def _add_instance_tags(
 ) -> Event | None:
     """Sentry before_send hook that lazily attaches instance identification tags.
 
-    On the first event, resolves the instance UUID from the KV store (requires DB)
-    and sets it as a global Sentry tag. Subsequent events pick it up automatically.
+    On the first event, resolves the instance UUID with the resolver the entry
+    point gave `init_sentry` (the KV store, which requires DB) and sets it as a
+    global Sentry tag. Subsequent events pick it up automatically. Without a
+    resolver, a single-tenant event gets no tag.
     """
     global _instance_id_resolved
 
@@ -36,10 +42,10 @@ def _add_instance_tags(
 
         if MULTI_TENANT:
             instance_id = "multi-tenant-cloud"
+        elif _instance_id_resolver is not None:
+            instance_id = _instance_id_resolver()
         else:
-            from onyx.utils.telemetry import get_or_generate_uuid
-
-            instance_id = get_or_generate_uuid()
+            return event
 
         sentry_sdk.set_tag("instance_id", instance_id)
 
@@ -83,13 +89,18 @@ def init_sentry(
     *,
     traces_sample_rate: float,
     integrations: list[Integration] | None = None,
+    instance_id_resolver: Callable[[], str] | None = None,
 ) -> None:
     """Initialize Sentry with credential-safe defaults for every entrypoint.
 
     Routing all inits through here keeps the hardening correct-by-construction:
     no entrypoint can reintroduce the credential leak. Callers guard on
-    SENTRY_DSN and pass only what differs (sample rate, integrations).
+    SENTRY_DSN and pass only what differs (sample rate, integrations, and the
+    instance id lookup for a process that has the KV store).
     """
+    global _instance_id_resolver
+    _instance_id_resolver = instance_id_resolver
+
     import sentry_sdk
 
     from onyx import __version__

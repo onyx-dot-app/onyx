@@ -35,7 +35,7 @@ def _build_braintrust_processor(config: BraintrustConfig) -> TracingProcessor:
     import braintrust
 
     from onyx.tracing.braintrust_tracing_processor import BraintrustTracingProcessor
-    from onyx.tracing.masking import mask_sensitive_data
+    from onyx.tracing.masking import bound_trace_data
 
     # The Braintrust SDK reads BRAINTRUST_API_URL from the env; keep it in sync
     # (and cleared when unset) so a custom/self-hosted URL is honored.
@@ -48,7 +48,7 @@ def _build_braintrust_processor(config: BraintrustConfig) -> TracingProcessor:
         project=config.project,
         api_key=config.api_key,
     )
-    braintrust.set_masking_function(mask_sensitive_data)
+    braintrust.set_masking_function(bound_trace_data)
     return BraintrustTracingProcessor(braintrust_logger)
 
 
@@ -74,6 +74,8 @@ def _build_langfuse_processor(config: LangfuseConfig) -> TracingProcessor:
         secret_key=config.secret_key,
         base_url=config.host or None,
         release=__version__,
+        # Required by Langfuse v4 ingestion; older servers ignore it.
+        additional_headers={"x-langfuse-ingestion-version": "4"},
     )
     return LangfuseTracingProcessor(client=client)
 

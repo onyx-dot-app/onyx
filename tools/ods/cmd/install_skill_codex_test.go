@@ -24,7 +24,7 @@ func TestInstallCodexSkillsCompilesEnforcedAndExcludesTheFile(t *testing.T) {
 	writeSkill(t, source, "enforced", "rule-b", "second", "Do B.")
 	writeSkill(t, source, "skills", "on-demand", "db work", "Use sessions.")
 
-	skills, err := discoverLLMContextSkills(source)
+	skills, err := discoverAgentContextSkills(source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestInstallCodexSkillsSymlinksNativeSkills(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	link := filepath.Join(home, agentsSkillsDir, "on-demand")
+	link := filepath.Join(repoRoot, projectSkillsDir, "on-demand")
 	target, err := os.Readlink(link)
 	if err != nil {
 		t.Fatalf("expected %s to be a symlink: %v", link, err)
@@ -108,6 +108,10 @@ func TestInstallCodexSkillsRemovesTheCompiledFileWhenEnforcedSkillsVanish(t *tes
 	if _, err := os.Stat(generated); !os.IsNotExist(err) {
 		t.Fatalf("stale compiled file should be removed: %v", err)
 	}
+	// With the file gone, a rerun is a no-op.
+	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot, false); err != nil {
+		t.Fatalf("expected a missing file to be a no-op, got %v", err)
+	}
 
 	// A hand-written file of the same name survives the same rerun.
 	deployWriteFile(t, generated, "my own local notes")
@@ -128,8 +132,8 @@ func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
 
 	err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false)
 
-	if err == nil {
-		t.Fatal("expected the failed exclusion to fail the install")
+	if err == nil || !strings.HasPrefix(err.Error(), "could not locate git exclude file: ") {
+		t.Fatalf("expected the failed exclusion to fail the install, got %v", err)
 	}
 	// The compiled file must not exist unignored: one git add away from a
 	// public diff is exactly what the exclusion prevents.
@@ -139,8 +143,8 @@ func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
 }
 
 func TestInstallSkill_agentCodexEndToEnd(t *testing.T) {
-	home, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	_, repoRoot := skillEnv(t)
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 
 	out, err := skillRun(t, "--source", source, "--agent", "codex")
@@ -152,7 +156,7 @@ func TestInstallSkill_agentCodexEndToEnd(t *testing.T) {
 	if !strings.Contains(compiled, "## style") {
 		t.Fatalf("enforced skill missing from the compiled file: %q", compiled)
 	}
-	link := filepath.Join(home, agentsSkillsDir, "review")
+	link := filepath.Join(repoRoot, projectSkillsDir, "review")
 	if _, err := os.Readlink(link); err != nil {
 		t.Fatalf("expected the on-demand skill to be symlinked: %v", err)
 	}
@@ -191,29 +195,12 @@ func TestInstallCodexSkillsKeepsAHandWrittenAgentsLocal(t *testing.T) {
 	}
 }
 
-func TestRemoveStaleAgentsLocalLeavesAHandWrittenFile(t *testing.T) {
-	repoRoot := t.TempDir()
-	dest := filepath.Join(repoRoot, agentsLocalFile)
-	deployWriteFile(t, dest, "my own notes, no marker")
-
-	if err := removeStaleAgentsLocal(discardCmd(), repoRoot); err != nil {
-		t.Fatal(err)
-	}
-	if got := skillReadFile(t, dest); got != "my own notes, no marker" {
-		t.Fatalf("hand-written file must survive: %q", got)
-	}
-	// A missing file is a no-op, not an error.
-	if err := removeStaleAgentsLocal(discardCmd(), t.TempDir()); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestExcludeAgentsLocalAppendsToAnExistingListWithoutTrailingNewline(t *testing.T) {
 	repoRoot := gitRepo(t)
 	excludePath := filepath.Join(repoRoot, ".git", "info", "exclude")
 	deployWriteFile(t, excludePath, "*.tmp")
 
-	if err := excludeAgentsLocal(repoRoot); err != nil {
+	if err := excludeFromGit(repoRoot, agentsLocalFile); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,7 +219,7 @@ func requireNonRoot(t *testing.T) {
 
 func TestInstallSkill_claudeMDWriteFailureFailsTheInstall(t *testing.T) {
 	_, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 	// .claude exists as a file, so creating the directory fails.
 	deployWriteFile(t, filepath.Join(repoRoot, ".claude"), "in the way")
@@ -240,19 +227,6 @@ func TestInstallSkill_claudeMDWriteFailureFailsTheInstall(t *testing.T) {
 	if _, err := skillRun(t, "--source", source); err == nil ||
 		!strings.Contains(err.Error(), ".claude") {
 		t.Fatalf("expected the failed .claude write to fail the install, got %v", err)
-	}
-}
-
-func TestResolveTargetDirFailsWhenTheChosenDirCannotBeCreated(t *testing.T) {
-	blocked := filepath.Join(t.TempDir(), "file")
-	deployWriteFile(t, blocked, "not a directory")
-	ui := testUI()
-	ui.interactive = true
-	ui.confirm = func(string) bool { return false }
-	ui.readString = func(string) string { return filepath.Join(blocked, "sub") }
-
-	if _, err := ui.resolveTargetDir("Cursor rules", filepath.Join(t.TempDir(), "missing")); err == nil {
-		t.Fatal("expected an uncreatable chosen directory to error")
 	}
 }
 
@@ -267,8 +241,9 @@ func TestInstallCodexSkillsFailsWhenTheCompiledFileCannotBeWritten(t *testing.T)
 	}
 	t.Cleanup(func() { _ = os.Chmod(repoRoot, 0o755) })
 
-	if err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false); err == nil {
-		t.Fatal("expected the unwritable repo root to fail the install")
+	err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false)
+	if want := "could not write " + filepath.Join(repoRoot, agentsLocalFile); err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("expected %q, got %v", want, err)
 	}
 }
 
@@ -282,8 +257,12 @@ func TestRemoveStaleAgentsLocalFailsOnAnUnreadableFile(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(dest, 0o644) })
 
-	if err := removeStaleAgentsLocal(discardCmd(), repoRoot); err == nil {
-		t.Fatal("expected an unreadable file to fail loudly")
+	err := removeStaleAgentsLocal(discardCmd(), repoRoot)
+	if want := "could not read " + dest; err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("expected %q, got %v", want, err)
+	}
+	if _, err := os.Lstat(dest); err != nil {
+		t.Fatalf("an unreadable file must not be removed: %v", err)
 	}
 }
 
@@ -296,7 +275,7 @@ func TestLinkManualSkillsRemovesStaleLinksIntoTheSourceOnly(t *testing.T) {
 	writeSkill(t, source, "skills", "kept", "still here", "Body.")
 	// A link into the source whose skill is gone, a link elsewhere, and a
 	// real directory the user made themselves.
-	skillsDir := filepath.Join(home, agentsSkillsDir)
+	skillsDir := filepath.Join(repoRoot, projectSkillsDir)
 	deployWriteFile(t, filepath.Join(source, "skills", "removed", "SKILL.md"), "old")
 	staleTarget := filepath.Join(source, "skills", "removed")
 	stale := filepath.Join(skillsDir, "removed")

@@ -8,10 +8,14 @@ registration, and token request — is checked.
 """
 
 import httpx
+from fastapi.concurrency import run_in_threadpool
 
-from onyx.server.security.models import outbound_ssrf_params
+from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.security.models import outbound_ssrf_params, ssrf_error_hint
 from onyx.server.security.store import get_security_settings
-from onyx.utils.url import validate_outbound_http_url
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 # Mirror the MCP SDK defaults (see mcp.shared._httpx_utils.create_mcp_http_client).
 _MCP_DEFAULT_TIMEOUT = 30.0
@@ -41,7 +45,7 @@ class _SSRFGuardAsyncTransport(httpx.AsyncHTTPTransport):
     targets are validated too."""
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        validate_mcp_outbound_url(str(request.url))
+        await run_in_threadpool(validate_mcp_outbound_url, str(request.url))
         return await super().handle_async_request(request)
 
 
@@ -106,3 +110,25 @@ def mcp_oauth_challenge_httpx_client_factory(
         timeout=timeout,
         transport=_OAuthChallengeTransport(server_url, metadata_url),
     )
+
+
+def validate_mcp_url(url: str | None, field: str, *, require_https: bool) -> None:
+    """Store-time SSRF guard for a curator-supplied URL; raises ``OnyxError`` as
+    a field-level frontend error. ``require_https`` routes OAuth endpoints through
+    the same validator the token exchange uses, so a URL that saves can't be
+    rejected later. Structural-only (``resolve_dns=False``): rejects bad
+    scheme/credentials/blocked hosts and literal internal IPs but doesn't resolve
+    hostnames, so a transient/internal-DNS host doesn't block a save; fetch-time
+    guards resolve DNS and cover SDK redirects/rebinding."""
+    if not url:
+        return
+    validator = (
+        validate_oauth_endpoint_url if require_https else validate_mcp_outbound_url
+    )
+    try:
+        validator(url, resolve_dns=False)
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Invalid {field}: {e}{ssrf_error_hint(url, e)}",
+        )

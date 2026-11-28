@@ -1,0 +1,168 @@
+@reference "#reference.css";
+
+/* ── CodePanel ───────────────────────────────────────────────────────────────
+   A bordered panel for code. Each part after the first draws a divider above
+   itself. Code is always LTR. */
+
+/* Always 0.5rem corners: concentric with a run card (0.75rem corners, 0.25rem
+   padding) around a step's body. The children are clipped to them. */
+.opal-code-panel {
+  @apply w-full overflow-hidden rounded-08 border-[0.5px] border-border-01;
+  @apply bg-background-tint-00;
+  direction: ltr;
+}
+
+.opal-code-panel > :not(:first-child) {
+  @apply border-t-[0.5px] border-border-01;
+}
+
+/* Title row: the same fill as the gutter. */
+.opal-code-panel-header {
+  @apply px-2 py-0.5 bg-background-tint-01;
+}
+
+.opal-code-panel-title {
+  @apply min-w-0 flex-1;
+}
+
+/* ANSI colors for terminal output: the 16 base colors, per theme. */
+.opal-code-panel {
+  --opal-ansi-0: #24292f;
+  --opal-ansi-1: #cf222e;
+  --opal-ansi-2: #116329;
+  --opal-ansi-3: #7d4e00;
+  --opal-ansi-4: #0550ae;
+  --opal-ansi-5: #8250df;
+  --opal-ansi-6: #1b7c83;
+  --opal-ansi-7: #6e7781;
+  --opal-ansi-8: #57606a;
+  --opal-ansi-9: #a40e26;
+  --opal-ansi-10: #1a7f37;
+  --opal-ansi-11: #633c01;
+  --opal-ansi-12: #0969da;
+  --opal-ansi-13: #6639ba;
+  --opal-ansi-14: #3192aa;
+  --opal-ansi-15: #8c959f;
+}
+
+.dark .opal-code-panel {
+  --opal-ansi-0: #3b4048;
+  --opal-ansi-1: #f47067;
+  --opal-ansi-2: #57ab5a;
+  --opal-ansi-3: #c69026;
+  --opal-ansi-4: #539bf5;
+  --opal-ansi-5: #b083f0;
+  --opal-ansi-6: #39c5cf;
+  --opal-ansi-7: #adbac7;
+  --opal-ansi-8: #768390;
+  --opal-ansi-9: #ff938a;
+  --opal-ansi-10: #6bc46d;
+  --opal-ansi-11: #daaa3f;
+  --opal-ansi-12: #6cb6ff;
+  --opal-ansi-13: #dcbdfb;
+  --opal-ansi-14: #56d4dd;
+  --opal-ansi-15: #cdd9e5;
+}
+
+/* Lines */
+.opal-code-panel-lines {
+  @apply max-h-96 overflow-auto;
+}
+/* Growing lines show in full; only a too-wide line scrolls sideways. */
+.opal-code-panel-lines[data-grow] {
+  @apply max-h-none overflow-y-visible;
+}
+
+.opal-code-panel-lines table {
+  @apply w-full border-collapse;
+}
+
+.opal-code-panel-lines tr {
+  @apply align-baseline;
+}
+
+/* 0.1875rem above and below each line. */
+.opal-code-panel-number,
+.opal-code-panel-marker,
+.opal-code-panel-code {
+  @apply py-0.75;
+}
+
+.opal-code-panel-lines tr[data-kind="added"] {
+  @apply bg-status-success-01;
+}
+
+.opal-code-panel-lines tr[data-kind="removed"] {
+  @apply bg-status-error-01;
+}
+
+.opal-code-panel-number {
+  @apply w-px select-none whitespace-nowrap ps-2 pe-1 text-end align-baseline;
+  @apply bg-background-tint-01 font-secondary-mono text-text-02;
+}
+
+.opal-code-panel-marker {
+  @apply w-px select-none ps-2 font-secondary-mono text-text-03;
+}
+
+.opal-code-panel-lines tr[data-kind="added"] .opal-code-panel-marker {
+  @apply text-status-success-05;
+}
+
+.opal-code-panel-lines tr[data-kind="removed"] .opal-code-panel-marker {
+  @apply text-status-error-05;
+}
+
+.opal-code-panel-code {
+  @apply px-2 whitespace-pre-wrap wrap-break-word;
+  @apply font-secondary-mono text-text-04;
+}
+
+/* Unwrapped lines keep their length; the panel scrolls sideways. */
+.opal-code-panel-lines[data-nowrap] .opal-code-panel-code {
+  @apply whitespace-pre wrap-normal;
+}
+
+.opal-code-panel-note {
+  @apply px-2 py-0.5 text-center italic bg-background-tint-02;
+  @apply font-secondary-mono text-text-02;
+}
+
+/* Copy button on hover, for lines without a header. */
+.opal-code-panel-copyable {
+  @apply relative;
+}
+
+.opal-code-panel-copy {
+  @apply absolute top-1 end-1;
+}
+
+/* Two sets of lines, side by side. */
+.opal-code-panel-columns {
+  @apply grid max-h-96 grid-cols-2 divide-x divide-border-01 overflow-auto;
+}
+
+/* The columns scroll together, so the lines inside them do not scroll. */
+.opal-code-panel-columns .opal-code-panel-lines {
+  @apply max-h-none overflow-visible;
+}
+
+/* Output */
+.opal-code-panel-output {
+  @apply max-h-72 overflow-auto px-2 py-1 bg-background-tint-00;
+  @apply whitespace-pre-wrap wrap-break-word;
+}
+
+.opal-code-panel-output[data-error="true"] {
+  @apply bg-status-error-01;
+}
+
+/* Content: anything that is not code or output. */
+.opal-code-panel-content {
+  @apply px-2 py-1;
+}
+
+/* Footer */
+.opal-code-panel-footer {
+  @apply px-2 py-0.5 bg-background-tint-00;
+}

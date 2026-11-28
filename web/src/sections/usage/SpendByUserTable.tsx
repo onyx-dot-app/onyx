@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  InputSingleSelect,
+  InputSingleComboBox,
   InputTypeIn,
   Table,
   Text,
-  createTableColumns,
+  type TableColumn,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgUser } from "@opal/icons";
@@ -72,15 +72,15 @@ function filteredRow(
   };
 }
 
-const tc = createTableColumns<SpendRow>();
-
 type UsageTranslate = ReturnType<typeof useTranslations<"admin.usage">>;
 
-function buildColumns(t: UsageTranslate) {
+function buildColumns(t: UsageTranslate): TableColumn<SpendRow>[] {
   return [
-    tc.qualifier({ content: "icon", getContent: () => SvgUser }),
-    tc.column("email", {
-      header: t("spendByUser.columns.user.header"),
+    { kind: "qualifier", content: "icon", icon: () => SvgUser },
+    {
+      kind: "data",
+      field: "email",
+      title: t("spendByUser.columns.user.header"),
       weight: 38,
       cell: (value) => (
         <span className="underline-offset-2 group-hover/row:underline">
@@ -93,9 +93,11 @@ function buildColumns(t: UsageTranslate) {
           </Text>
         </span>
       ),
-    }),
-    tc.column("cost_cents", {
-      header: t("spendByUser.columns.spend.header"),
+    },
+    {
+      kind: "data",
+      field: "cost_cents",
+      title: t("spendByUser.columns.spend.header"),
       weight: 16,
       alignment: "right",
       cell: (value) => (
@@ -109,9 +111,11 @@ function buildColumns(t: UsageTranslate) {
           </Text>
         </span>
       ),
-    }),
-    tc.column("total_tokens", {
-      header: t("spendByUser.columns.tokens.header"),
+    },
+    {
+      kind: "data",
+      field: "total_tokens",
+      title: t("spendByUser.columns.tokens.header"),
       weight: 18,
       alignment: "right",
       cell: (value) => (
@@ -125,9 +129,11 @@ function buildColumns(t: UsageTranslate) {
           </Text>
         </span>
       ),
-    }),
-    tc.column("input_tokens", {
-      header: t("spendByUser.columns.input.header"),
+    },
+    {
+      kind: "data",
+      field: "input_tokens",
+      title: t("spendByUser.columns.input.header"),
       weight: 14,
       alignment: "right",
       cell: (value) => (
@@ -141,9 +147,11 @@ function buildColumns(t: UsageTranslate) {
           </Text>
         </span>
       ),
-    }),
-    tc.column("output_tokens", {
-      header: t("spendByUser.columns.output.header"),
+    },
+    {
+      kind: "data",
+      field: "output_tokens",
+      title: t("spendByUser.columns.output.header"),
       weight: 14,
       alignment: "right",
       cell: (value) => (
@@ -157,7 +165,7 @@ function buildColumns(t: UsageTranslate) {
           </Text>
         </span>
       ),
-    }),
+    },
   ];
 }
 
@@ -240,18 +248,18 @@ export default function SpendByUserTable({
         <div className="flex w-full flex-col gap-2 sm:ms-auto sm:w-auto sm:flex-row">
           {models.length > 0 && (
             <div className="w-full sm:w-44">
-              <InputSingleSelect
+              <InputSingleComboBox
                 value={model}
                 onValueChange={setModel}
                 placeholder={t("spendByUser.filters.allModels.label")}
                 options={[
                   {
                     value: ALL,
-                    label: t("spendByUser.filters.allModels.label"),
+                    title: t("spendByUser.filters.allModels.label"),
                   },
                   ...models.map((option) => ({
                     value: option,
-                    label: option,
+                    title: option,
                   })),
                 ]}
               />
@@ -259,18 +267,18 @@ export default function SpendByUserTable({
           )}
           {flows.length > 0 && (
             <div className="w-full sm:w-40">
-              <InputSingleSelect
+              <InputSingleComboBox
                 value={flow}
                 onValueChange={setFlow}
                 placeholder={t("spendByUser.filters.allFlows.label")}
                 options={[
                   {
                     value: ALL,
-                    label: t("spendByUser.filters.allFlows.label"),
+                    title: t("spendByUser.filters.allFlows.label"),
                   },
                   ...flows.map((option) => ({
                     value: option,
-                    label: option,
+                    title: option,
                   })),
                 ]}
               />
@@ -287,7 +295,7 @@ export default function SpendByUserTable({
         // Remount on filter change so the Table's internal page index resets;
         // otherwise a narrower `rows` can leave it stranded past the last page.
         key={`${model}-${flow}-${searchTerm}`}
-        data={rows}
+        items={rows}
         columns={columns}
         getRowId={(row) => row.email}
         pageSize={10}

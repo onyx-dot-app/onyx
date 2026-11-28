@@ -1,7 +1,11 @@
 """Channel readership: a thread names the group of its channel's members, and
 the group sync names the people in it."""
 
-from unittest.mock import MagicMock
+import threading
+import time
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -42,7 +46,7 @@ STANDARD = ChannelRef(
 PRIVATE = ChannelRef(
     team_id=TEAM_ID, id="19:private", display_name="Leads", membership_type="private"
 )
-TEAM_GROUP = f"teams_team-members:{TEAM_ID}".lower()
+TEAM_GROUP = f"team-members:{TEAM_ID}"
 # What a checkpoint saved by an older version holds: a channel with no type.
 UNTYPED = ChannelRef(team_id=TEAM_ID, id=CHANNEL_ID, display_name="General")
 CHANNEL_TYPE_URL = f"teams/{TEAM_ID}/channels/{CHANNEL_ID}?$select=membershipType"
@@ -96,21 +100,13 @@ def test_a_private_channel_and_an_unknown_one_have_a_group_of_their_own() -> Non
 
 
 def test_a_thread_names_its_group_and_no_one_by_email() -> None:
-    access = channel_access(STANDARD, for_indexing=True)
+    access = channel_access(STANDARD)
 
     # A team of thousands would put every email on every thread, and a join or
     # a leave would rewrite them all.
     assert access.is_public is False
     assert access.external_user_emails == set()
     assert access.external_user_group_ids == {TEAM_GROUP}
-
-
-def test_the_permission_sync_walk_leaves_the_source_prefix_to_the_sync() -> None:
-    # The permission sync prefixes every group it is handed. A second prefix
-    # (teams_teams_...) matches no synced group, and nobody can read the thread.
-    access = channel_access(STANDARD, for_indexing=False)
-
-    assert access.external_user_group_ids == {f"team-members:{TEAM_ID}"}
 
 
 def test_a_member_without_an_email_is_named_by_user_id() -> None:
@@ -224,6 +220,76 @@ def test_an_id_graph_does_not_name_is_not_asked_for_again() -> None:
     assert len(client.posted) == 1
 
 
+def test_the_directory_lookup_runs_with_the_lock_released() -> None:
+    """Workers share the directory, so a page of names must not stall the
+    others: only the cache is guarded, the lookup itself is not."""
+    client: MagicMock = graph_client(
+        {
+            MEMBERS_URL: {"value": [member("Ada", None, "u1")]},
+            USER_LOOKUP_URL: {"u1": "ada@example.com"},
+        }
+    )
+    directory: UserDirectory = UserDirectory(client)
+    original: Callable[[list[str]], dict[str, str | None]] = directory._lookup
+    locked_during_lookup: list[bool] = []
+
+    def observed(batch: list[str]) -> dict[str, str | None]:
+        locked_during_lookup.append(directory._lock.locked())
+        return original(batch)
+
+    with patch.object(directory, "_lookup", side_effect=observed):
+        assert _emails(client, directory) == ["ada@example.com"]
+    assert locked_during_lookup == [False]
+
+
+@pytest.mark.parametrize("name_first", [True, False])
+def test_a_name_graph_gave_survives_a_racing_lookup_that_omits_it(
+    name_first: bool,
+) -> None:
+    """Two workers may look up the same new id at once. The answer that names
+    the user wins in either order, so an omission on the other lookup does
+    not take access away."""
+    directory: UserDirectory = UserDirectory(graph_client({}))
+    named: dict[str, str | None] = {"u1": "ada@example.com"}
+    omitted: dict[str, str | None] = {"u1": None}
+    answers: Iterator[dict[str, str | None]] = iter(
+        [named, omitted] if name_first else [omitted, named]
+    )
+    both_asking: threading.Barrier = threading.Barrier(2, timeout=5)
+    answers_lock: threading.Lock = threading.Lock()
+    first_written: threading.Event = threading.Event()
+    asked: list[int] = []
+
+    def lookup(_batch: list[str]) -> dict[str, str | None]:
+        both_asking.wait()
+        with answers_lock:
+            answer = next(answers)
+            asked.append(len(asked))
+            is_second = len(asked) == 2
+        if is_second:
+            # Written after the first answer, so the order under test holds.
+            assert first_written.wait(timeout=5)
+        return answer
+
+    with (
+        patch.object(directory, "_lookup", side_effect=lookup),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        workers: list[Future[dict[str, str]]] = [
+            pool.submit(directory.principal_names, ["u1"]) for _ in range(2)
+        ]
+        deadline: float = time.monotonic() + 5
+        while "u1" not in directory._principal_names:
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        first_written.set()
+        # Both finished, their raises included, before the cache is read.
+        for worker in workers:
+            worker.result(timeout=5)
+
+    assert directory.principal_names(["u1"]) == {"u1": "ada@example.com"}
+
+
 def test_a_channel_whose_members_all_carry_an_email_asks_for_no_names() -> None:
     client = graph_client(
         {MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]}}
@@ -247,7 +313,7 @@ def test_the_channel_walk_lists_no_members_and_names_the_thread_authors() -> Non
     documents = [item for item in items if isinstance(item, Document)]
     assert len(documents) == 2 and len(items) == 2
     for document in documents:
-        assert document.external_access == channel_access(STANDARD, for_indexing=True)
+        assert document.external_access == channel_access(STANDARD)
         owners = document.primary_owners or []
         assert [(o.display_name, o.email) for o in owners] == [("Ada", None)]
     # Naming a channel's people is the group sync's work, so indexing lists no
@@ -295,7 +361,7 @@ def test_a_checkpoint_without_the_channel_type_reads_it_from_graph() -> None:
     # The group sync names a standard channel's group by its team, so a resumed
     # checkpoint that named it by channel would share its threads with no one.
     assert [item.external_access for item in items if isinstance(item, Document)] == [
-        channel_access(STANDARD, for_indexing=True)
+        channel_access(STANDARD)
     ]
     assert _requested(client).count(CHANNEL_TYPE_URL) == 1
 

@@ -7,13 +7,20 @@ GENERATE_REPORT_TOOL_NAME = "generate_report"
 RESEARCH_AGENT_TOOL_NAME = "research_agent"
 
 
-# This is to ensure that even the non-reasoning models can have an ok time with this more complex flow.
-THINK_TOOL_NAME = "think_tool"
-
-
 # ruff: noqa: E501, W605 start
 
-# Hard for the open_url tool to be called for a ton of search results all at once so limit to 3
+# The research agent's tool definitions show only each tool's summary, so its
+# prompt carries the tools' guidance.
+INTERNAL_SEARCH_TOOL_DESCRIPTION = """
+## internal_search
+Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
+- Internal information: any time where there may be some information stored in internal applications that could help better answer the query.
+- Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
+- Keyword Queries: queries that are heavily keyword based are often internal document search queries.
+- Ambiguity: questions about something that is not widely known or understood.
+""".lstrip()
+
+# Hard for the URL reading tool to be called for a ton of search results all at once so limit to 3
 WEB_SEARCH_TOOL_DESCRIPTION = """
 
 ## web_search
@@ -23,20 +30,13 @@ If you use multiple queries, ensure that the queries are related in topic but no
 """
 
 # This one is mostly similar to the one for the main flow but there won't be any user specified URLs to open.
-OPEN_URLS_TOOL_DESCRIPTION = f"""
+# `{name}` is the URL reading tool's name in the model's tool family.
+OPEN_URLS_TOOL_DESCRIPTION = """
 
-## open_urls
-Use the `open_urls` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches. \
+## {name}
+Use the `{name}` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches. \
 You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources. \
-You should almost always use open_urls after a web_search call and sometimes after reasoning with the {THINK_TOOL_NAME} tool.
-"""
-
-OPEN_URLS_TOOL_DESCRIPTION_REASONING = """
-
-## open_urls
-Use the `open_urls` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches. \
-You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources. \
-You should almost always use open_urls after a web_search call.
+You should almost always use {name} after a web_search call.
 """
 
 # NOTE: Internal search tool uses the same description as the default flow, not duplicating here.

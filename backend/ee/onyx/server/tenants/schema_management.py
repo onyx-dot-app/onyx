@@ -8,8 +8,15 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
 
+from ee.onyx.db.tenant_snapshot import (
+    apply_snapshot,
+    get_head_revision,
+    get_snapshot,
+    schema_has_tables,
+)
 from onyx.db.engine.shard_registry import (
     ALEMBIC_TARGET_URL_ATTRIBUTE,
+    get_engine_for_shard,
     get_shard_spec,
 )
 from onyx.db.engine.shard_routing import get_engine_for_tenant, get_shard_for_tenant
@@ -78,9 +85,34 @@ def run_alembic_migrations(schema_name: str) -> None:
         raise
 
 
+def build_tenant_schema(tenant_id: str) -> None:
+    """Clone the shard's snapshot for the code's head into a new tenant, or run
+    the migration chain when the shard has no snapshot at this head. A schema
+    that already holds tables is a retried build, which only the chain can resume."""
+    shard_name = get_shard_for_tenant(tenant_id)
+    engine = get_engine_for_shard(shard_name)
+    head = get_head_revision()
+    dump = get_snapshot(shard_name, head) if head else None
+    if dump is None or schema_has_tables(engine, tenant_id):
+        logger.warning(
+            "Migrating tenant %s through the chain (snapshot for %s on shard %s: %s)",
+            tenant_id,
+            head,
+            shard_name,
+            "present" if dump else "missing",
+        )
+        run_alembic_migrations(tenant_id)
+        return
+    apply_snapshot(engine, dump, tenant_id)
+    logger.info(
+        "Cloned tenant %s from the shard %s snapshot at %s", tenant_id, shard_name, head
+    )
+
+
 def create_schema_if_not_exists(tenant_id: str) -> bool:
     with Session(get_engine_for_tenant(tenant_id)) as db_session:
         with db_session.begin():
+            # db-ops-outside-db: allow schema DDL, not a table query
             result = db_session.execute(
                 text(
                     "SELECT schema_name FROM information_schema.schemata WHERE schema_name = :schema_name"
@@ -90,6 +122,7 @@ def create_schema_if_not_exists(tenant_id: str) -> bool:
             schema_exists = result.scalar() is not None
             if not schema_exists:
                 stmt = CreateSchema(tenant_id)
+                # db-ops-outside-db: allow schema DDL, not a table query
                 db_session.execute(stmt)
                 return True
             return False
@@ -107,6 +140,7 @@ def drop_schema(tenant_id: str) -> None:
     with get_engine_for_tenant(tenant_id).connect() as connection:
         with connection.begin():
             # Use string formatting with validated tenant_id (safe after validation)
+            # db-ops-outside-db: allow schema DDL, not a table query
             connection.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
 
 
@@ -119,6 +153,7 @@ def get_current_alembic_version(tenant_id: str) -> str:
 
     # Set the search path to the tenant's schema
     with engine.connect() as connection:
+        # db-ops-outside-db: allow sets the schema for alembic
         connection.execute(text(f'SET search_path TO "{tenant_id}"'))
 
         # Get the current version from the alembic_version table

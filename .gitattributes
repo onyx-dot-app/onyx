@@ -1,2 +1,5 @@
 # Byte-for-byte copies of deployment files synced by `ods generate-compose --write`.
 cli/internal/deploy/deployfiles/embedded/** linguist-generated=true
+
+# Generated gRPC stubs (backend/onyx/microvm/generated/regenerate.sh).
+backend/onyx/microvm/generated/** linguist-generated=true

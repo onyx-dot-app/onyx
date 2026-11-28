@@ -1,8 +1,10 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
 import CloudSSOSignIn from "@/app/auth/login/CloudSSOSignIn";
+import MagicLinkSignIn from "@/app/auth/login/MagicLinkSignIn";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
 import { shouldAutoStartSso } from "@/lib/auth/utils";
@@ -33,6 +35,7 @@ export default function LoginPage({
   autoRedirectToSso,
 }: LoginPageProps) {
   const t = useTranslations("auth");
+  const navigation = useNavigation();
   useSendAuthRequiredMessage();
 
   // Honor any existing nextUrl; only default to new team flow for first users with no nextUrl
@@ -42,6 +45,7 @@ export default function LoginPage({
   const ssoProviders = authTypeMetadata?.ssoProviders ?? [];
   // Kill switch off: hide password login/signup. Backend refuses regardless.
   const passwordAuthEnabled = authTypeMetadata?.passwordAuthEnabled !== false;
+  const magicLinkEnabled = authTypeMetadata?.magicLinkEnabled === true;
   const autoStartSso = shouldAutoStartSso(authTypeMetadata, autoRedirectToSso);
   const orDivider = t("login.orDivider.text");
 
@@ -61,17 +65,24 @@ export default function LoginPage({
           )}
           <CloudSSOSignIn nextUrl={effectiveNextUrl} />
           <AuthLayouts.OrSeparator title={orDivider} />
-          {/* Password sign-in is never hidden on cloud: it is the only route
-              that does not need a workspace resolved first. */}
-          <EmailPasswordForm
-            label="submit"
-            shouldVerify={true}
-            nextUrl={effectiveNextUrl}
-          />
-          {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <Button href="/auth/forgot-password">
-              {t("login.resetPasswordButton.label")}
-            </Button>
+          {/* Cloud always keeps one sign-in that needs no workspace resolved
+              first. With the magic link on (the playground), the link takes
+              the password form's place: no password at all. */}
+          {magicLinkEnabled ? (
+            <MagicLinkSignIn nextUrl={effectiveNextUrl} />
+          ) : (
+            <>
+              <EmailPasswordForm
+                label="submit"
+                shouldVerify={true}
+                nextUrl={effectiveNextUrl}
+              />
+              {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
+                <Button {...navigation.linkTo("/auth/forgot-password")}>
+                  {t("login.resetPasswordButton.label")}
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -99,6 +110,14 @@ export default function LoginPage({
           {passwordAuthEnabled && (
             <EmailPasswordForm label="submit" nextUrl={effectiveNextUrl} />
           )}
+          {/* Off whenever SSO is the only way in, so it never stands alone
+              next to a hidden password form. */}
+          {magicLinkEnabled && (
+            <>
+              <AuthLayouts.OrSeparator title={orDivider} />
+              <MagicLinkSignIn nextUrl={effectiveNextUrl} />
+            </>
+          )}
         </div>
       )}
 
@@ -111,7 +130,7 @@ export default function LoginPage({
               if (typeof window !== "undefined" && window.top) {
                 window.top.location.href = "/auth/signup";
               } else {
-                window.location.href = "/auth/signup";
+                navigation.load("/auth/signup");
               }
             }}
             className="text-link font-medium cursor-pointer"

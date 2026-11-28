@@ -306,6 +306,9 @@ ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS = (
     SHORTCUTTED_FOLDER_ID,
     SHORTCUTTED_2_FOLDER_ID,
 )
+# Holds only a shortcut to a file in shortcutted2, so no indexed file has it as
+# a parent. Only the shard engine's folder listing yields it as a node.
+SHORTCUTTED_3_FOLDER_ID = "1L2sMWfaJfO7sJZf3fLLPbL3SlxQV8ebA"
 
 PADDING_DRIVE_URLS = [
     "0AOorXE6AfJRAUk9PVA",
@@ -464,6 +467,12 @@ EXPECTED_SHORTCUTTED_2_FOLDER = _node(
     HierarchyNodeType.FOLDER,
     SHORTCUTS_GALORE_FOLDER_ID,
 )
+EXPECTED_SHORTCUTTED_3_FOLDER = _node(
+    SHORTCUTTED_3_FOLDER_ID,
+    "shortcutted3",
+    HierarchyNodeType.FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID,
+)
 EXPECTED_EXTERNAL_SHARED_FOLDER = _node(
     EXTERNAL_SHARED_FOLDER_ID, "Onyx-test", HierarchyNodeType.FOLDER
 )
@@ -523,6 +532,7 @@ ALL_EXPECTED_HIERARCHY_NODES: dict[str, ExpectedHierarchyNode] = {
     SHORTCUTS_GALORE_FOLDER_ID: EXPECTED_SHORTCUTS_GALORE_FOLDER,
     SHORTCUTTED_FOLDER_ID: EXPECTED_SHORTCUTTED_FOLDER,
     SHORTCUTTED_2_FOLDER_ID: EXPECTED_SHORTCUTTED_2_FOLDER,
+    SHORTCUTTED_3_FOLDER_ID: EXPECTED_SHORTCUTTED_3_FOLDER,
     EXTERNAL_SHARED_FOLDER_ID: EXPECTED_EXTERNAL_SHARED_FOLDER,
     EXTERNAL_ONLY_USER_1_FOLDER_ID: EXPECTED_EXTERNAL_ONLY_USER_1_FOLDER,
     EXTERNAL_ONLY_ADMIN_FOLDER_ID: EXPECTED_EXTERNAL_ONLY_ADMIN_FOLDER,
@@ -613,6 +623,11 @@ file_text_template = "This is file {}"
 # This is done to prevent different tests from interfering with each other
 # So each test type should have its own valid prefix
 _VALID_PREFIX = "file_"
+
+# The Drive permission sync integration test creates and deletes shared drives
+# and docs with this name prefix in the same Workspace. A run, or a drive left
+# by a killed run, must not change what these tests expect.
+E2E_NAME_PREFIX = "onyx_e2e_"
 
 
 def filter_invalid_prefixes(names: set[str]) -> set[str]:
@@ -722,6 +737,25 @@ def load_connector_outputs(
     )
 
 
+def _without_e2e_nodes(nodes: list[HierarchyNode]) -> list[HierarchyNode]:
+    skipped = {
+        node.raw_node_id
+        for node in nodes
+        if node.display_name.startswith(E2E_NAME_PREFIX)
+    }
+    # Parents can come after their children, so repeat until no node is added.
+    while True:
+        children = {
+            node.raw_node_id
+            for node in nodes
+            if node.raw_parent_id in skipped and node.raw_node_id not in skipped
+        }
+        if not children:
+            break
+        skipped |= children
+    return [node for node in nodes if node.raw_node_id not in skipped]
+
+
 def assert_hierarchy_nodes_match_expected(
     retrieved_nodes: list[HierarchyNode],
     expected_nodes: dict[str, ExpectedHierarchyNode],
@@ -739,7 +773,10 @@ def assert_hierarchy_nodes_match_expected(
             expected display_name, node_type, and raw_parent_id
         ignorable_node_ids: Optional set of node IDs that can be missing or extra
             without failing. Useful for non-deterministically returned nodes.
+
+    Nodes named with E2E_NAME_PREFIX, and the nodes under them, are skipped.
     """
+    retrieved_nodes = _without_e2e_nodes(retrieved_nodes)
     expected_node_ids = set(expected_nodes.keys())
     retrieved_node_ids = {node.raw_node_id for node in retrieved_nodes}
     ignorable = ignorable_node_ids or set()
@@ -901,11 +938,17 @@ def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> dict[
 ]:
     """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only.
 
-    Only the external root appears, not the branch inside it that test_user_1 holds a
-    direct grant on: this run surfaces the shared ancestor, not each shared descendant.
+    The folder listing of this run returns every folder that test_user_1 sees
+    and does not own. That includes the branch inside the external root that
+    test_user_1 holds a direct grant on, though no listed file is in it.
     """
     return _clear_parents(
-        _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID, EXTERNAL_SHARED_FOLDER_ID),
+        _pick(
+            FOLDER_3_ID,
+            TEST_USER_1_EXTRA_FOLDER_ID,
+            EXTERNAL_SHARED_FOLDER_ID,
+            EXTERNAL_ONLY_USER_1_FOLDER_ID,
+        ),
         FOLDER_3_ID,
     )
 

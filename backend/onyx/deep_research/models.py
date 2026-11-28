@@ -1,22 +1,78 @@
-from pydantic import BaseModel
+from collections.abc import Mapping, Sequence
+from enum import Enum
+from typing import Literal
 
-from onyx.chat.citation_processor import CitationMapping
-from onyx.tools.models import ToolCallKickoff
+from pydantic import BaseModel, Field
+
+from onyx.context.search.models import SearchDoc, new_or_changed
+from onyx.file_store.models import FileToolMetadata
+from onyx.llm.models import Message, ReasoningEffort
+from onyx.tools.file_snapshot import SavedContextFiles
+from onyx.tools.tool_implementations.search.models import SearchContext
 
 
-class SpecialToolCalls(BaseModel):
-    think_tool_call: ToolCallKickoff | None = None
-    generate_report_tool_call: ToolCallKickoff | None = None
+class ResearchConfiguration(BaseModel):
+    """Settings needed to rebuild a research agent for another run."""
+
+    language_section: str
+    reasoning_effort: ReasoningEffort
 
 
 class ResearchAgentCallResult(BaseModel):
+    type: Literal["research_result"] = "research_result"
     intermediate_report: str
-    citation_mapping: CitationMapping
+    citation_mapping: dict[int, SearchDoc]
 
 
-class CombinedResearchAgentCallResult(BaseModel):
-    # The None is needed here to keep the mappings consistent
-    # we later skip the failed research results but we need to know
-    # which ones failed
-    intermediate_reports: list[str | None]
-    citation_mapping: CitationMapping
+class ResearchPhase(str, Enum):
+    CLARIFICATION = "clarification"
+    PLANNING = "planning"
+    RESEARCH = "research"
+    REPORT = "report"
+
+
+class ResearchMessageMetadata(BaseModel):
+    """Research phase and source references attached to a generated message."""
+
+    phase: ResearchPhase
+    is_intermediate: bool = False
+    sources: dict[int, SearchDoc] = Field(default_factory=dict)
+    elapsed_seconds: float = 0
+
+
+def new_sources(
+    sources: Mapping[int, SearchDoc], earlier: Sequence[Message]
+) -> dict[int, SearchDoc]:
+    """The sources that the run's earlier messages do not carry, or carry an
+    older copy of. A research step that no reader reads alone holds only
+    these: readers fold the steps of the run."""
+    carried: dict[int, SearchDoc] = {}
+    for message in earlier:
+        if isinstance(message.metadata, ResearchMessageMetadata):
+            carried.update(message.metadata.sources)
+    return new_or_changed(sources, carried)
+
+
+class ResearchTask(BaseModel):
+    task: str
+
+
+class DeepResearchFeatureState(BaseModel):
+    kind: Literal["deep_research.state.v1"] = "deep_research.state.v1"
+    language_section: str
+    reasoning_effort: ReasoningEffort
+    file_metadata: dict[str, FileToolMetadata] | None
+    skip_clarification: bool
+    request_context: str | None = None
+    context_files: SavedContextFiles | None = None
+    elapsed_seconds: float
+    citation_mapping: dict[int, SearchDoc]
+
+
+class ResearchFeatureState(BaseModel):
+    kind: Literal["research.state.v1"] = "research.state.v1"
+    elapsed_seconds: float = 0.0
+    configuration: ResearchConfiguration
+    citation_sources: dict[int, SearchDoc]
+    citation_mapping: dict[int, str]
+    search_context: SearchContext

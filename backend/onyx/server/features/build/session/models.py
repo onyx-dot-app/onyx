@@ -1,10 +1,13 @@
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Literal, Union
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
 from onyx.configs.constants import MessageType
+from onyx.db.build_session import session_runtime_stale
 from onyx.db.enums import (
     ArtifactType,
     BuildSessionStatus,
@@ -12,10 +15,14 @@ from onyx.db.enums import (
     SessionOrigin,
     SharingScope,
 )
-from onyx.server.features.build.db.build_session import session_runtime_stale
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    MANIFEST_MAX_ENTRIES,
+)
+from onyx.skills.limits import runtime_limit_notice
+from onyx.skills.models import SkillLimitNotice
 
 if TYPE_CHECKING:
-    from onyx.db.models import BuildSession, Sandbox
+    from onyx.db.models import Artifact, BuildSession, Sandbox
 
 
 # ===== Session Models =====
@@ -64,10 +71,71 @@ class SandboxResponse(BaseModel):
         )
 
 
+def skill_limit_notice(sandbox: "Sandbox | None") -> SkillLimitNotice | None:
+    """The plugins the run-time skill limit left out of the user's sandbox."""
+    if sandbox is None:
+        return None
+    return runtime_limit_notice(list(sandbox.skill_omissions))
+
+
 class SandboxStatusResponse(BaseModel):
-    """Lightweight sandbox status for the frontend sleep poll."""
+    """Lightweight sandbox status for the frontend poll. It also carries the
+    session's skill state, so a push by someone else reaches an open session."""
 
     status: SandboxStatus | None
+    skills_stale: bool
+    skill_omissions: SkillLimitNotice | None
+
+
+class OutputFileResponse(BaseModel):
+    path: str
+    revision: str
+    size: int
+
+
+class OutputInventoryResponse(BaseModel):
+    files: list[OutputFileResponse]
+    complete: bool
+
+
+class OutputCard(BaseModel):
+    id: str
+    kind: Literal["file", "app"]
+    path: str
+    name: str
+    turn_index: int
+    revision: int
+    size_bytes: int | None
+    deleted: bool
+    viewed_revision: int | None
+
+    @classmethod
+    def from_model(cls, artifact: "Artifact") -> "OutputCard":
+        if artifact.turn_index is None:
+            raise ValueError("Output cards require a known producing turn")
+        return cls(
+            id=str(artifact.id),
+            kind="app" if artifact.type == ArtifactType.WEB_APP else "file",
+            path=artifact.path,
+            name=artifact.name,
+            turn_index=artifact.turn_index,
+            revision=artifact.version,
+            size_bytes=artifact.size_bytes,
+            deleted=artifact.deleted,
+            viewed_revision=artifact.viewed_revision,
+        )
+
+
+class OutputCardsResponse(BaseModel):
+    cards: list[OutputCard]
+
+
+class OutputsViewedRequest(BaseModel):
+    revisions: dict[UUID, PositiveInt] = Field(max_length=MANIFEST_MAX_ENTRIES)
+
+
+class OutputViewedRequest(BaseModel):
+    revision: int = Field(gt=0)
 
 
 class ArtifactResponse(BaseModel):
@@ -114,6 +182,8 @@ class SessionResponse(BaseModel):
     agent_provider: str | None
     agent_model: str | None
     skills_stale: bool
+    # Plugins the run-time skill limit left out of the user's sandbox.
+    skill_omissions: SkillLimitNotice | None
 
     @classmethod
     def from_model(
@@ -141,11 +211,14 @@ class SessionResponse(BaseModel):
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
             skills_stale=session_runtime_stale(session, sandbox),
+            skill_omissions=skill_limit_notice(sandbox),
         )
 
 
 class SessionSkillsStateResponse(BaseModel):
     skills_stale: bool
+    # The plugins the run-time limit left out of the sandbox after the reload.
+    skill_omissions: SkillLimitNotice | None = None
 
 
 class DetailedSessionResponse(SessionResponse):
@@ -231,9 +304,7 @@ class SubagentMessageRequest(BaseModel):
 
 
 class MessageInterruptResponse(BaseModel):
-    """Response to an interrupt request. ``interrupted`` is False when there was
-    no directly-interruptible turn (no running sandbox or no opencode session);
-    the interrupt fence is set regardless."""
+    """Whether the requested turn was selected for cancellation."""
 
     interrupted: bool
 
@@ -315,3 +386,19 @@ class OpencodeHistorySnapshotResponse(BaseModel):
     """Response for an opencode history snapshot attempt."""
 
     created: bool
+
+
+class OutputSource(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    revision: str
+    size: int
+
+
+class TurnOutputSnapshot(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    sandbox_id: UUID
+    session_id: UUID
+    turn_index: int
+    sources: Mapping[str, OutputSource]

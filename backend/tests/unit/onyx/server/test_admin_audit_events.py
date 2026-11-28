@@ -21,6 +21,9 @@ from onyx.server.api_key.api import (
 from onyx.server.manage.llm.api import delete_llm_provider
 from tests.utils.audit import audit_events
 
+# Audit emission needs EE and the Enterprise tier.
+pytestmark = pytest.mark.usefixtures("enterprise_audit")
+
 
 @patch("onyx.server.api_key.api.insert_api_key")
 def test_create_api_key_emits_event(
@@ -99,7 +102,11 @@ def test_delete_api_key_emits_event(
 
 @patch("onyx.server.manage.llm.api.invalidate_provider_listing_cache")
 @patch("onyx.server.manage.llm.api.remove_llm_provider")
+@patch(
+    "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id", return_value=None
+)
 def test_delete_llm_provider_emits_event(
+    _mock_fetch: MagicMock,
     _mock_remove: MagicMock,
     _mock_invalidate: MagicMock,
     caplog: pytest.LogCaptureFixture,

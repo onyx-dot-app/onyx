@@ -7,6 +7,12 @@ from pydantic import ValidationError
 from slack_sdk import WebClient
 from typing_extensions import override
 
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.slack_configs import (
+    SLACK_API_URL,
+    SLACK_OAUTH_ACCESS_URL,
+    SLACK_OAUTH_AUTHORIZE_URL,
+)
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import ChunkIndexRequest, InferenceChunk
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -164,7 +170,7 @@ class SlackFederatedConnector(FederatedConnector):
         }
 
         # Build query string
-        oauth_url = f"https://slack.com/oauth/v2/authorize?{urlencode(params)}"
+        oauth_url = f"{SLACK_OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
 
         logger.info("Generated Slack OAuth authorization URL")
         return oauth_url
@@ -250,13 +256,14 @@ class SlackFederatedConnector(FederatedConnector):
             Token response from Slack API
         """
         response = requests.post(
-            "https://slack.com/api/oauth.v2.access",
+            SLACK_OAUTH_ACCESS_URL,
             data={
                 "client_id": self.slack_credentials.client_id,
                 "client_secret": self.slack_credentials.client_secret,
                 "code": code,
                 "redirect_uri": redirect_uri,
             },
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         return response.json()
@@ -289,7 +296,7 @@ class SlackFederatedConnector(FederatedConnector):
         # Get team_id from Slack API for caching and filtering
         team_id = None
         try:
-            slack_client = WebClient(token=access_token)
+            slack_client = WebClient(token=access_token, base_url=SLACK_API_URL)
             auth_response = slack_client.auth_test()
             auth_response.validate()
 

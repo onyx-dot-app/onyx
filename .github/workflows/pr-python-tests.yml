@@ -1,6 +1,6 @@
 name: Python Unit Tests
 concurrency:
-  group: Python-Unit-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  group: Python-Unit-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
   cancel-in-progress: true
 
 on:
@@ -14,6 +14,14 @@ permissions:
   contents: read
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -36,6 +44,7 @@ jobs:
           filters: |
             python:
               - 'backend/**'
+              - 'web/src/lib/searchSettings/constants.ts'
               - 'pyproject.toml'
               - '.github/workflows/pr-python-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
@@ -52,9 +61,6 @@ jobs:
       PYTHONPATH: ./backend
       REDIS_CLOUD_PYTEST_PASSWORD: ${{ secrets.REDIS_CLOUD_PYTEST_PASSWORD }}
       DISABLE_TELEMETRY: "true"
-      # Unit tests run without a live backend; EE code paths that depend on
-      # Redis/Vespa/etc are not available, so disable enforcement here.
-      LICENSE_ENFORCEMENT_ENABLED: "false"
 
     steps:
     - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc

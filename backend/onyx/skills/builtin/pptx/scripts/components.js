@@ -1,11 +1,11 @@
 // Composable slide component library for pptxgenjs (see components.md).
 //
 // Usage:
-//   const C = require(".opencode/skills/pptx/scripts/components.js");
+//   const C = require("/var/lib/onyx/skills/pptx/scripts/components.js");
 //   const theme = C.defaultTheme(); // or C.makeTheme({ primary: "...", ... })
 //   const pres = C.createPresentation(theme, { title: "My Deck" });
 //   C.titleSlide(pres, theme, { title: "...", subtitle: "..." });
-//   await pres.writeFile({ fileName: "outputs/deck.pptx" });
+//   await pres.writeFile({ fileName: "deck.pptx" });
 //
 // Visual system: "engineered monochrome" — light field with ink text, hairline
 // rules instead of card fills, faint architectural grid on title/divider/closing

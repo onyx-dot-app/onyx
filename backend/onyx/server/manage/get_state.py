@@ -6,13 +6,18 @@ import time
 import requests
 from anyio import to_thread
 from cachetools import TTLCache
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
 from onyx import __version__
+from onyx.auth.magic_link import is_sso_only
 from onyx.auth.users import anonymous_user_enabled, user_needs_to_be_verified
-from onyx.configs.app_configs import OAUTH_ENABLED
+from onyx.configs.app_configs import (
+    EMAIL_CONFIGURED,
+    MAGIC_LINK_ENABLED,
+    OAUTH_ENABLED,
+)
 from onyx.configs.constants import (
     DEV_VERSION_PATTERN,
     PUBLIC_API_TAGS,
@@ -20,7 +25,11 @@ from onyx.configs.constants import (
 )
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.sso_provider import fetch_sso_providers, sso_authorize_path
+from onyx.db.sso_provider import (
+    fetch_sso_providers,
+    sso_authorize_path,
+    sso_supports_native_app,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
 from onyx.server.manage.models import (
@@ -32,6 +41,7 @@ from onyx.server.manage.models import (
 )
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -78,6 +88,7 @@ def _fetch_sso_provider_options() -> list[SSOProviderOption]:
                     display_name=provider.display_name,
                     provider_type=provider.provider_type,
                     authorize_url=sso_authorize_path(provider),
+                    native_app_sso=sso_supports_native_app(provider),
                 )
                 for provider in fetch_sso_providers(db_session, enabled_only=True)
             ]
@@ -233,13 +244,161 @@ async def get_auth_type(response: Response) -> AuthConfigResponse:
         has_users=has_users,
         oauth_enabled=OAUTH_ENABLED,
         password_auth_enabled=security.password_auth_enabled,
+        magic_link_enabled=MAGIC_LINK_ENABLED
+        and EMAIL_CONFIGURED
+        # A display hint: the routes check again, strictly.
+        and not is_sso_only(allow_fallback=True),
         sso_providers=await run_in_threadpool(_fetch_sso_provider_options),
+        default_language=(
+            None
+            if MULTI_TENANT
+            else (await run_in_threadpool(load_settings)).default_language
+        ),
     )
 
 
 @router.get("/version", tags=PUBLIC_API_TAGS)
 def get_version() -> VersionResponse:
     return VersionResponse(backend_version=__version__)
+
+
+# Keep these images in sync with deployment/docker_compose/docker-compose.template.yml.
+DOCUMENT_INDEX_IMAGE = "opensearchproject/opensearch:3.6.0"
+NGINX_IMAGE = "nginx:1.30.7-alpine"
+
+
+_DOCKERHUB_REPOS = (
+    "onyxdotapp/onyx-model-server",
+    "onyxdotapp/onyx-backend",
+    "onyxdotapp/onyx-web-server",
+)
+_DOCKERHUB_PAGE_SIZE = 100
+_DOCKERHUB_MAX_PAGES = 2
+_DOCKERHUB_TIMEOUT_SECONDS = 5
+
+# Public endpoint, so cache the DockerHub lookup to keep it from being an
+# amplification vector. The lock makes concurrent misses share one fetch.
+_VERSIONS_TTL_SECONDS = 60 * 60
+_VERSIONS_CACHE: TTLCache[str, AllVersions] = TTLCache(
+    maxsize=1, ttl=_VERSIONS_TTL_SECONDS
+)
+_VERSIONS_KEY = "versions"
+_VERSIONS_LOCK = threading.Lock()
+# Outlives the TTL so a DockerHub outage serves the last good answer.
+_LAST_GOOD_VERSIONS: AllVersions | None = None
+# A present entry means the last fetch failed: skip refetching and serve the
+# last good value or raise.
+_VERSIONS_FAILURE_COOLDOWN_SECONDS = 60
+_VERSIONS_FAILURE_CACHE: TTLCache[str, bool] = TTLCache(
+    maxsize=1, ttl=_VERSIONS_FAILURE_COOLDOWN_SECONDS
+)
+
+
+def _get_dockerhub_tags(repo: str) -> list[str]:
+    url: str | None = (
+        f"https://hub.docker.com/v2/repositories/{repo}/tags"
+        f"?page_size={_DOCKERHUB_PAGE_SIZE}"
+    )
+    tags: list[str] = []
+    for _ in range(_DOCKERHUB_MAX_PAGES):
+        if not url:
+            break
+        response = requests.get(url, timeout=_DOCKERHUB_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        data = response.json()
+        tags.extend(
+            tag["name"] for tag in data["results"] if re.match(r"^v\d", tag["name"])
+        )
+        url = data.get("next")
+    return tags
+
+
+def _version_key(version: str) -> tuple[int, int, int, int]:
+    """Extract major, minor, patch, beta as integers for sorting"""
+    clean_version = version[1:]
+    if "-beta." in clean_version:
+        base_version, beta_num = clean_version.split("-beta.")
+        parts = base_version.split(".")
+        return (int(parts[0]), int(parts[1]), int(parts[2]), int(beta_num))
+    parts = clean_version.split(".")
+    return (int(parts[0]), int(parts[1]), int(parts[2]), 0)
+
+
+def _fetch_versions() -> AllVersions:
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        all_tags = list(
+            executor.map(lambda repo: set(_get_dockerhub_tags(repo)), _DOCKERHUB_REPOS)
+        )
+
+    common_tags = set.intersection(*all_tags)
+    dev_tags = [tag for tag in common_tags if DEV_VERSION_PATTERN.match(tag)]
+    stable_tags = [tag for tag in common_tags if STABLE_VERSION_PATTERN.match(tag)]
+
+    if not dev_tags:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "No valid dev versions found matching pattern v(number).(number).(number)-beta.(number)",
+        )
+    if not stable_tags:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "No valid stable versions found matching pattern v(number).(number).(number)",
+        )
+
+    latest_dev_version = max(dev_tags, key=_version_key)
+    latest_stable_version = max(stable_tags, key=_version_key)
+
+    return AllVersions(
+        stable=ContainerVersions(
+            onyx=latest_stable_version,
+            relational_db="postgres:15.2-alpine",
+            index=DOCUMENT_INDEX_IMAGE,
+            nginx=NGINX_IMAGE,
+        ),
+        dev=ContainerVersions(
+            onyx=latest_dev_version,
+            relational_db="postgres:15.2-alpine",
+            index=DOCUMENT_INDEX_IMAGE,
+            nginx=NGINX_IMAGE,
+        ),
+        migration=ContainerVersions(
+            onyx="airgapped-intfloat-nomic-migration",
+            relational_db="postgres:15.2-alpine",
+            index=DOCUMENT_INDEX_IMAGE,
+            nginx=NGINX_IMAGE,
+        ),
+    )
+
+
+def _get_cached_versions() -> AllVersions:
+    global _LAST_GOOD_VERSIONS
+    with _VERSIONS_LOCK:
+        cached = _VERSIONS_CACHE.get(_VERSIONS_KEY)
+        if cached is not None:
+            return cached
+        if _VERSIONS_KEY in _VERSIONS_FAILURE_CACHE:
+            if _LAST_GOOD_VERSIONS is not None:
+                return _LAST_GOOD_VERSIONS
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Version lookup is temporarily unavailable",
+            )
+        try:
+            versions = _fetch_versions()
+        except Exception:
+            _VERSIONS_FAILURE_CACHE[_VERSIONS_KEY] = True
+            if _LAST_GOOD_VERSIONS is None:
+                logger.warning("DockerHub version lookup failed", exc_info=True)
+                raise
+            logger.warning(
+                "DockerHub version lookup failed; serving last good value",
+                exc_info=True,
+            )
+            return _LAST_GOOD_VERSIONS
+        _VERSIONS_CACHE[_VERSIONS_KEY] = versions
+        _LAST_GOOD_VERSIONS = versions
+        _VERSIONS_FAILURE_CACHE.pop(_VERSIONS_KEY, None)
+        return versions
 
 
 @router.get("/versions", tags=PUBLIC_API_TAGS)
@@ -249,95 +408,4 @@ def get_versions() -> AllVersions:
     Since DockerHub does not explicitly flag stable and beta images,
     this endpoint can be used to programmatically check for new images.
     """
-    # Fetch the latest tags from DockerHub for each Onyx component
-    dockerhub_repos = [
-        "onyxdotapp/onyx-model-server",
-        "onyxdotapp/onyx-backend",
-        "onyxdotapp/onyx-web-server",
-    ]
-
-    # For good measure, we fetch 10 pages of tags
-    def get_dockerhub_tags(repo: str, pages: int = 10) -> list[str]:
-        url = f"https://hub.docker.com/v2/repositories/{repo}/tags"
-        tags = []
-        for _ in range(pages):
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            tags.extend(
-                [
-                    tag["name"]
-                    for tag in data["results"]
-                    if re.match(r"^v\d", tag["name"])
-                ]
-            )
-            url = data.get("next")
-            if not url:
-                break
-        return tags
-
-    # Get tags for all repos in parallel
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        all_tags = list(
-            executor.map(lambda repo: set(get_dockerhub_tags(repo)), dockerhub_repos)
-        )
-
-    # Find common tags across all repos
-    common_tags = set.intersection(*all_tags)
-
-    # Filter tags by strict version patterns
-    dev_tags = [tag for tag in common_tags if DEV_VERSION_PATTERN.match(tag)]
-    stable_tags = [tag for tag in common_tags if STABLE_VERSION_PATTERN.match(tag)]
-
-    # Ensure we have at least one tag of each type
-    if not dev_tags:
-        raise HTTPException(
-            status_code=500,
-            detail="No valid dev versions found matching pattern v(number).(number).(number)-beta.(number)",
-        )
-    if not stable_tags:
-        raise HTTPException(
-            status_code=500,
-            detail="No valid stable versions found matching pattern v(number).(number).(number)",
-        )
-
-    # Sort common tags and get the latest one
-    def version_key(version: str) -> tuple[int, int, int, int]:
-        """Extract major, minor, patch, beta as integers for sorting"""
-        # Remove 'v' prefix
-        clean_version = version[1:]
-
-        # Check if it's a beta version
-        if "-beta." in clean_version:
-            # Split on '-beta.' to separate version and beta number
-            base_version, beta_num = clean_version.split("-beta.")
-            parts = base_version.split(".")
-            return (int(parts[0]), int(parts[1]), int(parts[2]), int(beta_num))
-        else:
-            # Stable version - no beta number
-            parts = clean_version.split(".")
-            return (int(parts[0]), int(parts[1]), int(parts[2]), 0)
-
-    latest_dev_version = max(dev_tags, key=version_key)
-    latest_stable_version = max(stable_tags, key=version_key)
-
-    return AllVersions(
-        stable=ContainerVersions(
-            onyx=latest_stable_version,
-            relational_db="postgres:15.2-alpine",
-            index="vespaengine/vespa:8.277.17",
-            nginx="nginx:1.25.5-alpine",
-        ),
-        dev=ContainerVersions(
-            onyx=latest_dev_version,
-            relational_db="postgres:15.2-alpine",
-            index="vespaengine/vespa:8.277.17",
-            nginx="nginx:1.25.5-alpine",
-        ),
-        migration=ContainerVersions(
-            onyx="airgapped-intfloat-nomic-migration",
-            relational_db="postgres:15.2-alpine",
-            index="vespaengine/vespa:8.277.17",
-            nginx="nginx:1.25.5-alpine",
-        ),
-    )
+    return _get_cached_versions()

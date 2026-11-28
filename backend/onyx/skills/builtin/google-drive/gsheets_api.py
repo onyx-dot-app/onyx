@@ -16,7 +16,7 @@ import urllib.request
 from typing import Any
 
 _BASE = "https://sheets.googleapis.com/v4/"
-_HTTP_TIMEOUT_SECONDS = 180
+_HTTP_TIMEOUT_SECONDS = 200
 # Compact structure view: enough to find sheets and their sizes without the
 # full per-cell grid data.
 _DEFAULT_GET_FIELDS = (

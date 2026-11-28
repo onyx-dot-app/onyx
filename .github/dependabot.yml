@@ -46,6 +46,15 @@ updates:
     labels:
       - "dependabot:javascript"
   - package-ecosystem: "bun"
+    directory: "/mobile"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    labels:
+      - "dependabot:javascript"
+  - package-ecosystem: "bun"
     directory: "/backend/onyx/server/features/build/sandbox/image/templates/outputs/web"
     schedule:
       interval: "weekly"
@@ -57,3 +66,10 @@ updates:
     labels:
       - "dependabot:javascript"
       - "dependabot:sandbox"
+  # Security updates only (limit 0 turns off version updates). Each Go bump
+  # needs the Craft Firecracker KVM tests.
+  - package-ecosystem: "gomod"
+    directory: "/microvm"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0

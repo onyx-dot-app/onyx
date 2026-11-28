@@ -37,6 +37,11 @@ def _write_codex_config(codex_home: str, provider: DATestLLMProvider) -> None:
 model_provider = "{_PROVIDER_KEY}"
 model = "{model}"
 
+# Codex syncs the curated plugin marketplace into CODEX_HOME/.tmp with git
+# subprocesses that outlive `codex exec`, which races the temp dir cleanup.
+[features]
+plugins = false
+
 [model_providers.{_PROVIDER_KEY}]
 name = "Onyx Gateway"
 base_url = "{API_SERVER_URL}/gateway/v1"
@@ -103,7 +108,7 @@ def test_encrypted_reasoning_statelessness(
             "model": model,
             "input": [{"role": "user", "content": "What is 6 times 7?"}],
             "include": ["reasoning.encrypted_content"],
-            "reasoning": {"effort": "low"},
+            "reasoning": {"effort": "medium"},
         },
         timeout=60,
     )

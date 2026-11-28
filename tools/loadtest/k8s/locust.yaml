@@ -52,7 +52,9 @@ spec:
             - containerPort: 5557 # worker communication
             - containerPort: 9646 # Prometheus /metrics
           # No ONYX_API_KEY here: the master only coordinates — user
-          # greenlets (and API calls) run on the workers.
+          # greenlets (and API calls) run on the workers. The master assigns
+          # users to classes, so set ONYX_LONGCONV_USERS here as well as on
+          # the workers.
           env:
             - name: LOCUST_HOST
               value: "https://<your-onyx-url>"
@@ -121,6 +123,15 @@ spec:
                 secretKeyRef:
                   name: onyx-loadtest
                   key: ONYX_API_KEY
+            - name: ONYX_SCHEDULE_SEED
+              value: "0"
+            - name: ONYX_WAIT_SECONDS
+              value: "15"
+            - name: ONYX_WAIT_JITTER
+              value: "0.5"
+            - name: ONYX_START_STAGGER_SECONDS
+              value: "15"
+            # Mount a corpus and set ONYX_MESSAGES_FILE for representative search.
             # Optional scenario tuning (see ../README.md):
             # ONYX_LLM_PROVIDER, ONYX_SEARCH_MODEL, ONYX_DR_MODEL,
             # ONYX_WAIT_SECONDS, ONYX_STREAM_READ_TIMEOUT, ...

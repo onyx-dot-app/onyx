@@ -28,6 +28,8 @@ export function makeStep(
     turnIndex,
     tabIndex,
     packets,
+    nestedCalls: [],
+    codeMode: null,
   };
 }
 

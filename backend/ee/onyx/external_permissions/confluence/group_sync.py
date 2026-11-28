@@ -2,14 +2,18 @@ from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
-from onyx.background.error_logging import emit_background_error
+from ee.onyx.external_permissions.models import SyncEntityFailure
+from ee.onyx.external_permissions.utils import MAX_FAILED_ENTITY_FRACTION
 from onyx.configs.app_configs import CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC
-from onyx.connectors.confluence.onyx_confluence import (
-    OnyxConfluence,
-    get_user_email_from_username__server,
+from onyx.connectors.confluence.source_operations import (
+    ConfluenceSourceOperations,
+    build_probed_confluence_gateway,
+    user_list_variant,
 )
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
+from onyx.db.background_error import emit_background_error
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SyncEntityKind
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.users import get_all_users
 from onyx.utils.logger import setup_logger
@@ -18,10 +22,22 @@ logger = setup_logger()
 
 
 def _build_group_member_email_map(
-    confluence_client: OnyxConfluence, cc_pair_id: int
+    source_operations: ConfluenceSourceOperations,
+    cc_pair_id: int,
+    failures: list[SyncEntityFailure],
+    cap_failures: bool = True,
 ) -> dict[str, set[str]]:
+    """A user whose groups cannot be read is left out of every group and added
+    to ``failures``, which the caller owns so a later raise keeps them. The cap
+    is off while the Onyx-users fallback runs, since it reads users this
+    listing could not."""
     group_member_emails: dict[str, set[str]] = {}
-    for user in confluence_client.paginated_cql_user_retrieval():
+    failed_before = len(failures)
+    listed_user_count: int = 0
+    for user in source_operations.list_users(
+        variant=user_list_variant(source_operations)
+    ):
+        listed_user_count += 1
         logger.info("Processing groups for user: %s", user)
 
         email = user.email
@@ -30,10 +46,19 @@ def _build_group_member_email_map(
             user_name = user.username
             # If it is present, try to get the email using a Server-specific method
             if user_name:
-                email = get_user_email_from_username__server(
-                    confluence_client=confluence_client,
-                    user_name=user_name,
-                )
+                email = source_operations.get_listed_user_email(username=user_name)
+                # The lookup logs and swallows its errors, so an outage of the
+                # profile endpoint would otherwise skip every user unreported.
+                if not email and user.type != "app":
+                    failures.append(
+                        SyncEntityFailure(
+                            kind=SyncEntityKind.USER,
+                            id=user.user_id,
+                            name=user_name,
+                            message="Could not read the user's email from Confluence",
+                        )
+                    )
+                    continue
             else:
                 logger.error("user result missing username field: %s", user)
 
@@ -47,12 +72,25 @@ def _build_group_member_email_map(
                 logger.error(msg)
             continue
 
-        all_users_groups: set[str] = set()
-        for group in confluence_client.paginated_groups_by_user_retrieval(user.user_id):
+        try:
             # group name uniqueness is enforced by Confluence, so we can use it as a group ID
-            group_id = group["name"]
+            all_users_groups: set[str] = {
+                group["name"]
+                for group in source_operations.list_user_groups(user_id=user.user_id)
+            }
+        except Exception as e:
+            logger.exception("Error getting groups for user with email %s", email)
+            failures.append(
+                SyncEntityFailure(
+                    kind=SyncEntityKind.USER,
+                    id=user.user_id,
+                    name=email,
+                    message=str(e),
+                )
+            )
+            continue
+        for group_id in all_users_groups:
             group_member_emails.setdefault(group_id, set()).add(email)
-            all_users_groups.add(group_id)
 
         if not all_users_groups:
             msg = f"No groups found for user with email: {email}"
@@ -63,6 +101,10 @@ def _build_group_member_email_map(
                 "Found groups %s for user with email %s", all_users_groups, email
             )
 
+    failed_users = len(failures) - failed_before
+    if cap_failures and failed_users > MAX_FAILED_ENTITY_FRACTION * listed_user_count:
+        raise RuntimeError("Too many failed user group fetches during group sync")
+
     if not group_member_emails:
         msg = "No groups found for any users."
         emit_background_error(msg, cc_pair_id=cc_pair_id)
@@ -72,7 +114,8 @@ def _build_group_member_email_map(
 
 
 def _build_group_member_email_map_from_onyx_users(
-    confluence_client: OnyxConfluence,
+    source_operations: ConfluenceSourceOperations,
+    failures: list[SyncEntityFailure],
 ) -> dict[str, set[str]]:
     """Hacky, but it's the only way to do this as long as the
     Confluence APIs are broken.
@@ -96,53 +139,59 @@ def _build_group_member_email_map_from_onyx_users(
         logger.info("Processing groups for user with email: %s", email)
         try:
             user_name = _infer_username_from_email(email)
-            response = confluence_client.get_user_details_by_username(user_name)
+            response = source_operations.get_user_by_username(username=user_name)
             user_key = response.get("userKey")
             if not user_key:
                 logger.error("User key not found for user with email %s", email)
                 continue
 
-            all_users_groups: set[str] = set()
-            for group in confluence_client.paginated_groups_by_user_retrieval(user_key):
-                # group name uniqueness is enforced by Confluence, so we can use it as a group ID
-                group_id = group["name"]
-                group_member_emails.setdefault(group_id, set()).add(email)
-                all_users_groups.add(group_id)
-
-            if not all_users_groups:
-                msg = f"No groups found for user with email: {email}"
-                logger.error(msg)
-            else:
-                logger.info(
-                    "Found groups %s for user with email %s", all_users_groups, email
-                )
-        except Exception:
+            # group name uniqueness is enforced by Confluence, so we can use it as a group ID
+            all_users_groups: set[str] = {
+                group["name"]
+                for group in source_operations.list_user_groups(user_id=user_key)
+            }
+        except Exception as e:
             logger.exception("Error getting user details for user with email %s", email)
+            failures.append(
+                SyncEntityFailure(kind=SyncEntityKind.USER, id=email, message=str(e))
+            )
+            continue
+
+        for group_id in all_users_groups:
+            group_member_emails.setdefault(group_id, set()).add(email)
+        if not all_users_groups:
+            logger.error("No groups found for user with email: %s", email)
+        else:
+            logger.info(
+                "Found groups %s for user with email %s", all_users_groups, email
+            )
 
     return group_member_emails
 
 
 def _build_final_group_to_member_email_map(
-    confluence_client: OnyxConfluence,
+    source_operations: ConfluenceSourceOperations,
     cc_pair_id: int,
+    failures: list[SyncEntityFailure],
     # if set, will infer confluence usernames from onyx users in addition to using the
     # confluence users API. This is a hacky workaround for the fact that the Confluence
     # users API is broken before Confluence Data Center 10.1.0.
     use_onyx_users: bool = CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC,
 ) -> dict[str, set[str]]:
     group_to_member_email_map = _build_group_member_email_map(
-        confluence_client=confluence_client,
+        source_operations=source_operations,
         cc_pair_id=cc_pair_id,
+        failures=failures,
+        cap_failures=not use_onyx_users,
     )
-    group_to_member_email_map_from_onyx_users = (
-        (
+    group_to_member_email_map_from_onyx_users: dict[str, set[str]] = {}
+    if use_onyx_users:
+        group_to_member_email_map_from_onyx_users = (
             _build_group_member_email_map_from_onyx_users(
-                confluence_client=confluence_client,
+                source_operations=source_operations,
+                failures=failures,
             )
         )
-        if use_onyx_users
-        else {}
-    )
 
     all_group_ids = set(group_to_member_email_map.keys()) | set(
         group_to_member_email_map_from_onyx_users.keys()
@@ -160,34 +209,25 @@ def _build_final_group_to_member_email_map(
 def confluence_group_sync(
     tenant_id: str,
     cc_pair: ConnectorCredentialPair,
-) -> Generator[ExternalUserGroup, None, None]:
-    provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
-    is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
-    scoped_token = cc_pair.connector.connector_specific_config.get(
-        "scoped_token", False
+) -> Generator[ExternalUserGroup | SyncEntityFailure, None, None]:
+    provider = OnyxDBCredentialsProvider(
+        tenant_id, cc_pair.connector.source, cc_pair.credential_id
     )
-    wiki_base: str = cc_pair.connector.connector_specific_config["wiki_base"]
-    url = wiki_base.rstrip("/")
-
-    probe_kwargs = {
-        "max_backoff_retries": 6,
-        "max_backoff_seconds": 10,
-    }
-
-    final_kwargs = {
-        "max_backoff_retries": 10,
-        "max_backoff_seconds": 60,
-    }
-
-    confluence_client = OnyxConfluence(
-        is_cloud, url, provider, scoped_token=scoped_token
+    source_operations = build_probed_confluence_gateway(
+        credentials_provider=provider,
+        connector_specific_config=cc_pair.connector.connector_specific_config,
     )
-    confluence_client._probe_connection(**probe_kwargs)
-    confluence_client._initialize_connection(**final_kwargs)
 
-    group_to_member_email_map = _build_final_group_to_member_email_map(
-        confluence_client, cc_pair.id
-    )
+    failures: list[SyncEntityFailure] = []
+    try:
+        group_to_member_email_map = _build_final_group_to_member_email_map(
+            source_operations, cc_pair.id, failures
+        )
+    except Exception:
+        # The cap or a failed listing page still reports the users read so far.
+        yield from failures
+        raise
+    yield from failures
 
     all_found_emails = set()
     for group_id, group_member_emails in group_to_member_email_map.items():
@@ -199,11 +239,9 @@ def confluence_group_sync(
         )
         all_found_emails.update(group_member_emails)
 
-    # This is so that when we find a public confleunce server page, we can
-    # give access to all users only in if they have an email in Confluence
-    if cc_pair.connector.connector_specific_config.get("is_cloud", False):
-        all_found_group = ExternalUserGroup(
-            id=ALL_CONF_EMAILS_GROUP_NAME,
-            user_emails=list(all_found_emails),
-        )
-        yield all_found_group
+    # Spaces with anonymous read grant this group on Cloud and Server/DC alike
+    # (see space_access.py), so every user found here can read them.
+    yield ExternalUserGroup(
+        id=ALL_CONF_EMAILS_GROUP_NAME,
+        user_emails=list(all_found_emails),
+    )

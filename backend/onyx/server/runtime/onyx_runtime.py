@@ -6,7 +6,11 @@ from onyx.background.celery.tasks.beat_schedule import (
     CLOUD_BEAT_MULTIPLIER_DEFAULT,
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import (
+    CACHE_BACKEND,
+    ENABLE_CC_PAIR_ACCESS_FILTER,
     ENABLE_TENANT_WORK_GATING,
     TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS,
     TENANT_WORK_GATING_TTL_SECONDS,
@@ -16,11 +20,16 @@ from onyx.configs.constants import (
     ONYX_CLOUD_REDIS_RUNTIME,
     ONYX_CLOUD_TENANT_ID,
     ONYX_EMAILABLE_LOGO_MAX_DIM,
+    CacheBackendType,
 )
 from onyx.file_store.file_store import get_default_file_store
-from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.utils.file import FileWithMimeType, OnyxStaticFileManager
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+
+logger = setup_logger()
+
+_REQUEST_PATH_FLAG_TIMEOUT_S = 0.5
 
 
 class OnyxRuntime:
@@ -56,18 +65,24 @@ class OnyxRuntime:
         return onyx_file
 
     @staticmethod
-    def get_logo() -> FileWithMimeType:
+    def get_logo(*, workspace_branding: bool = True) -> FileWithMimeType:
+        """``workspace_branding=False`` skips the workspace's uploaded logo, for
+        a caller with no workspace to read it from."""
         STATIC_FILENAME = "static/images/logo.png"
 
-        db_filename: str | None = fetch_ee_implementation_or_noop(
-            "onyx.server.enterprise_settings.store", "get_logo_filename", None
+        db_filename: str | None = (
+            fetch_ee_implementation_or_noop(
+                "onyx.server.enterprise_settings.store", "get_logo_filename", None
+            )
+            if workspace_branding
+            else None
         )
 
         return OnyxRuntime._get_with_static_fallback(db_filename, STATIC_FILENAME)
 
     @staticmethod
-    def get_emailable_logo() -> FileWithMimeType:
-        onyx_file = OnyxRuntime.get_logo()
+    def get_emailable_logo(*, workspace_branding: bool = True) -> FileWithMimeType:
+        onyx_file = OnyxRuntime.get_logo(workspace_branding=workspace_branding)
 
         # check dimensions and resize downwards if necessary or if not PNG
         image = Image.open(io.BytesIO(onyx_file.data))
@@ -106,7 +121,7 @@ class OnyxRuntime:
 
         beat_multiplier: float = CLOUD_BEAT_MULTIPLIER_DEFAULT
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
 
         beat_multiplier_bytes = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:beat_multiplier")
         if beat_multiplier_bytes is not None:
@@ -126,7 +141,7 @@ class OnyxRuntime:
 
         value: float = CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
 
         value_bytes = r.get(
             f"{ONYX_CLOUD_REDIS_RUNTIME}:doc_permission_sync_multiplier"
@@ -143,16 +158,72 @@ class OnyxRuntime:
         return value
 
     @staticmethod
-    def _read_tenant_work_gating_flag(axis: str, default: bool) -> bool:
-        """Read `runtime:tenant_work_gating:{axis}` from Redis and interpret
-        it as a bool. Returns `default` if the key is absent or unparseable.
-        `axis` is either `enabled` (compute the gate) or `enforce` (actually
-        skip)."""
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-        raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:{axis}")
+    def _read_runtime_bool_flag(feature: str, axis: str, default: bool) -> bool:
+        """Read `runtime:{feature}:{axis}` from Redis and interpret it as a
+        bool. Returns `default` if the key is absent or unparseable. `axis` is
+        either `enabled` (shadow mode) or `enforce`."""
+        r = OnyxRuntime._runtime_settings_cache()
+        raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:{feature}:{axis}")
+        return OnyxRuntime._parse_bool_flag(raw, default)
+
+    @staticmethod
+    def _runtime_settings_cache() -> CacheBackend:
+        """The cache that holds runtime settings, read from the replica. The
+        Postgres backend has no cloud schema in a single-tenant install, so it
+        uses the current tenant's cache."""
+        return get_cache_backend(
+            tenant_id=(
+                None
+                if CACHE_BACKEND == CacheBackendType.POSTGRES
+                else ONYX_CLOUD_TENANT_ID
+            ),
+            replica=True,
+        )
+
+    @staticmethod
+    def _request_path_flag_cache(
+        operation_timeout_s: float | None = None,
+    ) -> CacheBackend:
+        """The cache that holds request-path flags. The Postgres backend has no
+        cloud schema in a single-tenant install, so it uses the current
+        tenant's cache."""
+        return get_cache_backend(
+            tenant_id=(
+                None
+                if CACHE_BACKEND == CacheBackendType.POSTGRES
+                else ONYX_CLOUD_TENANT_ID
+            ),
+            operation_timeout_s=operation_timeout_s,
+        )
+
+    @staticmethod
+    def _read_request_path_bool_flag(feature: str, axis: str, default: bool) -> bool:
+        """Like `_read_runtime_bool_flag`, for flags read on every request. It
+        reads the same key through the cache backend, so it also works with
+        CACHE_BACKEND=postgres. That backend keeps each tenant's cache in the
+        tenant's schema and has no cloud schema in a single-tenant install, so
+        it reads the current tenant's cache. A failed read returns `default`,
+        so an outage of the cache falls back to the default behavior instead
+        of failing the request."""
+        try:
+            raw = OnyxRuntime._request_path_flag_cache(
+                operation_timeout_s=_REQUEST_PATH_FLAG_TIMEOUT_S
+            ).get(f"{ONYX_CLOUD_REDIS_RUNTIME}:{feature}:{axis}")
+        except Exception:
+            logger.warning(
+                "Failed to read runtime flag %s:%s, using %s",
+                feature,
+                axis,
+                default,
+                exc_info=True,
+            )
+            return default
+        return OnyxRuntime._parse_bool_flag(raw, default)
+
+    @staticmethod
+    def _parse_bool_flag(raw: bytes | None, default: bool) -> bool:
         if raw is None:
             return default
-
         try:
             return raw.decode().strip().lower() == "true"
         except Exception:
@@ -164,8 +235,8 @@ class OnyxRuntime:
         many tenants would be skipped). Env-var `ENABLE_TENANT_WORK_GATING`
         is the fallback default when no Redis override is set — it acts as
         the master switch that turns the feature on in shadow mode."""
-        return OnyxRuntime._read_tenant_work_gating_flag(
-            "enabled", default=ENABLE_TENANT_WORK_GATING
+        return OnyxRuntime._read_runtime_bool_flag(
+            "tenant_work_gating", "enabled", default=ENABLE_TENANT_WORK_GATING
         )
 
     @staticmethod
@@ -179,7 +250,40 @@ class OnyxRuntime:
         accidentally skip real tenant traffic by flipping an env flag. Only
         meaningful when `get_tenant_work_gating_enabled()` is also True.
         """
-        return OnyxRuntime._read_tenant_work_gating_flag("enforce", default=False)
+        return OnyxRuntime._read_runtime_bool_flag(
+            "tenant_work_gating", "enforce", default=False
+        )
+
+    @staticmethod
+    def get_cc_pair_access_filter_enabled() -> bool:
+        """Should search compute the cc-pair access filter? On its own this is
+        shadow mode: results still use the old ACL filter, and disagreements
+        are logged. Env-var `ENABLE_CC_PAIR_ACCESS_FILTER` is the fallback
+        default when no Redis override is set."""
+        return OnyxRuntime._read_request_path_bool_flag(
+            "cc_pair_access_filter", "enabled", default=ENABLE_CC_PAIR_ACCESS_FILTER
+        )
+
+    @staticmethod
+    def get_cc_pair_access_filter_enforce() -> bool:
+        """Should search use the cc-pair access filter for results, in tenants
+        whose index is ready for it? Cache-only (no env var) with a hard-coded default of
+        False, like `get_tenant_work_gating_enforce`. Only meaningful when
+        `get_cc_pair_access_filter_enabled()` is also True."""
+        return OnyxRuntime._read_request_path_bool_flag(
+            "cc_pair_access_filter", "enforce", default=False
+        )
+
+    @staticmethod
+    def set_cc_pair_access_filter_flags(enabled: bool, enforce: bool) -> None:
+        """Writes both cc-pair access filter flags. An explicit value overrides
+        the `ENABLE_CC_PAIR_ACCESS_FILTER` env var."""
+        cache = OnyxRuntime._request_path_flag_cache()
+        for axis, value in (("enabled", enabled), ("enforce", enforce)):
+            cache.set(
+                f"{ONYX_CLOUD_REDIS_RUNTIME}:cc_pair_access_filter:{axis}",
+                "true" if value else "false",
+            )
 
     @staticmethod
     def get_tenant_work_gating_ttl_seconds() -> int:
@@ -189,7 +293,7 @@ class OnyxRuntime:
         has time to refresh memberships before they expire."""
         default = TENANT_WORK_GATING_TTL_SECONDS
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
         raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:ttl_seconds")
         if raw is None:
             return default
@@ -210,7 +314,7 @@ class OnyxRuntime:
         self-heal cadence."""
         default = TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
         raw = r.get(
             f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:full_fanout_interval_seconds"
         )
@@ -231,7 +335,7 @@ class OnyxRuntime:
 
         interval: int = CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
 
         interval_bytes = r.get(
             f"{ONYX_CLOUD_REDIS_RUNTIME}:build_fence_lookup_table_interval"

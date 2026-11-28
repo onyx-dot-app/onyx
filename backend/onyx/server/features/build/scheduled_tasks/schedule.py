@@ -1,13 +1,15 @@
 """Pure helpers for compiling, validating, and reasoning about schedules.
 
-Single source of truth for the cron semantics described in
-``docs/craft/features/scheduled-tasks/overview.md``:
+Single source of truth for cron semantics:
 
 - The DB stores a canonical 5-field cron string + ``editor_mode`` (UI hint).
   All three editor modes (interval, daily/weekly, advanced) compile to the
   same cron form on save.
 - ``compute_next_run_at`` returns UTC datetimes. Comparison happens in UTC,
   and cron expressions are evaluated in UTC.
+- A cron with no future fire is rejected at create and edit.
+- Pause sets ``next_run_at`` to NULL. Resume computes it forward from now, so
+  missed fires do not run. A past-due task fires once, then advances.
 - Editor payloads are strictly typed via the Pydantic models below. Anything
   reaching ``compile_to_cron`` has already been validated by Pydantic at the
   HTTP boundary, so the function is a pure transformation — no
@@ -20,13 +22,15 @@ them inside ``backend/onyx/db/scheduled_task.py`` for persisted reads/writes.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
+from uuid import UUID
 
 from cron_descriptor import ExpressionDescriptor
 from croniter import croniter
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from onyx.configs.app_configs import SCHEDULED_TASK_FIRE_WINDOW_SECONDS
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.datetime import datetime_to_utc
@@ -42,6 +46,13 @@ class _PayloadBase(BaseModel):
     """Common config for editor payload models — reject unknown fields."""
 
     model_config = ConfigDict(extra="forbid")
+
+
+_INTERVAL_MAX_EVERY: dict[IntervalUnit, int] = {
+    "minutes": 59,
+    "hours": 23,
+    "days": 31,
+}
 
 
 class IntervalPayload(_PayloadBase):
@@ -66,6 +77,15 @@ class IntervalPayload(_PayloadBase):
     def _days_requires_time_of_day(self) -> IntervalPayload:
         if self.unit == "days" and self.time_of_day is None:
             raise ValueError("time_of_day is required when unit == 'days'")
+        return self
+
+    @model_validator(mode="after")
+    def _every_fits_cron_step(self) -> IntervalPayload:
+        # A cron step cannot express a longer interval; reject it rather than
+        # compile a different cadence.
+        max_every = _INTERVAL_MAX_EVERY[self.unit]
+        if self.every > max_every:
+            raise ValueError(f"every must be at most {max_every} for {self.unit}")
         return self
 
 
@@ -104,12 +124,14 @@ class AdvancedPayload(_PayloadBase):
     @classmethod
     def _validate_cron(cls, v: str) -> str:
         v = v.strip()
-        if not v:
-            raise ValueError("cron expression is empty")
-        if len(v.split()) != 5:
-            raise ValueError("cron expression must have exactly 5 fields")
-        if not croniter.is_valid(v):
-            raise ValueError(f"invalid cron expression: {v!r}")
+        problem = _cron_problem(v)
+        if problem is not None:
+            raise ValueError(problem)
+        # Checked only on input: a stored row must not break the list read.
+        try:
+            croniter(v, datetime.now(UTC)).get_next(datetime)
+        except (ValueError, KeyError) as e:
+            raise ValueError(f"Cron expression has no future fire: {v!r}") from e
         return v
 
 
@@ -125,24 +147,23 @@ EDITOR_PAYLOAD_MODELS: dict[EditorMode, type[_PayloadBase]] = {
 }
 
 
-def _validate_cron(cron: str) -> None:
-    """Raise ``OnyxError(INVALID_INPUT)`` if ``cron`` is not a valid 5-field expression.
-
-    Used by the read-side helpers (``compute_next_run_at``, ``next_n_fires``,
-    ``human_readable``) which accept a cron string loaded from the DB.
-    """
+def _cron_problem(cron: str) -> str | None:
+    """Why ``cron`` is not a valid 5-field expression, or ``None``."""
     cron = cron.strip()
     if not cron:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Cron expression is empty")
+        return "Cron expression is empty"
     if len(cron.split()) != 5:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Cron expression must have exactly 5 fields",
-        )
+        return "Cron expression must have exactly 5 fields"
     if not croniter.is_valid(cron):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, f"Invalid cron expression: {cron!r}"
-        )
+        return f"Invalid cron expression: {cron!r}"
+    return None
+
+
+def _validate_cron(cron: str) -> None:
+    """Raise ``OnyxError(INVALID_INPUT)`` for a cron string loaded from the DB."""
+    problem = _cron_problem(cron)
+    if problem is not None:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, problem)
 
 
 def _split_hh_mm(value: str) -> tuple[int, int]:
@@ -170,16 +191,12 @@ def compile_to_cron(payload: EditorPayload) -> str:
     if isinstance(payload, IntervalPayload):
         every = payload.every
         if payload.unit == "minutes":
-            # ``*/60 * * * *`` is illegal — collapse to "every hour at :00".
-            if every > 59:
-                return "0 * * * *"
             return f"*/{every} * * * *"
         if payload.unit == "hours":
-            if every > 23:
-                return "0 0 * * *"
             return f"0 */{every} * * *"
         # unit == "days" — model validator guaranteed time_of_day is set.
-        assert payload.time_of_day is not None
+        if payload.time_of_day is None:
+            raise RuntimeError("A schedule in days needs time_of_day.")
         hour, minute = _split_hh_mm(payload.time_of_day)
         return f"{minute} {hour} */{every} * *"
 
@@ -204,20 +221,43 @@ def compute_next_run_at(cron: str, after: datetime) -> datetime:
         OnyxError(INVALID_INPUT): if ``cron`` is invalid, or if no future fire
             exists (e.g. an impossible expression).
     """
-    _validate_cron(cron)
+    return next_n_fires(cron, after, 1)[0]
 
-    after = datetime_to_utc(after)
 
-    try:
-        itr = croniter(cron, after)
-        next_fire = itr.get_next(datetime)
-    except (ValueError, KeyError) as e:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Cron expression has no future fire: {cron!r}",
-        ) from e
+def offset_seconds(task_id: UUID) -> int:
+    """Seconds after each cron time at which ``task_id`` fires. Stable per task."""
+    if SCHEDULED_TASK_FIRE_WINDOW_SECONDS <= 0:
+        return 0
+    return task_id.int % SCHEDULED_TASK_FIRE_WINDOW_SECONDS
 
-    return datetime_to_utc(next_fire)
+
+def compute_next_dispatch_at(
+    cron: str,
+    after: datetime,
+    task_id: UUID,
+    handled_dispatch_at: datetime | None = None,
+) -> datetime:
+    """The next fire of ``cron`` plus the task's offset, strictly after ``after``.
+
+    Shifting ``after`` back by the offset keeps every fire, even when the
+    offset is longer than the cron interval. ``handled_dispatch_at`` is the
+    dispatch time that just fired; its cron fire is never chosen again, also
+    when it was saved with another offset (an older row, or a changed window).
+    """
+    offset = timedelta(seconds=offset_seconds(task_id))
+    floor = datetime_to_utc(after) - offset
+    if handled_dispatch_at is not None:
+        handled = datetime_to_utc(handled_dispatch_at)
+        handled_fire = handled - offset
+        if compute_next_run_at(cron, handled_fire - timedelta(seconds=1)) != (
+            handled_fire
+        ):
+            # Saved with another offset: the fire is the last one at or before it.
+            handled_fire = croniter(cron, handled + timedelta(seconds=1)).get_prev(
+                datetime
+            )
+        floor = max(floor, datetime_to_utc(handled_fire))
+    return compute_next_run_at(cron, floor) + offset
 
 
 def next_n_fires(

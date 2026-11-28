@@ -24,8 +24,8 @@ func testProviderResponse() *models.LLMProviderResponse {
 				Provider:            "openai",
 				ProviderDisplayName: "OpenAI",
 				ModelConfigurations: []models.ModelConfiguration{
-					{ID: intPtr(10), Name: "gpt-4o", IsVisible: true, DisplayName: strPtr("GPT-4o")},
-					{ID: intPtr(11), Name: "gpt-4o-mini", IsVisible: false},
+					{ID: intPtr(10), Name: "gpt-6-sol", IsVisible: true, DisplayName: strPtr("GPT-6 Sol")},
+					{ID: intPtr(11), Name: "gpt-6-luna", IsVisible: false},
 				},
 			},
 			{
@@ -47,14 +47,14 @@ func TestFlattenModelOptions(t *testing.T) {
 	if len(options) != 2 {
 		t.Fatalf("expected 2 visible models, got %d", len(options))
 	}
-	if options[0].label != "GPT-4o" {
-		t.Errorf("label = %q, want %q", options[0].label, "GPT-4o")
+	if options[0].label != "GPT-6 Sol" {
+		t.Errorf("label = %q, want %q", options[0].label, "GPT-6 Sol")
 	}
 	if options[0].providerName != "OpenAI Prod" {
 		t.Errorf("providerName = %q, want %q", options[0].providerName, "OpenAI Prod")
 	}
 	if options[0].isDefault {
-		t.Error("gpt-4o should not be the default")
+		t.Error("gpt-6-sol should not be the default")
 	}
 	if options[1].label != "claude-sonnet-5" {
 		t.Errorf("label = %q, want %q", options[1].label, "claude-sonnet-5")
@@ -137,11 +137,11 @@ func TestSelectModelSetsOverrideAndStatus(t *testing.T) {
 	if m.modelOverride.ModelConfigurationID == nil || *m.modelOverride.ModelConfigurationID != 10 {
 		t.Errorf("ModelConfigurationID = %v, want 10", m.modelOverride.ModelConfigurationID)
 	}
-	if m.modelOverride.ModelVersion == nil || *m.modelOverride.ModelVersion != "gpt-4o" {
-		t.Errorf("ModelVersion = %v, want gpt-4o", m.modelOverride.ModelVersion)
+	if m.modelOverride.ModelVersion == nil || *m.modelOverride.ModelVersion != "gpt-6-sol" {
+		t.Errorf("ModelVersion = %v, want gpt-6-sol", m.modelOverride.ModelVersion)
 	}
-	if m.status.modelName != "GPT-4o" {
-		t.Errorf("status model = %q, want %q", m.status.modelName, "GPT-4o")
+	if m.status.modelName != "GPT-6 Sol" {
+		t.Errorf("status model = %q, want %q", m.status.modelName, "GPT-6 Sol")
 	}
 }
 
@@ -174,7 +174,7 @@ func TestFormatPickerLabelAlignsDetail(t *testing.T) {
 	rows := []pickerItem{
 		{label: "Gemma 4 E2B *", detail: "Ollama"},
 		{label: "Qwen 3 8B", detail: "Ollama"},
-		{label: "GPT-4o", detail: "OpenAI"},
+		{label: "GPT-6 Sol", detail: "OpenAI"},
 	}
 	const avail = 40
 	col := pickerDetailCol(rows, avail)

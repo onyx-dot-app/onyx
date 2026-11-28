@@ -143,7 +143,11 @@ resource "onyx_connector" "links" {
   name                      = "` + name + `-connector"
   source                    = "mock_connector"
   input_type                = "poll"
-  connector_specific_config = jsonencode({})
+  # A closed local port: the pair never reaches a real service.
+  connector_specific_config = jsonencode({
+    mock_server_host = "localhost"
+    mock_server_port = 9
+  })
 }
 
 resource "onyx_credential" "links" {
@@ -181,9 +185,9 @@ resource "onyx_user_group" "links" {
 				),
 			},
 			{
-				// Adding a member rewrites the group through the endpoint that
-				// also owns connector links. Without the echo-back the pair is
-				// silently unshared here.
+				// Adding a member goes through the endpoint that also owns
+				// connector links. The provider sends those links as null, so
+				// the pair must stay shared. The pair reads its groups back too.
 				Config: dependencies + `
 resource "onyx_user_group" "links" {
   name     = "` + name + `"
@@ -195,6 +199,7 @@ resource "onyx_user_group" "links" {
 					resource.TestCheckResourceAttr("onyx_user_group.links", "cc_pair_ids.#", "1"),
 					resource.TestCheckResourceAttrPair(
 						"onyx_user_group.links", "cc_pair_ids.0", "onyx_cc_pair.links", "id"),
+					resource.TestCheckResourceAttr("onyx_cc_pair.links", "groups.#", "1"),
 				),
 			},
 			{

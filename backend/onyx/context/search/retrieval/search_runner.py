@@ -12,7 +12,7 @@ from onyx.context.search.models import (
     InferenceSection,
 )
 from onyx.context.search.utils import get_query_embedding, inference_section_from_chunks
-from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.federated_connectors.federated_retrieval import (
     FederatedRetrievalInfo,
     get_federated_retrieval_functions,
@@ -114,6 +114,9 @@ def search_chunks(
             source_types=list(source_filters) if source_filters else None,
             document_set_names=query_request.filters.document_set,
         )
+    # Federated sources cannot apply tag filters.
+    if query_request.filters.tags:
+        federated_retrieval_infos = []
 
     federated_sources = {
         federated_retrieval_info.source.to_non_federated_source()
@@ -133,9 +136,7 @@ def search_chunks(
     if normal_search_enabled:
         if query_request.hybrid_alpha is not None and query_request.hybrid_alpha == 0.0:
             # Hybrid alpha explicitly set to keyword only —> do pure keyword
-            # search without computing an embedding. This branch is currently
-            # only set by OpenSearch-aware producers; Vespa would raise
-            # NotImplementedError on `keyword_retrieval`.
+            # search without computing an embedding.
             run_queries.append(
                 (
                     lambda: _keyword_search(query_request, document_index),

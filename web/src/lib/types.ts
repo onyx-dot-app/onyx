@@ -1,10 +1,19 @@
 import { Agent } from "@/lib/agents/types";
 import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { Locale } from "@/i18n/config";
-import type { Credential } from "@/lib/connectors/types";
+import type {
+  InterfaceFont,
+  Motion,
+  PopupDismissal,
+  ResponseFont,
+} from "@/lib/appearance/preferences";
+import type { Credential } from "@/lib/credentials/types";
 import type { Connector } from "@/lib/connectors/types";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
+// Imported from the module itself, not the barrel: the barrel re-exports
+// shapes that import from here, and the enum is a runtime value.
+import { ValidSources } from "@/lib/connectors/types/source";
 
 export enum ThemePreference {
   LIGHT = "light",
@@ -12,7 +21,7 @@ export enum ThemePreference {
   SYSTEM = "system",
 }
 
-interface UserPreferences {
+export interface UserPreferences {
   // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
   chosen_assistants: number[] | null;
   visible_assistants: number[];
@@ -30,8 +39,14 @@ interface UserPreferences {
   language: Locale | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+  interface_font: InterfaceFont;
+  response_font: ResponseFont;
+  motion: Motion;
+  popup_dismissal: PopupDismissal;
+  dynamic_conversations: boolean;
   // Input preferences
   paste_as_tile?: boolean;
+  interrupt_on_send?: boolean;
   // Voice preferences
   voice_auto_send?: boolean;
   voice_auto_playback?: boolean;
@@ -44,7 +59,11 @@ export interface MemoryItem {
 }
 
 export interface UserPersonalization {
+  /** Full name. SCIM provisioning keeps it in sync with the IdP. */
   name: string;
+  /** The name Onyx calls the user. Empty means it uses the full name. */
+  preferred_name: string;
+  /** Work role. See `WORK_ROLE_OPTIONS` for the values the web app offers. */
   role: string;
   memories: MemoryItem[];
   use_memories: boolean;
@@ -76,7 +95,7 @@ export enum Permission {
   MANAGE_ACTIONS = "manage:actions",
   READ_QUERY_HISTORY = "read:query_history",
   MANAGE_USER_GROUPS = "manage:user_groups",
-  MANAGE_SKILLS = "manage:skills",
+  MANAGE_PLUGINS = "manage:plugins",
   CREATE_USER_API_KEYS = "create:user_api_keys",
   MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
   MANAGE_BOTS = "manage:bots",
@@ -116,6 +135,10 @@ export interface User {
   token_expires_at?: string;
   is_cloud_superuser?: boolean;
   team_name: string | null;
+  /** The workspace of this session. Set only on multi-tenant deployments. */
+  tenant_id?: string | null;
+  /** Null when the user has no profile photo. See `buildUserProfileImageUrl`. */
+  profile_image_file_id?: string | null;
   is_anonymous_user?: boolean;
   // If user does not have a configured password
   // (i.e.) they are using an oauth flow
@@ -184,7 +207,12 @@ export type ValidStatuses =
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
-export type AccessType = "public" | "private" | "sync";
+export type AccessType =
+  | "public"
+  | "private"
+  | "sync"
+  | "sync_restricted"
+  | "personal";
 export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
@@ -214,15 +242,43 @@ export interface IndexAttemptSnapshot {
   total_docs_indexed: number;
   error_msg: string | null;
   error_count: number;
+  /** Unresolved errors, whole entities such as a drive or channel included. */
+  open_error_count: number;
+  /** Unresolved document-level errors, the ones a targeted reindex can retry. */
+  open_doc_error_count: number;
   full_exception_trace: string | null;
   time_started: string | null;
   time_updated: string;
+  /** When a finished attempt ended. `time_updated` also moves on checkpoint cleanup. */
+  time_finished: string | null;
+  /** Indexed under the FUTURE search settings of a running model switch. */
+  is_new_model: boolean;
+  /** A one-off run over a window outside the pair's incremental cursor, such as an added scope. */
+  is_backfill: boolean;
+  /** Set for an attempt that lists, converts and indexes in separate stages. */
+  progress?: IndexAttemptProgress | null;
+}
+
+/** Mirror of `onyx.server.documents.models.IndexAttemptProgress`. */
+export interface IndexAttemptProgress {
+  /** False while the listing runs. The totals are then not final. */
+  listing_done: boolean;
+  docs_listed: number;
+  docs_skipped: number;
+  docs_indexed: number;
+  docs_failed: number;
+  batches_listed: number;
+  batches_converted: number;
+  batches_indexed: number;
+  /** Set when the listing is done. */
+  batches_total: number | null;
+  /** Seconds until the slowest stage finishes at its rate so far. */
+  eta_seconds: number | null;
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The
-// declaration order is the canonical pipeline order — the API serializes
-// stages in this order and the "Pipeline order" sort renders them as-is.
-// Keep in sync with the Python enum.
+// declaration order is the canonical pipeline order, which the API serializes
+// and the stage details popover renders. Keep in sync with the Python enum.
 export const INDEX_ATTEMPT_STAGES = [
   "CONNECTOR_VALIDATION",
   "PERMISSION_VALIDATION",
@@ -231,6 +287,11 @@ export const INDEX_ATTEMPT_STAGES = [
   "HIERARCHY_UPSERT",
   "DOC_BATCH_STORE",
   "DOC_BATCH_ENQUEUE",
+  "CONVERSION_QUEUE_WAIT",
+  "STUB_BATCH_LOAD",
+  "CONVERSION",
+  "CONVERSION_DOC_BATCH_STORE",
+  "CONVERSION_DISPATCH",
   "QUEUE_WAIT",
   "DOCPROCESSING_SETUP",
   "BATCH_LOAD",
@@ -239,6 +300,8 @@ export const INDEX_ATTEMPT_STAGES = [
   "CHUNKING",
   "CONTEXTUAL_RAG",
   "EMBEDDING",
+  "EMBEDDING_RATE_LIMIT_WAIT",
+  "EMBEDDING_PROVIDER_THROTTLE_WAIT",
   "DOC_LOCK_ACQUIRE_WAIT",
   "ENRICHMENT_PREP",
   "VECTOR_DB_WRITE",
@@ -408,6 +471,8 @@ export interface DeletionAttemptSnapshot {
   connector_id: number;
   credential_id: number;
   status: TaskStatus;
+  // When the running deletion took its fence, null while it only waits to start.
+  started_at: string | null;
 }
 
 // DOCUMENT SETS
@@ -541,10 +606,19 @@ export interface SlackBotTokens {
 }
 
 /* EE Only Types */
+/** A member as a user group lists it: identity and access, no preferences. */
+export type UserGroupMember = Pick<
+  User,
+  "id" | "email" | "is_active" | "is_superuser" | "is_verified" | "account_type"
+>;
+
 export interface UserGroup {
   id: number;
   name: string;
-  users: User[];
+  // Empty when the list was fetched without members; use member_count.
+  users: UserGroupMember[];
+  member_count: number;
+  active_member_count: number;
   // ids of members who manage this group (drives the Make/Revoke Manager toggle)
   manager_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
@@ -583,6 +657,7 @@ export interface SecuritySettings {
   allow_connector_group_restrictions: boolean;
   track_external_idp_expiry: boolean;
   allow_same_provider_subject_relink: boolean;
+  allow_renamed_account_claim: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
   llm_custom_config_env_injection: boolean;
@@ -597,130 +672,45 @@ export interface SecuritySettings {
   jwt_public_key_url: string | null;
   jwt_expected_audience: string | null;
   jwt_expected_issuer: string | null;
+  audit_event_categories: AuditEventCategory[];
+  audit_include_query_text: boolean;
 }
 
-export enum ValidSources {
-  Web = "web",
-  GitHub = "github",
-  GitLab = "gitlab",
-  Slack = "slack",
-  GoogleDrive = "google_drive",
-  Gmail = "gmail",
-  Bookstack = "bookstack",
-  Outline = "outline",
-  Confluence = "confluence",
-  Jira = "jira",
-  Productboard = "productboard",
-  Slab = "slab",
-  Coda = "coda",
-  Notion = "notion",
-  Guru = "guru",
-  Gong = "gong",
-  Zulip = "zulip",
-  Linear = "linear",
-  Hubspot = "hubspot",
-  Document360 = "document360",
-  File = "file",
-  UserFile = "user_file",
-  GoogleSites = "google_sites",
-  Loopio = "loopio",
-  Box = "box",
-  Dropbox = "dropbox",
-  Discord = "discord",
-  Salesforce = "salesforce",
-  Sharepoint = "sharepoint",
-  Teams = "teams",
-  Outlook = "outlook",
-  Zendesk = "zendesk",
-  Discourse = "discourse",
-  Axero = "axero",
-  Clickup = "clickup",
-  Wikipedia = "wikipedia",
-  Mediawiki = "mediawiki",
-  Asana = "asana",
-  S3 = "s3",
-  R2 = "r2",
-  GoogleCloudStorage = "google_cloud_storage",
-  Xenforo = "xenforo",
-  OciStorage = "oci_storage",
-  NotApplicable = "not_applicable",
-  IngestionApi = "ingestion_api",
-  Freshdesk = "freshdesk",
-  Fireflies = "fireflies",
-  Egnyte = "egnyte",
-  Airtable = "airtable",
-  Gitbook = "gitbook",
-  Highspot = "highspot",
-  DrupalWiki = "drupal_wiki",
-  Imap = "imap",
-  Bitbucket = "bitbucket",
-  TestRail = "testrail",
-  Braintrust = "braintrust",
-  Lumapps = "lumapps",
-  Canvas = "canvas",
+export type AuditEventCategory =
+  | "authentication"
+  | "user_and_group_management"
+  | "configuration"
+  | "credential_access"
+  | "data_export"
+  | "chat"
+  | "search"
+  | "llm_gateway"
+  | "file_download";
 
-  // Craft-specific sources
-  CraftFile = "craft_file",
+// An OCSF class of the audit stream, or the credential-access stream.
+export type AuditStatusClass =
+  | "authentication"
+  | "account_change"
+  | "user_access_management"
+  | "group_management"
+  | "api_activity"
+  | "credential_access";
 
-  // Federated Connectors
-  FederatedSlack = "federated_slack",
+export interface AuditClassStatus {
+  event_class: AuditStatusClass;
+  events_last_24h: number;
+  last_event_at: string | null;
 }
 
-export const federatedSourceToRegularSource = (
-  maybeFederatedSource: ValidSources
-): ValidSources => {
-  if (maybeFederatedSource === ValidSources.FederatedSlack) {
-    return ValidSources.Slack;
-  }
-  return maybeFederatedSource;
-};
-
-export const validAutoSyncSources = [
-  ValidSources.Confluence,
-  ValidSources.Jira,
-  ValidSources.GoogleDrive,
-  ValidSources.Gmail,
-  ValidSources.Slack,
-  ValidSources.Salesforce,
-  ValidSources.GitHub,
-  ValidSources.Sharepoint,
-  ValidSources.Teams,
-  ValidSources.Outlook,
-  ValidSources.Canvas,
-  ValidSources.Box,
-] as const;
-
-// Create a type from the array elements
-export type ValidAutoSyncSource = (typeof validAutoSyncSources)[number];
-
-export type ConfigurableSources = Exclude<
-  ValidSources,
-  | ValidSources.NotApplicable
-  | ValidSources.IngestionApi
-  | ValidSources.FederatedSlack // is part of ValiedSources.Slack
-  | ValidSources.UserFile
-  | ValidSources.CraftFile // User Library - managed through dedicated UI
->;
-
-export const oauthSupportedSources: ConfigurableSources[] = [
-  ValidSources.Slack,
-  // NOTE: temporarily disabled until our GDrive App is approved
-  // ValidSources.GoogleDrive,
-  ValidSources.Confluence,
-];
-
-export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
+export interface AuditStreamStatus {
+  enabled: boolean;
+  log_format: string;
+  categories: AuditEventCategory[];
+  include_query_text: boolean;
+  classes: AuditClassStatus[];
+}
 
 // Federated Connector Types
-export interface CredentialFieldSpec {
-  type: string;
-  description: string;
-  required: boolean;
-  default?: any;
-  example?: any;
-  secret: boolean;
-}
-
 export interface ConfigurationFieldSpec {
   type: string;
   description: string;
@@ -731,12 +721,18 @@ export interface ConfigurationFieldSpec {
   hidden_when?: Record<string, any>;
 }
 
-export interface CredentialSchemaResponse {
-  credentials: Record<string, CredentialFieldSpec>;
-}
-
 export interface ConfigurationSchemaResponse {
   configuration: Record<string, ConfigurationFieldSpec>;
+}
+
+// The user's OAuth connection to a federated connector.
+export interface FederatedConnectorOAuthStatus {
+  federated_connector_id: number;
+  source: string;
+  name: string;
+  has_oauth_token: boolean;
+  oauth_token_expires_at?: string;
+  authorize_url?: string;
 }
 
 export interface FederatedConnectorCreateRequest {
@@ -759,4 +755,14 @@ export interface IndexingStatusRequest {
   source_to_page?: Record<ValidSources, number>;
   source?: ValidSources;
   get_all_connectors?: boolean;
+}
+
+export interface SpreadsheetSheet {
+  name: string;
+  csv: string;
+  truncated: boolean;
+}
+
+export interface SpreadsheetPreviewData {
+  sheets: SpreadsheetSheet[];
 }

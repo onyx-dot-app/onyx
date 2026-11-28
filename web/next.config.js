@@ -18,6 +18,10 @@ const nextConfig = {
     // TypeScript 7 has no classic JS API, so `next build` must type-check
     // through the `tsc` CLI.
     useTypeScriptCli: true,
+    // Next truncates larger bodies before they reach the API catch-all. This
+    // applies when requests reach Next directly (local dev); nginx and the Helm
+    // ingress send /api to the backend. Skill uploads allow a 25 MiB ZIP.
+    proxyClientMaxBodySize: "32mb",
   },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
@@ -72,11 +76,26 @@ const nextConfig = {
   },
   async rewrites() {
     return [
+      // Preset sign-ins return here with Craft off too, so serve the
+      // callback outside the gated /craft layout. Proxy still sees this path.
       {
-        source: "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr",
+        source: "/craft/v1/apps/oauth/callback",
+        destination: "/mcp/oauth/callback",
+      },
+      {
+        source:
+          "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)",
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"
-        }/build/sessions/:sessionId/webapp/_next/webpack-hmr`,
+        }/build/sessions/:sessionId/webapp/_next/:hmrEndpoint`,
+      },
+      // The chat browser's websocket, as Craft's HMR above: in dev the page's
+      // origin passes the upgrade and the auth cookie on to the backend
+      {
+        source: "/api/chat/sessions/:sessionId/browser/ws",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/chat/sessions/:sessionId/browser/ws`,
       },
       {
         source: "/ph_ingest/static/:path*",
@@ -132,6 +151,17 @@ const nextConfig = {
         destination: "/app/:path*",
         permanent: true,
       },
+      // Released CLI binaries open these settings paths.
+      {
+        source: "/app/settings/general",
+        destination: "/app/settings/account",
+        permanent: true,
+      },
+      {
+        source: "/app/settings/accounts-access",
+        destination: "/app/settings/third-party-access",
+        permanent: true,
+      },
       // Legacy /assistants → /agents redirects (added in PR #8869).
       // Preserves backward compatibility for bookmarks, shared links, and
       // hardcoded URLs that still reference the old /assistants paths.
@@ -145,6 +175,75 @@ const nextConfig = {
         source: "/admin/craft/instructions",
         destination: "/admin/craft/preferences",
         permanent: true,
+      },
+      // Old plugin and action pages. Their ids are not integration ids.
+      {
+        source: "/admin/mcp-actions/:path*",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/openapi-actions",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/craft/apps",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/mcp/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/openapi/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/external-app/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      // Marketplaces moved into a section of the Plugins page.
+      {
+        source: "/app/customize/plugins/marketplaces",
+        destination: "/app/customize/plugins#marketplaces",
+        permanent: true,
+      },
+      // The member plugin and skill pages moved to Customize. Next.js passes
+      // the query of the old URL on to the new one.
+      {
+        source: "/app/plugins",
+        destination: "/app/customize/plugins",
+        permanent: false,
+      },
+      {
+        source: "/app/plugins/:pluginId",
+        destination: "/app/customize/plugins/:pluginId",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills",
+        destination: "/app/customize/skills",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills/new",
+        destination: "/app/customize/skills/new",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills/edit/:id",
+        destination: "/app/customize/skills/:id?edit=1",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/plugins",
+        destination: "/app/customize/integrations",
+        permanent: false,
       },
       {
         source: "/admin/assistants/:path*",
@@ -313,6 +412,25 @@ module.exports = (phase) => {
     withSentryConfig(
       {
         ...nextConfig,
+        ...(isDevServer && {
+          async rewrites() {
+            return [
+              {
+                source: "/.well-known/oauth-authorization-server/:path*",
+                destination: `${
+                  process.env.INTERNAL_URL || "http://localhost:8080"
+                }/oauth-provider/metadata`,
+              },
+              {
+                source: "/.well-known/oauth-protected-resource/:path*",
+                destination: `${
+                  process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090"
+                }/.well-known/oauth-protected-resource/:path*`,
+              },
+              ...(await nextConfig.rewrites()),
+            ];
+          },
+        }),
         reactCompiler:
           !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
       },

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import random
+import time
 import unicodedata  # used to verify NFC expansion test preconditions
 from pathlib import Path
 
@@ -198,3 +200,46 @@ def test_nfc_expanding_char_snippet_match(char: str, description: str) -> None:
     assert snippet_nfc in matched_nfc or matched_nfc in snippet_nfc, (
         f"[{description}] Matched span '{matched}' does not overlap with expected snippet '{snippet}'"
     )
+
+
+def test_long_unmatched_snippet_returns_quickly() -> None:
+    """A long snippet that is not in the content must not stall the process.
+
+    Fuzzy alignment holds the GIL, and its time grows with the square of the
+    snippet length. Unbounded, this 8,000 character snippet took about 5 seconds.
+    """
+    rng = random.Random(0)
+
+    def text(alphabet: str, word_count: int) -> str:
+        words = [
+            "".join(rng.choices(alphabet, k=rng.randint(2, 9))) for _ in range(500)
+        ]
+        return " ".join(rng.choice(words) for _ in range(word_count))
+
+    content = text("abcdefghijklm", 20_000)
+    snippet = text("nopqrstuvwxyz", 1_400)[:8_000]
+
+    began = time.perf_counter()
+    result = find_snippet_in_content(content, snippet)
+    elapsed = time.perf_counter() - began
+
+    assert not result.snippet_located
+    assert elapsed < 2.0, f"snippet match took {elapsed:.1f}s"
+
+
+def test_long_fuzzy_snippet_keeps_its_length() -> None:
+    rng = random.Random(0)
+    words = [
+        "".join(rng.choices("abcdefghij", k=rng.randint(2, 9))) for _ in range(500)
+    ]
+    content = " ".join(rng.choice(words) for _ in range(30_000))
+    start = 50_000
+    original = content[start : start + 8_000]
+    # A changed character stops the exact match, so the fuzzy match runs.
+    snippet = original[:100] + "z" + original[101:]
+
+    result = find_snippet_in_content(content, snippet)
+
+    assert result.snippet_located
+    assert abs(result.start_idx - start) <= 10
+    assert abs(result.end_idx - (start + len(snippet))) <= 10

@@ -6,6 +6,26 @@ import { UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
+/** The admin group-list URL. Without members, each group has `users: []`. */
+export function userGroupListUrl({
+  includeDefault,
+  includeMembers,
+}: {
+  includeDefault: boolean;
+  includeMembers: boolean;
+}): string {
+  const base = includeDefault
+    ? SWR_KEYS.adminUserGroupsWithDefault
+    : SWR_KEYS.adminUserGroups;
+  if (includeMembers) return base;
+  return `${base}${base.includes("?") ? "&" : "?"}include_users=false`;
+}
+
+/** One group with its members. */
+export function userGroupUrl(groupId: number): string {
+  return `${SWR_KEYS.adminUserGroups}/${groupId}`;
+}
+
 /**
  * Fetches all user groups in the organization.
  *
@@ -37,22 +57,30 @@ import { SWR_KEYS } from "@/lib/swr-keys";
  *
  * @param includeDefault Include the seeded Admin and Basic groups, which group
  *   management hides. The service-account forms opt in to grant a key any access.
+ * @param includeMembers Load each group's member list. Pass false when the
+ *   caller needs only `member_count`: member lists are large in big orgs.
  */
-export default function useGroups(includeDefault = false) {
+export default function useGroups(
+  includeDefault = false,
+  includeMembers = true
+) {
   const settings = useSettings();
   const isPaidEnterpriseFeaturesEnabled =
     !settings.isLoading && settings.enterprise !== null;
 
-  const url = includeDefault
-    ? SWR_KEYS.adminUserGroupsWithDefault
-    : SWR_KEYS.adminUserGroups;
+  const url = userGroupListUrl({ includeDefault, includeMembers });
 
   const { data, error, isLoading } = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? url : null,
     errorHandlingFetcher
   );
 
-  const refreshGroups = () => mutate(url);
+  // Every variant: callers that edit members share the page with count readers.
+  const refreshGroups = () =>
+    mutate(
+      (key) =>
+        typeof key === "string" && key.startsWith(SWR_KEYS.adminUserGroups)
+    );
 
   if (settings.isLoading) {
     return {

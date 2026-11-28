@@ -1,12 +1,7 @@
 import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
-import {
-  selectModelFromInputPopover,
-  sendMessage,
-  startNewChat,
-  verifyCurrentModel,
-} from "@tests/e2e/utils/chatActions";
+import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 type SendChatMessagePayload = {
@@ -203,7 +198,7 @@ test.describe("LLM Runtime Selection", () => {
     await loginWithCleanCookies(page, "admin");
 
     const persistenceProviderName = uniqueName("PW Runtime Persist Provider");
-    const persistenceModelName = `persist-runtime-model-${Date.now()}`;
+    const persistenceModelName = uniqueName("persist-runtime-model");
     const persistenceProviderId = await createLlmProvider(page, {
       name: persistenceProviderName,
       provider: "openai",
@@ -216,7 +211,8 @@ test.describe("LLM Runtime Selection", () => {
     ]);
 
     await loginWithCleanCookies(page, testInfo.workerIndex);
-    await new ChatPage(page).goto();
+    const chat = new ChatPage(page);
+    await chat.goto();
 
     let turn = 0;
     await page.route("**/api/chat/send-chat-message", async (route) => {
@@ -228,10 +224,7 @@ test.describe("LLM Runtime Selection", () => {
       });
     });
 
-    const selectedModelDisplay = await selectModelFromInputPopover(page, [
-      persistenceModelName,
-    ]);
-    await verifyCurrentModel(page, selectedModelDisplay);
+    const selectedModelDisplay = await chat.switchModel(persistenceModelName);
 
     const firstPayload = await sendMessageAndCapturePayload(
       page,
@@ -246,10 +239,7 @@ test.describe("LLM Runtime Selection", () => {
     expect(page.url()).toContain("chatId=");
 
     await page.reload();
-    await page.waitForLoadState("networkidle");
-    await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
-
-    await verifyCurrentModel(page, selectedModelDisplay);
+    await chat.expectModelPill(selectedModelDisplay);
 
     const secondPayload = await sendMessageAndCapturePayload(
       page,
@@ -274,14 +264,6 @@ test.describe("LLM Runtime Selection", () => {
         body: buildMockStreamResponse(turn),
       });
     });
-
-    // Keep this aligned with the existing stable regenerate flow test.
-    const initialModelDisplay = await selectModelFromInputPopover(page, [
-      "GPT-4.1",
-      "GPT-4o Mini",
-      "GPT-4o",
-    ]);
-    await verifyCurrentModel(page, initialModelDisplay);
 
     const initialPayload = await sendMessageAndCapturePayload(
       page,
@@ -329,26 +311,17 @@ test.describe("LLM Runtime Selection", () => {
       timeout: 20000,
     });
 
+    const chatPage = new ChatPage(page);
     const messageSwitcher = page
       .getByTestId("MessageSwitcher/container")
       .first();
     await expect(messageSwitcher).toBeVisible({ timeout: 10000 });
     await expect(messageSwitcher).toContainText("2/2");
 
-    await messageSwitcher
-      .locator("..")
-      .locator("svg")
-      .first()
-      .locator("..")
-      .click();
+    await chatPage.selectPreviousVersion();
     await expect(messageSwitcher).toContainText("1/2");
 
-    await messageSwitcher
-      .locator("..")
-      .locator("svg")
-      .last()
-      .locator("..")
-      .click();
+    await chatPage.selectNextVersion();
     await expect(messageSwitcher).toContainText("2/2");
 
     expect(regeneratePayload.llm_override?.model_version).toBeTruthy();
@@ -363,7 +336,7 @@ test.describe("LLM Runtime Selection", () => {
   }, testInfo) => {
     await loginWithCleanCookies(page, "admin");
 
-    const sharedModelName = `shared-runtime-model-${Date.now()}`;
+    const sharedModelName = uniqueName("shared-runtime-model");
     const openAiProviderName = uniqueName("PW Runtime OpenAI");
     const anthropicProviderName = uniqueName("PW Runtime Anthropic");
 
@@ -404,21 +377,17 @@ test.describe("LLM Runtime Selection", () => {
       });
     });
 
-    await new ChatPage(page).goto();
+    const chatPage = new ChatPage(page);
+    await chatPage.goto();
 
-    await page.getByTestId("model-selector").locator("button").last().click();
-    await page.waitForSelector('[role="dialog"]', { state: "visible" });
-    const dialog = page.locator('[role="dialog"]');
-    await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
+    await chatPage.openModelList(sharedModelName);
 
-    const sharedModelOptions = dialog.locator("[data-interactive-state]");
-    await expect(sharedModelOptions).toHaveCount(2);
+    await expect(chatPage.modelOptions).toHaveCount(2);
     // Two results with the same model name under different providers.
     // Groups are sorted alphabetically, so OpenAI (index 1) comes after Anthropic (index 0).
-    const openAiModelOption = sharedModelOptions.nth(1);
+    const openAiModelOption = chatPage.modelOptions.nth(1);
     await expect(openAiModelOption).toBeVisible();
-    await openAiModelOption.click();
-    await page.waitForSelector('[role="dialog"]', { state: "hidden" });
+    await chatPage.chooseModelOption(openAiModelOption);
 
     await sendMessage(page, "Collision payload check one.");
     await expect.poll(() => capturedPayloads.length).toBe(1);
@@ -428,33 +397,18 @@ test.describe("LLM Runtime Selection", () => {
     await startNewChat(page);
     await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
 
-    await page.getByTestId("model-selector").locator("button").last().click();
-    await page.waitForSelector('[role="dialog"]', { state: "visible" });
-    const secondDialog = page.locator('[role="dialog"]');
-    await secondDialog
-      .getByPlaceholder("Search models...")
-      .fill(sharedModelName);
+    await chatPage.openModelList(sharedModelName);
 
-    const secondSharedModelOptions = secondDialog.locator(
-      "[data-interactive-state]"
-    );
-    await expect(secondSharedModelOptions).toHaveCount(2);
+    await expect(chatPage.modelOptions).toHaveCount(2);
     // Anthropic is index 0 (alphabetically first).
-    const anthropicModelOption = secondSharedModelOptions.nth(0);
+    const anthropicModelOption = chatPage.modelOptions.nth(0);
     await expect(anthropicModelOption).toBeVisible();
-    await anthropicModelOption.click();
-    await page.waitForSelector('[role="dialog"]', { state: "hidden" });
+    await chatPage.chooseModelOption(anthropicModelOption);
 
-    await page.getByTestId("model-selector").locator("button").last().click();
-    await page.waitForSelector('[role="dialog"]', { state: "visible" });
-    const verifyDialog = page.locator('[role="dialog"]');
+    await chatPage.openModelList();
     // Verify the Anthropic option (index 0) is selected.
-    const selectedOption = verifyDialog.locator(
-      '[data-interactive-state="selected"]'
-    );
-    await expect(selectedOption).toHaveCount(1);
-    await page.keyboard.press("Escape");
-    await page.waitForSelector('[role="dialog"]', { state: "hidden" });
+    await expect(chatPage.selectedModelOptions).toHaveCount(1);
+    await chatPage.closeModelPicker();
 
     await sendMessage(page, "Collision payload check two.");
     await expect.poll(() => capturedPayloads.length).toBe(2);
@@ -480,7 +434,7 @@ test.describe("LLM Runtime Selection", () => {
 
     const client = new OnyxApiClient(page.request);
     const restrictedGroupName = uniqueName("PW Runtime Restricted Group");
-    const restrictedModelName = `restricted-runtime-model-${Date.now()}`;
+    const restrictedModelName = uniqueName("restricted-runtime-model");
     const restrictedProviderName = uniqueName("PW Runtime Restricted Provider");
 
     let groupId: number;
@@ -509,19 +463,12 @@ test.describe("LLM Runtime Selection", () => {
     providersToCleanup.push(restrictedProviderId);
 
     await loginWithCleanCookies(page, testInfo.workerIndex);
-    await new ChatPage(page).goto();
+    const chatPage = new ChatPage(page);
+    await chatPage.goto();
 
-    await page.getByTestId("model-selector").locator("button").last().click();
-    await page.waitForSelector('[role="dialog"]', { state: "visible" });
+    const dialog = await chatPage.openModelList(restrictedModelName);
 
-    const dialog = page.locator('[role="dialog"]');
-    await dialog.getByPlaceholder("Search models...").fill(restrictedModelName);
-
-    const restrictedModelOption = dialog
-      .locator("[data-interactive-state]")
-      .filter({ hasText: restrictedModelName });
-
-    await expect(restrictedModelOption).toHaveCount(0);
+    await expect(chatPage.modelOption(restrictedModelName)).toHaveCount(0);
     await expect(dialog.getByText("No models found")).toBeVisible();
   });
 });

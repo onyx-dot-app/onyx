@@ -13,13 +13,14 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  CCPairIdsBackfillStatus,
   ConfiguredEmbeddingProvider,
   EmbeddingModelResponse,
   LLMContextualCost,
   ReindexErrorRow,
   ReindexProgress,
-  ImageProcessingSettings,
   SavedSearchSettings,
+  VectorQuantizationSupport,
 } from "@/lib/searchSettings/types";
 
 /**
@@ -91,6 +92,20 @@ export function useLLMContextualCosts() {
 }
 
 /** Combined connector + user-file re-index progress; polls when pollIntervalMs > 0. */
+/**
+ * Fetch the progress of the backfill that adds cc-pair IDs to the chunks of
+ * the current index. Polls every 10 s while it runs and every 60 s after.
+ */
+export function useCCPairIdsBackfillStatus() {
+  return useSWR<CCPairIdsBackfillStatus>(
+    SWR_KEYS.ccPairIdsBackfillProgress,
+    errorHandlingFetcher,
+    {
+      refreshInterval: (latestData) => (latestData?.completed ? 60000 : 10000),
+    }
+  );
+}
+
 export function useReindexProgress({
   pollIntervalMs = 0,
 }: { pollIntervalMs?: number } = {}) {
@@ -132,12 +147,14 @@ export function useConfiguredEmbeddingProviders() {
 }
 
 /**
- * The tenant's image processing settings. `data` is `null` when the feature
- * is off and `undefined` while loading.
+ * Fetch which vector quantization levels the OpenSearch cluster can index.
+ * Pass `enabled: false` to skip the request.
  */
-export function useImageProcessingSettings() {
-  return useSWR<ImageProcessingSettings | null>(
-    SWR_KEYS.imageProcessingSettings,
+export function useVectorQuantizationSupport({
+  enabled = true,
+}: { enabled?: boolean } = {}) {
+  return useSWR<VectorQuantizationSupport>(
+    enabled ? SWR_KEYS.vectorQuantizationSupport : null,
     errorHandlingFetcher
   );
 }

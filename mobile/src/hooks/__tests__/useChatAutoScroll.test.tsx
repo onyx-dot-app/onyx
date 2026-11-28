@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { act, renderHook } from "@testing-library/react-native";
 import type { RefObject } from "react";
+import { AccessibilityInfo } from "react-native";
 import type {
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -225,6 +226,18 @@ describe("useChatAutoScroll", () => {
     scrollToEnd.mockClear();
     act(() => rerender({ enabled: true, contentSignature: "1" }));
     act(() => flushRaf());
+    expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
+  });
+
+  it("jumps without animation when the OS reduces motion", async () => {
+    jest
+      .spyOn(AccessibilityInfo, "isReduceMotionEnabled")
+      .mockResolvedValueOnce(true);
+    const { result, scrollToEnd } = setup();
+    await act(async () => {});
+
+    act(() => result.current.scrollToBottom());
+
     expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
   });
 

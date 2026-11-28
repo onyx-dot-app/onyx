@@ -1,0 +1,119 @@
+---
+title: "Basic Auth"
+description: "Email and password authentication in Onyx"
+icon: "user-lock"
+---
+
+Email and password sign-in is always on in Onyx.
+
+- The first user who signs up becomes the admin.
+- Every later user signs up with an email and password, or signs in with SSO if you add a provider.
+- Admins invite users and approve requests at **Admin Panel → Permissions → Users**.
+
+<Note>
+  The `AUTH_TYPE` environment variable is no longer used. Onyx ignores it and logs a warning at startup.
+  Remove it from your deployment. SSO is configured in the admin panel, not with `AUTH_TYPE`.
+</Note>
+
+## Sign-Up Controls
+
+Set these in **Admin Panel → Organization → Security & Hardening**, in the **Authentication** section:
+
+- **Restrict Open Sign-Up**: only invited users can create an account.
+- **Allowed Email Domains**: only emails on these domains can sign up or sign in. You can also set `VALID_EMAIL_DOMAINS` as a comma-separated list in the environment.
+- **Disable Password Login & Signup**: everyone signs in and registers through SSO only.
+  Requires at least one enabled SSO provider.
+
+## Password Requirements
+
+Set the password policy in **Admin Panel → Organization → Security & Hardening**, in the **Password Policy** section.
+The policy applies to new passwords for email and password accounts only.
+
+| Setting                     | Environment variable            | Default |
+| --------------------------- | ------------------------------- | ------- |
+| Minimum Password Length     | `PASSWORD_MIN_LENGTH`           | `8`     |
+| Maximum Password Length     | `PASSWORD_MAX_LENGTH`           | `64`    |
+| Require Uppercase Letter    | `PASSWORD_REQUIRE_UPPERCASE`    | `false` |
+| Require Lowercase Letter    | `PASSWORD_REQUIRE_LOWERCASE`    | `false` |
+| Require Number              | `PASSWORD_REQUIRE_DIGIT`        | `false` |
+| Require Special Characters  | `PASSWORD_REQUIRE_SPECIAL_CHAR` | `false` |
+
+A value you set in the admin panel overrides the environment variable.
+An empty setting falls back to the environment value.
+
+## Email Verification
+
+Set `REQUIRE_EMAIL_VERIFICATION=true` to make new users confirm their email address before they can sign in.
+Onyx needs an SMTP server to send the verification email.
+
+<Tabs>
+  <Tab title="Docker Compose">
+    In `docker-compose.yml`, add these variables to the `api_server` service:
+
+    ```yaml
+    REQUIRE_EMAIL_VERIFICATION: "true"
+    SMTP_SERVER: smtp.gmail.com  # Your SMTP server
+    SMTP_PORT: "587"
+    SMTP_USER: your-email@company.com
+    SMTP_PASS: your-password-or-app-password
+    EMAIL_FROM: your-email@company.com
+    ```
+  </Tab>
+
+  <Tab title="Helm">
+    In `values.yaml`, set the SMTP password as a secret and the other values in the config map:
+
+    ```yaml
+    auth:
+      smtp:
+        enabled: true
+        values:
+          smtp_pass: your-password-or-app-password
+    configMap:
+      REQUIRE_EMAIL_VERIFICATION: "true"
+      SMTP_SERVER: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: your-email@company.com
+      EMAIL_FROM: your-email@company.com
+    ```
+  </Tab>
+</Tabs>
+
+If you use Gmail, create an [App Password](https://support.google.com/accounts/answer/185833) and use it as `SMTP_PASS`.
+Set `SMTP_STARTTLS=false` if your server does not support STARTTLS.
+
+The same SMTP settings send invitation emails.
+Set `ENABLE_EMAIL_INVITES=true` to email new users when an admin invites them.
+
+## Sign In With an Email Link
+
+Set `MAGIC_LINK_ENABLED=true` to add **Get a link by email** to the sign-in page.
+A user types their email address and Onyx sends a link. One click signs them in. No password is needed.
+
+- Onyx sends the link with the same email settings as email verification: SMTP, or SendGrid with `SENDGRID_API_KEY`.
+  Without them the option does not show.
+- Set `WEB_DOMAIN` to the address where users open Onyx. The link points there.
+- A link works once and expires after 15 minutes. One address gets at most one link a minute.
+- The link signs in at once in the browser that asked for it. Opened anywhere else, for example on a phone,
+  the page asks for the email address the link was sent to. A wrong address uses the link up.
+- A new email address creates a new account. **Restrict Open Sign-Up** and **Allowed Email Domains** apply.
+- A new account counts as verified, because the click proves the email address.
+- An existing account signs in with the link too, whether it was created with a password or with SSO.
+  If **Sync Session Expiry with Identity Provider** is on and the account's SSO session has ended,
+  the link does not sign in. The error page sends the person to sign in with SSO.
+- With **Disable Password Login & Signup** on, the option is off, so everyone signs in through SSO.
+- Sign-in emails are not copied to `EMAIL_ARCHIVE_BCC_ADDRESSES`, because the link signs the recipient in.
+- A used or expired link shows an error page with a button to ask for a new link.
+
+## Sessions
+
+A session lasts 7 days by default. Set `SESSION_EXPIRE_TIME_SECONDS` to change this.
+
+Turn on **Sync Session Expiry with Identity Provider** in **Security & Hardening** to end Onyx sessions when the
+identity provider session ends. This applies to SSO sign-ins only.
+
+## Next Steps
+
+- [SSO Providers](/deployment/authentication/sso_providers): add Google, OIDC, or SAML sign-in.
+- [JWT Header Auth](/deployment/authentication/jwt): accept tokens from your own identity provider on API requests.
+- [SCIM](/deployment/authentication/scim): provision users and groups from your identity provider.

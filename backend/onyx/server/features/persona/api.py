@@ -1,9 +1,9 @@
+from typing import Any
 from uuid import UUID
 
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -30,6 +30,12 @@ from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordT
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority, PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
+from onyx.db.integration_access import load_user_integration_states
+from onyx.db.integration_policy import (
+    list_persona_integration_snapshots,
+    list_persona_mcp_tools,
+    list_persona_openapi_tools,
+)
 from onyx.db.models import User
 from onyx.db.persona import (
     can_delete_persona,
@@ -45,6 +51,7 @@ from onyx.db.persona import (
     get_persona_count_for_user,
     get_persona_snapshots_for_user,
     get_persona_snapshots_paginated,
+    get_personas_by_ids,
     is_persona_editable_by_user,
     mark_persona_as_deleted,
     mark_persona_as_not_deleted,
@@ -65,7 +72,11 @@ from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
+from onyx.file_store.serving import (
+    INLINE_SAFE_IMAGE_MIME_TYPES,
+    RESPONSE_POLICY_VERSION,
+    resolve_inline_disposition,
+)
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.persona.constants import (
     ADMIN_AGENTS_RESOURCE,
@@ -79,16 +90,69 @@ from onyx.server.features.persona.models import (
     PersonaSnapshot,
     PersonaUpsertRequest,
 )
+from onyx.server.features.tool.api import openapi_tool_snapshots
+from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
+from onyx.utils.file import sniff_mime_type
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _persona_sharing_state(db_session: Session, persona_id: int) -> dict[str, Any]:
+    """Who can reach the agent after a change, as saved. Events use it instead
+    of the request, because helpers drop the changes a caller may not make."""
+    try:
+        personas = get_personas_by_ids([persona_id], db_session)
+        if not personas:
+            return {}
+        persona = personas[0]
+        return {
+            "is_public": persona.is_public,
+            "public_permission": persona.public_permission.value,
+            "owner_user_id": str(persona.user_id) if persona.user_id else None,
+            "owner_group_id": persona.owner_group_id,
+            "user_shares": [
+                {"user_id": str(share.user_id), "permission": share.permission.value}
+                for share in persona.user_shares
+            ],
+            "group_shares": [
+                {"group_id": share.user_group_id, "permission": share.permission.value}
+                for share in persona.group_shares
+            ],
+        }
+    except Exception:
+        # The change is already saved; the audit detail must not fail it.
+        logger.warning("Failed to read agent sharing state for audit", exc_info=True)
+        return {}
+
+
+def _emit_persona_event(
+    action: AuditAction,
+    user: User,
+    persona_id: int,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    emit_audit_event(
+        action,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="persona",
+        resource_id=persona_id,
+        extra=extra,
+    )
 
 
 def _validate_user_knowledge_enabled(
@@ -101,9 +165,9 @@ def _validate_user_knowledge_enabled(
         if persona_upsert_request.user_file_ids or getattr(  # ods: ignore[getattr]
             persona_upsert_request, "user_project_ids", None
         ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
             )
 
 
@@ -120,25 +184,19 @@ def _validate_vector_db_knowledge(
         return
 
     if persona_upsert_request.document_set_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot attach document sets to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot attach document sets to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set).",
         )
     if persona_upsert_request.hierarchy_node_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot attach hierarchy nodes to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot attach hierarchy nodes to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set).",
         )
     if persona_upsert_request.document_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot attach documents to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot attach documents to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set).",
         )
 
 
@@ -197,7 +255,16 @@ def patch_user_persona_public_status(
         )
     except ValueError as e:
         logger.exception("Failed to update persona public status")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_id,
+        {
+            "change": "public_status",
+            **_persona_sharing_state(db_session, persona_id),
+        },
+    )
 
 
 @admin_router.patch("/{persona_id}/featured")
@@ -216,7 +283,7 @@ def patch_persona_featured_status(
         )
     except ValueError as e:
         logger.exception("Failed to update persona featured status")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
 
 
 @admin_agents_router.patch("/display-priorities")
@@ -234,7 +301,7 @@ def patch_agents_display_priorities(
         )
     except ValueError as e:
         logger.exception("Failed to update agent display priorities.")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
 
 
 def _admin_list_get_editable(user: User, get_editable: bool) -> bool:
@@ -319,6 +386,16 @@ def undelete_persona(
         user=user,
         db_session=db_session,
     )
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_id,
+        {"change": "undelete", **_persona_sharing_state(db_session, persona_id)},
+    )
+
+
+# Every allowlisted image type is identified by its first few bytes.
+_AVATAR_SNIFF_BYTES = 2048
 
 
 # used for assistant profile pictures
@@ -327,13 +404,21 @@ def upload_file(
     file: UploadFile,
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> dict[str, str]:
+    # Store the type sniffed from the bytes, never the client-declared one.
+    header: bytes = file.file.read(_AVATAR_SNIFF_BYTES)
+    file.file.seek(0)
+    file_type: str | None = sniff_mime_type(header, INLINE_SAFE_IMAGE_MIME_TYPES)
+    if file_type is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Avatar must be a PNG, JPEG, GIF, or WebP image",
+        )
     file_store = get_default_file_store()
-    file_type = ChatFileType.IMAGE
-    file_id = file_store.save_file(
+    file_id: str = file_store.save_file(
         content=file.file,
         display_name=file.filename,
         file_origin=FileOrigin.CHAT_UPLOAD,
-        file_type=file.content_type or file_type.value,
+        file_type=file_type,
     )
     return {"file_id": file_id}
 
@@ -346,7 +431,7 @@ def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
     user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
-) -> PersonaSnapshot:
+) -> FullPersonaSnapshot:
     tenant_id = get_current_tenant_id()
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
@@ -358,13 +443,22 @@ def create_persona(
         user=user,
         db_session=db_session,
     )
+    _emit_persona_event(
+        AuditAction.PERSONA_CREATE,
+        user,
+        persona_snapshot.id,
+        {
+            "name": persona_upsert_request.name,
+            **_persona_sharing_state(db_session, persona_snapshot.id),
+        },
+    )
     mt_cloud_telemetry(
         tenant_id=tenant_id,
         distinct_id=str(user.id),
         event=MilestoneRecordType.CREATED_ASSISTANT,
     )
 
-    return persona_snapshot
+    return get_persona(persona_snapshot.id, user, db_session)
 
 
 # NOTE: This endpoint cannot update persona configuration options that
@@ -378,7 +472,7 @@ def update_persona(
     # editor-shared user should be able to edit the agent they were granted access to.
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> PersonaSnapshot:
+) -> FullPersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
     _validate_vector_db_knowledge(persona_upsert_request)
 
@@ -391,7 +485,17 @@ def update_persona(
     # The persona's default model is baked into the cached LLM provider listing
     # (see onyx/server/manage/llm/provider_cache.py), so edits must drop it.
     invalidate_provider_listing_cache()
-    return persona_snapshot
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_snapshot.id,
+        {
+            "change": "config",
+            "name": persona_upsert_request.name,
+            **_persona_sharing_state(db_session, persona_snapshot.id),
+        },
+    )
+    return get_persona(persona_snapshot.id, user, db_session)
 
 
 class PersonaLabelPatchRequest(BaseModel):
@@ -420,9 +524,9 @@ def create_label(
         label_model = create_assistant_label(name=label.name, db_session=db)
         return PersonaLabelResponse.from_model(label_model)
     except IntegrityError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Label with name '{label.name}' already exists. Please choose a different name.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Label with name '{label.name}' already exists. Please choose a different name.",
         )
 
 
@@ -519,13 +623,22 @@ def share_persona(
         )
     except PermissionError as e:
         logger.exception("Failed to share persona")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
     except NotImplementedError as e:
         logger.exception("Failed to share persona")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
     except ValueError as e:
         logger.exception("Failed to share persona")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_id,
+        {
+            "change": "share",
+            **_persona_sharing_state(db_session, persona_id),
+        },
+    )
 
 
 class TransferPersonaOwnershipRequest(BaseModel):
@@ -553,10 +666,19 @@ def transfer_persona_ownership_endpoint(
         )
     except PermissionError as e:
         logger.exception("Failed to transfer persona ownership")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
     except (ValueError, NotImplementedError) as e:
         logger.exception("Failed to transfer persona ownership")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_id,
+        {
+            "change": "transfer_ownership",
+            **_persona_sharing_state(db_session, persona_id),
+        },
+    )
 
 
 @basic_router.delete("/{persona_id}/share/me")
@@ -573,7 +695,7 @@ def leave_persona_shares(
         )
     except ValueError as e:
         logger.exception("Failed to remove user from persona shares")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
@@ -596,7 +718,7 @@ def delete_persona(
         # not forbidden. Only checked once the delete has already failed, so the
         # happy path costs no extra query.
         try:
-            get_persona_by_id(
+            persona = get_persona_by_id(
                 persona_id=persona_id,
                 user=user,
                 db_session=db_session,
@@ -609,16 +731,25 @@ def delete_persona(
                 persona_id,
             )
         else:
-            raise OnyxError(
-                OnyxErrorCode.PERSONA_NOT_FOUND,
-                f"Agent with ID {persona_id} is already deleted",
-            ) from e
+            if persona.deleted:
+                raise OnyxError(
+                    OnyxErrorCode.PERSONA_NOT_FOUND,
+                    f"Agent with ID {persona_id} is already deleted",
+                ) from e
+            if persona.builtin_persona:
+                # Editable by everyone and deletable by no one — mark_persona_as_deleted
+                # is the only other ValueError source that reaches this branch.
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Built-in agents cannot be deleted.",
+                ) from e
         # A non-owner failed the ownership check; its ValueError would 400 via the global
         # handler, so surface the real authorization failure as a 403.
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can only delete agents you created.",
         ) from e
+    _emit_persona_event(AuditAction.PERSONA_DELETE, user, persona_id)
 
 
 # scope_exempt: the auth dependency below carries no require_permission marker,
@@ -717,17 +848,67 @@ def get_persona(
             f"Agent with ID {persona_id} does not exist",
         ) from e
 
-    # Validate and clear the model override if the referenced model is no longer
-    # accessible to this persona (e.g. provider was restricted after the persona was saved).
+    snapshot = FullPersonaSnapshot.from_model(persona)
+    snapshot.integrations = list_persona_integration_snapshots(persona.id, db_session)
+    # Old custom and MCP tool ids come from the integration links, so they
+    # round-trip through tool_ids. A tool of an integration that the viewer
+    # has no access to keeps its id and gives nothing else of the tool. Each
+    # reader of the agent gets no header values: they can hold shared secrets.
+    visible_integrations = (
+        None
+        if has_global_permission(user, Permission.MANAGE_ACTIONS)
+        else {
+            state.integration_id
+            for state in load_user_integration_states(
+                [user.id],
+                db_session,
+                [link.integration_id for link in snapshot.integrations],
+            )
+        }
+    )
+
+    def viewer_snapshot(integration_id: int, tool: ToolSnapshot) -> ToolSnapshot:
+        if visible_integrations is None or integration_id in visible_integrations:
+            return tool.model_copy(update={"custom_headers": None})
+        return tool.model_copy(
+            update={
+                "description": "",
+                "definition": None,
+                "custom_headers": None,
+                "user_id": None,
+            }
+        )
+
+    custom_tools = list_persona_openapi_tools(persona.id, db_session)
+    custom_snapshots = [
+        viewer_snapshot(integration.id, tool_snapshot)
+        for (_, integration), tool_snapshot in zip(
+            custom_tools, openapi_tool_snapshots(custom_tools, db_session), strict=True
+        )
+    ]
+    mcp_tools = [
+        viewer_snapshot(
+            integration_id,
+            ToolSnapshot.from_model(tool, integration_id=integration_id),
+        )
+        for integration_id, tool, selected in list_persona_mcp_tools(
+            persona.id, db_session
+        )
+        if selected
+    ]
+    snapshot.tools = (
+        [tool for tool in snapshot.tools if tool.in_code_tool_id is not None]
+        + custom_snapshots
+        + mcp_tools
+    )
+    # Hide a pinned model this viewer cannot use. The check is viewer-relative, so
+    # it changes only the response, never the stored agent.
     if persona.default_model_configuration_id:
         valid_ids = get_valid_model_configuration_ids_for_persona(
             persona, user, db_session
         )
         if persona.default_model_configuration_id not in valid_ids:
-            persona.default_model_configuration_id = None
-            db_session.commit()
-
-    snapshot = FullPersonaSnapshot.from_model(persona)
+            snapshot.default_model_configuration_id = None
     if user is not None:
         snapshot.user_permission = get_persona_access_level(
             persona, user, user_group_ids
@@ -808,7 +989,7 @@ def get_persona_avatar(
         )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 
-    etag = f'"{file_id}"'
+    etag: str = f'"{file_id}-{RESPONSE_POLICY_VERSION}"'
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
@@ -817,8 +998,15 @@ def get_persona_avatar(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    # Older uploads kept the client-declared type, so anything that is not an
+    # allowlisted image is served as an inert attachment.
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type, inline_types=INLINE_SAFE_IMAGE_MIME_TYPES
+    )
     file_store = get_default_file_store()
     file_io = file_store.read_file(file_id, mode="b")
     return StreamingResponse(
-        file_io, media_type=file_record.file_type, headers=cache_headers
+        file_io,
+        media_type=media_type,
+        headers={**cache_headers, **security_headers},
     )

@@ -6,7 +6,8 @@ import { Project, ProjectSearchMatch } from "@/lib/projects/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { useUploadProgressStore } from "@/lib/projects/uploadProgress";
 
 export function useProjects() {
   const { data, error, mutate } = useSWR<Project[]>(
@@ -103,4 +104,14 @@ export function useProjectSearch(query: string): ProjectSearchMatch[] {
       ];
     });
   }, [projects, query]);
+}
+
+/** The fraction of the file's upload request sent, once known. */
+export function useUploadProgress(tempId: string): number | undefined {
+  return useUploadProgressStore((state) => state.progressByTempId[tempId]);
+}
+
+/** Changes each time a held upload settles (`holdUploads`). */
+export function useHeldUploadsSettled(): number {
+  return useUploadProgressStore((state) => state.heldSettled);
 }

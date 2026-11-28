@@ -1,6 +1,23 @@
+import logging
 import os
 from typing import Any, List
 from urllib.parse import urlparse
+
+
+def _int_env_or_default(name: str, default: int) -> int:
+    """Parse an int env var: ``default`` when unset or not an integer. A bad
+    value is logged, so it does not stop the import of this module."""
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logging.getLogger(__name__).error(
+            "%s=%r is not an integer; using %d", name, raw, default
+        )
+        return default
+
 
 # Used for logging
 SLACK_CHANNEL_ID = "channel_id"
@@ -35,7 +52,8 @@ INDEXING_MODEL_SERVER_PORT = int(
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
-DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
+# Fresh-install default self-hosted model, baked into the model-server image.
+DEFAULT_DOCUMENT_ENCODER_MODEL = "ibm-granite/granite-embedding-97m-multilingual-r2"
 # INTENT_MODEL_TAG = "v1.0.3"
 INTENT_MODEL_TAG: str | None = None
 # Bi-Encoder, other details
@@ -111,6 +129,15 @@ VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
     os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "50")
 )
 
+# Gemini Embedding 2 requests in flight: the max is per process, and each
+# project and model starts at the initial value, then adapts to rate limits.
+VERTEXAI_EMBEDDING_MAX_CONCURRENCY = max(
+    1, _int_env_or_default("VERTEXAI_EMBEDDING_MAX_CONCURRENCY", 128)
+)
+VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY = max(
+    1, _int_env_or_default("VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY", 16)
+)
+
 # Only used for OpenAI
 OPENAI_EMBEDDING_TIMEOUT = int(
     os.environ.get("OPENAI_EMBEDDING_TIMEOUT", API_BASED_EMBEDDING_TIMEOUT)
@@ -147,6 +174,8 @@ PRESERVED_SEARCH_FIELDS = [
     "normalize",
     "passage_prefix",
     "query_prefix",
+    # Part of the index mapping; a change needs a reindex into a new index.
+    "vector_quantization",
     # Immutable per settings id; server-controlled, never set via update.
     "use_port_flow",
 ]
@@ -193,6 +222,21 @@ CORS_ALLOW_CREDENTIALS: bool = cors_allow_credentials(CORS_ALLOWED_ORIGIN)
 # Multi-tenancy configuration
 MULTI_TENANT = os.environ.get("MULTI_TENANT", "").lower() == "true"
 
+# Deployment identity. The multi-tenant app runs as cloud or as the playground,
+# nothing else. False keeps every cloud behaviour unchanged.
+IS_PLAYGROUND = os.environ.get("IS_PLAYGROUND", "").lower() == "true"
+
+# Air-gapped deployment: no outbound calls to onyx-controlled endpoints
+# (recommended-models sync, remote model catalog lookup, release notes).
+# Inbound traffic and user-configured integrations are unaffected.
+ONYX_AIRGAPPED = os.environ.get("ONYX_AIRGAPPED", "").lower() == "true"
+
+# How often to check GitHub for updated onyx-published LLM config
+# (recommended-models, remote model catalog sections).
+AUTO_LLM_UPDATE_INTERVAL_SECONDS = int(
+    os.environ.get("AUTO_LLM_UPDATE_INTERVAL_SECONDS", 1800)  # 30 minutes
+)
+
 # Outside this file, should almost always use `POSTGRES_DEFAULT_SCHEMA` unless you
 # have a very good reason
 POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE = "public"
@@ -211,6 +255,10 @@ async def async_return_default_schema(
 
 # Prefix used for all tenant ids
 TENANT_ID_PREFIX = "tenant_"
+# Schema the rollout job keeps at head and dumps into the snapshot that new tenants
+# are cloned from. Migrated and re-encrypted like a tenant, never scheduled work
+# or assigned a user.
+TENANT_TEMPLATE_SCHEMA = f"{TENANT_ID_PREFIX}template"
 
 DISALLOWED_SLACK_BOT_TENANT_IDS = os.environ.get("DISALLOWED_SLACK_BOT_TENANT_IDS")
 DISALLOWED_SLACK_BOT_TENANT_LIST = (

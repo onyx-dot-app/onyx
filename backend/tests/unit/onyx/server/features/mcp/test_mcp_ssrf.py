@@ -13,7 +13,6 @@ import pytest
 from onyx.auth import oauth_token_manager
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.mcp import api
 from onyx.server.features.mcp import ssrf as mcp_ssrf
 from onyx.server.security.models import SecuritySettings, SSRFProtectionLevel
 from onyx.server.security.store import _build_env_defaults
@@ -175,7 +174,7 @@ def test_error_hint_for_never_allowed_omits_remedy(url: str) -> None:
     """Named hosts (localhost) and link-local/metadata can't be opted into, so
     the message must not dangle the SSRF setting as a remedy."""
     with pytest.raises(OnyxError) as exc_info:
-        api._validate_mcp_server_url(url, "server_url", require_https=False)
+        mcp_ssrf.validate_mcp_url(url, "server_url", require_https=False)
     detail = exc_info.value.detail
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
     assert "never permitted" in detail
@@ -186,7 +185,7 @@ def test_error_hint_for_private_points_at_allow_private_network() -> None:
     """A private LAN target opens at Allow Private Network, so steer there rather
     than all the way to Disabled."""
     with pytest.raises(OnyxError) as exc_info:
-        api._validate_mcp_server_url(
+        mcp_ssrf.validate_mcp_url(
             "http://10.0.0.5/mcp", "server_url", require_https=False
         )
     detail = exc_info.value.detail
@@ -197,12 +196,19 @@ def test_error_hint_for_private_points_at_allow_private_network() -> None:
 def test_error_hint_for_loopback_points_at_disabled() -> None:
     """Loopback reaches the app host itself, so it needs the Disabled level."""
     with pytest.raises(OnyxError) as exc_info:
-        api._validate_mcp_server_url(
+        mcp_ssrf.validate_mcp_url(
             "http://127.0.0.1:8010/mcp", "server_url", require_https=False
         )
     detail = exc_info.value.detail
     assert "SSRF Protection to Disabled" in detail
     assert "never permitted" not in detail
+
+
+def test_a_malformed_url_is_a_field_error() -> None:
+    with pytest.raises(OnyxError) as exc_info:
+        mcp_ssrf.validate_mcp_url("http://[::1", "server_url", require_https=False)
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert "server_url" in exc_info.value.detail
 
 
 def test_store_time_allows_loopback_when_disabled(
@@ -211,7 +217,7 @@ def test_store_time_allows_loopback_when_disabled(
     """With SSRF protection Disabled, a loopback MCP server URL saves cleanly (the
     fetch-time transport guard applies the same policy)."""
     _set_level(monkeypatch, SSRFProtectionLevel.DISABLED)
-    api._validate_mcp_server_url(
+    mcp_ssrf.validate_mcp_url(
         "http://127.0.0.1:8010/mcp", "server_url", require_https=False
     )
 
@@ -220,7 +226,7 @@ def test_oauth_endpoint_rejects_http_at_store_time() -> None:
     """http OAuth endpoints must fail at save time, matching the fetch-time
     https_only check, so a saved server can't silently fail the OAuth flow."""
     with pytest.raises(OnyxError) as exc_info:
-        api._validate_mcp_server_url(
+        mcp_ssrf.validate_mcp_url(
             "http://token.example.com/token", "oauth_token_endpoint", require_https=True
         )
     detail = exc_info.value.detail
@@ -230,6 +236,42 @@ def test_oauth_endpoint_rejects_http_at_store_time() -> None:
 
 
 def test_server_url_allows_http() -> None:
-    api._validate_mcp_server_url(
-        "http://8.8.8.8/mcp", "server_url", require_https=False
-    )
+    mcp_ssrf.validate_mcp_url("http://8.8.8.8/mcp", "server_url", require_https=False)
+
+
+def test_async_guard_offloads_validation_and_preserves_tenant_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+    validation_threads: list[int] = []
+    tenant_ids: list[str | None] = []
+    loop_threads: list[int] = []
+
+    def validate(url: str) -> str:
+        validation_threads.append(threading.get_ident())
+        tenant_ids.append(CURRENT_TENANT_ID_CONTEXTVAR.get())
+        return url
+
+    async def send(
+        _transport: httpx.AsyncHTTPTransport, request: httpx.Request
+    ) -> httpx.Response:
+        loop_threads.append(threading.get_ident())
+        return httpx.Response(200, request=request)
+
+    async def run() -> None:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("discovery-test-tenant")
+        try:
+            async with mcp_ssrf.mcp_ssrf_httpx_client_factory() as client:
+                await client.get("https://example.com/mcp")
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    monkeypatch.setattr(mcp_ssrf, "validate_mcp_outbound_url", validate)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
+    asyncio.run(run())
+    assert len(validation_threads) == 1
+    assert validation_threads[0] != loop_threads[0]
+    assert tenant_ids == ["discovery-test-tenant"]

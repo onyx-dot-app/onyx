@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.standard_answer import (
@@ -17,14 +17,22 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import (
     StandardAnswer,
     StandardAnswerCategory,
     StandardAnswerCategoryCreationRequest,
     StandardAnswerCreationRequest,
 )
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(
+    prefix="/manage",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.STANDARD_ANSWERS))
+    ],
+)
 
 
 @router.post("/admin/standard-answer")
@@ -69,7 +77,7 @@ def patch_standard_answer(
     )
 
     if existing_standard_answer is None:
-        raise HTTPException(status_code=404, detail="Standard answer not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Standard answer not found")
 
     standard_answer_model = update_standard_answer(
         standard_answer_id=standard_answer_id,
@@ -135,9 +143,7 @@ def patch_standard_answer_category(
     )
 
     if existing_standard_answer_category is None:
-        raise HTTPException(
-            status_code=404, detail="Standard answer category not found"
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Standard answer category not found")
 
     standard_answer_category_model = update_standard_answer_category(
         standard_answer_category_id=standard_answer_category_id,

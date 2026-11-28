@@ -1,13 +1,16 @@
+import { redirect } from "@opal/navigation";
 import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
+import { START_NEW_TEAM_PARAM } from "@/lib/auth/paths";
 import { AuthTypeMetadata } from "@/lib/auth/types";
-import { redirect } from "next/navigation";
 import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
+import MagicLinkSignIn from "@/app/auth/login/MagicLinkSignIn";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { AuthLayouts } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import { getTranslations } from "next-intl/server";
 import { fetchAppName } from "@/lib/app/svcSS";
@@ -24,6 +27,9 @@ const Page = async (props: {
   const defaultEmail = Array.isArray(searchParams?.email)
     ? searchParams?.email[0]
     : searchParams?.email || null;
+
+  // Playground: set by the "start a new team" choice on /auth/error.
+  const startNewTeam = searchParams?.[START_NEW_TEAM_PARAM] === "true";
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -47,6 +53,7 @@ const Page = async (props: {
     return redirect("/auth/waiting-on-verification");
   }
   const cloud = authTypeMetadata?.multiTenant === true;
+  const magicLinkEnabled = authTypeMetadata?.magicLinkEnabled === true;
 
   // No auth metadata (backend unreachable), nothing to render here.
   if (authTypeMetadata?.multiTenant !== false && !cloud) {
@@ -60,7 +67,11 @@ const Page = async (props: {
 
   let authUrl: string | null = null;
   if (cloud && authTypeMetadata) {
-    authUrl = await getAuthUrlSS(authTypeMetadata.multiTenant, null);
+    authUrl = await getAuthUrlSS(
+      authTypeMetadata.multiTenant,
+      null,
+      startNewTeam
+    );
   }
   const appName = await fetchAppName();
 
@@ -77,12 +88,12 @@ const Page = async (props: {
           )}
         >
           <div className="w-full">
-            <Text as="p" headingH2 text05>
+            <Text as="p" font="heading-headline" color="text-05">
               {cloud
                 ? t("signup.cloudSignupHeading.title")
                 : t("signup.createAccountHeading.title")}
             </Text>
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("signup.subtitle.text", { appName })}
             </Text>
           </div>
@@ -91,9 +102,11 @@ const Page = async (props: {
               <SignInButton authorizeUrl={authUrl} />
               <div className="flex items-center w-full my-4">
                 <div className="grow border-t border-border-01" />
-                <Text as="p" mainUiMuted text03 className="mx-2">
-                  {t("signup.orDivider.text")}
-                </Text>
+                <div className="mx-2">
+                  <Text as="p" font="main-ui-muted" color="text-03">
+                    {t("signup.orDivider.text")}
+                  </Text>
+                </div>
                 <div className="grow border-t border-border-01" />
               </div>
             </div>
@@ -107,12 +120,32 @@ const Page = async (props: {
             </>
           )}
 
-          <EmailPasswordForm
-            label="create"
-            shouldVerify={authTypeMetadata?.requiresVerification}
-            nextUrl={nextUrl}
-            defaultEmail={defaultEmail}
-          />
+          {/* The playground signs up with a link, not a password, and the link
+              carries the "start a new team" choice. Self-hosted offers the
+              link next to the password form, as on the login page. */}
+          {cloud && magicLinkEnabled ? (
+            <MagicLinkSignIn
+              nextUrl={nextUrl ?? null}
+              startNewTeam={startNewTeam}
+              defaultEmail={defaultEmail}
+            />
+          ) : (
+            <EmailPasswordForm
+              label="create"
+              shouldVerify={authTypeMetadata?.requiresVerification}
+              nextUrl={nextUrl}
+              defaultEmail={defaultEmail}
+            />
+          )}
+          {!cloud && magicLinkEnabled && (
+            <>
+              <AuthLayouts.OrSeparator title={t("signup.orDivider.text")} />
+              <MagicLinkSignIn
+                nextUrl={nextUrl ?? null}
+                defaultEmail={defaultEmail}
+              />
+            </>
+          )}
         </div>
       </>
     </AuthFlowContainer>

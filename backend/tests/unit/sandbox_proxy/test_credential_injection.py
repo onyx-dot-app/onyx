@@ -8,14 +8,16 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+from mitmproxy import http
+
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
     CredentialResolver,
     CredentialUnavailableError,
-    InjectionContext,
-    InjectionOutcome,
 )
+from onyx.sandbox_proxy.models import InjectionContext, InjectionOutcome
 from tests.unit.sandbox_proxy.conftest import (
     RecordingCredentialResolver,
     make_flow,
@@ -164,3 +166,41 @@ def test_resolver_receives_request_and_full_context() -> None:
     assert claim_request is flow.request
     assert claim_ctx is ctx
     assert resolver.resolve_calls == [ctx]
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://mcp.example/mcp", "mcp.example"),
+        ("http://mcp.example:8080/mcp", "mcp.example:8080"),
+        ("https://[2001:db8::1]:8443/mcp", "[2001:db8::1]:8443"),
+    ],
+)
+def test_an_injected_credential_goes_to_the_matched_host(
+    url: str, expected: str
+) -> None:
+    """The sandbox cannot send the credential to another virtual host of the
+    same upstream address."""
+    resolver = RecordingCredentialResolver(
+        claims_result=True, headers={"Authorization": "Bearer real"}
+    )
+    flow = make_flow()
+    flow.request = http.Request.make("POST", url)
+    flow.request.headers["Host"] = "attacker.example"
+
+    result = CredentialInjectionDispatcher([resolver]).apply(flow, _ctx())
+
+    assert result.outcome is InjectionOutcome.INJECTED
+    assert flow.request.headers["Authorization"] == "Bearer real"
+    assert flow.request.headers["Host"] == expected
+
+
+def test_a_request_with_no_credential_keeps_its_host_header() -> None:
+    resolver = RecordingCredentialResolver(claims_result=False)
+    flow = make_flow()
+    flow.request = http.Request.make("GET", "https://example.com/")
+    flow.request.headers["Host"] = "other.example"
+
+    CredentialInjectionDispatcher([resolver]).apply(flow, _ctx())
+
+    assert flow.request.headers["Host"] == "other.example"

@@ -1,0 +1,563 @@
+import {
+  fireEvent,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
+import ToolQuestionCard from "@/lib/timeline/chat/message/messageComponents/ToolQuestionCard";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
+import {
+  PENDING_QUESTION,
+  type ToolQuestionStatus,
+} from "@/lib/chat/toolQuestions";
+import {
+  PacketType,
+  type ToolQuestionRequest,
+} from "@/app/app/services/streamingModels";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { followChatStream } from "@/lib/chat/settleChatSession";
+import { readChatSessionStatus } from "@/lib/chat/sessionReadiness";
+import type { ChatStream } from "@/app/app/types";
+
+jest.mock("@/lib/chat/settleChatSession", () => ({
+  ...jest.requireActual("@/lib/chat/settleChatSession"),
+  followChatStream: jest.fn(),
+}));
+jest.mock("@/lib/chat/sessionReadiness", () => ({
+  fetchSettledChatSession: jest.fn(),
+  readChatSessionStatus: jest.fn(),
+  waitForChatResponseEnd: jest.fn(),
+}));
+
+const continuation: ChatStream = { stream_id: 900, response_ids: [82] };
+
+const request: ToolQuestionRequest = {
+  type: PacketType.TOOL_QUESTION_REQUEST,
+  question_request_id: "question-1",
+  tool_call_id: "call-1",
+  questions: [
+    {
+      id: "scope",
+      header: "Scope",
+      question: "Which files should I change?",
+      options: [
+        { label: "All files (Recommended)", description: "Every file." },
+        { label: "Docs", description: "Only the docs." },
+      ],
+      multi_select: false,
+    },
+  ],
+};
+
+const threeQuestions: ToolQuestionRequest = {
+  ...request,
+  question_request_id: "question-2",
+  questions: [
+    request.questions[0]!,
+    {
+      id: "format",
+      header: "Format",
+      question: "How should the notes look?",
+      options: [
+        { label: "Bullets", description: "" },
+        { label: "Prose", description: "" },
+      ],
+      multi_select: false,
+    },
+    {
+      id: "tone",
+      header: "Tone",
+      question: "Which tone fits?",
+      options: [
+        { label: "Formal", description: "" },
+        { label: "Casual", description: "" },
+      ],
+      multi_select: false,
+    },
+  ],
+};
+
+/** A waiting card as the trailing region renders it: an answer this client
+ * sent decides its status. */
+function Harness({ questions = request }: { questions?: ToolQuestionRequest }) {
+  const status = useToolRequestUi((state) =>
+    state.localAnswers.get(questions.question_request_id)
+  );
+  return (
+    <ToolQuestionCard
+      question={{
+        turnIndex: 1,
+        request: questions,
+        status: status ?? PENDING_QUESTION,
+      }}
+    />
+  );
+}
+
+function respond(status: number, body: unknown) {
+  return jest
+    .spyOn(global, "fetch")
+    .mockResolvedValue(new Response(JSON.stringify(body), { status }));
+}
+
+beforeEach(() => {
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  jest.mocked(followChatStream).mockReset();
+  jest.mocked(readChatSessionStatus).mockReset();
+});
+afterEach(() => jest.restoreAllMocks());
+
+test("the Other note is one of the choices and the answer follows the continuation", async () => {
+  const fetchSpy = respond(200, {
+    question_request_id: "question-1",
+    continuation,
+  });
+  const user = setupUser();
+  render(<Harness />);
+
+  const submit = screen.getByRole("button", { name: "Submit" });
+  expect(submit).toBeDisabled();
+  // One question needs no pages.
+  expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  expect(screen.queryByText(/^Question \d of/)).toBeNull();
+  // Options keep the model's order, recommended first.
+  expect(
+    screen.getAllByRole("radio").map((option) => option.textContent)
+  ).toEqual(["All files (Recommended)Every file.", "DocsOnly the docs."]);
+
+  const docs = screen.getByRole("radio", { name: /^Docs/ });
+  const other = screen.getByRole("textbox", { name: "Other answer to Scope" });
+  await user.click(docs);
+  await user.type(other, "Docs and the README");
+  // Typing in Other clears the option, and picking an option clears Other.
+  expect(docs).toHaveAttribute("aria-checked", "false");
+  await user.click(docs);
+  expect(other).toHaveValue("");
+  await user.type(other, "Docs and the README");
+  await user.click(submit);
+
+  await waitFor(() =>
+    expect(followChatStream).toHaveBeenCalledWith(
+      "session",
+      continuation,
+      expect.any(String)
+    )
+  );
+  const [url, init] = fetchSpy.mock.calls[0]!;
+  expect(url).toBe("/api/chat/question-requests/question-1/answers");
+  expect(JSON.parse(String(init?.body))).toEqual({
+    answers: [
+      {
+        question_id: "scope",
+        option_labels: [],
+        user_note: "Docs and the README",
+      },
+    ],
+  });
+  expect(screen.getByRole("status")).toHaveTextContent("Answered 1 question");
+  await user.click(
+    screen.getByRole("button", { name: "Expand Answered 1 question" })
+  );
+  expect(screen.getByText("Docs and the README")).toBeVisible();
+});
+
+test("a multi-select question takes several options and a note", async () => {
+  const fetchSpy = respond(200, {
+    question_request_id: "question-3",
+    continuation,
+  });
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-3",
+        questions: [
+          {
+            id: "channels",
+            header: "Channels",
+            question: "Where should the update go?",
+            options: [
+              { label: "Email", description: "" },
+              { label: "Slack", description: "" },
+              { label: "Wiki", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  expect(screen.getByText("Choose all that apply.")).toBeInTheDocument();
+  expect(screen.queryByRole("radio")).toBeNull();
+  const wiki = screen.getByRole("checkbox", { name: "Wiki" });
+  const slack = screen.getByRole("checkbox", { name: "Slack" });
+  const email = screen.getByRole("checkbox", { name: "Email" });
+  await user.click(wiki);
+  await user.click(slack);
+  await user.click(email);
+  // A second click clears an option; the note keeps the others.
+  await user.click(slack);
+  await user.type(
+    screen.getByRole("textbox", { name: "Other answer to Channels" }),
+    "Teams too"
+  );
+  expect(
+    [email, slack, wiki].map((option) => option.getAttribute("aria-checked"))
+  ).toEqual(["true", "false", "true"]);
+  await user.click(screen.getByRole("button", { name: "Submit" }));
+
+  await waitFor(() => expect(followChatStream).toHaveBeenCalled());
+  const [, init] = fetchSpy.mock.calls[0]!;
+  // The chosen options keep the question's order.
+  expect(JSON.parse(String(init?.body))).toEqual({
+    answers: [
+      {
+        question_id: "channels",
+        option_labels: ["Email", "Wiki"],
+        user_note: "Teams too",
+      },
+    ],
+  });
+  await user.click(
+    screen.getByRole("button", { name: "Expand Answered 1 question" })
+  );
+  expect(screen.getByText("Email and Wiki (Teams too)")).toBeVisible();
+});
+
+test("each option of a multi-select question shows whether it is chosen with a mark", async () => {
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-5",
+        questions: [
+          {
+            id: "channels",
+            header: "Channels",
+            question: "Where should the update go?",
+            options: [
+              { label: "Email", description: "" },
+              { label: "Wiki", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  const email = screen.getByRole("checkbox", { name: "Email" });
+  const mark = () => email.querySelector("svg")?.innerHTML;
+  const unchecked = mark();
+  expect(unchecked).toBeDefined();
+  await user.click(email);
+  // Not color alone: the mark changes when the option is chosen.
+  expect(mark()).toBeDefined();
+  expect(mark()).not.toEqual(unchecked);
+});
+
+test("a saved question that repeats a label sends that label once", async () => {
+  const consoleError = jest.spyOn(console, "error");
+  const fetchSpy = respond(200, {
+    question_request_id: "question-4",
+    continuation,
+  });
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-4",
+        questions: [
+          {
+            id: "cadence",
+            header: "Cadence",
+            question: "How often?",
+            options: [
+              { label: "Weekly", description: "" },
+              { label: "Weekly", description: "" },
+              { label: "Daily", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  await user.click(screen.getAllByRole("checkbox", { name: "Weekly" })[0]!);
+  await user.click(screen.getByRole("button", { name: "Submit" }));
+
+  await waitFor(() => expect(followChatStream).toHaveBeenCalled());
+  const [, init] = fetchSpy.mock.calls[0]!;
+  expect(JSON.parse(String(init?.body))).toEqual({
+    answers: [
+      { question_id: "cadence", option_labels: ["Weekly"], user_note: null },
+    ],
+  });
+  // Each option row has its own React key.
+  expect(consoleError.mock.calls.flat().join("\n")).not.toMatch(/same key/);
+});
+
+test("each checkbox of a multi-select question is a tab stop that Space or Enter toggles", async () => {
+  const user = setupUser();
+  render(
+    <Harness
+      questions={{
+        ...request,
+        question_request_id: "question-4",
+        questions: [
+          {
+            id: "channels",
+            header: "Channels",
+            question: "Where should the update go?",
+            options: [
+              { label: "Email", description: "" },
+              { label: "Slack", description: "" },
+            ],
+            multi_select: true,
+          },
+        ],
+      }}
+    />
+  );
+
+  expect(
+    screen.getByRole("group", { name: "Where should the update go?" })
+  ).toHaveAccessibleDescription("Choose all that apply.");
+  const email = screen.getByRole("checkbox", { name: "Email" });
+  const slack = screen.getByRole("checkbox", { name: "Slack" });
+  email.focus();
+  await user.keyboard(" ");
+  await user.tab();
+  expect(slack).toHaveFocus();
+  await user.keyboard("{Enter}");
+  expect(
+    [email, slack].map((option) => option.getAttribute("aria-checked"))
+  ).toEqual(["true", "true"]);
+  // Arrow keys move no choice in a group of checkboxes.
+  await user.keyboard("{ArrowUp}");
+  expect(slack).toHaveFocus();
+  await user.keyboard(" ");
+  expect(slack).toHaveAttribute("aria-checked", "false");
+  expect(email).toHaveAttribute("aria-checked", "true");
+  // A held key toggles once: its repeats change nothing.
+  for (const key of ["Enter", " "]) {
+    fireEvent.keyDown(slack, { key, repeat: true });
+    expect(slack).toHaveAttribute("aria-checked", "false");
+  }
+});
+
+test("a question that no longer waits shows so and reads the chat status", async () => {
+  respond(409, { detail: "This question was already answered" });
+  jest.mocked(readChatSessionStatus).mockResolvedValue({
+    is_processing: true,
+    current_stream: continuation,
+    has_active_subagents: false,
+    has_startable_input: false,
+    latest_response_id: 82,
+    approvals_version: "2",
+  });
+  const user = setupUser();
+  render(<Harness />);
+
+  await user.type(
+    screen.getByRole("textbox", { name: "Other answer to Scope" }),
+    "Only tests"
+  );
+  await user.click(screen.getByRole("button", { name: "Submit" }));
+
+  await waitFor(() =>
+    expect(screen.getByRole("status")).toHaveTextContent("No longer waiting")
+  );
+  expect(followChatStream).toHaveBeenCalledWith(
+    "session",
+    continuation,
+    expect.any(String)
+  );
+});
+
+test("the options are one tab stop that arrow keys and Space choose from", async () => {
+  const user = setupUser();
+  render(<Harness />);
+  const [first, second] = screen.getAllByRole("radio");
+
+  // Without a choice, the first option is the group's one tab stop.
+  expect(first).toHaveAttribute("tabindex", "0");
+  expect(second).toHaveAttribute("tabindex", "-1");
+  await user.tab();
+  expect(first).toHaveFocus();
+  await user.keyboard(" ");
+  expect(first).toHaveAttribute("aria-checked", "true");
+
+  await user.keyboard("{ArrowDown}");
+  expect(second).toHaveFocus();
+  expect(second).toHaveAttribute("aria-checked", "true");
+  expect(second).toHaveAttribute("tabindex", "0");
+  expect(first).toHaveAttribute("tabindex", "-1");
+
+  await user.keyboard("{ArrowDown}");
+  expect(first).toHaveFocus();
+  expect(first).toHaveAttribute("aria-checked", "true");
+
+  await user.keyboard("{End}");
+  expect(second).toHaveAttribute("aria-checked", "true");
+  await user.keyboard("{Home}");
+  await user.keyboard("{Enter}");
+  expect(first).toHaveAttribute("aria-checked", "true");
+  expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+
+  // Tab leaves the group for Other and then for Submit; only typing in
+  // Other clears the option.
+  await user.tab();
+  expect(
+    screen.getByRole("textbox", { name: "Other answer to Scope" })
+  ).toHaveFocus();
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Submit" })).toHaveFocus();
+  expect(first).toHaveAttribute("aria-checked", "true");
+  expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+});
+
+test("each question has its own page, and the choices stay across pages", async () => {
+  const fetchSpy = respond(200, {
+    question_request_id: "question-2",
+    continuation,
+  });
+  const user = setupUser();
+  render(<Harness questions={threeQuestions} />);
+  const back = screen.getByRole("button", { name: "Back" });
+
+  expect(screen.getByText("Question 1 of 3")).toBeInTheDocument();
+  expect(screen.getByText("Which files should I change?")).toBeInTheDocument();
+  expect(screen.queryByText("How should the notes look?")).toBeNull();
+  expect(back).toBeDisabled();
+  await user.click(screen.getByRole("radio", { name: /^Docs/ }));
+
+  // Next moves on without an answer; it does not submit.
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByText("Question 2 of 3")).toBeInTheDocument();
+  expect(screen.getByText("How should the notes look?")).toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "Format" })).toHaveFocus();
+  expect(screen.queryByText("Which files should I change?")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Next" }));
+
+  // The last page submits, but only once every question has an answer.
+  expect(screen.getByText("Question 3 of 3")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
+  expect(
+    screen.getByText("Answer questions 2 and 3 to submit.")
+  ).toBeInTheDocument();
+  // Each page change gives the focus to the new page.
+  expect(screen.getByRole("group", { name: "Tone" })).toHaveFocus();
+  expect(
+    screen.getByRole("button", { name: "Submit" })
+  ).toHaveAccessibleDescription("Answer questions 2 and 3 to submit.");
+  await user.click(screen.getByRole("radio", { name: "Formal" }));
+  expect(screen.getByText("Answer question 2 to submit.")).toBeInTheDocument();
+
+  await user.click(back);
+  await user.type(
+    screen.getByRole("textbox", { name: "Other answer to Format" }),
+    "A table"
+  );
+  await user.click(back);
+  expect(back).toBeDisabled();
+  expect(screen.getByRole("group", { name: "Scope" })).toHaveFocus();
+  expect(screen.getByRole("radio", { name: /^Docs/ })).toHaveAttribute(
+    "aria-checked",
+    "true"
+  );
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  expect(
+    screen.getByRole("textbox", { name: "Other answer to Format" })
+  ).toHaveValue("A table");
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByRole("radio", { name: "Formal" })).toHaveAttribute(
+    "aria-checked",
+    "true"
+  );
+  expect(screen.queryByText(/Answer question/)).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Submit" }));
+
+  await waitFor(() => expect(followChatStream).toHaveBeenCalled());
+  const [, init] = fetchSpy.mock.calls[0]!;
+  expect(JSON.parse(String(init?.body))).toEqual({
+    answers: [
+      { question_id: "scope", option_labels: ["Docs"], user_note: null },
+      { question_id: "format", option_labels: [], user_note: "A table" },
+      { question_id: "tone", option_labels: ["Formal"], user_note: null },
+    ],
+  });
+  // The record's title counts the answers; its body pairs each with its question.
+  await user.click(
+    screen.getByRole("button", { name: "Expand Answered 3 questions" })
+  );
+  expect(screen.getByText("How should the notes look?")).toBeVisible();
+  expect(screen.getByText("A table")).toBeVisible();
+});
+
+describe("record", () => {
+  function renderRecord(status: ToolQuestionStatus) {
+    return render(
+      <ToolQuestionCard question={{ turnIndex: 1, request, status }} />
+    );
+  }
+
+  test("an answered question is a step titled with the answer count that opens onto the question and its answer", async () => {
+    const user = setupUser();
+    renderRecord({
+      kind: "answered",
+      answers: [
+        {
+          question_id: "scope",
+          option_labels: ["Docs"],
+          user_note: "and the README",
+        },
+      ],
+      message: null,
+    });
+
+    const title = "Answered 1 question";
+    expect(screen.getByRole("status")).toHaveTextContent(title);
+    const toggle = screen.getByRole("button", { name: `Expand ${title}` });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Which files should I change?")).toBeVisible();
+    expect(screen.getByText("Docs (and the README)")).toBeVisible();
+  });
+
+  test.each([
+    [
+      "answered in the chat",
+      { kind: "answered", answers: null, message: "Only the docs" },
+      "Answered in the chat",
+    ],
+    ["cancelled", { kind: "cancelled" }, "Not answered"],
+    ["closed", { kind: "closed" }, "No longer waiting"],
+  ] satisfies [string, ToolQuestionStatus, string][])(
+    "a question %s is a step titled with its outcome that opens onto the question",
+    async (_, status, outcome) => {
+      const user = setupUser();
+      renderRecord(status);
+
+      expect(screen.getByRole("status")).toHaveTextContent(outcome);
+      const toggle = screen.getByRole("button", { name: `Expand ${outcome}` });
+      await user.click(toggle);
+      expect(screen.getByText("Which files should I change?")).toBeVisible();
+    }
+  );
+});

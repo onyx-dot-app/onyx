@@ -4,6 +4,11 @@ import { Permission } from "@/lib/types";
 import { apiLogin, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
+import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
+import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
+import { AdminLanguageModelsPage } from "@tests/e2e/pages/AdminLanguageModelsPage";
+import { SettingsThirdPartyAccessPage } from "@tests/e2e/pages/SettingsThirdPartyAccessPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -15,7 +20,7 @@ async function cleanup(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-test.describe("Permission gating — ADD_AGENTS", () => {
+test.describe("Permission gating: ADD_AGENTS", () => {
   test("New Agent button is disabled without ADD_AGENTS and enabled after granting it", async ({
     page,
     adminClient,
@@ -86,7 +91,7 @@ test.describe("Permission gating — ADD_AGENTS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_AGENTS", () => {
+test.describe("Permission gating: MANAGE_AGENTS", () => {
   test("Admin panel and /admin/agents are gated behind MANAGE_AGENTS", async ({
     page,
     adminClient,
@@ -129,11 +134,12 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
       await expect(page.getByRole("link", { name: "New Agent" })).toBeVisible({
         timeout: 10000,
       });
+      const agentsPage = new AdminAgentsPage(page);
+      await agentsPage.search(agentName);
       await expect(page.getByText(agentName)).toBeVisible();
 
       // Row controls come from the server-stamped affordance map; a wrong projection
       // empties the overflow menu instead of erroring, so assert the items.
-      const agentsPage = new AdminAgentsPage(page);
       await expect(agentsPage.editButton(agentId)).toBeVisible({
         timeout: 10000,
       });
@@ -163,7 +169,7 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_LLMS", () => {
+test.describe("Permission gating: MANAGE_LLMS", () => {
   test("Admin panel and /admin/language-models are gated behind MANAGE_LLMS", async ({
     page,
     adminClient,
@@ -183,9 +189,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
     const providerId = await adminClient.createProvider(providerName);
     // The Cost Overrides panel sits on this page but reads its own endpoint, so
     // seed a row the holder must be able to see.
-    const overrideModel = await adminClient.upsertCostOverride(
-      `e2e-manage-llm-${Date.now()}`
-    );
+    const override = await adminClient.createCostOverride(providerId);
 
     try {
       // Phase 1: Without MANAGE_LLMS — the page should redirect to /app
@@ -213,16 +217,15 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
       ).toBeVisible({
         timeout: 10000,
       });
-      await expect(page.getByText(providerName)).toBeVisible();
+      const languageModelsPage = new AdminLanguageModelsPage(page);
+      await expect(languageModelsPage.providerCard(providerName)).toBeVisible();
 
       // Cost overrides are gated separately from the page, so reaching the page
       // is not evidence the panel loaded — assert the row, not just the heading.
-      await expect(page.getByText(overrideModel)).toBeVisible({
-        timeout: 10000,
-      });
       await expect(
-        page.getByText("Failed to load cost overrides.")
-      ).toBeHidden();
+        languageModelsPage.costOverrideCard(override.modelDisplayName)
+      ).toBeVisible({ timeout: 10000 });
+      await expect(languageModelsPage.costOverridesLoadError).toBeHidden();
 
       // Phase 3: Revoke MANAGE_LLMS — should redirect again
       await page.context().clearCookies();
@@ -240,13 +243,13 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
         await loginAs(page, "admin");
         const cleanupClient = new OnyxApiClient(page.request);
         await cleanupClient.deleteProvider(providerId);
-        await cleanupClient.deleteCostOverride(overrideModel);
+        await cleanupClient.deleteCostOverride(override.modelConfigurationId);
       });
     }
   });
 });
 
-test.describe("Permission gating — MANAGE_CONNECTORS", () => {
+test.describe("Permission gating: MANAGE_CONNECTORS", () => {
   test("Admin panel and /admin/indexing-status are gated behind MANAGE_CONNECTORS", async ({
     page,
     adminClient,
@@ -294,7 +297,11 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       await expect(
         page.getByLabel("admin-page-title").getByText("Indexing Status")
       ).toBeVisible({ timeout: 10000 });
-      await expect(page.getByRole("table")).toBeVisible();
+      const indexingStatusPage = new IndexingStatusPage(page);
+      await indexingStatusPage.search(connectorName);
+      await expect(
+        indexingStatusPage.connectorRow(connectorName)
+      ).toBeVisible();
 
       // Also verify /admin/connectors is accessible
       await page.goto(ADMIN_ROUTES.CONNECTORS.path);
@@ -307,25 +314,37 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       // Access type and groups live on the connector setup page, so reaching
       // /admin/connectors says nothing about them. `web` has no credential
       // template, so its page shows the configuration straight away.
+      const setupPage = new ConnectorSetupPage(page, "web");
       await page.goto("/admin/connectors/web");
       await page.waitForLoadState("networkidle");
-      await expect(page.getByText("Document Access")).toBeVisible({
-        timeout: 10000,
-      });
+      await expect(setupPage.accessTypeSelect).toBeVisible({ timeout: 10000 });
 
       // a global holder defaults to public, which has no groups to scope
       // must be the picker, not "assigned to group X" — the old code auto-assigned
-      await page.getByText("Public", { exact: true }).first().click();
-      await page.getByText("Private", { exact: true }).first().click();
-      await expect(
-        page.getByText("Assign group access for this Connector")
-      ).toBeVisible({ timeout: 10000 });
+      await expect(setupPage.accessTypeSelect).toHaveValue(
+        "Everyone in Your Organization"
+      );
+      await setupPage.pickAccessType("Specific Groups");
+      await expect(setupPage.groupAccessPrompt).toBeVisible({ timeout: 10000 });
 
       // Drive's credential form used to render an empty fragment for non-admins
       // — a blank modal, no error, no network call.
       await page.goto("/admin/connectors/google-drive");
       await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Create New" }).click();
+      // The new-account card starts open when there is no saved account, so
+      // it is clicked only while folded. The sign-in is on the OAuth tab.
+      const newAccountCard = page.getByRole("button", {
+        name: "New Google Drive Account",
+      });
+      await expect(async () => {
+        if ((await newAccountCard.getAttribute("aria-expanded")) !== "true") {
+          await newAccountCard.click();
+        }
+        await expect(newAccountCard).toHaveAttribute("aria-expanded", "true", {
+          timeout: 1_000,
+        });
+      }).toPass({ timeout: 10000 });
+      await page.getByRole("tab", { name: "OAuth", exact: true }).click();
       await expect(
         page.getByText("Authenticate with Google Drive")
       ).toBeVisible({ timeout: 10000 });
@@ -351,7 +370,7 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
+test.describe("Permission gating: MANAGE_DOCUMENT_SETS", () => {
   test("Admin panel and /admin/documents/sets are gated behind MANAGE_DOCUMENT_SETS, with implied READ_CONNECTORS", async ({
     page,
     adminClient,
@@ -461,7 +480,9 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
       const publicToggle = page.locator("#checkbox-is_public");
       await expect(publicToggle).toBeAttached({ timeout: 10000 });
       const publicToggleLabel = page
-        .getByText("Make this Document Set Public?", { exact: false })
+        .getByText("Make this document set available to your organization?", {
+          exact: false,
+        })
         .first();
       await expect(publicToggleLabel).toBeVisible({ timeout: 10000 });
 
@@ -502,8 +523,8 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_ACTIONS", () => {
-  test("Admin panel /admin/mcp-actions and /admin/openapi-actions are gated behind MANAGE_ACTIONS", async ({
+test.describe("Permission gating: MANAGE_ACTIONS", () => {
+  test("Admin panel /admin/integrations is gated behind MANAGE_ACTIONS", async ({
     page,
     adminClient,
     testUserContext,
@@ -522,21 +543,29 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
     const toolId = await adminClient.createCustomTool(toolName);
 
     const mcpName = `E2E Manage MCP ${Date.now()}`;
-    const mcpServerId = await adminClient.createMcpServer(mcpName);
+    const { id: mcpIntegrationId } = await adminClient.createIntegration({
+      for_organization: true,
+      name: mcpName,
+      description: "E2E test MCP server",
+      auth_mode: "individual",
+      auth_method: "api_key",
+      credential_fields: [{ key: "api_key", label: "API Key", secret: true }],
+      header_template: { Authorization: "Bearer {api_key}" },
+      oauth_client: null,
+      config: {
+        shape: "mcp_server",
+        server_url: "https://example.com/mcp",
+        transport: "STREAMABLE_HTTP",
+      },
+    });
 
     try {
-      // Phase 1: Without MANAGE_ACTIONS — both pages should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
+      await page.goto(ADMIN_ROUTES.INTEGRATIONS.path);
       await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain("/app");
+      await expect(page).toHaveURL(/\/app(?:\?.*)?$/);
 
-      await page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
-      await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain("/app");
-
-      // Phase 2: Grant MANAGE_ACTIONS — both pages should be accessible
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await adminClient.setUserGroupPermissions(groupId, [
@@ -546,79 +575,36 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
       await page.context().clearCookies();
       await apiLogin(page, email, password);
 
-      // Verify OpenAPI Actions page and created tool visibility
-      await page.goto(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
-      await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
-      await expect(
-        page.getByLabel("admin-page-title").getByText("OpenAPI Actions")
-      ).toBeVisible({ timeout: 10000 });
-      await expect(
-        page.getByLabel(`${toolName} OpenAPI action card`)
-      ).toBeVisible({ timeout: 10000 });
+      const integrations = new AdminIntegrationsPage(page);
+      await integrations.goto();
+      await integrations.expectIntegrationVisible(toolName);
+      await integrations.expectIntegrationVisible(mcpName);
+      await integrations.openAdd("MCP server");
+      await expect(integrations.serverUrlInput).toBeVisible();
+      await integrations.cancelAdd();
 
-      // Verify MCP Actions page and created server visibility
-      await page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
-      await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain(ADMIN_ROUTES.MCP_ACTIONS.path);
-      await expect(
-        page.getByLabel("admin-page-title").getByText("MCP Actions")
-      ).toBeVisible({ timeout: 10000 });
-      await expect(page.getByLabel(`${mcpName} MCP server card`)).toBeVisible({
-        timeout: 10000,
-      });
-
-      // The Add-MCP-Server modal hosts the shared group selector, the same
-      // component that hid its Public toggle from non-admins on other forms.
-      await page.getByRole("button", { name: "Add MCP Server" }).click();
-      await expect(page.getByText("MCP Server URL")).toBeVisible({
-        timeout: 10000,
-      });
-
-      // Rendered only for a holder of this permission.
-      const mcpPublicToggle = page.locator("#checkbox-is_public");
-      await expect(mcpPublicToggle).toBeAttached({ timeout: 10000 });
-      const mcpPublicToggleLabel = page
-        .getByText("Make this MCP Server Public?", { exact: false })
-        .first();
-      await expect(mcpPublicToggleLabel).toBeVisible({ timeout: 10000 });
-
-      // MCP servers default to public, so the picker is disabled until unticked.
-      await mcpPublicToggleLabel.click();
-      await expect(
-        page.getByText("Assign group access for this MCP server")
-      ).toBeVisible({ timeout: 10000 });
-      await expect(page.getByTestId("groups-search-input")).toBeVisible({
-        timeout: 10000,
-      });
-
-      // Phase 3: Revoke MANAGE_ACTIONS — should redirect again
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await adminClient.setUserGroupPermissions(groupId, []);
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
+      await page.goto(ADMIN_ROUTES.INTEGRATIONS.path);
       await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain("/app");
-
-      await page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
-      await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain("/app");
+      await expect(page).toHaveURL(/\/app(?:\?.*)?$/);
     } finally {
       await cleanup(async () => {
         await page.context().clearCookies();
         await loginAs(page, "admin");
         const cleanupClient = new OnyxApiClient(page.request);
         await cleanupClient.deleteCustomTool(toolId);
-        await cleanupClient.deleteMcpServer(mcpServerId);
+        await cleanupClient.deleteIntegration(mcpIntegrationId);
       });
     }
   });
 });
 
-test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
+test.describe("Permission gating: MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
   test("Admin panel /admin/service-accounts is gated behind MANAGE_SERVICE_ACCOUNT_API_KEYS, with implied READ_USER_GROUPS", async ({
     page,
     adminClient,
@@ -719,7 +705,7 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_BOTS", () => {
+test.describe("Permission gating: MANAGE_BOTS", () => {
   test("Admin panel /admin/bots and /admin/discord-bot are gated behind MANAGE_BOTS", async ({
     page,
     adminClient,
@@ -760,24 +746,24 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
       await page.context().clearCookies();
       await apiLogin(page, email, password);
 
-      // Verify Slack Integration page
+      // Verify Slack Bot page
       await page.goto(ADMIN_ROUTES.SLACK_BOTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain(ADMIN_ROUTES.SLACK_BOTS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Slack Integration")
+        page.getByLabel("admin-page-title").getByText("Slack Bot")
       ).toBeVisible({ timeout: 10000 });
       // href Buttons render as links, not buttons
       await expect(
         page.getByRole("link", { name: "New Slack Bot" })
       ).toBeVisible();
 
-      // Verify Discord Integration page
+      // Verify Discord Bot page
       await page.goto(ADMIN_ROUTES.DISCORD_BOTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain(ADMIN_ROUTES.DISCORD_BOTS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Discord Integration")
+        page.getByLabel("admin-page-title").getByText("Discord Bot")
       ).toBeVisible({ timeout: 10000 });
       await expect(page.getByText("Add Server")).toBeVisible();
 
@@ -806,7 +792,7 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
   });
 });
 
-test.describe("Permission gating — READ_QUERY_HISTORY", () => {
+test.describe("Permission gating: READ_QUERY_HISTORY", () => {
   test("Admin panel /admin/performance/query-history is gated behind READ_QUERY_HISTORY", async ({
     page,
     adminClient,
@@ -876,9 +862,10 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
   });
 });
 
-test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
-  test("Access Tokens section and New Access Token button are gated behind CREATE_USER_API_KEYS", async ({
+test.describe("Permission gating: CREATE_USER_API_KEYS", () => {
+  test("The Basic group grants Access Tokens by default and an admin can switch it off", async ({
     page,
+    browser,
     adminClient,
     testUserContext,
   }) => {
@@ -890,46 +877,26 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       "Permission registry unavailable (CE environment)"
     );
 
-    const { groupId, email, password } = testUserContext;
+    const { email, password } = testUserContext;
+    const basicGroup = (await adminClient.getUserGroups()).find(
+      (g) => g.is_default && g.name === "Basic"
+    );
+    expect(basicGroup).toBeDefined();
+    const basicGroupId = basicGroup!.id;
     let createdPatId: number | undefined;
 
     try {
-      // Phase 1: Without permission and no tokens — section should be hidden entirely
+      // Phase 1: Basic grants it by default, so the section shows and the button is enabled
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
-
-      await expect(
-        page.getByText("Access Tokens", { exact: true })
-      ).not.toBeVisible();
-      await expect(
-        page.getByRole("button", { name: "New Access Token" })
-      ).not.toBeVisible();
-
-      // Phase 2: Grant CREATE_USER_API_KEYS — section visible, button enabled
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      await adminClient.setUserGroupPermissions(groupId, [
-        Permission.CREATE_USER_API_KEYS,
-      ]);
-
-      await page.context().clearCookies();
-      await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
-
-      await expect(
-        page.getByText("Access Tokens", { exact: true })
-      ).toBeVisible({ timeout: 10000 });
-
-      const newTokenButton = page.getByRole("button", {
-        name: "New Access Token",
+      const thirdPartyAccessPage = new SettingsThirdPartyAccessPage(page);
+      await thirdPartyAccessPage.load();
+      await expect(thirdPartyAccessPage.newTokenButton).toBeVisible({
+        timeout: 10000,
       });
-      await expect(newTokenButton).toBeVisible({ timeout: 10000 });
-      await expect(newTokenButton).toBeEnabled();
+      await expect(thirdPartyAccessPage.newTokenButton).toBeEnabled();
 
-      // Create a PAT via API so Phase 3 can test "token exists but no permission"
+      // Create a PAT via API so Phase 2 can test "token exists but no permission"
       const createResponse = await page.request.post("/api/user/pats", {
         data: {
           name: `E2E PAT ${Date.now()}`,
@@ -940,25 +907,51 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       const patData = await createResponse.json();
       createdPatId = patData.id;
 
-      // Phase 3: Revoke permission — section stays (token exists) but button disabled
+      // Phase 2: Switch it off on Basic. The section stays (a token exists) but the button is disabled
       await page.context().clearCookies();
       await loginAs(page, "admin");
-      await adminClient.setUserGroupPermissions(groupId, []);
+      await adminClient.setUserGroupPermissions(basicGroupId, []);
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
+      await thirdPartyAccessPage.load();
+      await expect(thirdPartyAccessPage.newTokenButton).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(thirdPartyAccessPage.newTokenButton).toBeDisabled();
 
-      await expect(
-        page.getByText("Access Tokens", { exact: true })
-      ).toBeVisible({ timeout: 10000 });
+      // Phase 3: Switch it back on and the button is enabled again
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(basicGroupId, [
+        Permission.CREATE_USER_API_KEYS,
+      ]);
 
-      await expect(newTokenButton).toBeVisible({ timeout: 10000 });
-      await expect(newTokenButton).toBeDisabled();
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await thirdPartyAccessPage.load();
+      await expect(thirdPartyAccessPage.newTokenButton).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(thirdPartyAccessPage.newTokenButton).toBeEnabled();
     } finally {
+      // Basic is shared with every other spec, so restore it from a context
+      // that outlives this test's page if the test timed out.
       await cleanup(async () => {
-        // Delete the PAT (only requires BASIC_ACCESS)
+        const restoreContext = await browser.newContext({
+          storageState: "admin_auth.json",
+        });
+        try {
+          await new OnyxApiClient(
+            restoreContext.request
+          ).setUserGroupPermissions(basicGroupId, [
+            Permission.CREATE_USER_API_KEYS,
+          ]);
+        } finally {
+          await restoreContext.close();
+        }
+      });
+      await cleanup(async () => {
         if (createdPatId !== undefined) {
           await page.context().clearCookies();
           await apiLogin(page, email, password);
@@ -971,7 +964,7 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
+test.describe("Permission gating: MANAGE_USER_GROUPS", () => {
   test("Admin panel /admin/groups and /admin/groups/create are gated behind MANAGE_USER_GROUPS, with implied READ_CONNECTORS, READ_DOCUMENT_SETS, and READ_AGENTS", async ({
     page,
     adminClient,

@@ -1,0 +1,1927 @@
+"""Live response ownership and explicit, safe checkpoint transfer across API pods."""
+
+import json
+import threading
+import time
+from collections.abc import Callable, Collection, Iterator, Sequence
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
+
+# no-direct-redis: allow names the Redis error in the retry tuple
+from redis.exceptions import RedisError
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as DatabaseTimeoutError
+from sqlalchemy.orm import Session
+
+from onyx.agents.agent_coordination import (
+    AgentCoordinator,
+    AgentDirectory,
+    RunOwnership,
+    RunStore,
+    ToolApprovals,
+)
+from onyx.agents.concurrency import OPERATION_TIMEOUT_SECONDS, EventDispatcher
+from onyx.agents.events import AgentEvent
+from onyx.agents.models import (
+    AgentCompletion,
+    AgentInfo,
+    AgentMessageReceipt,
+    AgentMessageRequest,
+    AgentState,
+    ExecutionCheckpoint,
+    InputMessageMetadata,
+    InputSource,
+    RunFailure,
+    RunFailureKind,
+    RunState,
+    RunStatus,
+    StepRecord,
+    cancellation_failure,
+)
+from onyx.agents.runtime import (
+    Agent,
+    AgentBusy,
+    InputNotWaiting,
+    Run,
+    RunNotTransferable,
+    RunReleased,
+)
+from onyx.agents.tools import HumanToolAnswer, InputMode, PendingToolInput
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
+from onyx.chat.agent_stream import BackgroundRunStream, is_background_run
+from onyx.chat.checkpoint import (
+    CheckpointVersionError,
+    deserialize_checkpoint,
+    serialize_checkpoint,
+)
+from onyx.chat.mention_models import AcceptedPicks, PickedMentions
+from onyx.chat.models import (
+    ChatBranch,
+    ChatInbox,
+    CheckpointBinding,
+    ResponseOwner,
+    ResponseRecord,
+    ResponseStatus,
+    SavedAgentContext,
+    SavedResponse,
+    SavedToolApproval,
+    SavedToolQuestion,
+    accepted_input_messages,
+)
+from onyx.chat.presentation import project_response
+from onyx.chat.response import (
+    response_record,
+    response_snapshot,
+    tool_arguments_for_display,
+)
+from onyx.chat.restoration import persist_checkpoint_files
+from onyx.chat.tool_approvals import (
+    open_tool_approval,
+    tool_answer,
+)
+from onyx.chat.tool_questions import question_answer
+from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
+from onyx.configs.constants import MessageType
+from onyx.db.approval_request import (
+    close_pending_approval_requests__no_commit,
+    get_approval_requests,
+)
+from onyx.db.chat import (
+    agent_path_from_ancestors,
+    get_selected_branch,
+    session_ancestors,
+)
+from onyx.db.chat_checkpoint import (
+    check_checkpoint_owner__no_commit,
+    claim_checkpoint__no_commit,
+    interrupt_response__no_commit,
+    parked_tree_approval_ids,
+    publish_checkpoint__no_commit,
+    release_checkpoint_claim__no_commit,
+)
+from onyx.db.chat_inputs import (
+    active_agent_response_ids,
+    agent_result_states,
+    consume_inputs__no_commit,
+    enqueue_message,
+    fail_inbox_start__no_commit,
+    fail_response_start__no_commit,
+    lock_agent,
+    read_chat_inbox,
+    read_run_inputs,
+    reserve_inbox_run__no_commit,
+    withdraw_agent_result__no_commit,
+)
+from onyx.db.chat_response import (
+    CHECKPOINT_DUMP_CLEANUP,
+    abort_response_start__no_commit,
+    find_response__no_commit,
+    finish_checkpoint__no_commit,
+    read_response__no_commit,
+    read_response_status__no_commit,
+    reserve_child_response__no_commit,
+    save_chat_turn,
+    save_response_record__no_commit,
+)
+from onyx.db.chat_subagents import (
+    load_agent_history,
+    load_session_agent_metadata,
+    lookup_session_agent,
+    read_agent_completions,
+)
+from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, QuestionOutcome
+from onyx.db.models import User
+from onyx.db.question_request import (
+    get_question_requests,
+    resolve_question_requests__no_commit,
+)
+from onyx.db.skill import list_chat_skills
+from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import delete_files_best_effort
+from onyx.llm.cancellation import CancelReason
+from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.skills.chat import accept_picked_skills
+from onyx.tools.interface import Tool
+from onyx.tools.models import ToolApprovalScope, ToolOptions
+from onyx.tools.tool_implementations.question.shapes import QUESTION_TOOL_NAMES
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
+from onyx.tools.tool_implementations.subagents.shapes import (
+    SPAWN_TOOL_NAMES,
+)
+from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+logger = setup_logger()
+LEASE_CACHE_TIMEOUT_S = 1.0
+OWNER_TTL_SECONDS = 60
+OWNER_REFRESH_SECONDS = 10
+OWNER_RETRY_SECONDS = 1.0
+OWNER_EXPIRY_MARGIN_SECONDS = 5.0
+OWNER_LOCK_SECONDS = 30
+OWNER_LOCK_WAIT_SECONDS = 10
+STOP_TTL_SECONDS = 600
+RESUME_FAILED_MESSAGE = (
+    "This response could not continue after your answer. Send the message again."
+)
+RESUME_UPDATED_MESSAGE = (
+    "This response could not continue because Onyx was updated while it "
+    "waited. Send the message again."
+)
+INPUT_POLL_SECONDS = 1.0
+MAX_RUNNING_AGENTS = 10
+# A step reads at most this many finished results; a run reads the rest in its
+# next steps before it answers.
+MAX_AGENT_COMPLETIONS_PER_STEP = 8
+RESPONSE_OWNER_KEY_PREFIX = "chat_response_owner:"
+# Start failures that a later poll retries; other failures end the inbox work.
+RETRYABLE_START_ERRORS = (
+    OperationalError,
+    DatabaseTimeoutError,
+    RedisError,
+    TimeoutError,
+    AgentBusy,
+)
+# A park that fails with these keeps the run resident, and a later control
+# poll tries again: the run changed, or storage failed for a moment.
+_RETRYABLE_PARK_ERRORS = (RunNotTransferable, *RETRYABLE_START_ERRORS)
+
+
+def _owner_key(response_id: int) -> str:
+    return f"{RESPONSE_OWNER_KEY_PREFIX}{response_id}"
+
+
+@contextmanager
+def _ownership_lock(cache: CacheBackend, response_id: int) -> Iterator[None]:
+    lock = cache.lock(f"chat_response_lock:{response_id}", timeout=OWNER_LOCK_SECONDS)
+    if not lock.acquire(blocking_timeout=OWNER_LOCK_WAIT_SECONDS):
+        raise TimeoutError("Response ownership is busy")
+    try:
+        yield
+    finally:
+        lock.release()
+
+
+def ownerless_response_ids(
+    cache: CacheBackend, response_ids: Collection[int]
+) -> set[int]:
+    """The running responses whose execution lease is gone."""
+    keys = {_owner_key(response_id): response_id for response_id in response_ids}
+    return set(response_ids) - (
+        {keys[key] for key in cache.exists_many(keys)} if keys else set()
+    )
+
+
+def _end_ownerless_response(
+    cache: CacheBackend,
+    tenant_id: str,
+    response_id: int,
+    *,
+    cancelled: bool = False,
+    failure: RunFailure | None = None,
+    keep_parked: bool = False,
+) -> bool:
+    """End a response that no owner runs, as `interrupt_response__no_commit`
+    does, then delete the dumps that its checkpoint owned. Returns whether it
+    ended here."""
+    with _ownership_lock(cache, response_id):
+        if cache.exists(_owner_key(response_id)):
+            return False
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            dumps = interrupt_response__no_commit(
+                session,
+                response_id,
+                cancelled=cancelled,
+                failure=failure,
+                keep_parked=keep_parked,
+            )
+            session.commit()
+    if dumps is None:
+        return False
+    delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
+    return True
+
+
+def interrupt_ownerless_responses(
+    cache: CacheBackend, tenant_id: str, response_ids: Collection[int]
+) -> set[int]:
+    """Save running responses whose owner is gone as interrupted; return their IDs.
+
+    A crashed owner's lease expires without a terminal status. A parked
+    response has no owner by design and stays parked.
+    """
+    return {
+        response_id
+        for response_id in ownerless_response_ids(cache, response_ids)
+        if _end_ownerless_response(cache, tenant_id, response_id, keep_parked=True)
+    }
+
+
+def resume_failure(error: BaseException) -> RunFailure:
+    """The failure of a suspended response that `error` stops from
+    continuing. Saved data that the running code cannot read gets the
+    message that Onyx was updated."""
+    return RunFailure(
+        kind=RunFailureKind.EXECUTION,
+        message=RESUME_UPDATED_MESSAGE
+        if isinstance(error, CheckpointVersionError)
+        else RESUME_FAILED_MESSAGE,
+    )
+
+
+def fail_suspended_response(
+    cache: CacheBackend, tenant_id: str, response_id: int, failure: RunFailure
+) -> None:
+    """End a suspended response that cannot continue after its approvals, for
+    example because its model or saved state is gone: save it as failed with
+    `failure` (`resume_failure`), end its requests, and delete its checkpoint
+    and its parked programs' dumps."""
+    _end_ownerless_response(cache, tenant_id, response_id, failure=failure)
+
+
+def _stop_key(response_id: int) -> str:
+    return f"chat_response_stop:{response_id}"
+
+
+def request_response_stop(
+    cache: CacheBackend, response_id: int, reason: CancelReason = "requested"
+) -> None:
+    """Ask the run's owner to cancel it; the reason travels with the request."""
+    cache.set(_stop_key(response_id), reason, ex=STOP_TTL_SECONDS)
+
+
+def cancel_parked_response(
+    cache: CacheBackend,
+    tenant_id: str,
+    response_id: int,
+    failure: RunFailure | None = None,
+) -> bool:
+    """Cancel a response that still waits for approval. A response that an
+    approval resumed, or that ended, stays as it is: unlike Stop, this sends
+    no stop request that a resumed owner would obey. `failure` is the reason
+    the response keeps. Returns whether it ended here."""
+    with _ownership_lock(cache, response_id):
+        if cache.exists(_owner_key(response_id)):
+            return False
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            dumps = interrupt_response__no_commit(
+                session,
+                response_id,
+                cancelled=True,
+                failure=failure,
+                only_parked=True,
+            )
+            session.commit()
+    if dumps is None:
+        return False
+    delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
+    return True
+
+
+def stop_response(
+    cache: CacheBackend,
+    tenant_id: str,
+    response_id: int,
+    reason: CancelReason = "requested",
+) -> None:
+    """Request Stop of a run; save it as cancelled when no owner remains, as
+    for a parked run, whose checkpoint and program dumps go."""
+    request_response_stop(cache, response_id, reason)
+    _end_ownerless_response(
+        cache,
+        tenant_id,
+        response_id,
+        cancelled=True,
+        failure=cancellation_failure(reason),
+    )
+
+
+def agent_result_message(
+    completion: AgentCompletion, still_running: Sequence[str]
+) -> UserMessage:
+    """Present a finished child's output to the agent that started it, as an
+    agent notification that also lists the agents that it started and that
+    still run."""
+    output = completion.output
+    result: dict[str, str | list[str]] = {
+        "agent": completion.agent_path,
+        "status": completion.status.value,
+        "answer": output.text if output is not None else "",
+    }
+    if completion.failure is not None:
+        result["error"] = completion.failure.message
+    result["still_running"] = list(still_running)
+    return UserMessage(
+        id=completion.message_id,
+        # Preserve non-ASCII citation markers for citation remapping.
+        content="<agent_notification>\n"
+        "This is an automatic update about an agent you started, not a message "
+        "from the user.\n"
+        f"{json.dumps(result, ensure_ascii=False)}\n"
+        "</agent_notification>",
+        metadata=InputMessageMetadata(
+            source=InputSource.AGENT_RESULT,
+            source_run_id=completion.run_id,
+            content_metadata=output.metadata if output is not None else None,
+        ),
+    )
+
+
+def _is_question(request: PendingToolInput) -> bool:
+    """Only the question tool requests a result in chat; the run's
+    ToolApprovals opens every request that gates execution."""
+    return request.mode == InputMode.RESULT and not request.approval
+
+
+def _waits_on_user(request: PendingToolInput) -> bool:
+    return request.approval or _is_question(request)
+
+
+def _saved_answers(
+    session: Session, requests: Sequence[PendingToolInput], *, deleted: bool = True
+) -> dict[str, HumanToolAnswer]:
+    """The answers that the saved rows give `requests`, by request ID: each
+    approval request's decision and each question's answer. A deleted row
+    gives its call no tool, or with `deleted` False no answer; a row that
+    still waits gives no answer."""
+    approval_ids = [
+        UUID(request.request_id) for request in requests if request.approval
+    ]
+    question_ids = [
+        UUID(request.request_id) for request in requests if _is_question(request)
+    ]
+    approvals = get_approval_requests(session, approval_ids)
+    questions = get_question_requests(session, question_ids)
+    answers: dict[str, HumanToolAnswer] = {}
+    for approval_id in approval_ids:
+        approval = approvals.get(approval_id)
+        if (approval is None and deleted) or (
+            approval is not None and approval.decision is not None
+        ):
+            answers[str(approval_id)] = tool_answer(
+                approval_id,
+                SavedToolApproval.model_validate(approval) if approval else None,
+            )
+    for question_id in question_ids:
+        question = questions.get(question_id)
+        if (question is None and deleted) or (
+            question is not None and question.outcome is not None
+        ):
+            answers[str(question_id)] = question_answer(
+                question_id,
+                SavedToolQuestion.model_validate(question) if question else None,
+            )
+    return answers
+
+
+class _OwnershipLost(RuntimeError):
+    pass
+
+
+class _MessageChanged(ValueError):
+    """Another owner removed the message or advanced its recipient before reservation."""
+
+
+class _OwnerLease:
+    def __init__(
+        self, owner: ResponseOwner, *, record_start_failure: bool = False
+    ) -> None:
+        self.owner = owner
+        # Queued work was consumed at reservation, so a failed start is recorded.
+        self.record_start_failure = record_start_failure
+        self.lock = threading.Lock()
+        self.released = False
+        self.refreshed = time.monotonic()
+        self.retry_at = self.refreshed
+        self.error: Exception | None = None
+
+    def expire_if_due(self) -> None:
+        if self.error is None and (
+            time.monotonic()
+            >= self.refreshed + OWNER_TTL_SECONDS - OWNER_EXPIRY_MARGIN_SECONDS
+        ):
+            self.error = TimeoutError("Response ownership renewal deadline expired")
+
+
+class _OwnedRun:
+    def __init__(self, run: Run, lease: _OwnerLease) -> None:
+        self.run = run
+        self.lease = lease
+        self.owner = lease.owner
+        # A background run's live output (`agent_stream.py`)
+        self.stream: BackgroundRunStream | None = None
+
+
+class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
+    """Persist and authorize runs on one chat branch. The application polls control while ownership remains."""
+
+    def __init__(
+        self,
+        *,
+        tenant_id: str,
+        chat_session_id: UUID,
+        response_id: int,
+        visible_response_ids: list[int],
+        cache: CacheBackend,
+        follow_up_steps: int,
+        user: User,
+        restore_subagent: Callable[[SavedAgentContext, int], Agent] | None = None,
+        root_response: RunStore | None = None,
+        control_cache: CacheBackend | None = None,
+        on_child_released: Callable[[], None] | None = None,
+        tools: Sequence[Tool] = (),
+        answers_agent_results: bool = False,
+        on_root_parked: Callable[[Run], None] | None = None,
+        model_configuration_id: int | None = None,
+        temperature: float | None = None,
+        tool_options: ToolOptions | None = None,
+    ) -> None:
+        self.tenant_id = tenant_id
+        # The model, temperature, tools and search filters of the branch's
+        # runs, which parked runs continue with.
+        self._model_configuration_id = model_configuration_id
+        self._temperature = temperature
+        self._tool_options = tool_options
+        # The root response answers unread agent results under a hidden
+        # AGENT_RESULTS question, as a released wait's follow-up does.
+        self._answers_agent_results = answers_agent_results
+        # Runs whose last read left results for a later step.
+        self._capped_runs: set[str] = set()
+        # Saved child tool calls link to these tool rows by name.
+        self._tool_ids = {tool.name: tool.id for tool in tools}
+        self._sandbox_tools = any(isinstance(tool, SandboxTool) for tool in tools)
+        self.chat_session_id = chat_session_id
+        self.response_id = response_id
+        # Branch IDs stay newest first, as the branch queries order them.
+        self._input_branch = ChatBranch(
+            chat_session_id=chat_session_id,
+            message_ids=list(dict.fromkeys([response_id, *visible_response_ids])),
+        )
+        self.visible_response_ids = set(self._input_branch.message_ids)
+        self.cache = cache
+        self.control_cache = control_cache or get_cache_backend(
+            tenant_id=tenant_id, operation_timeout_s=LEASE_CACHE_TIMEOUT_S
+        )
+        self._root_response = root_response
+        self._restore_subagent = restore_subagent
+        self._on_child_released = on_child_released
+        # Reports that the root run parked, so its turn ends.
+        self._on_root_parked = on_root_parked
+        self._lock = threading.Lock()
+        self._owned: dict[int, _OwnedRun] = {}
+        self._leases: dict[int, _OwnerLease] = {}
+        self._coordinator: AgentCoordinator | None = None
+        self._build_agent: Callable[[ExecutionCheckpoint, int], Agent] | None = None
+        self._pending_dispatch = False
+        # Runs that wait on other runs park after a storage read, so the
+        # control poll checks them at the inbox poll interval.
+        self._next_park_poll = 0.0
+        # Children still running on the branch can finish in another store. The
+        # first poll scans, which also finds inbox work left by earlier turns.
+        self._has_running_children = True
+        self._next_input_poll = 0.0
+        # The tools whose calls can wait for approval, with their gated actions.
+        self._gated_tools: dict[str, tuple[Tool, ToolApprovalScope]] = {
+            tool.name: (tool, scope)
+            for tool in tools
+            if (scope := tool.approval) is not None
+        }
+        # Whether a run of this store can have open approval requests: one
+        # opened here, or a resumed run's from an earlier process. Without
+        # one, releasing a run closes none.
+        self._approval_opened = False
+        # Result follow-ups use the step limit of this store's chat agent.
+        self._follow_up_steps = follow_up_steps
+        # Every run counts against the chat owner's token rate limits.
+        self._user = user
+
+    def _follow_selected_branch(self, selected: ChatBranch) -> bool:
+        """Follow the selected branch while it continues this store's response.
+
+        Inbox work continues an agent's newest history, which a later turn can
+        extend. Returns whether this store's response is on the selected branch.
+        """
+        if self.response_id not in selected.message_ids:
+            return False
+        with self._lock:
+            self._input_branch = selected
+            self.visible_response_ids = set(selected.message_ids)
+        return True
+
+    def _with_tenant[T](self, operation: Callable[[], T]) -> T:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
+        try:
+            return operation()
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    def _owner(self, response_id: int) -> ResponseOwner | None:
+        value = self.cache.get(_owner_key(response_id))
+        return ResponseOwner.model_validate_json(value) if value is not None else None
+
+    def _require_owner(self, owned: _OwnedRun) -> None:
+        if self._owner(int(owned.run.id)) != owned.owner:
+            raise RuntimeError("Response ownership was lost")
+
+    def _binding(self, response_id: int) -> CheckpointBinding:
+        return CheckpointBinding(
+            tenant_id=self.tenant_id,
+            response_id=str(response_id),
+        )
+
+    def bind(
+        self,
+        coordinator: AgentCoordinator,
+        *,
+        build_agent: Callable[[ExecutionCheckpoint, int], Agent],
+    ) -> AgentCoordinator:
+        """`build_agent` rebuilds a checkpoint's agent at its depth below the root."""
+        if self._coordinator is not None:
+            raise ValueError("Response store is already bound")
+        self._build_agent = build_agent
+        self._coordinator = coordinator.view(
+            directory=self, store=self, ownership=self, approvals=self
+        )
+        return self._coordinator
+
+    def _authorize(
+        self, saved: ResponseStatus | None, parent_id: str | None
+    ) -> ResponseStatus:
+        if saved is None:
+            raise LookupError("Response is unavailable")
+        if (
+            saved.root_session_id != self.chat_session_id
+            or saved.root_message_id not in self.visible_response_ids
+        ):
+            raise ValueError("Response is unavailable on this branch")
+        if parent_id is not None:
+            allowed = (
+                parent_id in saved.ancestor_agent_ids
+                if parent_id
+                else not saved.ancestor_agent_ids
+            )
+            if not allowed:
+                raise ValueError("Response is unavailable to this parent")
+        return saved
+
+    def _load_status(
+        self, response_id: int, parent_id: str | None = None
+    ) -> ResponseStatus:
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            saved = self._authorize(
+                read_response_status__no_commit(session, response_id), parent_id
+            )
+        if saved.status == RunStatus.RUNNING and interrupt_ownerless_responses(
+            self.cache, self.tenant_id, [saved.message_id]
+        ):
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                current = read_response_status__no_commit(session, saved.message_id)
+            if current is None:
+                raise LookupError("Response was removed")
+            saved = current
+        return saved
+
+    def _load(self, response_id: int, parent_id: str | None = None) -> SavedResponse:
+        self._load_status(response_id, parent_id)
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            saved = read_response__no_commit(session, response_id)
+        if saved is None:
+            raise LookupError("Response is unavailable")
+        return saved
+
+    def list_agents(self) -> list[AgentInfo]:
+        return self._with_tenant(
+            lambda: load_session_agent_metadata(
+                self.response_id, branch=self._input_branch
+            )
+        )
+
+    def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
+        return self._with_tenant(
+            lambda: lookup_session_agent(self._input_branch, agent_id, parent_id)
+        )
+
+    def restore_agent(self, agent_id: str, parent_id: str) -> Agent:
+        saved = self.lookup_agent(agent_id, parent_id)
+        if saved is None:
+            raise ValueError("Agent is not a visible child of this parent")
+        if (
+            saved.latest_run_id is not None
+            and not self.read_run_status(saved.latest_run_id, parent_id).is_terminal
+        ):
+            raise ValueError("Response must finish before another run starts")
+        restore_subagent = self._restore_subagent
+        if restore_subagent is None:
+            raise ValueError("Subagent restoration is unavailable")
+        # Restoration must use the conversation's tenant, not the worker's context.
+        return self._with_tenant(
+            lambda: restore_subagent(
+                load_agent_history(self._input_branch, saved.id), saved.depth
+            )
+        )
+
+    def _child_context(self, agent_id: str, response_id: int) -> AgentState:
+        """A child run's history: the saved runs of its agent before this one.
+
+        A child's checkpoint binds to it, so any pod rebuilds the same history.
+        """
+        history = self._with_tenant(
+            lambda: load_agent_history(
+                self._input_branch, agent_id, before_response_id=response_id
+            )
+        )
+        return AgentState(messages=history.messages, checkpoint=history.checkpoint)
+
+    def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt:
+        """Any agent in the visible tree can message any other agent, including the root."""
+        with self._lock:
+            parent = self._owned.get(int(request.parent_run_id))
+        if parent is None or parent.run.agent_id != request.parent_id:
+            raise ValueError("Message sender has no execution ownership")
+        self._save_output(parent, parent.run.snapshot(include_children=False))
+        with _ownership_lock(self.cache, int(request.parent_run_id)):
+            self._require_owner(parent)
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                # Stop subagents drops pending work and sets Stop keys under the
+                # chat lock, so a stopped sender cannot add work after it.
+                lock_agent(session, str(self.chat_session_id))
+                if self.cache.exists(_stop_key(int(request.parent_run_id))):
+                    raise ValueError(
+                        "This agent was stopped; it cannot message agents."
+                    )
+                self._follow_selected_branch(
+                    get_selected_branch(session, self.chat_session_id)[1]
+                )
+                receipt = enqueue_message(
+                    session, self._input_branch, request, parent.owner.root_message_id
+                )
+                session.commit()
+        with self._lock:
+            self._pending_dispatch = True
+            self._next_input_poll = 0.0
+        return receipt
+
+    def _root_branch(self, run: Run) -> list[int] | None:
+        """The root reads every agent message sent on its branch."""
+        return (
+            self._input_branch.message_ids
+            if run.agent_id == str(self.chat_session_id)
+            else None
+        )
+
+    def receive_inputs(self, run: Run) -> list[UserMessage]:
+        """Read sent messages, then finished results of children this run's agent started.
+
+        A sent message's picks are accepted here, against the user's skills
+        now, as a question's are when its turn starts: each skill is recorded
+        at the version the user runs, and its `<skill>` message follows the
+        message.
+        """
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            received, results = read_run_inputs(
+                session,
+                run.agent_id,
+                run.id,
+                self._root_branch(run),
+                self._input_branch.message_ids,
+                follow_up=self._is_follow_up(run),
+            )
+            picks = [
+                message.metadata.content_metadata.mentions
+                if isinstance(message.metadata, InputMessageMetadata)
+                and isinstance(message.metadata.content_metadata, PickedMentions)
+                else []
+                for message in received
+            ]
+            accepted = (
+                accept_picked_skills(
+                    picks,
+                    list_chat_skills(
+                        session, self._user, with_sandbox=self._sandbox_tools
+                    ),
+                    self._user.id,
+                    session,
+                    with_sandbox=self._sandbox_tools,
+                )
+                if any(picks)
+                else [AcceptedPicks() for _ in received]
+            )
+        messages: list[UserMessage] = []
+        for message, accepted_picks in zip(received, accepted, strict=True):
+            if not accepted_picks.mentions:
+                messages.append(message)
+                continue
+            # Sent messages are read with their identity and provenance.
+            if message.id is None or not isinstance(
+                message.metadata, InputMessageMetadata
+            ):
+                raise ValueError("A sent message has no identity or provenance")
+            messages += accepted_input_messages(
+                message_id=message.id,
+                content=message.text,
+                source=message.metadata.source,
+                source_run_id=message.metadata.source_run_id,
+                mentions=accepted_picks.mentions,
+                skill_messages=accepted_picks.skill_messages,
+            )
+        finished = [
+            result.response_id for result in results if result.status.is_terminal
+        ]
+        completed = finished[:MAX_AGENT_COMPLETIONS_PER_STEP]
+        with self._lock:
+            if len(finished) > len(completed):
+                self._capped_runs.add(run.id)
+            else:
+                self._capped_runs.discard(run.id)
+        if not completed:
+            return messages
+        # The unread results of agents that still run are their status.
+        running = [
+            result.agent_id for result in results if not result.status.is_terminal
+        ]
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            completions = read_agent_completions(session, completed)
+            ancestors = session_ancestors(session, running)
+        still_running = sorted(
+            agent_path_from_ancestors(agent_id, ancestors) for agent_id in running
+        )
+        return [
+            *messages,
+            *(
+                agent_result_message(completion, still_running)
+                for completion in completions
+            ),
+        ]
+
+    def accept_inputs(self, run: Run, step: StepRecord) -> bool:
+        if not step.input_messages:
+            return True
+        snapshot = run.snapshot(include_children=False)
+        snapshot.steps.append(step)
+        response_id = int(run.id)
+        with self._lock:
+            owned = self._owned.get(response_id)
+        if owned is None:
+            raise ValueError("Response has no execution ownership")
+        with _ownership_lock(self.cache, response_id):
+            self._require_owner(owned)
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                if not consume_inputs__no_commit(
+                    session,
+                    response_id,
+                    step.input_messages,
+                    self._input_branch.message_ids,
+                    ownership_version=owned.owner.ownership_version,
+                ):
+                    return False
+                save_response_record__no_commit(
+                    session, owned.owner.root_message_id, self._record(snapshot)
+                )
+                session.commit()
+                return True
+
+    def has_unread_inputs(self, run: Run) -> bool:
+        """Sends keep a run going; results keep it going only to finish a batch.
+
+        A released wait's follow-up reads every result before it answers, and a
+        run whose last read hit the per-step cap reads the rest. Other results
+        start the recipient's next run, so an answer the user saw stays saved.
+        """
+        with self._lock:
+            capped = run.id in self._capped_runs
+        follow_up = self._is_follow_up(run)
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            messages, results = read_run_inputs(
+                session,
+                run.agent_id,
+                run.id,
+                self._root_branch(run),
+                self._input_branch.message_ids,
+                follow_up=follow_up,
+            )
+        return bool(messages) or (
+            (follow_up or capped) and any(result.wakes_recipient for result in results)
+        )
+
+    def _is_follow_up(self, run: Run) -> bool:
+        return self._answers_agent_results and run.agent_id == str(self.chat_session_id)
+
+    def _read_inbox(self) -> tuple[ChatInbox, bool]:
+        """Read the inbox, and whether this store's response is on the
+        selected branch."""
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            inbox = read_chat_inbox(session, self.chat_session_id)
+        return inbox, self._follow_selected_branch(inbox.branch)
+
+    def _dispatch_messages(self) -> None:
+        """Resume parked agent runs of this store's branch whose waits ended
+        and that saved this store's model settings and tools, then start idle children's
+        queued messages and result follow-ups.
+
+        Scans run after a notification and while children run on the branch.
+        Parked runs resume on the store's branch, selected or not; other work
+        starts only while this store's response stays selected. A failure here
+        never stops the turn: transient errors retry at a later poll, and work
+        that cannot start becomes a failed run.
+        """
+        coordinator = self._coordinator
+        if coordinator is None:
+            return
+        with self._lock:
+            if (
+                not (self._pending_dispatch or self._has_running_children)
+                or time.monotonic() < self._next_input_poll
+            ):
+                return
+            # Consume this notification before scanning so new submissions remain pending.
+            pending = self._pending_dispatch
+            self._pending_dispatch = False
+            self._next_input_poll = time.monotonic() + INPUT_POLL_SECONDS
+        try:
+            inbox, selected = self._read_inbox()
+            # A run saved with another model, temperature or tool options
+            # waits for an agent host, which continues it with them.
+            parked = [
+                run
+                for run in inbox.resumable_runs
+                if not run.is_root
+                and run.root_response_id in self.visible_response_ids
+                and run.model_configuration_id == self._model_configuration_id
+                and run.temperature == self._temperature
+                and run.tool_options == self._tool_options
+            ]
+            for run in parked:
+                lock = self.cache.lock(
+                    f"chat_agent_dispatch:{run.agent_id}", timeout=OWNER_LOCK_SECONDS
+                )
+                if not lock.acquire(blocking_timeout=0):
+                    continue
+                try:
+                    # None: another store claimed it first.
+                    self.resume(
+                        str(run.response_id),
+                        deadline_at=datetime.now(timezone.utc)
+                        + timedelta(seconds=CHAT_EXECUTION_TIMEOUT_S),
+                    )
+                except RETRYABLE_START_ERRORS:
+                    raise
+                except Exception as error:
+                    logger.exception("Could not resume a parked agent run")
+                    fail_suspended_response(
+                        self.cache,
+                        self.tenant_id,
+                        run.response_id,
+                        resume_failure(error),
+                    )
+                finally:
+                    lock.release()
+            if selected and interrupt_ownerless_responses(
+                self.cache, self.tenant_id, inbox.unfinished_response_ids
+            ):
+                inbox, selected = self._read_inbox()
+            if not selected:
+                with self._lock:
+                    self._has_running_children = False
+                    self._pending_dispatch = self._pending_dispatch or bool(parked)
+                return
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                spawners = (
+                    session_ancestors(
+                        session, [UUID(work.agent_id) for work in inbox.child_work]
+                    )
+                    if inbox.child_work
+                    else {}
+                )
+            # Poll again while messages wait for runs that still have an owner.
+            waiting = len(
+                ownerless_response_ids(self.control_cache, inbox.waiting_response_ids)
+            ) < len(inbox.waiting_response_ids)
+            with self._lock:
+                # Starting one run per agent can leave more work for the next scan.
+                self._pending_dispatch = (
+                    self._pending_dispatch
+                    or bool(inbox.child_work or parked)
+                    or waiting
+                )
+                self._has_running_children = any(
+                    result.is_active for result in inbox.results
+                )
+            for work in inbox.child_work:
+                # Stores of several turns on one branch scan the same inbox. This
+                # lock keeps them from restoring one agent twice; the reservation's
+                # row lock and previous-run check keep the start correct.
+                lock = self.cache.lock(
+                    f"chat_agent_dispatch:{work.agent_id}", timeout=OWNER_LOCK_SECONDS
+                )
+                if not lock.acquire(blocking_timeout=0):
+                    continue
+                try:
+                    spawner_id = spawners[UUID(work.agent_id)].parent_id
+                    if spawner_id is None:
+                        raise ValueError("Inbox work cannot start the root")
+                    # The agent restores through its spawner, whoever sent the work.
+                    coordinator.start_message_run(
+                        work.agent_id,
+                        spawner_id=str(spawner_id),
+                        messages=[work.message] if work.message is not None else [],
+                        max_steps=work.max_steps or self._follow_up_steps,
+                        deadline_at=datetime.now(timezone.utc)
+                        + timedelta(seconds=work.total_timeout_s)
+                        if work.total_timeout_s is not None
+                        else None,
+                        parent_run_id=work.parent_run_id,
+                        parent_message_id=work.parent_message_id,
+                        parent_tool_call_id=work.parent_tool_call_id,
+                    )
+                except _MessageChanged:
+                    continue
+                except RETRYABLE_START_ERRORS:
+                    raise
+                except Exception:
+                    logger.exception("Could not start agent inbox work")
+                    with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                        fail_inbox_start__no_commit(
+                            session,
+                            inbox.branch,
+                            work.agent_id,
+                            work.message.id if work.message is not None else None,
+                        )
+                        session.commit()
+                finally:
+                    lock.release()
+        except RETRYABLE_START_ERRORS:
+            with self._lock:
+                self._pending_dispatch |= pending
+            logger.exception(
+                "Could not dispatch agent inbox work; retrying on the next control poll"
+            )
+        except Exception:
+            logger.exception("Could not dispatch agent inbox work")
+
+    def delegated_runs(self, parent_id: str) -> dict[str, RunStatus]:
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            results = agent_result_states(
+                session, self._input_branch.message_ids, UUID(parent_id)
+            )
+        return {str(result.response_id): result.status for result in results}
+
+    def read_run(self, run_id: str, parent_id: str) -> RunState | None:
+        if not run_id.isdecimal():
+            return None
+        response_id = int(run_id)
+        try:
+            saved = self._load(response_id, parent_id)
+        except LookupError:
+            return None
+        return response_snapshot(saved.response)
+
+    def read_run_status(self, run_id: str, parent_id: str) -> RunStatus:
+        if not run_id.isdecimal():
+            raise LookupError("Response is unavailable")
+        response_id = int(run_id)
+        return self._load_status(response_id, parent_id).status
+
+    def cancel_run(self, run_id: str, parent_id: str) -> None:
+        if not run_id.isdecimal():
+            raise LookupError("Response is unavailable")
+        response_id = int(run_id)
+        saved = self._load_status(response_id, parent_id)
+        if saved.status.is_terminal:
+            return
+        stop_response(self.cache, self.tenant_id, saved.message_id)
+
+    def withdraw_result(self, run_id: str, parent_id: str) -> None:
+        """Withdraw before any status repair, which would make the run finished."""
+        if not run_id.isdecimal():
+            raise LookupError("Response is unavailable")
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            self._authorize(
+                read_response_status__no_commit(session, int(run_id)), parent_id
+            )
+            withdraw_agent_result__no_commit(session, int(run_id))
+            session.commit()
+
+    def _record(self, snapshot: RunState) -> ResponseRecord:
+        registrations = self._coordinator.registrations() if self._coordinator else []
+        return response_record(
+            snapshot.model_copy(update={"child_runs": []}), registrations
+        )
+
+    def _save_output(self, owned: _OwnedRun, snapshot: RunState) -> None:
+        response_id = int(owned.run.id)
+        display = None
+        if snapshot.parent_run_id is not None and snapshot.status.is_terminal:
+            display = project_response(
+                snapshot,
+                tool_ids={
+                    call.name: self._tool_ids.get(call.name)
+                    for step in snapshot.steps
+                    for call in step.message.tool_calls
+                },
+                registrations=self._coordinator.registrations()
+                if self._coordinator
+                else (),
+            )
+        record = display.response if display is not None else self._record(snapshot)
+        if record is None:
+            raise ValueError("Response projection has no accepted content")
+        dumps: list[str] = []
+        with _ownership_lock(self.cache, response_id):
+            self._require_owner(owned)
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                check_checkpoint_owner__no_commit(
+                    session, response_id, owned.owner.ownership_version
+                )
+                if snapshot.status.is_terminal:
+                    dumps = finish_checkpoint__no_commit(session, response_id)
+                if display is None:
+                    save_response_record__no_commit(
+                        session, owned.owner.root_message_id, record
+                    )
+                    session.commit()
+                else:
+                    response = find_response__no_commit(session, response_id)
+                    if response is None:
+                        raise ValueError("Child response is unavailable")
+                    save_chat_turn(
+                        message_text=display.answer or "",
+                        reasoning_tokens=display.reasoning,
+                        tool_calls=display.tool_calls,
+                        citation_to_doc=display.citation_to_doc,
+                        all_search_docs=display.all_search_docs,
+                        db_session=session,
+                        assistant_message=response,
+                        request_params=display.request_params,
+                        pre_answer_processing_time=display.pre_answer_processing_time,
+                        response_record=record,
+                        presentation=display.presentation,
+                    )
+        delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
+
+    def _claim_reservation(
+        self,
+        session: Session,
+        response_id: int,
+        root_id: int,
+        *,
+        record_start_failure: bool,
+    ) -> None:
+        """Commit a reserved running response and take its lease together.
+
+        Another reservation for the same agent sees the running response, and
+        repair sees its owner. A failed claim undoes or fails the reservation.
+        """
+        lease = _OwnerLease(
+            ResponseOwner(token=uuid4(), root_message_id=root_id),
+            record_start_failure=record_start_failure,
+        )
+        with self._lock:
+            self._leases[response_id] = lease
+        try:
+            with _ownership_lock(self.cache, response_id):
+                session.commit()
+                self.cache.set(
+                    _owner_key(response_id),
+                    lease.owner.model_dump_json(),
+                    ex=OWNER_TTL_SECONDS,
+                )
+        except BaseException:
+            session.rollback()
+            try:
+                self.abort_start(str(response_id))
+            except Exception:
+                logger.exception("Could not undo a reserved response")
+            raise
+
+    def _lock_background_capacity(self, session: Session) -> bool:
+        """Lock the chat; return whether its branch can run another background agent.
+
+        The chat lock comes before response locks, as on the input paths, and
+        orders concurrent starts around the count.
+        """
+        lock_agent(session, str(self.chat_session_id))
+        # A later turn can extend the branch and start agents before this store
+        # polls, so the count reads the branch under the lock.
+        self._follow_selected_branch(
+            get_selected_branch(session, self.chat_session_id)[1]
+        )
+        return (
+            len(active_agent_response_ids(session, self._input_branch.message_ids))
+            < MAX_RUNNING_AGENTS
+        )
+
+    def reserve_run_id(
+        self,
+        *,
+        agent: AgentInfo,
+        messages: Sequence[Message],
+        previous_run_id: str | None,
+        parent_run_id: str | None,
+        parent_message_id: str | None,
+        parent_tool_call_id: str | None,
+    ) -> str:
+        if previous_run_id is not None and agent.id != str(self.chat_session_id):
+            # An idle child's next run comes from its inbox.
+            instruction = messages[0] if messages else None
+            if len(messages) > 1 or (
+                instruction is not None and not isinstance(instruction, UserMessage)
+            ):
+                raise ValueError("A child run starts from one message or its results")
+            if (
+                parent_run_id is None
+                or parent_message_id is None
+                or parent_tool_call_id is None
+            ):
+                raise ValueError("Child run has no parent invocation")
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                if not self._lock_background_capacity(session):
+                    # The work stays in the inbox; a later scan starts it.
+                    raise _MessageChanged("The chat runs its maximum of agents")
+                # Runs that agents start count against the chat owner's limits.
+                # Work over the limit becomes a failed run that its sender sees,
+                # so it does not retry for the whole budget window.
+                check_token_rate_limits(self._user)
+                reserved = reserve_inbox_run__no_commit(
+                    session,
+                    self._input_branch,
+                    agent,
+                    message_id=instruction.id if instruction else None,
+                    previous_run_id=previous_run_id,
+                    parent_ids=(parent_run_id, parent_message_id, parent_tool_call_id),
+                )
+                if reserved is None:
+                    raise _MessageChanged("Agent inbox work changed before it started")
+                message_id, root_id = reserved
+                # The inbox work was consumed, so a failed start is recorded.
+                self._claim_reservation(
+                    session, message_id, root_id, record_start_failure=True
+                )
+            return str(message_id)
+        if parent_run_id is None:
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                response = find_response__no_commit(session, self.response_id)
+                if (
+                    response is None
+                    or response.chat_session_id != self.chat_session_id
+                    or agent.id != str(self.chat_session_id)
+                    or response.message_type != MessageType.ASSISTANT
+                    or response.response_status is not None
+                ):
+                    raise ValueError("Response is unavailable for a new run")
+            return str(self.response_id)
+        if len(messages) != 1 or not isinstance(messages[0], UserMessage):
+            raise ValueError("A saved child response requires one user instruction")
+        if parent_message_id is None or parent_tool_call_id is None:
+            raise ValueError("Child instruction has no parent invocation")
+        # Runs that agents start count against the chat owner's limits. Root
+        # turns check them when they are sent or accepted from the queue.
+        check_token_rate_limits(self._user)
+        parent_response_id = int(parent_run_id)
+        with self._lock:
+            parent = self._owned.get(parent_response_id)
+        if parent is None:
+            raise ValueError("Parent response has no execution ownership")
+        parent_snapshot = parent.run.snapshot(include_children=False)
+        self._save_output(parent, parent_snapshot)
+        # A spawned agent works in the background; foreground tools wait for their child.
+        delivers_result = any(
+            call.id == parent_tool_call_id and call.name in SPAWN_TOOL_NAMES
+            for step in parent_snapshot.steps
+            if step.message.id == parent_message_id
+            for call in step.message.tool_calls
+        )
+        with _ownership_lock(self.cache, parent_response_id):
+            self._require_owner(parent)
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                if delivers_result and not self._lock_background_capacity(session):
+                    raise ValueError(
+                        f"{MAX_RUNNING_AGENTS} agents are already running in "
+                        "this chat. Wait for one to finish, or interrupt one, "
+                        "before you start another."
+                    )
+                # A Stop sets the key before it releases the chat lock, so a
+                # stopped parent cannot start a child that the Stop missed.
+                if self.cache.exists(_stop_key(parent_response_id)):
+                    raise ValueError("This agent was stopped; it cannot start agents.")
+                check_checkpoint_owner__no_commit(
+                    session, parent_response_id, parent.owner.ownership_version
+                )
+                message_id = reserve_child_response__no_commit(
+                    session,
+                    parent.owner.root_message_id,
+                    agent=agent,
+                    instruction=messages[0],
+                    previous_response_id=int(previous_run_id)
+                    if previous_run_id is not None
+                    else None,
+                    parent_response_id=parent_response_id,
+                    parent_message_id=parent_message_id,
+                    parent_tool_call_id=parent_tool_call_id,
+                    delivers_result=delivers_result,
+                )
+                self._claim_reservation(
+                    session,
+                    message_id,
+                    parent.owner.root_message_id,
+                    record_start_failure=False,
+                )
+        return str(message_id)
+
+    def register(self, run: Run) -> None:
+        response_id = int(run.id)
+        snapshot = run.snapshot(include_children=False)
+        with self._lock:
+            lease = self._leases.get(response_id)
+        if lease is None:
+            # Child runs take their lease when they are reserved.
+            if response_id != self.response_id or snapshot.parent_run_id is not None:
+                raise ValueError("Child response has no reservation")
+            with _ownership_lock(self.cache, response_id):
+                if self._owner(response_id) is not None:
+                    raise ValueError("Response already has an owner")
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    response = find_response__no_commit(session, response_id)
+                    if response is None or response.response_status is not None:
+                        raise ValueError("Response is unavailable for a new run")
+                    save_response_record__no_commit(
+                        session, self.response_id, self._record(snapshot)
+                    )
+                    session.commit()
+                lease = _OwnerLease(
+                    ResponseOwner(token=uuid4(), root_message_id=self.response_id)
+                )
+                with self._lock:
+                    self._leases[response_id] = lease
+                self.cache.set(
+                    _owner_key(response_id),
+                    lease.owner.model_dump_json(),
+                    ex=OWNER_TTL_SECONDS,
+                )
+        with lease.lock:
+            if lease.error is not None:
+                raise RuntimeError(
+                    "Response ownership failed during restoration"
+                ) from lease.error
+            started = time.monotonic()
+            self._refresh_owner(response_id, lease.owner)
+            if (
+                time.monotonic() - started
+                >= OWNER_TTL_SECONDS - OWNER_EXPIRY_MARGIN_SECONDS
+            ):
+                raise TimeoutError("Response ownership renewal took too long")
+            lease.refreshed = started
+        owned = _OwnedRun(run, lease)
+        if is_background_run(run):
+            try:
+                owned.stream = BackgroundRunStream(
+                    self.cache,
+                    self.tenant_id,
+                    self.chat_session_id,
+                    run,
+                    self._tool_ids,
+                )
+            except Exception:
+                # The agent's output still reaches its saved history.
+                logger.exception("Agent response %d has no live stream", response_id)
+        with self._lock:
+            self._owned[response_id] = owned
+
+    def abort_start(self, run_id: str) -> None:
+        response_id = int(run_id)
+        with self._lock:
+            lease = self._leases.get(response_id)
+            started = self._owned.get(response_id)
+        if started is not None and started.stream is not None:
+            started.stream.close()
+        if lease is None:
+            with _ownership_lock(self.cache, response_id):
+                if self._owner(response_id) is not None:
+                    return
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    abort_response_start__no_commit(
+                        session, self.response_id, response_id
+                    )
+                    session.commit()
+            return
+        with lease.lock:
+            lease.released = True
+        try:
+            with _ownership_lock(self.cache, response_id):
+                owner = self._owner(response_id)
+                if owner is not None and owner != lease.owner:
+                    return
+                if lease.owner.ownership_version is not None:
+                    if owner is None:
+                        return
+                    with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                        release_checkpoint_claim__no_commit(
+                            session,
+                            response_id,
+                            lease.owner.ownership_version,
+                        )
+                        session.commit()
+                else:
+                    with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                        if lease.record_start_failure:
+                            fail_response_start__no_commit(session, response_id)
+                        else:
+                            abort_response_start__no_commit(
+                                session, self.response_id, response_id
+                            )
+                        session.commit()
+                if owner is not None:
+                    self.cache.delete(_owner_key(response_id))
+        finally:
+            with self._lock:
+                self._leases.pop(response_id, None)
+                self._owned.pop(response_id, None)
+
+    @property
+    def has_owned_work(self) -> bool:
+        with self._lock:
+            return bool(self._leases) or self._pending_dispatch
+
+    def save(self, run: Run) -> None:
+        response_id = int(run.id)
+        with self._lock:
+            owned = self._owned.get(response_id)
+        if owned is None:
+            raise ValueError("Run has no storage ownership")
+        if response_id != self.response_id or self._root_response is None:
+            self._save_output(owned, run.snapshot(include_children=False))
+            return
+        with _ownership_lock(self.cache, response_id):
+            self._require_owner(owned)
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                check_checkpoint_owner__no_commit(
+                    session, response_id, owned.owner.ownership_version
+                )
+            self._root_response.save(run)
+
+    def release(self, run_id: str) -> None:
+        response_id = int(run_id)
+        with self._lock:
+            owned = self._owned.get(response_id)
+        if owned is None:
+            return
+        is_child = response_id != self.response_id
+        if owned.stream is not None:
+            owned.stream.close()
+        with owned.lease.lock:
+            owned.lease.released = True
+        # Only the root asks, and only a run that called the question tool
+        # can leave a question open.
+        asked = (
+            owned.run.status.is_terminal
+            and not is_child
+            and any(
+                call.name in QUESTION_TOOL_NAMES
+                for step in owned.run.snapshot(include_children=False).steps
+                for call in step.message.tool_calls
+            )
+        )
+        if (self._approval_opened or asked) and owned.run.status.is_terminal:
+            # No call of the run waits anymore, so its requests cannot be
+            # answered. A handed-off run keeps them for its resume.
+            try:
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    if self._approval_opened:
+                        close_pending_approval_requests__no_commit(
+                            session,
+                            ApprovalDecision.EXPIRED,
+                            None,
+                            chat_message_ids=[response_id],
+                        )
+                    if asked:
+                        resolve_question_requests__no_commit(
+                            session,
+                            QuestionOutcome.CANCELLED,
+                            chat_message_ids=[response_id],
+                        )
+                    session.commit()
+            except Exception:
+                logger.exception("Could not end tool requests that ended")
+        try:
+            with _ownership_lock(self.cache, response_id):
+                if self._owner(response_id) == owned.lease.owner:
+                    self.cache.delete(_owner_key(response_id))
+        finally:
+            # Owned work stays visible until the dispatch it needs is pending.
+            with self._lock:
+                self._leases.pop(response_id, None)
+                self._owned.pop(response_id, None)
+                if is_child:
+                    self._pending_dispatch = True
+                    self._next_input_poll = 0.0
+        if is_child and self._on_child_released is not None:
+            self._on_child_released()
+
+    def _refresh_owner(self, response_id: int, owner: ResponseOwner) -> None:
+        if not self.control_cache.renew_if_value(
+            _owner_key(response_id),
+            owner.model_dump_json().encode(),
+            OWNER_TTL_SECONDS,
+        ):
+            raise _OwnershipLost("Response ownership was lost")
+
+    def poll_control(self) -> None:
+        """Renew leases, read Stop, and dispatch messages on the turn's control thread."""
+        with self._lock:
+            leases = list(self._leases.items())
+        for response_id, lease in leases:
+            if not lease.lock.acquire(blocking=False):
+                continue
+            stopped = False
+            reason: CancelReason = "requested"
+            try:
+                if lease.released:
+                    continue
+                lease.expire_if_due()
+                now = time.monotonic()
+                if (
+                    lease.error is None
+                    and now >= lease.retry_at
+                    and now - lease.refreshed >= OWNER_REFRESH_SECONDS
+                ):
+                    try:
+                        self._refresh_owner(response_id, lease.owner)
+                    except _OwnershipLost as error:
+                        lease.error = error
+                    except Exception:
+                        lease.retry_at = time.monotonic() + OWNER_RETRY_SECONDS
+                        logger.exception(
+                            "Response ownership renewal failed; will retry"
+                        )
+                    else:
+                        lease.expire_if_due()
+                        if lease.error is None:
+                            # Cache response latency must not extend local ownership.
+                            lease.refreshed = now
+                lease.expire_if_due()
+                if lease.error is None:
+                    try:
+                        requested = self.control_cache.get(_stop_key(response_id))
+                        stopped = requested is not None
+                        if requested == b"user":
+                            reason = "user"
+                    except Exception:
+                        logger.exception(
+                            "Failed to read agent Stop request; will retry"
+                        )
+                    lease.expire_if_due()
+                stopped = stopped or lease.error is not None
+            finally:
+                lease.lock.release()
+            if not stopped:
+                continue
+            with self._lock:
+                owned = self._owned.get(response_id)
+            if owned is not None:
+                owned.run.cancel(reason)
+        if time.monotonic() >= self._next_park_poll:
+            self._next_park_poll = time.monotonic() + INPUT_POLL_SECONDS
+            with self._lock:
+                runs = [owned.run for owned in self._owned.values()]
+            self._submit_saved_answers(runs)
+            for run in runs:
+                if not self.may_park(run):
+                    continue
+                try:
+                    self.handoff(run.id)
+                except Exception as error:
+                    # A file store error retries only when the store
+                    # throttled or failed for a moment.
+                    if isinstance(
+                        error, _RETRYABLE_PARK_ERRORS
+                    ) or get_default_file_store().is_transient_error(error):
+                        logger.info(
+                            "Run %s did not park; a later poll tries again",
+                            run.id,
+                            exc_info=True,
+                        )
+                        continue
+                    # The run ends instead, and its requests end with it.
+                    logger.exception("Could not park a waiting run")
+                    run.cancel()
+                    continue
+                # A child's release dispatches, as every child release does.
+                if int(run.id) == self.response_id and self._on_root_parked:
+                    self._on_root_parked(run)
+        self._dispatch_messages()
+
+    def _submit_saved_answers(self, runs: Sequence[Run]) -> None:
+        """Give live runs the answers saved for their waiting requests, so a
+        decision applies without a park. A deleted row waits for the run to
+        park; its resume ends the call."""
+        waits = [
+            (run, request)
+            for run in runs
+            for request in run.pending_inputs
+            if _waits_on_user(request)
+        ]
+        if not waits:
+            return
+        try:
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                answers = _saved_answers(
+                    session, [request for _, request in waits], deleted=False
+                )
+        except Exception:
+            logger.exception("Could not read saved answers; a later poll retries")
+            return
+        for run, request in waits:
+            answer = answers.get(request.request_id)
+            if answer is None:
+                continue
+            try:
+                run.submit(answer)
+            except (InputNotWaiting, RunReleased):
+                # The request ended, or the run parked, after the read.
+                logger.debug(
+                    "Run %s no longer waits for request %s", run.id, request.request_id
+                )
+            except Exception:
+                logger.exception("Run %s did not take a saved answer", run.id)
+
+    def may_park(self, run: Run) -> bool:
+        """Whether a suspended, idle run waits, and waits only on people.
+
+        Its waits are its approval requests and questions, its unfinished foreground children
+        and, for a subagent, its unfinished delegated runs. A waited-for run
+        counts when it is parked; one that runs keeps this run resident until
+        it parks or ends.
+        """
+        if run.status != RunStatus.SUSPENDED or not run.wait_for_idle(timeout=0):
+            return False
+        requests = run.pending_inputs
+        if not all(_waits_on_user(request) for request in requests):
+            return False
+        coordination = run.coordination
+        children = coordination.pending_children() if coordination else []
+        if coordination is not None and any(
+            coordination.coordinator.child_run(child_id, run.agent_id) is not None
+            for child_id in children
+        ):
+            # A child that executes here is not parked.
+            return False
+        delegated = coordination.delegated_runs() if coordination else {}
+        waited = [
+            *(self.read_run_status(child_id, run.agent_id) for child_id in children),
+            *(status for status in delegated.values() if not status.is_terminal),
+        ]
+        return bool(requests or waited) and all(
+            status == RunStatus.SUSPENDED or status.is_terminal for status in waited
+        )
+
+    def request_approval(
+        self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
+    ) -> PendingToolInput | ToolResult | None:
+        call = nested_call or tool_call
+        tool, scope = self._gated_tools[call.name]
+        # Before any database work: a call that needs no approval runs.
+        details = tool.approval_details(call.arguments)
+        if details is None:
+            return None
+        pending = open_tool_approval(
+            tenant_id=self.tenant_id,
+            chat_session_id=self.chat_session_id,
+            response_id=int(run.id),
+            user_id=self._user.id,
+            tool_call_id=tool_call.id,
+            tool_name=call.name,
+            details=details,
+            arguments=tool_arguments_for_display(call),
+            scope=scope,
+        )
+        if isinstance(pending, PendingToolInput):
+            self._approval_opened = True
+        return pending
+
+    def withdraw_approval(self, request_id: str) -> None:
+        try:
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                close_pending_approval_requests__no_commit(
+                    session,
+                    ApprovalDecision.EXPIRED,
+                    None,
+                    approval_ids=[UUID(request_id)],
+                )
+                session.commit()
+        except Exception:
+            logger.exception("Could not end a tool approval request")
+
+    def reject_waiting_inputs(self) -> None:
+        """Save the user's Stop as the rejection of the approval requests that
+        the root run and its foreground descendants wait on, the runs that the
+        Stop cancels, and as the cancellation of the root's questions, and
+        give each live run its answers as it cancels. A foreground descendant
+        that parked has no live run; its saved requests are rejected too. An
+        answer saved first wins. Background agents keep running and keep their
+        requests."""
+        with self._lock:
+            owned = {response_id: item.run for response_id, item in self._owned.items()}
+        runs: list[Run] = []
+        parked: list[int] = []
+        pending = [owned.get(self.response_id)]
+        while pending:
+            run = pending.pop()
+            if run is None:
+                continue
+            runs.append(run)
+            if run.coordination is not None:
+                for child_id in run.coordination.pending_children():
+                    child = owned.get(int(child_id))
+                    if child is None:
+                        parked.append(int(child_id))
+                    else:
+                        pending.append(child)
+        waits = {
+            run.id: [
+                request for request in run.pending_inputs if _waits_on_user(request)
+            ]
+            for run in runs
+        }
+        requests = [request for waiting in waits.values() for request in waiting]
+        answers: dict[str, HumanToolAnswer] = {}
+        if requests or parked:
+            try:
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    close_pending_approval_requests__no_commit(
+                        session,
+                        ApprovalDecision.REJECTED,
+                        ApprovalDecidedVia.USER,
+                        approval_ids=[
+                            *(
+                                UUID(request.request_id)
+                                for request in requests
+                                if request.approval
+                            ),
+                            *parked_tree_approval_ids(session, parked),
+                        ],
+                    )
+                    resolve_question_requests__no_commit(
+                        session,
+                        QuestionOutcome.CANCELLED,
+                        question_request_ids=[
+                            UUID(request.request_id)
+                            for request in requests
+                            if _is_question(request)
+                        ],
+                    )
+                    answers = _saved_answers(session, requests)
+                    session.commit()
+            except Exception:
+                logger.exception("Could not end the tool requests of a Stop")
+        for run in runs:
+            # The run applies its answers only after it sees the Stop.
+            with run.execution_lock:
+                for request in waits[run.id]:
+                    answer = answers.get(request.request_id)
+                    if answer is None:
+                        continue
+                    try:
+                        run.submit(answer)
+                    except (InputNotWaiting, RunReleased):
+                        # The request ended, or the run parked, after the read.
+                        logger.debug(
+                            "Run %s no longer waits for request %s",
+                            run.id,
+                            request.request_id,
+                        )
+                    except Exception:
+                        logger.exception("Run %s did not take a Stop's answer", run.id)
+                run.cancel()
+
+    def handoff(self, run_id: str) -> None:
+        """Save a paused run before releasing ownership for another API pod.
+
+        Its foreground children must have ended or parked. A child run's
+        checkpoint binds to its agent's saved history (`_child_context`). The
+        checkpoint owns the dumps of the run's parked programs: they are
+        deleted when the save fails, and when the checkpoint ends or a new one
+        replaces it. Raises RunNotTransferable when the run changed.
+        """
+        response_id = int(run_id)
+        with self._lock:
+            owned = self._owned[response_id]
+        if owned.run.status != RunStatus.SUSPENDED or not owned.run.wait_for_idle(
+            timeout=OPERATION_TIMEOUT_SECONDS
+        ):
+            raise RunNotTransferable("Response must be suspended and idle")
+        captured = owned.run.capture()
+        progress = captured.run_state.progress
+        if progress is None:
+            raise RunNotTransferable("Response has no saved execution progress")
+        for child_id in progress.child_run_ids:
+            status = self.read_run_status(child_id, owned.run.agent_id)
+            if not status.is_terminal and status != RunStatus.SUSPENDED:
+                raise RunNotTransferable(
+                    "Child responses must end or park before parent release"
+                )
+        if owned.run.parent_run_id is not None:
+            captured = captured.model_copy(
+                update={
+                    "agent_state": self._child_context(owned.run.agent_id, response_id)
+                }
+            )
+        dumps = self._with_tenant(
+            lambda: persist_checkpoint_files(captured, session_id=self.chat_session_id)
+        )
+        # The dumps of the checkpoint that this one replaced, once it is saved.
+        replaced: list[str] | None = None
+
+        def save(_checkpoint: ExecutionCheckpoint) -> None:
+            nonlocal replaced
+            with _ownership_lock(self.cache, response_id):
+                self._require_owner(owned)
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    check_checkpoint_owner__no_commit(
+                        session, response_id, owned.owner.ownership_version
+                    )
+                    save_response_record__no_commit(
+                        session,
+                        owned.owner.root_message_id,
+                        record.model_copy(update={"status": RunStatus.RUNNING}),
+                    )
+                    saved = read_response__no_commit(session, response_id)
+                    if saved is None:
+                        raise ValueError("Response is unavailable")
+                    deserialize_checkpoint(
+                        data,
+                        saved.response,
+                        captured.agent_state,
+                        self._binding(response_id),
+                    )
+                    dropped = publish_checkpoint__no_commit(
+                        session,
+                        response_id,
+                        data,
+                        expected_ownership_version=owned.owner.ownership_version,
+                        child_run_ids=[int(child) for child in progress.child_run_ids],
+                        dump_file_ids=dumps,
+                    )
+                    session.commit()
+                    replaced = dropped
+
+        try:
+            record = self._record(captured.run_state)
+            data = serialize_checkpoint(
+                captured,
+                record,
+                self._binding(response_id),
+                model_configuration_id=self._model_configuration_id,
+                temperature=self._temperature,
+                tool_options=self._tool_options,
+            )
+            owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
+        except BaseException:
+            if replaced is None:
+                delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
+            raise
+        delete_files_best_effort(replaced or [], CHECKPOINT_DUMP_CLEANUP)
+
+    def resume(
+        self,
+        run_id: str,
+        *,
+        context: AgentState | None = None,
+        deadline_at: datetime | None = None,
+        on_event: Callable[[AgentEvent], None] | None = None,
+        event_dispatcher: EventDispatcher | None = None,
+    ) -> Run | None:
+        """Resume with authorized, rehydrated history; never reconstruct a live owner.
+
+        The root's `context` is its turn's history; a child's comes from its
+        agent's saved runs. Each approval request that the run waits for gets
+        the answer of its saved decision, and each question the result of its
+        saved answer; one that still waits keeps waiting. None when another
+        owner holds the run or no checkpoint waits.
+        """
+        if not run_id.isdecimal():
+            raise LookupError("Response is unavailable")
+        response_id = int(run_id)
+        build_agent = self._build_agent
+        if self._coordinator is None or build_agent is None:
+            raise ValueError("Bind feature reconstruction before resuming")
+        requested = self.cache.get(_stop_key(response_id))
+        if requested is not None:
+            # Stop subagents sets the key before it commits its rejections,
+            # which make the run resumable; the run ends instead.
+            stop_response(
+                self.cache,
+                self.tenant_id,
+                response_id,
+                "user" if requested == b"user" else "requested",
+            )
+            return None
+        saved = self._load(response_id)
+        # The saved run can wait on requests that an earlier process opened.
+        self._approval_opened = True
+        if saved.agent.parent_id is not None:
+            context = self._child_context(saved.agent.id, response_id)
+        if context is None:
+            raise ValueError("A root response resumes with its turn's history")
+        with _ownership_lock(self.cache, response_id):
+            if self._owner(response_id) is not None:
+                return None
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                checkpoint = claim_checkpoint__no_commit(session, saved.message_id)
+                session.commit()
+            if checkpoint is None:
+                return None
+            owner = ResponseOwner(
+                token=uuid4(),
+                root_message_id=saved.root_message_id,
+                ownership_version=checkpoint.ownership_version,
+            )
+            lease = _OwnerLease(owner)
+            try:
+                self.cache.set(
+                    _owner_key(response_id),
+                    owner.model_dump_json(),
+                    ex=OWNER_TTL_SECONDS,
+                )
+            except Exception:
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    release_checkpoint_claim__no_commit(
+                        session, saved.message_id, checkpoint.ownership_version
+                    )
+                    session.commit()
+                raise
+        with self._lock:
+            self._leases[response_id] = lease
+        try:
+            captured = deserialize_checkpoint(
+                checkpoint.data,
+                saved.response,
+                context,
+                self._binding(saved.message_id),
+            )
+            progress = captured.run_state.progress
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                answers = _saved_answers(
+                    session, progress.input_requests if progress else []
+                )
+            agent = self._with_tenant(lambda: build_agent(captured, saved.agent.depth))
+            self._coordinator.register(saved.agent)
+            for info in self.list_agents():
+                self._coordinator.register(info)
+            return self._with_tenant(
+                lambda: agent.resume(
+                    captured.run_state,
+                    answers=list(answers.values()),
+                    deadline_at=deadline_at,
+                    coordinator=self._coordinator,
+                    on_event=on_event,
+                    event_dispatcher=event_dispatcher,
+                )
+            )
+        except BaseException:
+            try:
+                self.abort_start(str(response_id))
+            except Exception:
+                logger.exception("Response reconstruction rollback failed")
+            raise

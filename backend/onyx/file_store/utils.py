@@ -1,18 +1,39 @@
 import base64
 from collections.abc import Callable
 from io import BytesIO
-from typing import Any, cast
+from typing import cast
 from uuid import UUID
 
 import requests
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS, WEB_DOMAIN
 from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.models import UserFile
+from onyx.db.projects import get_project_user_files_by_file_ids
 from onyx.db.user_file import get_user_file_by_id
+from onyx.file_processing.extract_file_text import (
+    XLSX_TRUNCATION_MARKER,
+    extract_text_pages,
+)
+from onyx.file_processing.file_types import (
+    OnyxFileExtensions,
+    get_file_ext,
+    guess_mime_type,
+)
+from onyx.file_store.constants import (
+    ARTIFACT_TEXT_FILE_PREFIX,
+    ARTIFACT_TEXT_MAX_CHARS,
+    ARTIFACT_TEXT_MAX_FILE_BYTES,
+)
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType, FileDescriptor, InMemoryChatFile
+from onyx.file_store.models import (
+    ArtifactText,
+    ChatFileType,
+    FileDescriptor,
+    InMemoryChatFile,
+    UserFileMetadata,
+)
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.b64 import get_image_type
 from onyx.utils.logger import setup_logger
@@ -27,12 +48,13 @@ def plaintext_file_name_for_id(file_id: str) -> str:
     return f"plaintext_{file_id}"
 
 
-def store_plaintext(file_id: str, plaintext_content: str) -> bool:
+def store_plaintext(cache_key: str, plaintext_content: str) -> bool:
     """
-    Store plaintext content for a file in the file store.
+    Store text in the file store under `cache_key` (plaintext_file_name_for_id,
+    or ARTIFACT_TEXT_FILE_PREFIX + a file_id).
 
     Args:
-        file_id: The ID of the file (user_file or artifact_file)
+        cache_key: The file store ID of the cached text
         plaintext_content: The plaintext content to store (may be the empty
             string, which is still cached so that files we cannot extract
             text from don't get re-attempted on every retrieval)
@@ -40,21 +62,101 @@ def store_plaintext(file_id: str, plaintext_content: str) -> bool:
     Returns:
         bool: True if storage was successful, False otherwise
     """
-    plaintext_file_name = plaintext_file_name_for_id(file_id)
     try:
         file_store = get_default_file_store()
         file_content = BytesIO(plaintext_content.encode("utf-8"))
         file_store.save_file(
             content=file_content,
-            display_name=f"Plaintext for {file_id}",
+            display_name=f"Plaintext for {cache_key}",
             file_origin=FileOrigin.PLAINTEXT_CACHE,
             file_type="text/plain",
-            file_id=plaintext_file_name,
+            file_id=cache_key,
         )
         return True
     except Exception as e:
-        logger.warning("Failed to store plaintext for %s: %s", file_id, e)
+        logger.warning("Failed to store plaintext %s: %s", cache_key, e)
         return False
+
+
+def get_or_extract_plaintext(
+    cache_key: str,
+    extract_fn: Callable[[], str],
+    store_on_miss: bool = True,
+) -> str:
+    """Read cached text, or extract it without replacing a pending worker result."""
+    file_store = get_default_file_store()
+
+    # Try cached plaintext first.
+    try:
+        plaintext_io = file_store.read_file(cache_key, mode="b")
+        return plaintext_io.read().decode("utf-8")
+    except Exception:
+        logger.info("Cache miss for %s", cache_key)
+
+    # Cache miss — extract and store.  We cache the result unconditionally
+    # (including the empty string) so that files we cannot extract text from
+    # (e.g. .zip, or any extension without a handler in extract_file_text)
+    # don't get re-fetched from object storage and re-attempted on every
+    # subsequent chat turn.  Transient extraction errors surface as raised
+    # exceptions, not empty returns, so they propagate without poisoning the
+    # cache.  Callers pass store_on_miss=False when another writer owns the
+    # canonical plaintext for this key (e.g. the user-file worker, whose
+    # result may include image captions this inline extraction can't produce).
+    content_text = extract_fn()
+    if store_on_miss:
+        store_plaintext(cache_key, content_text)
+    return content_text
+
+
+# The text of published files (chat artifacts), by page. A version's text is
+# extracted wherever it is first needed and cached under
+# ARTIFACT_TEXT_FILE_PREFIX + file_id; later calls reuse the cached text. A
+# version's file never changes, so its cached text never goes stale. The text
+# of a file whose format has pages ends each page with a form feed; the text
+# of any other file has none. Page text loses its own form feeds.
+_PAGE_END = "\f"
+
+
+def get_or_extract_artifact_text(
+    file_id: str, file_name: str, file_size: int
+) -> ArtifactText | None:
+    """The text of the published file version `file_id`, from the cache or
+    extracted and cached on a miss; None for a file over
+    ARTIFACT_TEXT_MAX_FILE_BYTES. `file_name` picks the parser. A file
+    store read error raises and caches nothing."""
+    if file_size > ARTIFACT_TEXT_MAX_FILE_BYTES:
+        return None
+
+    def extract() -> str:
+        extracted = extract_text_pages(
+            get_default_file_store().read_file(file_id, mode="b", use_tempfile=True),
+            file_name,
+        )
+        if not extracted.paged:
+            return "".join(extracted.pages).replace(_PAGE_END, "")[
+                :ARTIFACT_TEXT_MAX_CHARS
+            ]
+        text = "".join(
+            page.replace(_PAGE_END, "") + _PAGE_END for page in extracted.pages
+        )
+        if len(text) <= ARTIFACT_TEXT_MAX_CHARS:
+            return text
+        return text[: ARTIFACT_TEXT_MAX_CHARS - 1] + _PAGE_END
+
+    text = get_or_extract_plaintext(f"{ARTIFACT_TEXT_FILE_PREFIX}{file_id}", extract)
+    paged = text.endswith(_PAGE_END)
+    pages = text[:-1].split(_PAGE_END) if paged else [text]
+    return ArtifactText(
+        pages=pages,
+        paged=paged,
+        # The sheet parser ends each sheet that it cut with the marker row.
+        truncated=len(text) >= ARTIFACT_TEXT_MAX_CHARS
+        or (
+            paged
+            and get_file_ext(file_name) in OnyxFileExtensions.SPREADSHEET_EXTENSIONS
+            and any(page.endswith(XLSX_TRUNCATION_MARKER) for page in pages)
+        ),
+    )
 
 
 # --- Convenience wrappers for callers that use user-file UUIDs ---
@@ -67,7 +169,9 @@ def user_file_id_to_plaintext_file_name(user_file_id: UUID) -> str:
 
 def store_user_file_plaintext(user_file_id: UUID, plaintext_content: str) -> bool:
     """Store plaintext content for a user file (delegates to :func:`store_plaintext`)."""
-    return store_plaintext(str(user_file_id), plaintext_content)
+    return store_plaintext(
+        user_file_id_to_plaintext_file_name(user_file_id), plaintext_content
+    )
 
 
 def load_chat_file_by_id(file_id: str) -> InMemoryChatFile:
@@ -88,12 +192,9 @@ def load_chat_file_by_id(file_id: str) -> InMemoryChatFile:
     )
 
 
-def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
+def load_user_file_content(user_file: UserFileMetadata) -> InMemoryChatFile:
+    """Read file content without an ORM record or caller-owned database session."""
     status = "not_loaded"
-
-    user_file = get_user_file_by_id(file_id, db_session)
-    if not user_file:
-        raise ValueError(f"User file with id {file_id} not found")
 
     # Get the file record to determine the appropriate chat file type
     file_store = get_default_file_store()
@@ -103,14 +204,14 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     chat_file_type = mime_type_to_chat_file_type(file_record.file_type)
 
     # Try to load plaintext version first
-    plaintext_file_name = user_file_id_to_plaintext_file_name(file_id)
+    plaintext_file_name = user_file_id_to_plaintext_file_name(user_file.id)
 
     # check for plain text normalized version first, then use original file otherwise
     try:
         file_io = file_store.read_file(plaintext_file_name, mode="b")
         plaintext_bytes = file_io.read()
         # An empty plaintext entry is a "we tried and there is no text"
-        # sentinel written by `_get_or_extract_plaintext` / `store_plaintext`
+        # sentinel written by `get_or_extract_plaintext` / `store_plaintext`
         # for unprocessable files (e.g. .zip).  Treat it as a cache miss
         # here so downstream tools (code interpreter, file reader) still
         # receive the original bytes instead of an empty file.
@@ -155,7 +256,7 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
         return chat_file
     finally:
         logger.debug(
-            "load_user_file finished: file_id=%s chat_file_type=%s status=%s",
+            "load_user_file_content finished: file_id=%s chat_file_type=%s status=%s",
             user_file.file_id,
             chat_file_type,
             status,
@@ -163,27 +264,13 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
 
 
 def load_in_memory_chat_files(
-    user_file_ids: list[UUID],
-    db_session: Session,
+    user_files: list[UserFileMetadata],
 ) -> list[InMemoryChatFile]:
-    """
-    Loads the actual content of user files specified by individual IDs and those
-    within specified project IDs into memory.
-
-    Args:
-        user_file_ids: A list of specific UserFile IDs to load.
-        db_session: The SQLAlchemy database session.
-
-    Returns:
-        A list of InMemoryChatFile objects, each containing the file content (as bytes),
-        file ID, file type, and filename. Prioritizes loading plaintext versions if available.
-    """
-    # Use parallel execution to load files concurrently
+    """Load captured files concurrently without sharing a database session."""
     return cast(
         list[InMemoryChatFile],
         run_functions_tuples_in_parallel(
-            # 1. Load files specified by individual IDs
-            [(load_user_file, (file_id, db_session)) for file_id in user_file_ids]
+            [(load_user_file_content, (user_file,)) for user_file in user_files]
         ),
     )
 
@@ -239,42 +326,50 @@ def validate_user_files_ownership(
     return current_user_files
 
 
-def chat_image_gen_metadata(chat_session_id: UUID) -> dict[str, Any]:
-    """Stamp the owning chat session onto a generated file.
+def chat_output_file_type(file_name: str) -> str:
+    """The MIME type of a chat output file, from its name."""
+    return guess_mime_type(file_name) or "application/octet-stream"
 
-    `access.py:user_can_access_chat_file` scopes a `CHAT_IMAGE_GEN` file to the
-    users who may read this session. Only rows written before stamping existed
-    lack it; new writes must always carry it.
-    """
-    return {CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)}
+
+def save_chat_output_file(
+    content: bytes,
+    *,
+    display_name: str,
+    file_type: str,
+    chat_session_id: UUID,
+) -> str:
+    """Save a generated image or code interpreter output, stamped with the
+    chat session: `access.py:user_can_access_chat_file` gives the file to the
+    users who may read that session. A file without the stamp is open to
+    every signed-in user (see `user_can_access_chat_file`). Returns the file
+    ID."""
+    return get_default_file_store().save_file(
+        content=BytesIO(content),
+        display_name=display_name,
+        file_origin=FileOrigin.CHAT_IMAGE_GEN,
+        file_type=file_type,
+        file_metadata={CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)},
+    )
 
 
 def save_file_from_url(url: str, chat_session_id: UUID) -> str:
-    response = requests.get(url)
+    response = requests.get(url, timeout=(10, REQUEST_TIMEOUT_SECONDS))
     response.raise_for_status()
-
-    file_io = BytesIO(response.content)
-    file_store = get_default_file_store()
-    file_id = file_store.save_file(
-        content=file_io,
+    return save_chat_output_file(
+        response.content,
         display_name="GeneratedImage",
-        file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type="image/png;base64",
-        file_metadata=chat_image_gen_metadata(chat_session_id),
+        chat_session_id=chat_session_id,
     )
-    return file_id
 
 
 def save_file_from_base64(base64_string: str, chat_session_id: UUID) -> str:
-    file_store = get_default_file_store()
-    file_id = file_store.save_file(
-        content=BytesIO(base64.b64decode(base64_string)),
+    return save_chat_output_file(
+        base64.b64decode(base64_string),
         display_name="GeneratedImage",
-        file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type=get_image_type(base64_string),
-        file_metadata=chat_image_gen_metadata(chat_session_id),
+        chat_session_id=chat_session_id,
     )
-    return file_id
 
 
 def save_file(
@@ -326,7 +421,7 @@ def save_files(
     return run_functions_tuples_in_parallel(funcs)
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def verify_user_files(
     user_files: list[FileDescriptor],
     user_id: UUID | None,
@@ -346,7 +441,6 @@ def verify_user_files(
     Raises:
         ValueError: If any file does not belong to the user or is not found
     """
-    from onyx.db.models import Project__UserFile
     from onyx.db.projects import check_project_ownership
 
     user_file_descriptors: list[tuple[UUID, str]] = []
@@ -392,14 +486,8 @@ def verify_user_files(
             )
 
         # Verify all project files belong to the specified project
-        user_files_in_project = (
-            db_session.query(UserFile)
-            .join(Project__UserFile)
-            .filter(
-                Project__UserFile.project_id == project_id,
-                UserFile.file_id.in_(project_file_ids),
-            )
-            .all()
+        user_files_in_project = get_project_user_files_by_file_ids(
+            project_id, project_file_ids, db_session
         )
 
         # Check if all files were found in the project

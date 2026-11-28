@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import (
@@ -18,6 +18,10 @@ from onyx.db.models import (
     StarterMessage,
 )
 from onyx.db.persona_sharing import derive_persona_sharing_status
+from onyx.integrations.models import (
+    PersonaIntegrationLink,
+    PersonaIntegrationSnapshot,
+)
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
@@ -168,8 +172,13 @@ class PersonaUpsertRequest(BaseModel):
     # For Private Personas, who should be able to access these
     users: list[UUID] | None = None
     groups: list[int] | None = None
-    # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
+    # Built-in tool ids. An old custom or MCP tool id adds its integration.
     tool_ids: list[int]
+    # The integrations of the agent with their action settings. None keeps
+    # the current links, except the links of integrations that have an
+    # OpenAPI tool or an old MCP tool: tool_ids replaces those, so a link that
+    # tool_ids does not select is removed.
+    integrations: list[PersonaIntegrationLink] | None = None
     remove_image: bool | None = None
     uploaded_image_id: str | None = None  # New field for uploaded image
     icon_name: str | None = (
@@ -195,6 +204,17 @@ class PersonaUpsertRequest(BaseModel):
     replace_base_system_prompt: bool = False
     task_prompt: str
     datetime_aware: bool
+
+    @field_validator("integrations")
+    @classmethod
+    def _one_link_for_each_integration(
+        cls, value: list[PersonaIntegrationLink] | None
+    ) -> list[PersonaIntegrationLink] | None:
+        if value is not None:
+            ids = [link.integration_id for link in value]
+            if len(ids) != len(set(ids)):
+                raise ValueError("Each integration can appear only one time.")
+        return value
 
 
 class MinimalPersonaSnapshot(BaseModel):
@@ -279,7 +299,7 @@ class MinimalPersonaSnapshot(BaseModel):
             name=persona.name,
             description=persona.description,
             tools=[
-                ToolSnapshot.from_model(tool)
+                ToolSnapshot.from_model(tool, with_headers=False)
                 for tool in persona.tools
                 if should_expose_tool_to_fe(tool)
             ],
@@ -371,7 +391,7 @@ class PersonaSnapshot(BaseModel):
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
             tools=[
-                ToolSnapshot.from_model(tool)
+                ToolSnapshot.from_model(tool, with_headers=False)
                 for tool in persona.tools
                 if should_expose_tool_to_fe(tool)
             ],
@@ -415,6 +435,7 @@ class PersonaSnapshot(BaseModel):
 # This is used for flows which need to know all settings
 class FullPersonaSnapshot(PersonaSnapshot):
     search_start_date: datetime | None = None
+    integrations: list[PersonaIntegrationSnapshot] = Field(default_factory=list)
     # Per-requesting-user context, set by the single-persona endpoint
     user_permission: PersonaAccessLevel | None = None
     admin_count: int = 0
@@ -454,7 +475,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             public_permission=persona.public_permission,
             sharing_status=derive_persona_sharing_status(persona),
             tools=[
-                ToolSnapshot.from_model(tool)
+                ToolSnapshot.from_model(tool, with_headers=False)
                 for tool in persona.tools
                 if should_expose_tool_to_fe(tool)
             ],

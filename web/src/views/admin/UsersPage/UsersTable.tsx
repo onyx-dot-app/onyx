@@ -1,16 +1,16 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Table, createTableColumns } from "@opal/components";
+import { Table, type TableColumn } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
-import { Button } from "@opal/components";
-import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
+import { Button, Text } from "@opal/components";
+import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import { AccountType, UserStatus } from "@/lib/types";
 import { timeAgo } from "@opal/time";
-import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
@@ -26,7 +26,7 @@ import type {
   StatusCountMap,
 } from "./types";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
-import type { User } from "@/lib/types";
+import { buildUserProfileImageUrl } from "@/lib/users/svc";
 
 // ---------------------------------------------------------------------------
 // Column renderers
@@ -35,8 +35,7 @@ import type { User } from "@/lib/types";
 function renderNameColumn(email: string, row: UserRow) {
   return (
     <Content
-      sizePreset="main-ui"
-      variant="section"
+      font="main-ui-action"
       title={row.personal_name ?? email}
       description={row.personal_name ? email : undefined}
     />
@@ -50,11 +49,11 @@ function renderStatusColumn(
 ) {
   return (
     <div className="flex flex-col">
-      <Text as="span" mainUiBody text03>
+      <Text as="span" font="main-ui-body" color="text-03">
         {labels.status[value] ?? value}
       </Text>
       {row.is_scim_synced && (
-        <Text as="span" secondaryBody text03>
+        <Text as="span" font="secondary-body" color="text-03">
           {labels.scimSynced}
         </Text>
       )}
@@ -64,7 +63,7 @@ function renderStatusColumn(
 
 function renderLastActiveColumn(value: string | null, locale: string) {
   return (
-    <Text as="span" secondaryBody text03>
+    <Text as="span" font="secondary-body" color="text-03">
       {value ? (timeAgo(value, locale) ?? "\u2014") : "\u2014"}
     </Text>
   );
@@ -73,8 +72,6 @@ function renderLastActiveColumn(value: string | null, locale: string) {
 // ---------------------------------------------------------------------------
 // Columns
 // ---------------------------------------------------------------------------
-
-const tc = createTableColumns<UserRow>();
 
 interface ColumnLabels {
   name: string;
@@ -90,52 +87,63 @@ function buildColumns(
   onMutate: () => void,
   labels: ColumnLabels,
   locale: string
-) {
+): TableColumn<UserRow>[] {
   return [
-    tc.qualifier({
+    {
+      kind: "qualifier",
       content: "icon",
-      iconSize: "lg",
-      getContent: (row) => {
-        const user = {
-          email: row.email,
-          personalization: row.personal_name
-            ? { name: row.personal_name }
-            : undefined,
-        } as User;
-        return (props) => <UserAvatar user={user} size={props.size} />;
-      },
-    }),
-    tc.column("email", {
-      header: labels.name,
+      avatar: true,
+      icon: (row) => (props) => (
+        <UserAvatar
+          name={row.personal_name}
+          email={row.email}
+          imageUrl={buildUserProfileImageUrl(row)}
+          size={props.size}
+        />
+      ),
+    },
+    {
+      kind: "data",
+      field: "email",
+      title: labels.name,
       weight: 22,
       cell: renderNameColumn,
-    }),
-    tc.column("groups", {
-      header: labels.groups,
+    },
+    {
+      kind: "data",
+      field: "groups",
+      title: labels.groups,
       weight: 24,
-      enableSorting: false,
+      sortable: false,
       cell: (value, row) => (
         <GroupsCell groups={value} user={row} onMutate={onMutate} />
       ),
-    }),
-    tc.column("account_type", {
-      header: labels.accountType,
+    },
+    {
+      kind: "data",
+      field: "account_type",
+      title: labels.accountType,
       weight: 16,
       cell: (_value, row) => <AccountTypeCell user={row} onMutate={onMutate} />,
-    }),
-    tc.column("status", {
-      header: labels.statusHeader,
+    },
+    {
+      kind: "data",
+      field: "status",
+      title: labels.statusHeader,
       weight: 14,
       cell: (value, row) => renderStatusColumn(value, row, labels),
-    }),
-    tc.column("last_active", {
-      header: labels.lastActive,
+    },
+    {
+      kind: "data",
+      field: "last_active",
+      title: labels.lastActive,
       weight: 14,
       cell: (value) => renderLastActiveColumn(value, locale),
-    }),
-    tc.actions({
+    },
+    {
+      kind: "actions",
       cell: (row) => <UserRowActions user={row} onMutate={onMutate} />,
-    }),
+    },
   ];
 }
 
@@ -166,14 +174,14 @@ export default function UsersTable({
   >([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
 
-  const { data: allGroups } = useGroups(true);
+  const { data: allGroups } = useGroups(true, false);
 
   const groupOptions: GroupOption[] = useMemo(
     () =>
       (allGroups ?? []).map((g) => ({
         id: g.id,
         name: g.name,
-        memberCount: g.users.length,
+        memberCount: g.member_count,
       })),
     [allGroups]
   );
@@ -231,14 +239,14 @@ export default function UsersTable({
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <SvgSimpleLoader className="h-6 w-6" />
+        <IconLoader className="h-6 w-6" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <Text as="p" secondaryBody text03>
+      <Text as="p" font="secondary-body" color="text-03">
         {t("table.error.description")}
       </Text>
     );
@@ -250,7 +258,7 @@ export default function UsersTable({
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         placeholder={t("table.search.placeholder")}
-        searchIcon
+        icon="search"
       />
       <UserFilters
         selectedAccountTypes={selectedAccountTypes}
@@ -264,11 +272,11 @@ export default function UsersTable({
         statusCounts={statusCounts}
       />
       <Table
-        data={filteredUsers}
+        items={filteredUsers}
         columns={columns}
         getRowId={(row) => row.id ?? row.email}
         pageSize={PAGE_SIZE}
-        searchTerm={searchTerm}
+        query={searchTerm}
         emptyState={
           <IllustrationContent
             illustration={SvgNoResult}

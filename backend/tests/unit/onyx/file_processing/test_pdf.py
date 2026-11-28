@@ -13,13 +13,15 @@ dependency on pypdf internals; the image-bearing ones are regenerated with
 """
 
 import importlib.util
+import subprocess
+import sys
 from io import BytesIO
 from pathlib import Path
 
 import pytest
 from pypdfium2 import PdfiumError
 
-from onyx.file_processing import extract_file_text, pdf_image_utils
+from onyx.file_processing import extract_file_text, pdf_image_utils, pdfium_text
 from onyx.file_processing.extract_file_text import pdf_to_text, read_pdf_file
 from onyx.file_processing.password_validation import is_pdf_protected
 from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
@@ -47,12 +49,14 @@ class TestReadPdfFile:
         assert "Page two content" in text
 
     def test_text_extraction_uses_pdfium(self) -> None:
-        """Text extraction goes through pypdfium2 (GIL-releasing), not pypdf."""
-        text = extract_file_text._extract_pdf_text_pdfium(
+        """Text extraction goes through pypdfium2 (GIL-releasing), not pypdf,
+        one text for each page."""
+        pages = pdfium_text.extract_pdf_pages_pdfium(
             (FIXTURES / "multipage.pdf").read_bytes(), None
         )
-        assert "Page one content" in text
-        assert "Page two content" in text
+        assert len(pages) == 2
+        assert "Page one content" in pages[0]
+        assert "Page two content" in pages[1]
 
     @pytest.mark.parametrize(
         "isolation_failure",
@@ -152,6 +156,24 @@ class TestReadPdfFile:
         assert len(collected[0][0]) > 0
         # Returned list is empty when callback is used
         assert images == []
+
+    def test_image_callback_failure_keeps_text(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failing image store (e.g. S3 AccessDenied) must not discard the text."""
+        monkeypatch.setattr(
+            extract_file_text,
+            "iter_pdf_extracted_images",
+            lambda *_args: iter([(b"img", "page_1_image_0.png")]),
+        )
+
+        def callback(_data: bytes, _name: str) -> None:
+            raise PermissionError("AccessDenied")
+
+        text, _, _ = read_pdf_file(
+            _load("simple.pdf"), extract_images=True, image_callback=callback
+        )
+        assert "Hello World" in text
 
     def test_image_cap_skips_images_above_limit(
         self, monkeypatch: pytest.MonkeyPatch
@@ -322,3 +344,27 @@ class TestIsPdfProtected:
         pdf.seek(42)
         is_pdf_protected(pdf)
         assert pdf.tell() == 42
+
+
+def test_pdfium_text_module_has_light_imports() -> None:
+    """Each PDF's child process imports the module of the function it runs.
+    That module must not pull in ``extract_file_text``, which costs about a
+    CPU-second for each PDF."""
+    code = (
+        "import sys\n"
+        "import onyx.file_processing.pdfium_text\n"
+        "heavy = [m for m in ('onyx.file_processing.extract_file_text', "
+        "'openpyxl', 'chardet') if m in sys.modules]\n"
+        "assert not heavy, heavy\n"
+    )
+    # The child does not get pytest's sys.path, so run it from the directory
+    # that holds the onyx package.
+    backend_dir = Path(pdfium_text.__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=backend_dir,
+    )
+    assert result.returncode == 0, result.stderr

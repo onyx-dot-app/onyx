@@ -1,0 +1,18 @@
+"use client";
+
+import { SingleSelectField } from "@opal/components/inputs/dropdowns/single/components";
+import type { InputSingleComboBoxProps } from "@opal/components/inputs/dropdowns/types";
+
+/**
+ * A single pick from a set behind a text input: typing filters the options,
+ * and `mode="open"` also commits the raw text via the create row. Focus
+ * opens the list. The family's pick-only sibling is `InputSingleSelect`.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too.
+ */
+function InputSingleComboBox(props: InputSingleComboBoxProps) {
+  return <SingleSelectField {...props} trigger="type-in" />;
+}
+
+export { InputSingleComboBox };

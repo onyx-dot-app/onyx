@@ -1,13 +1,16 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, JsonValue, model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag
 from onyx.tools.models import ChatMinimalTextMessage
 
+# Public API bound, so internal expansion tuning cannot change it.
+MAX_RAW_SEARCH_CONTEXT_CHUNKS = 5
 
-class SearchRequest(BaseModel):
+
+class BaseSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2048)
 
     sources: list[DocumentSource] | None = None
@@ -19,6 +22,8 @@ class SearchRequest(BaseModel):
 
     persona_id: int | None = None
 
+
+class SearchRequest(BaseSearchRequest):
     provider: str | None = None
     model: str | None = None
 
@@ -35,17 +40,41 @@ class SearchRequest(BaseModel):
         return self
 
 
+class RawSearchRequest(BaseSearchRequest):
+    # Neighboring chunks added on each side of every result.
+    context_chunks: int = Field(
+        default=MAX_RAW_SEARCH_CONTEXT_CHUNKS, ge=0, le=MAX_RAW_SEARCH_CONTEXT_CHUNKS
+    )
+
+
 class SearchResult(BaseModel):
     citation_id: int | None
     title: str
-    # Full chunk text the LLM saw for this section. Multiple results may
-    # share a citation_id when the LLM selected multiple non-overlapping
-    # sections of the same document.
+    # Section text, with any surrounding chunks the search added. Results from
+    # one document share a citation_id.
     content: str
     link: str | None
     source_type: str
     updated_at: str | None
+    # Source fields such as a Jira reporter. Null when the document has none.
+    metadata: dict[str, str | list[str]] | None = None
 
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
+
+
+class PostgresQueryRequest(BaseModel):
+    """One postgres_query call: the arguments the chat tool takes."""
+
+    arguments: dict[str, JsonValue]
+    # Applies this agent's knowledge scope, as for search.
+    persona_id: int | None = None
+
+
+class PostgresQueryResponse(BaseModel):
+    # The text the chat tool returns to the model. Listed documents carry
+    # their links.
+    result: str
+    # The call was rejected or failed; `result` says why.
+    is_error: bool

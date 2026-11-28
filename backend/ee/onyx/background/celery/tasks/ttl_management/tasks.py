@@ -14,6 +14,8 @@ from onyx.configs.constants import (
 )
 from onyx.db.chat import delete_chat_session, get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.settings.store import load_settings
@@ -49,6 +51,21 @@ def _release_chain_if_owned(redis_client: TenantRedisClient, chain_token: str) -
         [OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE],
         [chain_token],
     )
+
+
+def _send_harness_retention_purge(task: Task, tenant_id: str) -> None:
+    """Once per chain, after its deletes commit. The sandbox queue runs on a
+    worker that can call the Firecracker host agents."""
+    try:
+        task.app.send_task(
+            OnyxCeleryTask.PURGE_EXPIRED_HARNESS_SESSIONS,
+            kwargs={"tenant_id": tenant_id},
+            queue=OnyxCeleryQueues.SANDBOX,
+            priority=OnyxCeleryPriority.LOW,
+            expires=CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
+        )
+    except Exception:
+        logger.exception("Failed to enqueue the Firecracker retention purge")
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -100,6 +117,12 @@ def perform_ttl_management_task(
     if not owns_chain:
         return
 
+    # The chain carries the limit it started with, so a limit cleared since
+    # then has to end it here.
+    if load_settings().maximum_chat_retention_days is None:
+        _release_chain_if_owned(redis_client, chain_token)
+        return
+
     with get_session_with_current_tenant() as db_session:
         old_chat_sessions = get_chat_sessions_older_than(
             retention_limit_days, db_session, limit=CHAT_TTL_DELETE_BATCH_SIZE
@@ -108,13 +131,14 @@ def perform_ttl_management_task(
     for user_id, session_id in old_chat_sessions:
         try:
             with get_session_with_current_tenant() as db_session:
-                delete_chat_session(
+                artifact_ids = delete_chat_session(
                     user_id,
                     session_id,
                     db_session,
                     include_deleted=True,
                     hard_delete=True,
                 )
+            delete_chat_artifacts_from_index(artifact_ids)
         except Exception:
             logger.exception(
                 "Failed to delete chat session user_id=%s session_id=%s, continuing with remaining sessions",
@@ -141,6 +165,8 @@ def perform_ttl_management_task(
             _release_chain_if_owned(redis_client, chain_token)
             raise
     else:
+        if HARNESS_SANDBOX_ENABLED:
+            _send_harness_retention_purge(self, tenant_id)
         _release_chain_if_owned(redis_client, chain_token)
 
 

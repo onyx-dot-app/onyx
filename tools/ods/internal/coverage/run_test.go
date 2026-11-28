@@ -44,13 +44,6 @@ func TestModulePath_noModuleDeclaration(t *testing.T) {
 	}
 }
 
-func TestExitError_reportsTheCode(t *testing.T) {
-	err := &ExitError{Code: 2}
-	if got := err.Error(); got != "the measurement exited with code 2" {
-		t.Fatalf("unexpected message: %q", got)
-	}
-}
-
 // fakeGo puts a go on PATH that runs script.
 func fakeGo(t *testing.T, script string) {
 	t.Helper()

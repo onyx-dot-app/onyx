@@ -21,21 +21,41 @@ import requests
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.paths.resource_path import ResourcePath
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS, SKIP_SPREADSHEET_CONTENT
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
     is_tabular_file,
 )
+from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
+    DriveDeltaPage,
+    fetch_drive_delta_checkpoint_page,
+    parse_graph_sharepoint_ids,
+)
 from onyx.connectors.microsoft_utils.graph_client import (
+    GRAPH_API_RETRYABLE_STATUSES,
     TRANSIENT_TRANSPORT_EXCEPTIONS,
     GraphApiClient,
     backoff_seconds,
     log_and_raise_for_status,
+    retry_wait,
 )
-from onyx.connectors.models import ImageSection, TabularSection, TextSection
+from onyx.connectors.microsoft_utils.request_pacer import (
+    MICROSOFT_USER_AGENT,
+    THROTTLE_STATUSES,
+    USER_AGENT_HEADER,
+    MicrosoftCall,
+    MicrosoftRequestPacer,
+)
+from onyx.connectors.models import (
+    ConnectorStopSignal,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_processing.image_utils import (
@@ -45,12 +65,12 @@ from onyx.file_processing.image_utils import (
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
 _EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 
-SHAREPOINT_IDS_PROPERTY = "sharepointIds"
 LIST_ITEM_ID_PROPERTY = "listItemId"
 DRIVE_ITEM_ID_PROPERTY = "id"
 DRIVE_ITEM_NAME_PROPERTY = "name"
@@ -86,6 +106,12 @@ DRIVE_ITEM_SELECT_FIELDS = ",".join(
 # Graph closes the connection mid-body under throttling, so a streaming
 # download retries transport errors on top of its initial attempt.
 STREAM_DOWNLOAD_MAX_RETRIES = 3
+# The answers of an expired download target. A new request of /content
+# gives a new target, at most _REDIRECT_REFRESHES times.
+_EXPIRED_TARGET_STATUSES: frozenset[int] = frozenset({401, 403, 410})
+_REDIRECT_REFRESHES = 2
+# The answers of Graph's /content that point to the download host.
+_REDIRECT_STATUSES: frozenset[int] = frozenset({301, 302, 303, 307, 308})
 STREAM_CHUNK_SIZE = 64 * 1024
 
 
@@ -234,7 +260,7 @@ class DriveItemData(BaseModel):
             "user", {}
         )
         parent_ref = item.get(DRIVE_ITEM_PARENT_REFERENCE_PROPERTY, {})
-        sharepoint_ids = item.get(SHAREPOINT_IDS_PROPERTY) or {}
+        sharepoint_ids = parse_graph_sharepoint_ids(item.get(SHAREPOINT_IDS_PROPERTY))
 
         return cls(
             id=item[DRIVE_ITEM_ID_PROPERTY],
@@ -256,7 +282,7 @@ class DriveItemData(BaseModel):
             ),
             parent_reference_path=parent_ref.get("path"),
             drive_id=parent_ref.get("driveId"),
-            list_item_id=sharepoint_ids.get(LIST_ITEM_ID_PROPERTY),
+            list_item_id=sharepoint_ids.list_item_id if sharepoint_ids else None,
         )
 
     def to_sdk_driveitem(self, graph_client: GraphClient) -> DriveItem:
@@ -275,6 +301,25 @@ class DriveItemData(BaseModel):
                 {LIST_ITEM_ID_PROPERTY: self.list_item_id},
             )
         return item
+
+
+class DriveFolderReference(BaseModel):
+    id: str
+    web_url: str = Field(
+        validation_alias=AliasChoices(DRIVE_ITEM_WEB_URL_PROPERTY, "web_url")
+    )
+
+
+def resolve_drive_folder(
+    client: GraphApiClient, drive_id: str, folder_path: str
+) -> DriveFolderReference:
+    return DriveFolderReference.model_validate(
+        client.get_json(
+            f"{client.graph_api_base}/drives/{drive_id}/root:/"
+            f"{quote(folder_path, safe='/')}",
+            {"$select": "id,webUrl"},
+        )
+    )
 
 
 class DriveItemContent(BaseModel):
@@ -351,14 +396,16 @@ def stream_response_to_buffer_with_cap(
     cap: int,
     description: str,
     max_retries: int = STREAM_DOWNLOAD_MAX_RETRIES,
+    retry_statuses: frozenset[int] = GRAPH_API_RETRYABLE_STATUSES,
+    pacer: MicrosoftRequestPacer | None = None,
+    call: MicrosoftCall = MicrosoftCall.DOWNLOAD,
+    on_redirect: Callable[[str], bytes] | None = None,
 ) -> bytes:
-    """Stream a GET response into memory with a byte cap, retrying on transient
-    transport-level failures.
-
-    Graph occasionally drops the TCP connection mid-body (surfaces as
-    `ChunkedEncodingError: IncompleteRead`). Each retry calls
-    ``request_factory`` again to obtain a fresh ``Response`` -- this also
-    avoids reusing a stale socket from urllib3's connection pool.
+    """Stream a GET into memory under a byte cap, retrying transport drops
+    (Graph closes a connection mid-body now and then) and the answers in
+    ``retry_statuses`` with Retry-After. Each attempt calls
+    ``request_factory`` for a fresh ``Response``, so a stale pooled socket is
+    never reused.
 
     Args:
         request_factory: Zero-arg callable that issues a streaming GET and
@@ -366,41 +413,59 @@ def stream_response_to_buffer_with_cap(
         cap: Maximum number of bytes to read before raising ``SizeCapExceeded``.
         description: Short label used in log messages.
         max_retries: Number of retries beyond the initial attempt.
+        pacer: Takes the cost of a download from the shared limiter before
+            each attempt, and reports a throttled answer.
+        call: The call type, which picks the limiter lane: a Graph download
+            or a fetch of a pre-authenticated link.
+        on_redirect: With a request that does not follow redirects, gets the
+            Location of a redirect and returns its bytes.
 
     Raises:
         SizeCapExceeded: when ``cap`` is exceeded (never retried).
-        requests.RequestException: when retries are exhausted. HTTPError from
-            ``raise_for_status`` is not retried here.
+        requests.RequestException: once retries are exhausted, including the
+            HTTPError of a final throttled or 5xx answer.
     """
+    redirect_to: str | None = None
     for attempt in range(max_retries + 1):
+        if pacer is not None:
+            pacer.acquire(call)
         try:
             with request_factory() as resp:
-                log_and_raise_for_status(resp)
-
-                cl_header = resp.headers.get("Content-Length")
-                if cl_header and cl_header.isdigit() and int(cl_header) > cap:
-                    logger.warning(
-                        "Content-Length %s exceeds cap %s for %s; skipping download.",
-                        cl_header,
-                        cap,
-                        description,
+                if pacer is not None:
+                    pacer.report_response(
+                        resp.status_code, resp.headers.get("Retry-After"), call
                     )
-                    raise SizeCapExceeded("pre_download")
-
-                buf = io.BytesIO()
-                for chunk in resp.iter_content(STREAM_CHUNK_SIZE):
-                    if not chunk:
-                        continue
-                    buf.write(chunk)
-                    if buf.tell() > cap:
-                        logger.warning(
-                            "Streaming download for %s exceeded cap %s bytes; "
-                            "aborting early.",
-                            description,
-                            cap,
-                        )
-                        raise SizeCapExceeded("during_download")
-                return buf.getvalue()
+                if on_redirect is not None and resp.status_code in _REDIRECT_STATUSES:
+                    redirect_to = resp.headers.get("Location")
+                sleep_time = retry_wait(resp, attempt, max_retries, retry_statuses)
+                if redirect_to is not None:
+                    sleep_time = None
+                elif sleep_time is None:
+                    log_and_raise_for_status(resp)
+                    return _read_under_cap(resp, cap, description)
+                else:
+                    logger.warning(
+                        "Download for %s answered %s on attempt %s/%s. "
+                        "Sleeping %.1fs before retry.",
+                        description,
+                        resp.status_code,
+                        attempt + 1,
+                        max_retries + 1,
+                        sleep_time,
+                    )
+                    if (
+                        pacer is not None
+                        and resp.status_code in THROTTLE_STATUSES
+                        and parse_retry_after_seconds(resp.headers.get("Retry-After"))
+                    ):
+                        # The pacer set the pause of the lane. The next
+                        # acquire waits for it and ends the wait on a stop.
+                        sleep_time = None
+            if redirect_to is not None:
+                break
+            # The response is closed by now, so the wait holds no socket.
+            if sleep_time is not None:
+                time.sleep(sleep_time)
         except TRANSIENT_TRANSPORT_EXCEPTIONS as e:
             if attempt >= max_retries:
                 logger.warning(
@@ -424,6 +489,9 @@ def stream_response_to_buffer_with_cap(
             )
             time.sleep(sleep_time)
 
+    if redirect_to is not None and on_redirect is not None:
+        # The redirect target has retries of its own.
+        return on_redirect(redirect_to)
     # Defensive: the loop either returns or re-raises on the final attempt.
     raise RuntimeError(
         f"Unreachable: streaming download retry loop exited without resolution "
@@ -431,56 +499,176 @@ def stream_response_to_buffer_with_cap(
     )
 
 
-def download_with_cap(url: str, timeout: int, cap: int) -> bytes:
+def _read_under_cap(resp: requests.Response, cap: int, description: str) -> bytes:
+    cl_header: str | None = resp.headers.get("Content-Length")
+    if cl_header and cl_header.isdigit() and int(cl_header) > cap:
+        logger.warning(
+            "Content-Length %s exceeds cap %s for %s; skipping download.",
+            cl_header,
+            cap,
+            description,
+        )
+        raise SizeCapExceeded("pre_download")
+
+    buf: io.BytesIO = io.BytesIO()
+    for chunk in resp.iter_content(STREAM_CHUNK_SIZE):
+        if not chunk:
+            continue
+        buf.write(chunk)
+        if buf.tell() > cap:
+            logger.warning(
+                "Streaming download for %s exceeded cap %s bytes; aborting early.",
+                description,
+                cap,
+            )
+            raise SizeCapExceeded("during_download")
+    return buf.getvalue()
+
+
+def download_with_cap(
+    url: str, timeout: int, cap: int, pacer: MicrosoftRequestPacer | None = None
+) -> bytes:
     """Stream download content with an upper bound on bytes read.
 
     Behavior:
     - Checks `Content-Length` first and aborts early if it exceeds `cap`.
     - Otherwise streams the body in chunks and stops once `cap` is surpassed.
-    - Retries on transient transport errors (e.g. mid-stream connection drops).
+    - Retries transport errors (e.g. mid-stream connection drops), and a
+      throttled answer (429 or 503) after its Retry-After. The pacer reports
+      the throttle to the download lane, so every link download on the app
+      pauses, and Graph calls go on. Any other refusal is
+      final: the caller's Graph `/content` fallback is its second chance.
     - Raises `SizeCapExceeded` when the cap would be exceeded.
     - Returns the full bytes if the content fits within `cap`.
     """
 
     def _factory() -> requests.Response:
-        return requests.get(url, stream=True, timeout=timeout)
+        return requests.get(
+            url,
+            headers={USER_AGENT_HEADER: MICROSOFT_USER_AGENT},
+            stream=True,
+            timeout=timeout,
+        )
 
     return stream_response_to_buffer_with_cap(
-        _factory, cap, description=f"downloadUrl:{redact_url_for_logging(url)}"
+        _factory,
+        cap,
+        description=f"downloadUrl:{redact_url_for_logging(url)}",
+        retry_statuses=THROTTLE_STATUSES,
+        pacer=pacer,
+        call=MicrosoftCall.LINK_DOWNLOAD,
     )
 
 
 def download_graph_url_with_cap(
-    access_token: str, url: str, cap: int, description: str
+    get_access_token: Callable[[], str],
+    url: str,
+    cap: int,
+    description: str,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> bytes:
     """Stream the bytes a Graph URL serves, with a byte cap.
 
-    Retries on transient transport errors. Raises SizeCapExceeded if the cap is
-    exceeded.
+    Retries transport errors and Graph's retryable statuses with Retry-After,
+    the token fetched per attempt so a long wait cannot outlive it. Raises
+    SizeCapExceeded if the cap is exceeded.
+
+    The request does not follow a redirect. Graph's ``/content`` answers 302
+    to the download host, and that fetch is a link download: it takes its
+    turn from the download lane, and a throttle there pauses that lane only.
     """
-    headers = {"Authorization": f"Bearer {access_token}"}
+
+    def _factory() -> requests.Response:
+        headers = {
+            "Authorization": f"Bearer {get_access_token()}",
+            USER_AGENT_HEADER: MICROSOFT_USER_AGENT,
+        }
+        return requests.get(
+            url,
+            headers=headers,
+            stream=True,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            allow_redirects=False,
+        )
+
+    def _follow(location: str) -> bytes:
+        try:
+            return _download_redirect_target(location, cap, pacer)
+        except requests.HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status in _EXPIRED_TARGET_STATUSES:
+                raise _ExpiredRedirectTarget(status) from error
+            raise
+
+    # A target can expire during a long throttle wait. Then a new request of
+    # the Graph URL gives a new target, a few times at most.
+    for refresh in range(_REDIRECT_REFRESHES + 1):
+        try:
+            return stream_response_to_buffer_with_cap(
+                _factory, cap, description=description, pacer=pacer, on_redirect=_follow
+            )
+        except _ExpiredRedirectTarget as expired:
+            if refresh >= _REDIRECT_REFRESHES:
+                raise requests.HTTPError(
+                    f"The download target of {description} expired "
+                    f"(status={expired.status})"
+                ) from expired
+            logger.info(
+                "The download target of %s expired (status=%s); asking Graph "
+                "for a new one.",
+                description,
+                expired.status,
+            )
+    raise RuntimeError(f"Unreachable: no download result for {description}")
+
+
+class _ExpiredRedirectTarget(Exception):
+    """The download target of a Graph redirect refused the fetch, as an
+    expired pre-authenticated URL does."""
+
+    def __init__(self, status: int | None) -> None:
+        super().__init__(f"redirect target refused (status={status})")
+        self.status = status
+
+
+def _download_redirect_target(
+    url: str, cap: int, pacer: MicrosoftRequestPacer | None
+) -> bytes:
+    """The bytes behind the redirect of a Graph download, as a link
+    download. A throttled answer is retried after its Retry-After."""
 
     def _factory() -> requests.Response:
         return requests.get(
-            url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
+            url,
+            headers={USER_AGENT_HEADER: MICROSOFT_USER_AGENT},
+            stream=True,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
-    return stream_response_to_buffer_with_cap(_factory, cap, description=description)
+    return stream_response_to_buffer_with_cap(
+        _factory,
+        cap,
+        description=f"redirect:{redact_url_for_logging(url)}",
+        pacer=pacer,
+        call=MicrosoftCall.LINK_DOWNLOAD,
+    )
 
 
 def download_via_graph_api(
-    access_token: str,
+    get_access_token: Callable[[], str],
     drive_id: str,
     item_id: str,
     cap: int,
     graph_api_base: str,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> bytes:
     """Download a drive item via the Graph API /content endpoint with a byte cap."""
     return download_graph_url_with_cap(
-        access_token,
+        get_access_token,
         f"{graph_api_base}/drives/{drive_id}/items/{item_id}/content",
         cap,
         description=f"graph_api(drive={drive_id},item={item_id})",
+        pacer=pacer,
     )
 
 
@@ -488,8 +676,9 @@ def extract_drive_item_content(
     driveitem: DriveItemData,
     size_threshold: int,
     graph_api_base: str,
-    access_token: str | None = None,
+    get_access_token: Callable[[], str] | None = None,
     raw_file_callback: RawFileCallback | None = None,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> DriveItemContent | None:
     """Download an item and extract it into Onyx sections.
 
@@ -533,6 +722,7 @@ def extract_drive_item_content(
                 download_url,
                 REQUEST_TIMEOUT_SECONDS,
                 size_threshold,
+                pacer,
             )
         except SizeCapExceeded as e:
             logger.warning(
@@ -541,6 +731,18 @@ def extract_drive_item_content(
             return None
         except requests.RequestException as e:
             status = e.response.status_code if e.response is not None else -1
+            if status in THROTTLE_STATUSES:
+                # /content redirects to the same download host, so a
+                # fallback would only add load and spend Graph RU.
+                logger.warning(
+                    "Download via downloadUrl for '%s' stayed throttled "
+                    "(status=%s) after its retries.",
+                    driveitem.name,
+                    status,
+                )
+                raise DriveItemContentError(
+                    f"Download link throttled (status={status})"
+                ) from e
             logger.warning(
                 "Failed to download via downloadUrl for '%s' (status=%s); falling back to Graph API.",
                 driveitem.name,
@@ -548,14 +750,16 @@ def extract_drive_item_content(
             )
 
     # Fallback: download via Graph API /content endpoint
-    if content_bytes is None and access_token and driveitem.drive_id:
+    if content_bytes is None and get_access_token and driveitem.drive_id:
         try:
+            # The token is read for each try, after its limiter wait.
             content_bytes = download_via_graph_api(
-                access_token,
+                get_access_token,
                 driveitem.drive_id,
                 driveitem.id,
                 size_threshold,
                 graph_api_base=graph_api_base,
+                pacer=pacer,
             )
         except SizeCapExceeded:
             logger.warning(
@@ -563,6 +767,8 @@ def extract_drive_item_content(
                 driveitem.name,
             )
             return None
+        except ConnectorStopSignal:
+            raise
         except Exception as e:
             scrubbed = scrub_url_credentials(str(e))
             logger.warning(
@@ -607,6 +813,7 @@ def extract_drive_item_content(
                 content_type=mime_type or "application/octet-stream",
                 raw_file_callback=raw_file_callback,
                 link=driveitem.web_url or "",
+                skip_content=SKIP_SPREADSHEET_CONTENT,
             )
             sections.extend(result.sections)
             staged_file_id = result.staged_file_id
@@ -630,15 +837,18 @@ def extract_drive_item_content(
     return DriveItemContent(sections=sections, staged_file_id=staged_file_id)
 
 
-def _delta_item_is_indexable(
-    item: dict[str, Any],
+def iter_delta_page_files(
+    page: DriveDeltaPage,
     start: datetime | None,
     end: datetime | None,
-) -> bool:
-    """Folders and tombstones carry no content, so only files in window index."""
-    if DRIVE_ITEM_FOLDER_PROPERTY in item or DRIVE_ITEM_DELETED_PROPERTY in item:
-        return False
-    return drive_item_in_time_window(item, start, end)
+) -> Generator[DriveItemData, None, None]:
+    for item in page.items:
+        if item.is_folder or item.is_tombstone:
+            continue
+        graph_json = item.to_graph_json()
+        if not drive_item_in_time_window(graph_json, start, end):
+            continue
+        yield DriveItemData.from_graph_json(graph_json)
 
 
 def iter_drive_items_paged(
@@ -649,6 +859,7 @@ def iter_drive_items_paged(
     end: datetime | None = None,
     page_size: int = 200,
     folder_id: str | None = None,
+    before_page: Callable[[], None] | None = None,
 ) -> Generator[DriveItemData, None, None]:
     """Yield DriveItemData for every file in a drive via the Graph API.
 
@@ -676,6 +887,8 @@ def iter_drive_items_paged(
         }
 
         while page_url:
+            if before_page is not None:
+                before_page()
             data = client.get_json(page_url, params)
             params = None  # nextLink already embeds query params
 
@@ -714,7 +927,8 @@ def iter_drive_items_delta(
 
     initial_url = f"{client.graph_api_base}/drives/{drive_id}/root/delta"
     if use_timestamp_token:
-        assert start is not None  # for type-checking
+        if start is None:
+            raise RuntimeError("Delta timestamp token needs a start time.")
         token = quote(start.isoformat(timespec="seconds"))
         initial_url += f"?token={token}"
 
@@ -750,102 +964,18 @@ def iter_delta_pages(
     }
 
     while page_url:
-        try:
-            data = client.get_json(page_url, params)
-        except requests.HTTPError as e:
-            # 410 means the delta token expired, so we need to fall back to full enumeration
-            if e.response is not None and e.response.status_code == 410:
-                if not allow_full_resync:
-                    raise
-                logger.warning(
-                    "Delta token expired (410 Gone) for drive '%s'. Falling back to full delta enumeration.",
-                    drive_id,
-                )
-                yield from iter_delta_pages(
-                    client,
-                    initial_url=f"{client.graph_api_base}/drives/{drive_id}/root/delta",
-                    drive_id=drive_id,
-                    start=start,
-                    end=end,
-                    page_size=page_size,
-                    allow_full_resync=False,
-                )
-                return
-            raise
-
-        params = None  # nextLink/deltaLink already embed query params
-
-        for item in data.get("value", []):
-            if not _delta_item_is_indexable(item, start, end):
-                continue
-            yield DriveItemData.from_graph_json(item)
-
-        page_url = data.get("@odata.nextLink")
-        if not page_url:
-            break
-
-
-def build_delta_start_url(
-    graph_api_base: str,
-    drive_id: str,
-    start: datetime | None = None,
-    page_size: int = 200,
-) -> str:
-    """Build the initial delta API URL with query parameters embedded.
-
-    Embeds ``$top``, ``$select``, and optionally ``token`` so the URL can be
-    stored in a checkpoint without a separate params dict.
-    """
-    base_url = f"{graph_api_base}/drives/{drive_id}/root/delta"
-    params = [
-        f"$top={page_size}",
-        f"$select={DRIVE_ITEM_SELECT_FIELDS}",
-    ]
-    if start is not None and start > _EPOCH:
-        token = quote(start.isoformat(timespec="seconds"))
-        params.append(f"token={token}")
-    return f"{base_url}?{'&'.join(params)}"
-
-
-def fetch_one_delta_page(
-    client: GraphApiClient,
-    page_url: str,
-    drive_id: str,
-    start: datetime | None = None,
-    end: datetime | None = None,
-    page_size: int = 200,
-) -> tuple[list[DriveItemData], str | None]:
-    """Fetch a single page of delta API results.
-
-    Returns ``(items, next_page_url)``.  *next_page_url* is ``None`` when
-    the delta enumeration is complete (deltaLink with no nextLink).
-
-    On 410 Gone (expired token) returns ``([], full_resync_url)`` so
-    the caller can store the resync URL in the checkpoint and retry on
-    the next cycle.
-    """
-    try:
-        data = client.get_json(page_url)
-    except requests.HTTPError as e:
-        if e.response is not None and e.response.status_code == 410:
-            logger.warning(
-                "Delta token expired (410 Gone) for drive '%s'. Will restart with full delta enumeration.",
-                drive_id,
-            )
-            full_url = (
-                f"{client.graph_api_base}/drives/{drive_id}/root/delta?"
-                f"$top={page_size}&$select={DRIVE_ITEM_SELECT_FIELDS}"
-            )
-            return [], full_url
-        raise
-
-    items: list[DriveItemData] = []
-    for item in data.get("value", []):
-        if not _delta_item_is_indexable(item, start, end):
-            continue
-        items.append(DriveItemData.from_graph_json(item))
-
-    next_url = data.get("@odata.nextLink")
-    if next_url:
-        return items, next_url
-    return items, None
+        result = fetch_drive_delta_checkpoint_page(
+            client,
+            page_url=page_url,
+            drive_id=drive_id,
+            query_params=params,
+            page_size=page_size,
+            select_fields=DRIVE_ITEM_SELECT_FIELDS,
+            allow_full_resync=allow_full_resync,
+        )
+        params = None  # Cursor URLs already embed query parameters.
+        if result.resync_after_410:
+            allow_full_resync = False
+        else:
+            yield from iter_delta_page_files(result.page, start, end)
+        page_url = result.next_checkpoint_url

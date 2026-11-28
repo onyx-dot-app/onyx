@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import InternetContentProvider, InternetSearchProvider
@@ -205,6 +206,31 @@ def fetch_web_content_provider_by_type(
     return db_session.scalars(stmt).first()
 
 
+def set_web_search_provider_base_url(
+    *, name: str, base_url: str, db_session: Session
+) -> None:
+    provider = db_session.scalars(
+        select(InternetSearchProvider).where(InternetSearchProvider.name == name)
+    ).first()
+    if provider is None:
+        return
+    provider.config = {**(provider.config or {}), "base_url": base_url}
+    db_session.flush()
+
+
+def set_web_content_provider_base_url(
+    *, name: str, base_url: str, db_session: Session
+) -> None:
+    provider = db_session.scalars(
+        select(InternetContentProvider).where(InternetContentProvider.name == name)
+    ).first()
+    if provider is None:
+        return
+    config = provider.config or WebContentProviderConfig()
+    provider.config = config.model_copy(update={"base_url": base_url})
+    db_session.flush()
+
+
 def _ensure_unique_content_name(
     name: str, provider_id: int | None, db_session: Session
 ) -> None:
@@ -323,3 +349,55 @@ def delete_web_content_provider(provider_id: int, db_session: Session) -> None:
     db_session.flush()
 
     db_session.commit()
+
+
+def upsert_web_content_provider_api_key__no_commit(
+    name: str,
+    provider_type: str,
+    api_key: str,
+    config: WebContentProviderConfig | None,
+    db_session: Session,
+) -> None:
+    """Set the API key of the content provider with this name. Insert the
+    provider, inactive, when it does not exist."""
+    db_session.execute(
+        insert(InternetContentProvider)
+        .values(
+            name=name,
+            provider_type=provider_type,
+            api_key=api_key,
+            is_active=False,
+            config=config,
+        )
+        .on_conflict_do_update(
+            index_elements=["name"],
+            set_={"api_key": api_key},
+        )
+    )
+    db_session.flush()
+
+
+def upsert_web_search_provider_api_key__no_commit(
+    name: str,
+    provider_type: str,
+    api_key: str,
+    config: dict[str, str] | None,
+    db_session: Session,
+) -> None:
+    """Set the API key of the search provider with this name. Insert the
+    provider, inactive, when it does not exist."""
+    db_session.execute(
+        insert(InternetSearchProvider)
+        .values(
+            name=name,
+            provider_type=provider_type,
+            api_key=api_key,
+            is_active=False,
+            config=config,
+        )
+        .on_conflict_do_update(
+            index_elements=["name"],
+            set_={"api_key": api_key},
+        )
+    )
+    db_session.flush()

@@ -1,375 +1,212 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSWRConfig } from "swr";
 import {
   Button,
   InputTypeIn,
-  LineItemButton,
+  InputSingleSelect,
   MessageCard,
-  Popover,
-  Text,
+  Dropdown,
+  useCreateModal,
 } from "@opal/components";
 import {
-  ConfirmationModalLayout,
   IllustrationContent,
   SettingsLayouts,
+  Toolbar,
+  Section,
   toast,
 } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
-  SvgAlertTriangle,
   SvgBlocks,
   SvgEdit,
   SvgPlus,
-  SvgSimpleLoader,
   SvgUploadCloud,
+  SvgUsers,
 } from "@opal/icons";
-import { SvgGithub } from "@opal/logos";
-import TextSeparator from "@/refresh-components/TextSeparator";
+import { usePluginBulkActions } from "@/sections/skills/usePluginBulkActions";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
-import SkillCard, {
-  type CustomSkillCardItem,
-  type SkillCardItem,
-} from "@/sections/cards/SkillCard";
+import AdminSkillsTable from "@/sections/skills/AdminSkillsTable";
+import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
-import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
-import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
-import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import SkillReviewRequests from "@/sections/skills/SkillReviewRequests";
+import SkillLimitUsersBanner from "@/sections/skills/SkillLimitUsersBanner";
+import SkillPublishingCard from "@/sections/skills/SkillPublishingCard";
+import type { CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
-import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
+import { refreshSkillListsChecked } from "@/lib/skills/cache";
+import { canManageSkill } from "@/lib/skills/sharing";
 import { useSettings } from "@/lib/settings/hooks";
+import { usePluginDelete, usePluginEnablement } from "@/lib/skills/hooks";
+import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
+import { adminSkillHref, newSkillHref } from "@/lib/customize/paths";
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-
-export default function SkillsPage() {
+export default function AdminSkillsPage() {
   const t = useTranslations("skills");
+  const bulkCopy = useTranslations("skills.bulk");
+  const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const { appName } = useSettings();
-  const router = useRouter();
-  const externalAppIdParam = useSearchParams().get("externalAppId");
-  const focusedExternalAppId =
-    externalAppIdParam !== null && /^\d+$/.test(externalAppIdParam)
-      ? Number(externalAppIdParam)
-      : null;
+  const navigation = useNavigation();
   const { data, error, isLoading, refresh } = useUserSkills();
+  const { mutate, cache } = useSWRConfig();
+  function revalidateSkills() {
+    return refreshSkillListsChecked(mutate, cache).then((ok) => {
+      if (!ok) toast.error(t("page.toasts.listRefreshFailed"));
+    });
+  }
+  const [deleteTarget, setDeleteTarget] = useState<CustomSkill | null>(null);
+  const deleteModal = useCreateModal();
+  // Drop the skill now, so a failed refresh does not show it.
+  const deletion = usePluginDelete({
+    noun: "skill",
+    onDeleted: async (deleted) => {
+      await refresh(
+        (current) =>
+          current && {
+            ...current,
+            customs: current.customs.filter((skill) => skill.id !== deleted.id),
+          },
+        { revalidate: false }
+      );
+    },
+  });
   const [searchQuery, setSearchQuery] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [githubImportOpen, setGitHubImportOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
-    null
-  );
-  const [pendingSkillIds, setPendingSkillIds] = useState<Set<string>>(
-    new Set()
-  );
-  const [optimisticEnabledById, setOptimisticEnabledById] = useState<
-    Map<string, boolean>
-  >(new Map());
-  const [pendingSwitchTarget, setPendingSwitchTarget] =
-    useState<SkillCardItem | null>(null);
+  const [shareTarget, setShareTarget] = useState<CustomSkill | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useOnMount(() => {
     searchInputRef.current?.focus();
   });
 
-  function handleEdit(item: CustomSkillCardItem) {
-    router.push(`/craft/v1/skills/edit/${item.id}`);
+  async function deleteSkill() {
+    if (!deleteTarget || !canManageSkill(deleteTarget)) return;
+    if (await deletion.remove(deleteTarget)) deleteModal.toggle(false);
   }
 
-  async function updateSkillEnabled(
-    item: SkillCardItem,
-    enabled: boolean,
-    replaceConflict = false
-  ) {
-    if (
-      enabled &&
-      !replaceConflict &&
-      items.some(
-        (candidate) =>
-          candidate.id !== item.id &&
-          candidate.name === item.name &&
-          candidate.enabled
-      )
-    ) {
-      setPendingSwitchTarget(item);
-      return;
-    }
-
-    const affectedItems =
-      enabled && replaceConflict
-        ? items.filter(
-            (candidate) =>
-              candidate.id === item.id ||
-              (candidate.name === item.name && candidate.enabled)
-          )
-        : [item];
-    const affectedIds = new Set(affectedItems.map(({ id }) => id));
-    setPendingSkillIds((current) => {
-      const next = new Set(current);
-      affectedIds.forEach((id) => next.add(id));
-      return next;
-    });
-    setOptimisticEnabledById((current) => {
-      const next = new Map(current);
-      if (enabled) {
-        affectedItems.forEach((candidate) =>
-          next.set(candidate.id, candidate.id === item.id)
-        );
-      } else {
-        next.set(item.id, false);
-      }
-      return next;
-    });
-    try {
-      const updatedSkill = await setSkillEnabled(
-        item.id,
-        enabled,
-        replaceConflict
-      );
-      if (replaceConflict) setPendingSwitchTarget(null);
-      await refresh(
-        (current) => {
-          if (!current) return current;
-          return {
-            ...current,
-            builtins: current.builtins.map((skill) => {
-              if (
-                updatedSkill.source === "builtin" &&
-                skill.id === updatedSkill.id
-              ) {
-                return updatedSkill;
-              }
-              if (enabled && skill.name === updatedSkill.name) {
-                return { ...skill, enabled: false };
-              }
-              return skill;
-            }),
-            customs: current.customs.map((skill) => {
-              if (
-                updatedSkill.source === "custom" &&
-                skill.id === updatedSkill.id
-              ) {
-                return updatedSkill;
-              }
-              if (enabled && skill.name === updatedSkill.name) {
-                return { ...skill, enabled: false };
-              }
-              return skill;
-            }),
-          };
-        },
-        { revalidate: false }
-      );
-      void refresh().catch(() => {
-        toast.error(t("page.toasts.refreshFailed", { name: item.name }));
-      });
-    } catch (error) {
-      if (enabled && !replaceConflict && isSkillNameConflict(error)) {
-        setPendingSwitchTarget(item);
-        return;
-      }
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t(
-              enabled
-                ? "page.toasts.enableFailed"
-                : "page.toasts.disableFailed",
-              { name: item.name }
-            )
-      );
-    } finally {
-      setOptimisticEnabledById((current) => {
-        const next = new Map(current);
-        affectedIds.forEach((id) => next.delete(id));
-        return next;
-      });
-      setPendingSkillIds((current) => {
-        const next = new Set(current);
-        affectedIds.forEach((id) => next.delete(id));
-        return next;
-      });
-    }
-  }
-
-  const items = useMemo<SkillCardItem[]>(() => {
-    if (!data) return [];
-    const builtinItems: SkillCardItem[] = data.builtins
-      .filter(
-        (b): b is BuiltinSkill =>
-          b.source === "builtin" && b.is_available !== null
-      )
-      .map((b) => ({
-        id: b.id,
-        name: b.name,
-        description: b.description,
-        source: "builtin",
-        enabled: optimisticEnabledById.get(b.id) ?? b.enabled,
-        can_toggle: b.can_toggle,
-        is_available: b.is_available,
-        unavailable_reason: b.unavailable_reason,
-        external_app: b.external_app,
-      }));
-    const customItems: SkillCardItem[] = data.customs
-      .filter((c): c is CustomSkill => c.source === "custom")
-      .map((c) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description,
-        source: "custom",
-        skill: c,
-        author_email: c.author_email,
-        is_personal: c.is_personal && c.user_permission === "OWNER",
-        enabled: optimisticEnabledById.get(c.id) ?? c.enabled,
-        can_toggle: c.can_toggle,
-        external_app: c.external_app,
-      }));
-    // Group order: built-in, then custom (org-wide), then personal; alphabetical within each group.
-    const groupRank = (item: SkillCardItem): number => {
-      switch (item.source) {
-        case "builtin":
-          return 0;
-        case "custom":
-          return item.is_personal ? 2 : 1;
-      }
-    };
-    return [...builtinItems, ...customItems].sort(
-      (a, b) =>
-        groupRank(a) - groupRank(b) ||
-        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-    );
-  }, [data, optimisticEnabledById]);
-
-  const focusedAppName = useMemo(() => {
-    if (focusedExternalAppId === null) return null;
-    for (const item of items) {
-      if (item.external_app?.external_app_id === focusedExternalAppId) {
-        return item.external_app.name;
-      }
-    }
-    return null;
-  }, [focusedExternalAppId, items]);
-
-  const enabledItemByName = useMemo(
+  const items = useMemo<CustomSkill[]>(
     () =>
-      new Map(
-        items
-          .filter((item) => item.enabled)
-          .map((item) => [item.name, item] as const)
-      ),
-    [items]
+      (data?.customs ?? [])
+        // Plugins have their own admin page.
+        .filter(
+          (skill): skill is CustomSkill =>
+            skill.source === "custom" && skill.kind !== "plugin"
+        )
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+        ),
+    [data]
   );
+  const enablement = usePluginEnablement(items, refresh);
 
+  // The groups of the summaries the caller may see.
+  const groupOptions = useMemo(() => {
+    const names = new Map<number, string>();
+    for (const item of items) {
+      for (const summary of item.group_summaries) {
+        names.set(summary.group_id, summary.group_name);
+      }
+    }
+    return Array.from(names, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+  }, [items]);
+  const activeGroupId =
+    groupOptions.find((group) => String(group.id) === groupFilter)?.id ?? null;
+  // A group that left every summary after a refresh clears the filter, so it
+  // does not come back on when the group returns.
+  if (groupFilter !== "" && activeGroupId === null) setGroupFilter("");
+
+  const organizationLibrary = t("adminTable.organizationLibrary");
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return items.filter(
       (item) =>
-        (focusedAppName === null ||
-          item.external_app?.external_app_id === focusedExternalAppId) &&
+        (activeGroupId === null ||
+          item.group_summaries.some(
+            (summary) => summary.group_id === activeGroupId
+          )) &&
         (!q ||
-          item.name.toLowerCase().includes(q) ||
-          item.description.toLowerCase().includes(q))
+          [
+            item.name,
+            item.description,
+            item.owner?.email ?? "",
+            item.published_version_number !== null ? organizationLibrary : "",
+            ...item.group_summaries.map((summary) => summary.group_name),
+          ].some((field) => field.toLowerCase().includes(q)))
     );
-  }, [focusedAppName, focusedExternalAppId, items, searchQuery]);
+  }, [activeGroupId, items, searchQuery, organizationLibrary]);
 
-  const switchPending =
-    pendingSwitchTarget !== null && pendingSkillIds.has(pendingSwitchTarget.id);
-  const previewUnavailableReason =
-    previewTarget?.source === "builtin" && !previewTarget.is_available
-      ? (previewTarget.unavailable_reason ??
-        t("page.preview.unavailableFallback"))
-      : null;
+  const bulk = usePluginBulkActions({
+    items: visibleItems,
+    enablement,
+    noun: "skill",
+  });
 
   return (
-    <SettingsLayouts.Root data-testid="SkillsPage/container">
+    <SettingsLayouts.Root width="lg" data-testid="SkillsPage/container">
       <SettingsLayouts.Header
         icon={SvgBlocks}
         title={t("page.header.title")}
-        description={t("page.header.description")}
+        description={bulkCopy("adminDescription")}
         actions={[
-          <Popover
+          <Dropdown
             key="primary"
             open={createMenuOpen}
             onOpenChange={setCreateMenuOpen}
           >
-            <Popover.Trigger asChild>
+            <Dropdown.Trigger asChild>
               <Button icon={SvgPlus}>
                 {t("page.createMenu.trigger.label")}
               </Button>
-            </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="xl">
-              <Popover.Menu>
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgEdit}
-                  description={t("page.createMenu.scratch.description", {
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("page.createMenu.trigger.label")}
+              items={[
+                {
+                  kind: "action",
+                  id: "scratch",
+                  icon: SvgEdit,
+                  title: t("page.createMenu.scratch.title"),
+                  description: t("page.createMenu.scratch.description", {
                     appName,
-                  })}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    router.push("/craft/v1/skills/new");
-                  }}
-                  title={t("page.createMenu.scratch.title")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgUploadCloud}
-                  description={t("page.createMenu.upload.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setCreateOpen(true);
-                  }}
-                  title={t("page.createMenu.upload.title")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgGithub}
-                  description={t("page.createMenu.github.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setGitHubImportOpen(true);
-                  }}
-                  title={t("page.createMenu.github.title")}
-                />
-              </Popover.Menu>
-            </Popover.Content>
-          </Popover>,
+                  }),
+                  onSelect: () => navigation.go(newSkillHref()),
+                },
+                {
+                  kind: "action",
+                  id: "upload",
+                  icon: SvgUploadCloud,
+                  title: t("page.createMenu.upload.title"),
+                  description: t("page.createMenu.upload.description"),
+                  onSelect: () => setCreateOpen(true),
+                },
+              ]}
+            />
+          </Dropdown>,
         ]}
-      >
-        <InputTypeIn
-          ref={searchInputRef}
-          placeholder={t("page.search.placeholder")}
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          searchIcon
-        />
-      </SettingsLayouts.Header>
+      />
 
       <SettingsLayouts.Body>
-        {focusedAppName && (
-          <MessageCard
-            variant="info"
-            title={t("page.focusedApp.title", { appName: focusedAppName })}
-            description={t("page.focusedApp.description", {
-              appName: focusedAppName,
-            })}
-            rightChildren={
-              <Button prominence="secondary" href="/craft/v1/skills">
-                {t("page.focusedApp.showAll.label")}
-              </Button>
-            }
-          />
+        {canManageOrgSkills && <SkillLimitUsersBanner />}
+        {canManageOrgSkills && (
+          <SkillReviewRequests onReviewed={() => void revalidateSkills()} />
         )}
+        {bulk.failures}
 
-        {isLoading && <SvgSimpleLoader />}
+        {isLoading && <IconLoader />}
 
         {error && !isLoading && (
           <MessageCard
@@ -381,6 +218,58 @@ export default function SkillsPage() {
 
         {!isLoading && !error && (
           <>
+            {items.length > 0 && (
+              <Toolbar
+                search={
+                  <InputTypeIn
+                    ref={searchInputRef}
+                    placeholder={t("page.search.placeholder")}
+                    value={searchQuery}
+                    readOnly={bulk.busy}
+                    onChange={(event) => {
+                      setSearchQuery(event.target.value);
+                      bulk.reset();
+                    }}
+                    icon="search"
+                  />
+                }
+                filters={
+                  groupOptions.length > 0
+                    ? [
+                        <InputSingleSelect
+                          key="group"
+                          search
+                          placeholder={t("groups.filter.placeholder")}
+                          value={
+                            activeGroupId === null
+                              ? "all"
+                              : String(activeGroupId)
+                          }
+                          defaultOption="all"
+                          disabled={bulk.busy}
+                          options={[
+                            {
+                              value: "all",
+                              title: t("groups.filter.all"),
+                              icon: SvgUsers,
+                            },
+                            ...groupOptions.map((group) => ({
+                              value: String(group.id),
+                              title: group.name,
+                              icon: SvgUsers,
+                            })),
+                          ]}
+                          onValueChange={(value) => {
+                            setGroupFilter(value);
+                            bulk.reset();
+                          }}
+                        />,
+                      ]
+                    : []
+                }
+                actions={bulk.toolbarActions}
+              />
+            )}
             {visibleItems.length === 0 ? (
               <IllustrationContent
                 illustration={SvgNoResult}
@@ -392,107 +281,76 @@ export default function SkillsPage() {
                 description={
                   items.length === 0
                     ? t("page.empty.noSkills.description")
-                    : t("page.empty.noMatches.description")
+                    : activeGroupId !== null
+                      ? t("page.empty.noMatches.groupDescription")
+                      : t("page.empty.noMatches.description")
                 }
               />
             ) : (
-              <>
-                <section className="flex flex-col gap-2">
-                  <Text font="secondary-body" color="text-03">
-                    {t("page.browse.title")}
-                  </Text>
-                  <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {visibleItems.map((item) => (
-                      <SkillCard
-                        key={item.id}
-                        item={item}
-                        hasEnabledNameConflict={
-                          !item.enabled && enabledItemByName.has(item.name)
-                        }
-                        onEdit={handleEdit}
-                        onClick={setPreviewTarget}
-                        onEnabledChange={(skill, enabled) =>
-                          void updateSkillEnabled(skill, enabled)
-                        }
-                        enablementPending={pendingSkillIds.has(item.id)}
-                      />
-                    ))}
-                  </div>
-                </section>
-                <TextSeparator
-                  count={visibleItems.length}
-                  text={t("page.countSeparator.label", {
-                    count: visibleItems.length,
-                  })}
+              <Section height="auto" alignItems="stretch">
+                <AdminSkillsTable
+                  skills={visibleItems}
+                  bulk={bulk}
+                  enablement={enablement}
+                  onOpen={(skill) => navigation.go(adminSkillHref(skill.id))}
+                  onShare={setShareTarget}
+                  onDelete={(skill) => {
+                    setDeleteTarget(skill);
+                    deleteModal.toggle(true);
+                  }}
                 />
-              </>
+              </Section>
             )}
           </>
         )}
+        {canManageOrgSkills && <SkillPublishingCard />}
       </SettingsLayouts.Body>
+
+      {bulk.modals}
+
+      {shareTarget && (
+        <ShareSkillModal
+          mode="edit"
+          skillId={shareTarget.id}
+          fallbackTitle={shareTarget.name}
+          open
+          onClose={() => setShareTarget(null)}
+          onSaved={() => void revalidateSkills()}
+        />
+      )}
 
       <CreateSkillModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
+        onImported={() => void revalidateSkills()}
         onContinue={(draft) => {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
-          router.push(`/craft/v1/skills/new?draft=${draftId}`);
+          navigation.go(newSkillHref(draftId));
         }}
       />
 
-      {githubImportOpen && (
-        <ImportSkillsFromGitHubModal
-          open
-          onClose={() => setGitHubImportOpen(false)}
-          onImported={() => {
-            void refresh().catch((refreshError: unknown) => {
-              console.error(
-                "Failed to refresh skills after GitHub import",
-                refreshError
-              );
-            });
-          }}
-        />
-      )}
+      <deleteModal.Provider>
+        {deleteTarget && (
+          <ConfirmEntityModal
+            danger
+            entityType={t("editor.deleteModal.entityType")}
+            entityName={deleteTarget.name}
+            additionalDetails={t("editor.delete.description")}
+            actionButtonText={t(
+              deletion.deleting
+                ? "editor.deleteModal.pendingLabel"
+                : "editor.deleteModal.label"
+            )}
+            onClose={() => {
+              if (!deletion.deleting) deleteModal.toggle(false);
+            }}
+            onSubmit={() => void deleteSkill()}
+          />
+        )}
+      </deleteModal.Provider>
 
-      <SkillPreviewModal
-        open={previewTarget !== null}
-        skillId={previewTarget?.id ?? null}
-        fallbackTitle={previewTarget?.name}
-        unavailableReason={previewUnavailableReason}
-        onClose={() => setPreviewTarget(null)}
-      />
-
-      {pendingSwitchTarget && (
-        <ConfirmationModalLayout
-          icon={SvgAlertTriangle}
-          title={t("page.switchModal.title", {
-            name: pendingSwitchTarget.name,
-          })}
-          description={t("page.switchModal.description", {
-            name: pendingSwitchTarget.name,
-          })}
-          onClose={
-            switchPending ? undefined : () => setPendingSwitchTarget(null)
-          }
-          submit={
-            <Button
-              disabled={switchPending}
-              onClick={() => {
-                const target = pendingSwitchTarget;
-                void updateSkillEnabled(target, true, true);
-              }}
-            >
-              {switchPending
-                ? t("page.switchModal.submit.pendingLabel")
-                : t("page.switchModal.submit.label")}
-            </Button>
-          }
-        >
-          {t("page.switchModal.body")}
-        </ConfirmationModalLayout>
-      )}
+      <SkillSwitchModal enablement={enablement} />
     </SettingsLayouts.Root>
   );
 }

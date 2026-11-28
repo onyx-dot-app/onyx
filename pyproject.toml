@@ -4,12 +4,12 @@ version = "0.0.0"
 requires-python = ">=3.13"
 # Shared dependencies between backend and model_server
 dependencies = [
-    "aioboto3==15.1.0",
+    "aiobotocore==3.8.0",
     "cohere==7.0.5",
     "fastapi==0.133.1",
     "google-genai==2.18.1",
     "huggingface-hub==1.26.0",
-    "litellm[google]==1.93.0",
+    "litellm[google]==1.100.4",
     "openai==2.38.0",
     "pydantic==2.12.5",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
@@ -21,21 +21,22 @@ dependencies = [
     "tenacity==9.1.2",
     "uvicorn==0.49.0",
     "voyageai==0.2.3",
-    "brotli>=1.2.0",
+    "brotli==1.2.1",
     "agent-client-protocol>=0.7.1",
 ]
 
 [dependency-groups]
 backend = [
-    "aiohttp==3.14.3",
+    "aiohttp==3.14.4",
     "alembic==1.18.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==4.0.7",
     "azure-cognitiveservices-speech==1.50.0",
     "azure-identity>=1.23.0,<2.0.0",
     "azure-storage-blob>=12.24.0,<13.0.0",
+    "azure-storage-file-datalake>=12.19.0,<13.0.0",
     "beautifulsoup4==4.12.3",
-    "boto3==1.39.11",
+    "boto3==1.43.3",
     "boxsdk==10.12.0",
     "celery==5.5.1",
     "chardet==5.2.0",
@@ -48,11 +49,16 @@ backend = [
     "fastapi-users==15.0.4",
     "fastapi-users-db-sqlalchemy==7.0.0",
     "fastapi-limiter==0.1.6",
-    "fastmcp==3.2.0",
+    "fastmcp==3.4.10",
     "google-api-python-client==2.86.0",
     "google-auth-oauthlib==1.4.0",
     "google-cloud-storage>=3.0.0,<4.0.0",
-    "graphql-core==3.2.8",
+    "graphql-core==3.2.12",
+    # Craft Firecracker host agent client (backend/onyx/microvm/). The
+    # generated stubs need protobuf; googleapis-common-protos has ErrorInfo.
+    "googleapis-common-protos==1.72.0",
+    "grpcio==1.80.0",
+    "protobuf==6.33.5",
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",
@@ -69,12 +75,11 @@ backend = [
     # backend/onyx/file_processing/extract_file_text.py and what impacts
     # updating might have on this behavior.
     "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.7",
-    "mcp[cli]==1.28.1",
-    "msal==1.34.0",
+    "mcp[cli]==1.30.0",
+    "msal==1.37.0",
     "msoffcrypto-tool==6.0.0",
-    "nltk==3.10.3",
     "Office365-REST-Python-Client==2.6.2",
-    "oauthlib==3.2.2",
+    "oauthlib==4.0.1",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
     "openpyxl==3.0.10",
     "opensearch-py==3.2.0",
@@ -82,10 +87,12 @@ backend = [
     # import namespace). passlib 1.7.4 is unmaintained and imports the stdlib
     # `crypt` module, which was removed in Python 3.13.
     "libpass==1.9.3",
-    "playwright==1.58.0",
+    "playwright==1.64.1",
     "psutil==7.1.3",
     "psycopg2-binary==2.9.10",
     "puremagic==1.28",
+    # Sandbox for code mode programs that call tools.
+    "pydantic-monty==1.5.0",
     "pyairtable==3.0.1",
     "pycryptodome==3.19.1",
     "PyGithub==2.5.0",
@@ -93,13 +100,14 @@ backend = [
     "python-docx==1.1.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.16.1",
+    "pypdf==6.21.4",
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "python-slugify==8.0.4",
     "pywikibot==11.4.2",
     "readerwriterlock==1.0.9",
     "redis==5.0.8",
+    "regex==2025.11.3",
     # PDF generation for the usage report review pack.
     "reportlab==5.0.0",
     "requests==2.33.0",
@@ -118,7 +126,7 @@ backend = [
     "asana==5.0.8",
     "dropbox==12.0.2",
     "stripe==10.12.0",
-    "urllib3==2.7.0",
+    "urllib3==2.8.0",
     "mistune==3.3.3",
     "mitmproxy==12.2.3",
     "sendgrid==6.12.5",
@@ -134,16 +142,18 @@ backend = [
 
 # Dev tools
 dev = [
-    "boto3-stubs[s3]==1.39.11",
+    "boto3-stubs[s3]==1.43.3",
     "celery-types==0.26.0",
     "faker==40.38.0",
     "hatchling==1.28.0",
+    "hypothesis==6.170.14",
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.63",
     "openapi-generator-cli==7.17.0",
-    "pre-commit==4.6.2",
+    # deployment/tests and tools/helm import yaml when CI installs only this group.
+    "pyyaml==6.0.3",
     "pytest-alembic==0.12.1",
     "pytest-asyncio==1.4.0",
     "pytest-dotenv==0.5.2",
@@ -152,6 +162,8 @@ dev = [
     "pytest-repeat==0.9.4",
     "pytest-xdist==3.8.0",
     "pytest==9.0.3",
+    # backend/onyx/skills/builtin/pptx/scripts/lint.py measures text with it.
+    "power-pptx==2.15.0",
     "types-docker==7.1.0.20260518",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
@@ -166,7 +178,9 @@ dev = [
     "types-pytz==2023.3.1.1",
     "types-regex==2023.3.23.1",
     "types-requests==2.32.0.20250328",
+    "pytest-split==0.11.0",
     { include-group = "ods" },
+    { include-group = "prek" },
     { include-group = "ruff" },
     { include-group = "zizmor" },
 ]
@@ -174,9 +188,14 @@ dev = [
 # One-tool groups, installed with `--only-group` by the pre-commit hooks: each
 # tool comes from hash-verified uv.lock artifacts without a full project sync,
 # and each pin below is the only one in the repo.
-ods = ["onyx-devtools[audit]==0.13.8"]
+ods = ["onyx-devtools[audit]==0.13.16"]
 ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
+
+# The hook runner for .pre-commit-config.yaml. Keep the same version in
+# prek-version of the j178/prek-action steps, in .devcontainer/Dockerfile and
+# in cve-alerts.yml.
+prek = ["prek==0.5.10"]
 
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
@@ -189,14 +208,19 @@ loadtest = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "prometheus-client>=0.21",
+    # The mock's tokenizer, and the harness tests (`uv run --only-group loadtest`;
+    # httpx backs fastapi's TestClient).
+    "tiktoken==0.13.0",
+    "pytest==9.0.3",
+    "httpx==0.28.1",
 ]
 
 # Model server specific dependencies (ML packages)
 model_server = [
-    "accelerate==1.14.0",
+    "accelerate==1.15.0",
     "einops==0.8.1",
     "numpy==2.4.1",
-    "sentence-transformers==5.4.1",
+    "sentence-transformers==5.6.0",
     "torch==2.9.1",
     "transformers==5.14.1",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
@@ -213,15 +237,19 @@ default-groups = ["backend", "dev", "ee", "model_server"]
 # Loosen mitmproxy's over-tight upper caps so the resolver keeps the
 # backend's newer versions.
 override-dependencies = [
-    "brotli>=1.2.0,<2.0",
+    "brotli==1.2.1",
     "h11>=0.11,<1.0",
-    "cryptography>=42.0,<50.0",
+    "cryptography>=42.0,<51.0",
     "h2>=4.3.0,<5.0",
     "hyperframe>=6.1.0,<7.0",
     # mitmproxy 12.x already pins tornado to the 6.5 series; keep this floor
     # explicit so a future resolver change can't drop back to the <=6.4.2 that
     # mitmproxy 11.x capped to (CVE-2025-47287, multipart logging DoS).
     "tornado>=6.5.0,<7.0",
+    # mitmproxy 12.2.3 caps urwid at 3.0.5, below the 4.0.7 fix for
+    # GHSA-cp25-j9x5-p5xm (request-handling DoS). Only its console UI imports
+    # urwid, and the sandbox proxy never runs it.
+    "urwid>=4.0.7,<5.0",
     "msgpack>=1.0.0,<2.0",
 ]
 
@@ -255,6 +283,15 @@ all = "error"
 missing-override-decorator = "ignore"  # ~1.1k methods across ~250 files.
 missing-type-argument = "ignore"  # ~1k bare generics across ~350 files.
 
+# Old migrations must not change, and some pass arguments that app models later
+# dropped (e.g. dbaa756c2ccf passes embedding_precision to IndexingSetting).
+# Pydantic discards them at runtime, so silence only this rule there.
+[[tool.ty.overrides]]
+include = ["backend/alembic/versions/**"]
+
+[tool.ty.overrides.rules]
+pydantic-discarded-extra-argument = "ignore"
+
 [tool.uv.workspace]
 members = ["tools/ods"]
 
@@ -270,6 +307,8 @@ typeCheckingMode = "off"
 [tool.ruff]
 line-length = 88
 target-version = "py313"
+# protoc output (backend/onyx/microvm/generated/regenerate.sh).
+extend-exclude = ["backend/onyx/microvm/generated"]
 
 [tool.ruff.lint]
 ignore = [
@@ -280,7 +319,6 @@ ignore = [
     # Revisit only if we adopt trio or anyio cancel scopes.
     "ASYNC109", # async-function-with-timeout.
     # flake8-bandit (S) rules ignored as noisy / low-signal:
-    "S101", # `assert` — used heavily in pytest and as runtime invariant checks.
     "S105", # Hardcoded password string — very high false-positive rate.
     "S106", # Hardcoded password func arg — very high false-positive rate.
     "S107", # Hardcoded password default — very high false-positive rate.
@@ -289,9 +327,9 @@ ignore = [
     "S311", # Non-crypto random — used for jitter/sampling/non-security purposes.
     "S603", # subprocess without shell=True — this is the *correct* invocation form.
     "S607", # Start-process with partial path — common and low signal.
-    # Tracked in kanban ticket #491 — to be removed once existing violations are
-    # cleaned up:
-    "S113", # request-without-timeout (~463 existing violations).
+    # Calendar dates have no time of day or timezone.
+    "DTZ011",
+    "DTZ012",
     # flake8-bugbear (B) rule deferred — to be removed once existing violations
     # are cleaned up:
     "B904", # raise-without-from-inside-except (~465 existing violations).
@@ -303,6 +341,7 @@ select = [
   "B",
   "C4",
   "C901",
+  "DTZ",
   "E",
   "F",
   "FURB",
@@ -336,6 +375,9 @@ extend-immutable-calls = [
     "onyx.auth.permissions.require_permission",
 ]
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"dataclasses.dataclass".msg = "Use a Pydantic BaseModel."
+
 [tool.ruff.lint.isort]
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
@@ -347,11 +389,36 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # Tests use asserts, mock credentials, and lots of patterns the bandit rules
 # flag as suspicious. Disable the full S rule set in tests.
 "backend/tests/**" = ["S"]
+# S101 (`assert`) applies to application code only: backend/AGENTS.md "Key Rules".
+# `python -O` removes asserts, and a failed one gives the caller no useful error.
+# Write an explicit check that raises:
+#   - Type narrowing:   `if x is None: raise RuntimeError("why x is always set")`
+#   - Invariant:        `if not ok: raise RuntimeError("Bug: ...")` (or ValueError
+#                       for a bad argument)
+#   - Input validation: `raise OnyxError(OnyxErrorCode.INVALID_INPUT, "...")` on a
+#                       request path; ValueError for configuration;
+#                       ConnectorMissingCredentialError for connector credentials
+# A deliberate exception goes on the line: `# noqa: S101 - <reason>`.
+# Scope the assert, timeout, datetime, and dataclass checks to application code.
+"!backend/{onyx,ee,shared_configs,model_server}/**" = ["S101", "S113", "DTZ", "TID251"]
+# pytest files that live in the application tree.
+"backend/onyx/connectors/salesforce/shelve_stuff/*test_salesforce_shelves.py" = ["S101"]
+# Vendored skill scripts; they run in the sandbox, not in the backend.
+"backend/onyx/skills/builtin/pptx/**" = ["S101"]
+# Vendored sandbox scripts use stdlib dataclasses.
+"backend/onyx/skills/builtin/**" = ["TID251"]
+# Docs site tooling (documentation/scripts, documentation/audit), imported with the
+# docs. format_docs.py is one long line-by-line formatter; leave its shape alone.
+"documentation/**" = ["C901", "PERF401", "ARG001"]
 # Ops and developer scripts run by humans (kubectl exec payloads, one-off
 # data dumps, manual tenant cleanup) commonly use `/tmp/...` script payloads,
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs
 # (tenant IDs, schema names). Other S rules still apply.
 "backend/scripts/**" = ["S108", "S602", "S608"]
+# Existing request, datetime, and dataclass findings. Remove each code after
+# you fix its last finding in that file. An ignore covers new findings of
+# the same code in that file.
+"backend/ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py" = ["DTZ005"] # DTZ005 × 1
 # Functions above the max-complexity of 20 when C901 was enabled. The trailing
 # number is the highest complexity in that file at the time. Remove an entry
 # once its functions are simplified. NOTE: the ignore is per file, so it also
@@ -372,7 +439,7 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/chat/process_message.py" = ["C901"] # 47
 "backend/onyx/connectors/blob/connector.py" = ["C901"] # 24
 "backend/onyx/connectors/confluence/connector.py" = ["C901"] # 22
-"backend/onyx/connectors/confluence/onyx_confluence.py" = ["C901"] # 22
+"backend/onyx/connectors/confluence/source_operations.py" = ["C901"] # 22
 "backend/onyx/connectors/connector_runner.py" = ["C901"] # 26
 "backend/onyx/connectors/drupal_wiki/connector.py" = ["C901"] # 21
 "backend/onyx/connectors/github/connector.py" = ["C901"] # 28
@@ -389,9 +456,7 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/db/persona.py" = ["C901"] # 49
 "backend/onyx/deep_research/dr_loop.py" = ["C901"] # 26
 "backend/onyx/document_index/opensearch/search.py" = ["C901"] # 48
-"backend/onyx/document_index/vespa/shared_utils/vespa_request_builders.py" = ["C901"] # 41
 "backend/onyx/federated_connectors/federated_retrieval.py" = ["C901"] # 21
-"backend/onyx/kg/extractions/extraction_processing.py" = ["C901"] # 30
 "backend/onyx/llm/multi_llm.py" = ["C901"] # 45
 "backend/onyx/llm/utils.py" = ["C901"] # 30
 "backend/onyx/onyxbot/slack/handlers/handle_message.py" = ["C901"] # 34
@@ -414,7 +479,6 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/tools/tool_constructor.py" = ["C901"] # 40
 "backend/onyx/tools/tool_implementations/search/search_tool.py" = ["C901"] # 25
 "backend/onyx/tools/tool_runner.py" = ["C901"] # 21
-"backend/onyx/utils/jsonriver/tokenize.py" = ["C901"] # 22
 "backend/onyx/voice/providers/elevenlabs.py" = ["C901"] # 21
 "backend/scripts/rotate_llm_provider_keys.py" = ["C901"] # 25
 "backend/scripts/tenant_cleanup/cleanup_tenants.py" = ["C901"] # 27

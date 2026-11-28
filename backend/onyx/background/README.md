@@ -13,10 +13,11 @@ The background jobs take care of:
 | Worker                    | File                           | Queues                                                                                                               |
 | ------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | Primary                   | `apps/primary.py`              | `celery`                                                                                                             |
-| Light                     | `apps/light.py`                | `vespa_metadata_sync`, `connector_deletion`, `doc_permissions_upsert`, `checkpoint_cleanup`, `index_attempt_cleanup` |
+| Light                     | `apps/light.py`                | `vespa_metadata_sync`, `connector_deletion`, `doc_permissions_upsert`, `checkpoint_cleanup`, `index_attempt_cleanup`, `suggested_questions` |
 | Heavy                     | `apps/heavy.py`                | `connector_pruning`, `connector_doc_permissions_sync`, `connector_external_group_sync`, `csv_generation`, `sandbox`  |
 | Docprocessing             | `apps/docprocessing.py`        | `docprocessing`, `port`                                                                                              |
 | Docfetching               | `apps/docfetching.py`          | `connector_doc_fetching`                                                                                             |
+| Docconversion             | `apps/docconversion.py`        | `docconversion`                                                                                                      |
 | User File Processing      | `apps/user_file_processing.py` | `user_file_processing`, `user_file_project_sync`, `user_file_delete`                                                 |
 | Monitoring                | `apps/monitoring.py`           | `monitoring`                                                                                                         |
 | Background (consolidated) | `apps/background.py`           | All queues above except `celery`                                                                                     |
@@ -59,6 +60,7 @@ Then it cycles through its tasks as scheduled by Celery Beat:
 | `check_for_pruning`               | 20s       | Finds connectors due for pruning → dispatches to `CONNECTOR_PRUNING` queue                 |
 | `check_for_connector_deletion`    | 20s       | Processes deletion requests → dispatches to `CONNECTOR_DELETION` queue                     |
 | `check_for_user_file_processing`  | 20s       | Checks for user uploads → dispatches to `USER_FILE_PROCESSING` queue                       |
+| `check_for_chat_artifact_indexing` | 20s      | Finds published files waiting to be indexed → dispatches to `USER_FILE_PROCESSING` queue  |
 | `check_for_checkpoint_cleanup`    | 1h        | Cleans up old indexing checkpoints                                                         |
 | `check_for_index_attempt_cleanup` | 30m       | Cleans up old index attempts                                                               |
 | `celery_beat_heartbeat`           | 1m        | Heartbeat for Beat watchdog                                                                |
@@ -106,6 +108,6 @@ Observability and metrics collections:
 
 ## Prometheus Metrics
 
-Workers can expose Prometheus metrics via a standalone HTTP server. Currently docfetching and docprocessing have push-based task lifecycle metrics; the monitoring worker runs pull-based collectors for queue depth and connector health.
+The docfetching, docconversion, docprocessing, heavy, light, monitoring, primary, and scheduled_tasks workers each expose Prometheus metrics on a standalone HTTP server. The user_file_processing worker and beat do not. The docfetching, docprocessing, heavy, light, primary, and scheduled_tasks workers emit push-based task lifecycle metrics; docfetching and docprocessing also emit per-connector indexing metrics. The monitoring worker runs pull-based collectors for queue depth, worker heartbeats, and Redis health.
 
-For the full metric reference, integration guide, and PromQL examples, see [`docs/METRICS.md`](../../../docs/METRICS.md#celery-worker-metrics).
+To add a metric or wire a new worker, see [`onyx/server/metrics/README.md`](../server/metrics/README.md). For ports, settings, and example alerts, see the [Monitoring docs](https://docs.onyx.app/deployment/production/monitoring).

@@ -12,42 +12,6 @@ from onyx.server.kg.models import EntityType
 UNGROUNDED_SOURCE_NAME = "Ungrounded"
 
 
-def get_entity_types_with_grounded_source_name(
-    db_session: Session,
-) -> list[KGEntityType]:
-    """Get all entity types that have non-null grounded_source_name.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntityType objects that have grounded_source_name defined
-    """
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.grounded_source_name.isnot(None))
-        .all()
-    )
-
-
-def get_entity_types(
-    db_session: Session,
-    active: bool | None = True,
-) -> list[KGEntityType]:
-    # Query the database for all distinct entity types
-
-    if active is None:
-        return db_session.query(KGEntityType).order_by(KGEntityType.id_name).all()
-
-    else:
-        return (
-            db_session.query(KGEntityType)
-            .filter(KGEntityType.active == active)
-            .order_by(KGEntityType.id_name)
-            .all()
-        )
-
-
 def get_configured_entity_types(db_session: Session) -> dict[str, list[KGEntityType]]:
     # get entity types from configured sources
     configured_connector_sources = {
@@ -149,3 +113,24 @@ def update_entity_types_and_related_connectors__commit(
     )
 
     db_session.commit()
+
+
+def disable_kg_processing_for_all_connectors__no_commit(db_session: Session) -> None:
+    db_session.query(Connector).update({"kg_processing_enabled": False})
+
+
+def deactivate_grounded_entity_types__no_commit(db_session: Session) -> None:
+    """Ungrounded entity types stay active."""
+    db_session.query(KGEntityType).filter(
+        KGEntityType.grounded_source_name.isnot(None)
+    ).update({"active": False})
+
+
+def get_entity_type_id_names(db_session: Session) -> set[str]:
+    return {et.id_name for et in db_session.query(KGEntityType).all()}
+
+
+def add_entity_type__no_commit(
+    db_session: Session, kg_entity_type: KGEntityType
+) -> None:
+    db_session.add(kg_entity_type)

@@ -1,13 +1,15 @@
 "use client";
 
+import type { Route } from "next";
+import { useNavigation, useSearchParams } from "@opal/navigation";
+import { IconLoader } from "@opal/loaders";
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import { Button, Text } from "@opal/components";
 import { InputErrorText, toast } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
   SvgArrowRight,
@@ -15,7 +17,6 @@ import {
   SvgCheckCircle,
   SvgOrganization,
   SvgPlus,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 export interface TenantByDomainResponse {
@@ -36,14 +37,23 @@ export default function NewTeamModal() {
 
   const { user } = useUser();
   const appDomain = user?.email.split("@")[1] ?? "";
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
+  // The playground asks "join or start a new team" before the tenant exists
+  // (/auth/error), and its "join" must not request an invite. No modal there.
+  // The server always sends `is_playground`: undefined means the settings have
+  // not arrived (still loading, or the request failed), not "cloud".
+  const { is_playground } = useSettings();
+  const settingsLoaded = is_playground !== undefined;
+  const isPlayground = is_playground === true;
 
   useEffect(() => {
     const hasNewTeamParam = searchParams?.has("new_team");
-    if (hasNewTeamParam) {
-      setShowNewTeamModal(true);
-      fetchTenantInfo();
+    if (hasNewTeamParam && settingsLoaded) {
+      if (!isPlayground) {
+        setShowNewTeamModal(true);
+        fetchTenantInfo();
+      }
 
       // Remove the new_team parameter from the URL without page reload
       const newParams = new URLSearchParams(searchParams?.toString() || "");
@@ -51,9 +61,17 @@ export default function NewTeamModal() {
       const newUrl =
         window.location.pathname +
         (newParams.toString() ? `?${newParams.toString()}` : "");
-      window.history.replaceState({}, "", newUrl);
+      // SAFETY: the current pathname with its query trimmed is a page of the
+      // app.
+      navigation.go(newUrl as Route, { replace: true, shallow: true });
     }
-  }, [searchParams, setShowNewTeamModal]);
+  }, [
+    searchParams,
+    setShowNewTeamModal,
+    navigation,
+    isPlayground,
+    settingsLoaded,
+  ]);
 
   const fetchTenantInfo = async () => {
     setIsLoading(true);
@@ -120,9 +138,8 @@ export default function NewTeamModal() {
   };
 
   const handleContinueToNewOrg = () => {
-    const newUrl = window.location.pathname;
-    // SAFETY: the current pathname is a route of this app.
-    router.replace(newUrl as Route);
+    // The `new_team` query is already gone, so only the page's data is stale.
+    navigation.refresh();
     setShowNewTeamModal(false);
   };
 
@@ -132,7 +149,9 @@ export default function NewTeamModal() {
   };
 
   // Only render if showNewTeamModal is true
-  if (!showNewTeamModal || isLoading) return null;
+  if (!showNewTeamModal || isLoading || !settingsLoaded || isPlayground) {
+    return null;
+  }
 
   const headerIcon = hasRequestedInvite ? SvgCheckCircle : SvgOrganization;
   const headerTitle = hasRequestedInvite
@@ -190,7 +209,7 @@ export default function NewTeamModal() {
                 disabled={isSubmitting}
                 onClick={handleRequestInvite}
                 width="full"
-                icon={isSubmitting ? SvgSimpleLoader : SvgArrowUp}
+                icon={isSubmitting ? IconLoader : SvgArrowUp}
               >
                 {isSubmitting
                   ? t("requestButton.pendingLabel")

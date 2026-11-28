@@ -1,12 +1,13 @@
+import calendar
 import copy
 import email
 import imaplib
 import os
 import re
 import ssl
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import getaddresses
 from enum import Enum
 from typing import Any, cast
 
@@ -15,7 +16,8 @@ from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.imap.models import EmailHeaders
+from onyx.connectors.imap.config import DEFAULT_IMAP_PORT_NUMBER
+from onyx.connectors.imap.models import EmailHeaders, message_document_id
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
@@ -26,7 +28,9 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
+    ConnectorFailure,
     Document,
+    DocumentFailure,
     TextSection,
 )
 from onyx.utils.logger import setup_logger
@@ -34,11 +38,14 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-_DEFAULT_IMAP_PORT_NUMBER = int(os.environ.get("IMAP_PORT", 993))
 _IMAP_OKAY_STATUS = "OK"
 _PAGE_SIZE = 100
 _USERNAME_KEY = "imap_username"
 _PASSWORD_KEY = "imap_password"
+_INTERNALDATE_FETCH_BATCH_SIZE = 500
+# The stdlib's RFC 3501 INTERNALDATE regex and month table; typeshed omits them.
+_IMAP_INTERNALDATE_RE = imaplib.InternalDate  # ty: ignore[unresolved-attribute]
+_IMAP_MON2NUM: dict[bytes, int] = imaplib.Mon2num  # ty: ignore[unresolved-attribute]
 
 
 class CurrentMailbox(BaseModel):
@@ -73,7 +80,7 @@ class ImapConnector(
     def __init__(
         self,
         host: str,
-        port: int = _DEFAULT_IMAP_PORT_NUMBER,
+        port: int = DEFAULT_IMAP_PORT_NUMBER,
         mailboxes: list[str] | None = None,
     ) -> None:
         self._host = host
@@ -202,13 +209,25 @@ class ImapConnector(
                 )
                 continue
 
-            email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+            try:
+                email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+                document = _convert_email_headers_and_body_into_document(
+                    email_msg=email_msg,
+                    email_headers=email_headers,
+                    include_perm_sync=include_perm_sync,
+                )
+            except Exception as e:
+                logger.exception("Failed to convert email_id=%r", email_id)
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=message_document_id(email_msg)
+                    ),
+                    failure_message=f"Failed to convert email: {e}",
+                    exception=e,
+                )
+                continue
 
-            yield _convert_email_headers_and_body_into_document(
-                email_msg=email_msg,
-                email_headers=email_headers,
-                include_perm_sync=include_perm_sync,
-            )
+            yield document
 
         return checkpoint
 
@@ -311,11 +330,21 @@ def _fetch_email_ids_in_mailbox(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> list[str]:
+    """Return the ids of messages whose INTERNALDATE is in `[start, end)`.
+
+    SEARCH compares only the calendar date of INTERNALDATE, in the server's own
+    timezone. So search a day wider on each side, then filter on exact time.
+    """
     _select_mailbox(mail_client=mail_client, mailbox=mailbox)
 
-    start_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%d-%b-%Y")
-    end_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%d-%b-%Y")
-    search_criteria = f'(SINCE "{start_str}" BEFORE "{end_str}")'
+    since_day = datetime.fromtimestamp(start, tz=timezone.utc).date() - timedelta(
+        days=1
+    )
+    before_day = datetime.fromtimestamp(end, tz=timezone.utc).date() + timedelta(days=2)
+    search_criteria = (
+        f'(SINCE "{_format_imap_date(since_day)}" '
+        f'BEFORE "{_format_imap_date(before_day)}")'
+    )
 
     status, email_ids_byte_array = mail_client.search(None, search_criteria)
 
@@ -323,8 +352,73 @@ def _fetch_email_ids_in_mailbox(
         raise RuntimeError(f"Failed to fetch email ids; {status=}")
 
     email_ids: bytes = email_ids_byte_array[0]
+    candidate_ids = [email_id.decode() for email_id in email_ids.split()]
 
-    return [email_id.decode() for email_id in email_ids.split()]
+    internal_dates = _fetch_internal_dates(
+        mail_client=mail_client, email_ids=candidate_ids
+    )
+    # Keep a message whose INTERNALDATE is unknown; the document id dedups it.
+    return [
+        email_id
+        for email_id in candidate_ids
+        if (internal_date := internal_dates.get(email_id)) is None
+        or start <= internal_date < end
+    ]
+
+
+def _format_imap_date(day: date) -> str:
+    # Time2Internaldate gives '"dd-Mon-yyyy HH:MM:SS +zzzz"'; SEARCH takes the date.
+    midnight = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+    return imaplib.Time2Internaldate(midnight).strip('"').split(" ")[0]
+
+
+def _fetch_internal_dates(
+    mail_client: imaplib.IMAP4_SSL, email_ids: list[str]
+) -> dict[str, float]:
+    internal_dates: dict[str, float] = {}
+    for i in range(0, len(email_ids), _INTERNALDATE_FETCH_BATCH_SIZE):
+        message_set = ",".join(email_ids[i : i + _INTERNALDATE_FETCH_BATCH_SIZE])
+        status, fetch_data = mail_client.fetch(
+            message_set=message_set, message_parts="(INTERNALDATE)"
+        )
+        if status != _IMAP_OKAY_STATUS:
+            raise RuntimeError(f"Failed to fetch INTERNALDATE; {status=}")
+
+        for item in fetch_data:
+            line = item[0] if isinstance(item, tuple) else item
+            if not isinstance(line, bytes):
+                continue
+            parsed = _parse_internaldate_line(line)
+            if parsed:
+                internal_dates[parsed[0]] = parsed[1]
+    return internal_dates
+
+
+def _parse_internaldate_line(line: bytes) -> tuple[str, float] | None:
+    """Return the sequence number and epoch of a FETCH INTERNALDATE line.
+
+    `Internaldate2tuple` rolls an out-of-range day or zone over to a wrong time,
+    so reject those first. The caller then keeps the message.
+    """
+    match = _IMAP_INTERNALDATE_RE.match(line)
+    if not match or match["mon"] not in _IMAP_MON2NUM:
+        return None
+    _, days_in_month = calendar.monthrange(
+        int(match["year"]), _IMAP_MON2NUM[match["mon"]]
+    )
+    if (
+        not 1 <= int(match["day"]) <= days_in_month
+        or int(match["zoneh"]) >= 24
+        or int(match["zonem"]) >= 60
+    ):
+        return None
+
+    local_time = imaplib.Internaldate2tuple(line)
+    if local_time is None or local_time.tm_gmtoff is None:
+        return None
+    seq = line.split(b" ", 1)[0].decode()
+    # Local struct_time back to an epoch without a mktime round trip.
+    return seq, float(calendar.timegm(local_time) - local_time.tm_gmtoff)
 
 
 def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | None:
@@ -333,10 +427,9 @@ def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | Non
         return None
 
     data = msg_data[0]
+    # Not a tuple when the message was expunged after the search.
     if not isinstance(data, tuple):
-        raise RuntimeError(
-            f"Message data should be a tuple; instead got a {type(data)=} {data=}"
-        )
+        return None
 
     _metadata, raw_email = data
     return email.message_from_bytes(raw_email)
@@ -347,7 +440,11 @@ def _convert_email_headers_and_body_into_document(
     email_headers: EmailHeaders,
     include_perm_sync: bool,
 ) -> Document:
-    sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
+    sender_parsed = (
+        _parse_singular_addr(raw_header=email_headers.sender)
+        if email_headers.sender
+        else None
+    )
     parsed_recipients = (
         _parse_addrs(raw_header=email_headers.recipients)
         if email_headers.recipients
@@ -360,10 +457,18 @@ def _convert_email_headers_and_body_into_document(
         )
         for recipient_name, recipient_addr in parsed_recipients
     }
-    if sender_addr not in expert_info_map:
-        expert_info_map[sender_addr] = BasicExpertInfo(
-            display_name=sender_name, email=sender_addr
+    if sender_parsed is None:
+        logger.warning(
+            "Unable to parse sender header for email %s; indexing without sender attribution. raw_header=%r",
+            email_headers.id,
+            email_headers.sender,
         )
+    else:
+        sender_name, sender_addr = sender_parsed
+        if sender_addr not in expert_info_map:
+            expert_info_map[sender_addr] = BasicExpertInfo(
+                display_name=sender_name, email=sender_addr
+            )
 
     email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
     primary_owners = list(expert_info_map.values())
@@ -438,22 +543,29 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
-    return [(name, addr) for name, addr in name_addr_pairs if addr]
+    # getaddresses honors RFC 5322 quoting, so a comma in a quoted name is kept.
+    return [(name, addr) for name, addr in getaddresses([raw_header]) if addr]
 
 
-def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
+def _parse_singular_addr(raw_header: str) -> tuple[str, str] | None:
+    """Parse a header expected to carry a single email address.
+
+    Returns ``None`` when no address can be recovered — callers skip
+    attribution rather than aborting the whole indexing run (#7620).
+    If multiple addresses are present (RFC 5322 §3.6.2 permits mailbox-list
+    in ``From`` when a ``Sender`` header disambiguates), returns the first
+    and logs a warning; dropping the email entirely would cost otherwise-
+    valid content.
+    """
     addrs = _parse_addrs(raw_header=raw_header)
     if not addrs:
-        raise RuntimeError(
-            f"Parsing email header resulted in no addresses being found; {raw_header=}"
+        return None
+    if len(addrs) >= 2:
+        logger.warning(
+            "Expected a singular address header but found %d; using the first. raw_header=%r",
+            len(addrs),
+            raw_header,
         )
-    elif len(addrs) >= 2:
-        raise RuntimeError(
-            f"Expected a singular address, but instead got multiple; {raw_header=} {addrs=}"
-        )
-
     return addrs[0]
 
 
@@ -461,7 +573,7 @@ if __name__ == "__main__":
     import time
 
     from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-    from tests.daily.connectors.utils import load_all_from_connector
+    from onyx.connectors.load_all import load_all_from_connector
 
     host = os.environ.get("IMAP_HOST")
     mailboxes_str = os.environ.get("IMAP_MAILBOXES")

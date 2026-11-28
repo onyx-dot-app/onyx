@@ -18,12 +18,12 @@ class TestIsTrueOpenAIModel:
         assert is_true_openai_model(LlmProviderNames.OPENAI, "gpt-3.5-turbo") is True
 
     def test_real_openai_gpt4o(self) -> None:
-        """Test that real OpenAI GPT-4o model is correctly identified."""
-        assert is_true_openai_model(LlmProviderNames.OPENAI, "gpt-4o") is True
+        """Test that real OpenAI GPT-6 Sol model is correctly identified."""
+        assert is_true_openai_model(LlmProviderNames.OPENAI, "gpt-6-sol") is True
 
     def test_real_openai_gpt4o_mini(self) -> None:
-        """Test that real OpenAI GPT-4o-mini model is correctly identified."""
-        assert is_true_openai_model(LlmProviderNames.OPENAI, "gpt-4o-mini") is True
+        """Test that real OpenAI GPT-6 Luna model is correctly identified."""
+        assert is_true_openai_model(LlmProviderNames.OPENAI, "gpt-6-luna") is True
 
     def test_openai_with_provider_prefix(self) -> None:
         """Test that OpenAI model with provider prefix is correctly identified."""
@@ -151,16 +151,21 @@ class TestIsTrueOpenAIModel:
     def test_azure_openai_model_through_litellm_proxy(self) -> None:
         """Test that Azure OpenAI models are correctly identified."""
         assert is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "gpt-4") is True
-        assert is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "gpt-5") is True
-        assert is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "gpt-5.1") is True
+        assert (
+            is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "gpt-6-astra") is True
+        )
+        assert (
+            is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "gpt-6.1-sol") is True
+        )
 
         assert (
             is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "azure/gpt-4") is True
         )
         assert (
-            is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "azure/gpt-5") is True
+            is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "azure/gpt-6-astra")
+            is True
         )
         assert (
-            is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "azure/gpt-5.1")
+            is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "azure/gpt-6.1-sol")
             is True
         )

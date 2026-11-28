@@ -5,11 +5,11 @@ import json
 import os
 import re
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable, Iterator, Sequence
 from email.parser import Parser as EmailParser
 from io import BytesIO
-from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, NamedTuple, Optional, cast
 from zipfile import BadZipFile
 
@@ -26,12 +26,18 @@ from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import (
     PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MIME_TYPES,
     WORD_PROCESSING_MIME_TYPE,
     OnyxFileExtensions,
     OnyxMimeTypes,
+    get_file_ext,
 )
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.pdf_image_utils import iter_pdf_extracted_images
+from onyx.file_processing.pdfium_text import (
+    TEXT_SECTION_SEPARATOR,
+    extract_pdf_pages_pdfium,
+)
 from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     unstructured_to_text,
@@ -48,7 +54,12 @@ if TYPE_CHECKING:
     from markitdown import MarkItDown
 logger = setup_logger()
 
-TEXT_SECTION_SEPARATOR = "\n\n"
+
+# A full collection costs about 0.1 s in a loaded worker. One follows every
+# spreadsheet (openpyxl leaves cycles) and otherwise at most one per interval,
+# which bounds the cyclic garbage the other parsers leave in a long-lived worker.
+GC_COLLECT_INTERVAL_SECONDS = 10.0
+_last_gc_collect_at = 0.0
 
 _MARKITDOWN_CONVERTER: Optional["MarkItDown"] = None
 
@@ -81,11 +92,6 @@ def get_markitdown_converter() -> "MarkItDown":
         )
         _MARKITDOWN_CONVERTER = MarkItDown(enable_plugins=False)
     return _MARKITDOWN_CONVERTER
-
-
-def get_file_ext(file_path_or_name: str | Path) -> str:
-    _, extension = os.path.splitext(file_path_or_name)
-    return extension.lower()
 
 
 def is_text_file(file: IO[bytes]) -> bool:
@@ -140,8 +146,10 @@ def load_files_from_zip(
 ) -> Iterator[tuple[zipfile.ZipInfo, IO[Any]]]:
     """
     Iterates through files in a zip archive, yielding (ZipInfo, file handle) pairs.
+    Raises ZipSizeLimitError if the archive exceeds the decompression limits.
     """
     with zipfile.ZipFile(zip_file_io, "r") as zip_file:
+        assert_zip_within_limits(zip_file)
         for file_info in zip_file.infolist():
             if ignore_dirs and file_info.is_dir():
                 continue
@@ -152,6 +160,7 @@ def load_files_from_zip(
             ) or file_info.filename == ONYX_METADATA_FILENAME:
                 continue
 
+            # zipfile caps each read at the declared size checked above.
             with zip_file.open(file_info.filename, "r") as subfile:
                 # Try to match by exact filename first
                 yield file_info, subfile
@@ -228,33 +237,6 @@ def pdf_to_text(
     return text
 
 
-def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
-    """Extract all text from a PDF via pypdfium2 (PDFium/C).
-
-    PDFium releases the GIL while parsing, so a large or complex PDF can't pin
-    a worker thread or stall the indexing heartbeat during text extraction.
-    """
-    import pypdfium2 as pdfium
-
-    pdf = pdfium.PdfDocument(file_bytes, password=password)
-    try:
-        page_texts: list[str] = []
-        for page in pdf:
-            # Per-page try/finally so a get_textpage() failure still closes the
-            # native page handle instead of leaking it until GC.
-            try:
-                textpage = page.get_textpage()
-                try:
-                    page_texts.append(textpage.get_text_range())
-                finally:
-                    textpage.close()
-            finally:
-                page.close()
-        return TEXT_SECTION_SEPARATOR.join(page_texts)
-    finally:
-        pdf.close()
-
-
 def read_pdf_file(
     file: IO[Any],
     pdf_pass: str | None = None,
@@ -269,6 +251,21 @@ def read_pdf_file(
     under a deadline: a child of a child is orphaned when the outer one is
     killed, so PDFium runs in the caller's process instead.
     """
+    pages, metadata, images = _read_pdf_pages(
+        file, pdf_pass, extract_images, image_callback, isolate_pdfium
+    )
+    return TEXT_SECTION_SEPARATOR.join(pages), metadata, images
+
+
+def _read_pdf_pages(
+    file: IO[Any],
+    pdf_pass: str | None,
+    extract_images: bool,
+    image_callback: Callable[[bytes, str], None] | None,
+    isolate_pdfium: bool,
+) -> tuple[list[str], dict[str, Any], Sequence[tuple[bytes, str]]]:
+    """read_pdf_file with the text of each page. A PDF that cannot be read
+    gives no pages."""
     from pypdf import PdfReader
     from pypdf.errors import PdfStreamError
     from pypdfium2 import PdfiumError
@@ -301,7 +298,7 @@ def read_pdf_file(
                 logger.error(
                     "Encrypted PDF could not be decrypted, returning empty text."
                 )
-                return "", metadata, []
+                return [], metadata, []
 
         # Basic PDF metadata
         if pdf_reader.metadata is not None:
@@ -318,33 +315,37 @@ def read_pdf_file(
         # so run it isolated; a crash, timeout, or PdfiumError falls back to pypdf.
         try:
             if isolate_pdfium:
-                text = run_in_isolated_process(
-                    _extract_pdf_text_pdfium,
+                pages = run_in_isolated_process(
+                    extract_pdf_pages_pdfium,
                     file_bytes,
                     decrypt_password,
                     timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
                 )
             else:
-                text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
+                pages = extract_pdf_pages_pdfium(file_bytes, decrypt_password)
         except (PdfiumError, IsolatedProcessError) as pdfium_err:
             logger.warning(
                 "PDFium text extraction failed (%s); falling back to pypdf",
                 pdfium_err,
             )
-            text = TEXT_SECTION_SEPARATOR.join(
-                page.extract_text() for page in pdf_reader.pages
-            )
+            pages = [page.extract_text() for page in pdf_reader.pages]
 
         if extract_images:
-            images = iter_pdf_extracted_images(pdf_reader, MAX_EMBEDDED_IMAGES_PER_FILE)
-            if image_callback is None:
-                extracted_images.extend(images)
-            else:
-                # Stream each image out immediately
-                for img_bytes, image_name in images:
-                    image_callback(img_bytes, image_name)
+            # Images are best-effort: a failure here must not discard the text.
+            try:
+                images = iter_pdf_extracted_images(
+                    pdf_reader, MAX_EMBEDDED_IMAGES_PER_FILE
+                )
+                if image_callback is None:
+                    extracted_images.extend(images)
+                else:
+                    # Stream each image out immediately
+                    for img_bytes, image_name in images:
+                        image_callback(img_bytes, image_name)
+            except Exception:
+                logger.exception("Failed to extract pdf images")
 
-        return text, metadata, extracted_images
+        return pages, metadata, extracted_images
 
     except PdfStreamError as e:
         # Malformed/truncated PDF content — a per-document content issue, not
@@ -358,7 +359,7 @@ def read_pdf_file(
         # non-fatal skip.
         logger.warning("Failed to read PDF, skipping content extraction: %s", e)
 
-    return "", metadata, []
+    return [], metadata, []
 
 
 def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
@@ -551,6 +552,9 @@ def _columns_to_keep(col_has_data: bytearray, max_empty: int) -> list[int]:
     return kept
 
 
+XLSX_TRUNCATION_MARKER = "[truncated: sheet exceeded cell limit]"
+
+
 def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     """Stream worksheet rows into CSV text without materializing a dense matrix.
 
@@ -558,35 +562,39 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     bitmap so column trimming needs no transpose or copy. Runs of empty
     rows/columns longer than 2 are collapsed; shorter runs are preserved.
 
-    Scanning stops once ``MAX_XLSX_CELLS_PER_SHEET`` non-empty cells have been
-    seen; the output gets a truncation marker row appended so downstream
-    indexing sees that the sheet was cut off.
+    Rows are stored as sparse ``(column, value)`` pairs. Scanning stops once
+    ``MAX_XLSX_CELLS_PER_SHEET`` cell positions (padding included) have been
+    seen, so sparse wide rows cannot bypass the cap; the output gets a
+    truncation marker row appended so downstream indexing sees that the sheet
+    was cut off.
     """
     MAX_EMPTY_ROWS_IN_OUTPUT = 2
     MAX_EMPTY_COLS_IN_OUTPUT = 2
-    TRUNCATION_MARKER = "[truncated: sheet exceeded cell limit]"
 
-    non_empty_rows: list[tuple[int, list[str]]] = []
+    non_empty_rows: list[tuple[int, list[tuple[int, str]]]] = []
     col_has_data = bytearray()
-    total_non_empty = 0
+    total_cells = 0
     truncated = False
 
     for row_idx, row_vals in enumerate(rows):
-        # Fast-reject empty rows before allocating a list of "".
-        if not any(v is not None and v != "" for v in row_vals):
-            continue
+        total_cells += len(row_vals)
+        cells: list[tuple[int, str]] = []
+        for i, v in enumerate(row_vals):
+            if v is None or v == "":
+                continue
+            text = str(v)
+            if text:
+                cells.append((i, text))
 
-        cells = ["" if v is None else str(v) for v in row_vals]
-        non_empty_rows.append((row_idx, cells))
-
-        if len(cells) > len(col_has_data):
-            col_has_data.extend(b"\x00" * (len(cells) - len(col_has_data)))
-        for i, v in enumerate(cells):
-            if v:
+        if cells:
+            non_empty_rows.append((row_idx, cells))
+            last_col = cells[-1][0]
+            if last_col >= len(col_has_data):
+                col_has_data.extend(b"\x00" * (last_col + 1 - len(col_has_data)))
+            for i, _ in cells:
                 col_has_data[i] = 1
-                total_non_empty += 1
 
-        if total_non_empty > MAX_XLSX_CELLS_PER_SHEET:
+        if total_cells > MAX_XLSX_CELLS_PER_SHEET:
             truncated = True
             break
 
@@ -600,25 +608,33 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     blank_row = [""] * len(keep_cols)
+    output_col = {c: i for i, c in enumerate(keep_cols)}
     last_idx = -1
     for row_idx, cells in non_empty_rows:
         gap = row_idx - last_idx - 1
         if gap > 0:
             for _ in range(min(gap, MAX_EMPTY_ROWS_IN_OUTPUT)):
                 writer.writerow(blank_row)
-        writer.writerow([cells[c] if c < len(cells) else "" for c in keep_cols])
+        out_row = list(blank_row)
+        for c, text in cells:
+            out_row[output_col[c]] = text
+        writer.writerow(out_row)
         last_idx = row_idx
 
     if truncated:
-        writer.writerow([TRUNCATION_MARKER])
+        writer.writerow([XLSX_TRUNCATION_MARKER])
 
     return buf.getvalue().rstrip("\n")
 
 
-def _load_readonly_workbook(file: IO[Any], file_name: str) -> openpyxl.Workbook | None:
+def _load_readonly_workbook(
+    file: IO[Any], file_name: str, max_decompressed_bytes: int | None = None
+) -> openpyxl.Workbook | None:
     """Load a read-only workbook, returning None (and logging) for the BadZipFile
     / known-openpyxl-bug cases the xlsx indexers treat as skip-and-continue rather
-    than a hard failure."""
+    than a hard failure. Raises ZipSizeLimitError if the container exceeds the
+    decompression limits."""
+    assert_zip_container_within_limits(file, max_total_bytes=max_decompressed_bytes)
     try:
         return openpyxl.load_workbook(file, read_only=True, data_only=True)
     except BadZipFile as e:
@@ -639,14 +655,16 @@ def _load_readonly_workbook(file: IO[Any], file_name: str) -> openpyxl.Workbook 
         raise
 
 
-def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
+def xlsx_sheet_extraction(
+    file: IO[Any], file_name: str = "", max_decompressed_bytes: int | None = None
+) -> list[tuple[str, str]]:
     """
     Converts each sheet in the excel file to a csv condensed string.
     Returns a string and the worksheet title for each worksheet
 
     Returns a list of (csv_text, sheet)
     """
-    workbook = _load_readonly_workbook(file, file_name)
+    workbook = _load_readonly_workbook(file, file_name, max_decompressed_bytes)
     if workbook is None:
         return []
 
@@ -842,6 +860,68 @@ def extract_file_text_locally(
     raise ValueError("Unknown file extension or not recognized as text data")
 
 
+class PagedText(NamedTuple):
+    """The text of a file, by page when its format has pages: a PDF's pages,
+    a PowerPoint file's slides or a spreadsheet's sheets. Any other file is
+    one text and `paged` is False."""
+
+    pages: list[str]
+    paged: bool
+
+
+# The marker that markitdown writes before each slide of a PowerPoint file.
+_SLIDE_MARKER = re.compile(r"^<!-- Slide number: \d+ -->$\n?", re.MULTILINE)
+
+
+def extract_text_pages(file: IO[Any], file_name: str) -> PagedText:
+    """The text of a file by page, from the parsers that extract_file_text
+    uses: Unstructured when an admin set its key, which gives no pages, and
+    otherwise, or when Unstructured fails, the local parser for the file's
+    extension. A file that no parser reads, or whose content a parser
+    rejects, gives no text. An OSError (I/O, network, timeout) or a
+    MemoryError raises, so the caller caches nothing and can retry."""
+    use_unstructured = bool(get_unstructured_api_key())
+    try:
+        if use_unstructured:
+            try:
+                return PagedText([unstructured_to_text(file, file_name)], paged=False)
+            except Exception as unstructured_error:
+                logger.error(
+                    "Failed to process with Unstructured: %s. Falling back to normal processing.",
+                    unstructured_error,
+                )
+        extension = get_file_ext(file_name)
+        file.seek(0)
+        if extension == ".pdf":
+            pages, _, _ = _read_pdf_pages(
+                file,
+                pdf_pass=None,
+                extract_images=False,
+                image_callback=None,
+                isolate_pdfium=True,
+            )
+            return PagedText(pages, paged=True)
+        if extension == ".pptx":
+            before_first, *slides = _SLIDE_MARKER.split(pptx_to_text(file, file_name))
+            if not slides:
+                return PagedText([before_first], paged=False)
+            # Any text before the first marker belongs to the first slide.
+            return PagedText([before_first + slides[0], *slides[1:]], paged=True)
+        if extension in OnyxFileExtensions.SPREADSHEET_EXTENSIONS:
+            return PagedText(
+                [csv_text for csv_text, _ in xlsx_sheet_extraction(file, file_name)],
+                paged=True,
+            )
+        return PagedText(
+            [extract_file_text_locally(file, file_name, extension)], paged=False
+        )
+    except (OSError, MemoryError):
+        raise
+    except Exception as e:
+        logger.warning("Failed to extract text from %s: %s", file_name, e)
+        return PagedText([""], paged=False)
+
+
 class ExtractionResult(NamedTuple):
     """Structured result from text and image extraction from various file types."""
 
@@ -893,11 +973,29 @@ def extract_text_and_images(
     res = _extract_text_and_images(
         file, file_name, pdf_pass, content_type, image_callback
     )
-    # Clean up any temporary objects and force garbage collection
-    unreachable = gc.collect()
-    logger.info("Unreachable objects: %s", unreachable)
+    _collect_garbage_if_due(file_name, content_type)
 
     return res
+
+
+def _collect_garbage_if_due(file_name: str, content_type: str | None) -> None:
+    global _last_gc_collect_at
+    now = time.monotonic()
+    if (
+        not _is_spreadsheet(file_name, content_type)
+        and now - _last_gc_collect_at < GC_COLLECT_INTERVAL_SECONDS
+    ):
+        return
+    # Racing threads may both collect. The duplicate is harmless.
+    _last_gc_collect_at = now
+    logger.info("Unreachable objects: %s", gc.collect())
+
+
+def _is_spreadsheet(file_name: str, content_type: str | None) -> bool:
+    return (
+        get_file_ext(file_name) in OnyxFileExtensions.SPREADSHEET_EXTENSIONS
+        or content_type in SPREADSHEET_MIME_TYPES
+    )
 
 
 def _extract_text_and_images(

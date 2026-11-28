@@ -1,6 +1,5 @@
 import type { IconProps } from "@opal/types";
 import {
-  SvgCpu,
   SvgGlobe,
   SvgImage,
   SvgLink,
@@ -9,9 +8,6 @@ import {
 } from "@opal/icons";
 
 // Tool names as referenced by tool results / tool calls
-export const SEARCH_TOOL_NAME = "run_search";
-export const INTERNET_SEARCH_TOOL_NAME = "run_internet_search";
-export const IMAGE_GENERATION_TOOL_NAME = "run_image_generation";
 export const PYTHON_TOOL_NAME = "run_python";
 export const OPEN_URL_TOOL_NAME = "open_url";
 
@@ -22,7 +18,6 @@ export const WEB_SEARCH_TOOL_ID = "WebSearchTool";
 export const PYTHON_TOOL_ID = "PythonTool";
 export const OPEN_URL_TOOL_ID = "OpenURLTool";
 export const FILE_READER_TOOL_ID = "FileReaderTool";
-export const CODING_AGENT_TOOL_ID = "CodingAgentTool";
 export const KNOWLEDGE_GRAPH_TOOL_ID = "KnowledgeGraphTool";
 export const MEMORY_TOOL_ID = "MemoryTool";
 
@@ -36,7 +31,6 @@ export const SYSTEM_TOOL_ICONS: Record<
   [IMAGE_GENERATION_TOOL_ID]: SvgImage,
   [PYTHON_TOOL_ID]: SvgTerminal,
   [OPEN_URL_TOOL_ID]: SvgLink,
-  [CODING_AGENT_TOOL_ID]: SvgCpu,
 };
 
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -64,6 +58,6 @@ export const ADMIN_CONFIG_LINKS: Record<
 
 /** Where an admin goes for a tool that is neither built-in nor from MCP. */
 export const OPENAPI_ADMIN_CONFIG = {
-  href: ADMIN_ROUTES.OPENAPI_ACTIONS.path,
-  tooltip: "Manage OpenAPI Actions",
+  href: ADMIN_ROUTES.INTEGRATIONS.path,
+  tooltip: "Manage integrations",
 };

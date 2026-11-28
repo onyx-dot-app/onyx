@@ -23,10 +23,11 @@ from onyx.connectors.cross_connector_utils.server_wait import (
     SERVER_WAIT_LONG_LOG_PREFIX,
     bound_server_wait,
 )
-from onyx.connectors.github import connector as github_connector
 from onyx.connectors.github import rate_limit_utils as github_rl
+from onyx.connectors.github import source_operations as github_ops
+from onyx.connectors.github import utils as github_utils
 from onyx.connectors.github.connector import GithubConnector
-from onyx.connectors.github.rate_limit_utils import BoundedGithubRetry
+from onyx.connectors.github.source_operations import BoundedGithubRetry
 from onyx.connectors.google_utils import google_utils
 from onyx.connectors.hubspot.rate_limit import get_rate_limit_retry_delay_seconds
 from onyx.connectors.microsoft_utils.graph_client import backoff_seconds
@@ -150,11 +151,11 @@ def test_invalid_wait_becomes_zero(seconds: float) -> None:
 
 
 def test_github_reset_sleep(cloud: bool) -> None:
-    client = MagicMock()
-    client.get_rate_limit.return_value.core.reset = _FAR_FUTURE
+    gateway = MagicMock()
+    gateway.get_rate_limit_reset.return_value = _FAR_FUTURE
     before = _count("github", "over_5m")
     with patch.object(github_rl.time, "sleep") as sleep:
-        github_rl.sleep_after_rate_limit_exception(client)
+        github_rl.sleep_after_rate_limit_exception(gateway)
     slept = sleep.call_args.args[0]
     if cloud:
         assert slept == MAX_SERVER_WAIT_SECONDS
@@ -199,10 +200,11 @@ def test_github_retry_after_header_is_classified() -> None:
 def test_github_client_uses_bounded_retry(
     monkeypatch: pytest.MonkeyPatch, env_base_url: str | None
 ) -> None:
-    monkeypatch.setattr(github_connector, "GITHUB_CONNECTOR_BASE_URL", env_base_url)
-    with patch.object(github_connector, "Github") as github_cls:
+    monkeypatch.setattr(github_utils, "GITHUB_CONNECTOR_BASE_URL", env_base_url)
+    with patch.object(github_ops, "Github") as github_cls:
         connector = GithubConnector(repo_owner="o", repositories="r")
         connector.load_credentials({"github_access_token": "t"})
+        connector.source_operations._client()
     assert isinstance(github_cls.call_args.kwargs["retry"], BoundedGithubRetry)
 
 

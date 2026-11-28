@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useSearchParams } from "@opal/navigation";
 /**
  * Shared analytics components.
  *
@@ -7,13 +8,13 @@
  * side effects. Drop them into the root layout and forget about them.
  */
 
-import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, Suspense, type ReactElement } from "react";
 import { usePostHog } from "posthog-js/react";
 import { useReportWebVitals } from "next/web-vitals";
 import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { initPostHog } from "@/app/providers";
+import { redactUrl } from "@/lib/analytics/redact";
 
 // ─── PostHogRuntimeInitializer ──────────────────────────────────────────────
 
@@ -59,8 +60,8 @@ export function WebVitals(): null {
  * (`capture_pageview: false`) because Next.js App Router navigation does not
  * trigger full page loads, which PostHog cannot detect on its own.
  *
- * Manages its own `<Suspense>` boundary (required by `useSearchParams()` in
- * Next.js), so callers can drop it in directly without wrapping it themselves.
+ * Manages its own `<Suspense>` boundary (required by `useSearchParams()`, which
+ * reads the query), so callers can drop it in directly without wrapping it.
  */
 function PostHogPageTrackerInner(): null {
   const pathname = usePathname();
@@ -76,7 +77,7 @@ function PostHogPageTrackerInner(): null {
         url = url + `?${searchParams.toString()}`;
       }
       posthog.capture("$pageview", {
-        $current_url: url,
+        $current_url: redactUrl(url),
       });
     }
   }, [pathname, searchParams, posthog]);

@@ -17,7 +17,7 @@ func NewFmtCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "fmt",
 		Aliases: []string{"format"},
-		Short:   "Format repository sources",
+		Short:   "Format Terraform sources",
 	}
 	cmd.AddCommand(newFmtTerraformCommand())
 	return cmd

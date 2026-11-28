@@ -1,8 +1,8 @@
 @import "@onyx-ai/opal/root.css";
 @import "./css/content-editable.css" layer(base);
 @import "./css/card.css" layer(base);
+@import "./css/chat-find.css" layer(base);
 @import "./css/comet.css" layer(base);
-@import "./css/color-swatch.css" layer(base);
 @import "./css/divider.css" layer(base);
 @import "./css/general-layouts.css" layer(base);
 @import "./css/inputs.css" layer(base);
@@ -23,6 +23,17 @@
   If we ever want to remove these styles, we need to add an explicit border
   color utility to any element that depends on these defaults.
 */
+/* The page content's room for the chat's right panel toggle: its 12px inset
+   and its 36px button, which abuts the next button as the header's buttons
+   abut each other. The panel's size button sits beside it at the same 48px
+   (`end-12` in sections/chat/ChatRightPanel.tsx). Registered for its
+   48px default where no open panel sets it. */
+@property --panel-toggle-reserve {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 48px;
+}
+
 @layer base {
   *,
   ::after,
@@ -63,8 +74,8 @@
     align-items: start;
   }
 
-  /* CJK system-font tail for the app font variables (composed into
-     --font-hanken-grotesk / --font-dm-mono in src/app/layout.tsx). Font
+  /* CJK system-font tail for the app font variables (composed into the
+     --font-* variables in src/app/layout.tsx). Font
      selection is per-character and first-match-wins, and macOS/Windows
      preinstall the fonts for every CJK language — so the active locale's
      fonts must come first or shared Han codepoints render with another
@@ -102,6 +113,45 @@
   :lang(ko) {
     word-break: keep-all;
   }
+}
+
+/* Font preferences. src/lib/appearance/preferences.ts owns the attribute values on <html>;
+   src/app/layout.tsx defines the webfont variables. Unlayered so they
+   override the --font-interface default in the unlayered tokens.css. */
+:root[data-interface-font="system"] {
+  --font-interface: var(--font-system);
+}
+
+:root[data-interface-font="opendyslexic"] {
+  --font-interface: var(--font-opendyslexic);
+  /* OpenDyslexic spaces letters and words widely; tighten both so text width
+     stays close to the default font. The typography presets in the interface
+     and content fonts read these, and em follows each element's font size.
+     Presets in other fonts, such as mono, keep their own spacing. */
+  --font-interface-letter-spacing: -0.06em;
+  --font-interface-word-spacing: -0.2em;
+  --font-content-letter-spacing: -0.06em;
+  --font-content-word-spacing: -0.2em;
+}
+
+/* Monospace text without a preset inherits spacing from the text around it;
+   it keeps the spacing it has without OpenDyslexic. */
+:root[data-interface-font="opendyslexic"]
+  :is(code, pre, kbd, samp, .font-mono) {
+  letter-spacing: normal;
+  word-spacing: normal;
+}
+
+:root[data-interface-font="atkinson"] {
+  --font-interface: var(--font-atkinson-hyperlegible-next);
+}
+
+/* The response font applies only inside chat responses: elsewhere the
+   main-content presets follow the interface font. */
+:root[data-response-font="default"] .response-text {
+  --font-content: var(--font-hanken-grotesk);
+  --font-content-letter-spacing: 0em;
+  --font-content-word-spacing: normal;
 }
 
 /* Markdown chat overrides — placed in `utilities` so they sit in the same
@@ -184,7 +234,7 @@
 
   .default-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #888 transparent;
+    scrollbar-color: var(--border-02) transparent;
     overflow-y: scroll;
     overflow-x: hidden;
   }
@@ -257,94 +307,6 @@
   /* Preserves whitespace and wraps text */
 }
 
-/* Text shimmer for streaming status lines (see ShimmerText.tsx). The base
-   text renders normally; an inert clone above it is masked to its own glyphs,
-   and a highlight bar slides across the clone. Only `translate` animates, so
-   the effect composites on the GPU instead of repainting every frame. */
-.shimmer-text {
-  position: relative;
-  color: var(--shimmer-base);
-}
-
-.shimmer-text-overlay {
-  position: absolute;
-  inset: 0;
-  overflow: clip;
-  color: transparent;
-  contain: strict;
-  pointer-events: none;
-  mask-image: linear-gradient(#fff, #fff);
-  -webkit-mask-clip: text;
-}
-
-.shimmer-text-overlay::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(
-    90deg,
-    transparent 35%,
-    var(--shimmer-highlight) 50%,
-    transparent 65%
-  );
-  will-change: transform;
-  animation: shimmer-slide 1s ease-out infinite;
-}
-
-@keyframes shimmer-slide {
-  from {
-    translate: -100% 0;
-  }
-  to {
-    translate: 100% 0;
-  }
-}
-
-/* Browsers without text mask clipping (Firefox) fall back to the animated
-   background gradient. It repaints each frame but looks the same. */
-@supports not (-webkit-mask-clip: text) {
-  .shimmer-text {
-    animation: shimmer 1s ease-out infinite;
-    background-size: 300% 100%;
-    background-image: linear-gradient(
-      90deg,
-      var(--shimmer-base) 35%,
-      var(--shimmer-highlight) 50%,
-      var(--shimmer-base) 65%
-    );
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-  }
-
-  .shimmer-text-overlay {
-    display: none;
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-  100% {
-    background-position: 0% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .shimmer-text {
-    animation: none;
-    background-image: none;
-    background-clip: border-box;
-    -webkit-background-clip: border-box;
-    color: var(--shimmer-base);
-  }
-
-  .shimmer-text-overlay {
-    display: none;
-  }
-}
-
 .collapsible {
   max-height: 300px;
   transition:
@@ -379,6 +341,26 @@
 
 .animate-fadeIn {
   animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* The chat browser agent cursor's click ripple: one ping that ends hidden */
+@keyframes agent-cursor-ripple {
+  to {
+    opacity: 0;
+    transform: scale(2);
+  }
+}
+
+.animate-agent-cursor-ripple {
+  animation: agent-cursor-ripple 1s cubic-bezier(0, 0, 0.2, 1) forwards;
+}
+
+/* Without the animation, the ripple would stay; hide it */
+@media (prefers-reduced-motion: reduce) {
+  .animate-agent-cursor-ripple {
+    animation: none;
+    visibility: hidden;
+  }
 }
 
 /* Recording waveform animation */

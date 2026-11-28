@@ -1,6 +1,6 @@
 # Charts
 
-> **Path convention**: All commands run from the **session workspace**. Prefix skill scripts with `.opencode/skills/pptx/`. Generated files go in `outputs/`.
+> **Path convention**: Run all commands from your working directory, the chat session folder. Run skill scripts with their interpreter and the absolute path under `/var/lib/onyx/skills/pptx/`. Write generated files to the working directory.
 
 Render charts as **PNG images via matplotlib** using the `chart.py` styling helper, then place them like any other image. This works identically for the from-scratch path (pptxgenjs `addImage`) and the template-editing path, and gives full styling control so charts match the deck instead of looking like a pasted Jupyter screenshot.
 
@@ -37,7 +37,7 @@ Only use native PowerPoint charts (pptxgenjs `addChart` or python-pptx) when the
 ```python
 import sys
 
-sys.path.insert(0, ".opencode/skills/pptx/scripts")
+sys.path.insert(0, "/var/lib/onyx/skills/pptx/scripts")
 import matplotlib
 
 matplotlib.use("Agg")
@@ -50,7 +50,7 @@ with deck_style(palette=DECK_PALETTE, font="Montserrat"):
     fig, ax = plt.subplots(layout="constrained")
     ax.bar(["Q1", "Q2", "Q3", "Q4"], [4500, 5500, 6200, 7100])
     ax.set_title("Quarterly Sales")
-    save_for_slide(fig, "outputs/chart-sales.png", width_in=6, height_in=3.5)
+    save_for_slide(fig, "chart-sales.png", width_in=6, height_in=3.5)
 ```
 
 - `palette`: the deck's palette (same hex values as the rest of the deck; bare hex like `"1E2761"` is fine). When editing a template, pull colors from the template's theme.
@@ -64,7 +64,7 @@ Decide the chart's region on the slide **in inches first**, then pass exactly th
 
 ```javascript
 // pptxgenjs (from scratch)
-slide.addImage({ path: "outputs/chart-sales.png", x: 0.5, y: 1.2, w: 6, h: 3.5 });
+slide.addImage({ path: "chart-sales.png", x: 0.5, y: 1.2, w: 6, h: 3.5 });
 ```
 
 For the template-editing path, insert the PNG as slide media (replace an existing picture's media file, or add an image the same way any picture is referenced in the slide XML) at the placeholder's size — see [editing.md](editing.md).

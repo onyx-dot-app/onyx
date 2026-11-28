@@ -3,6 +3,8 @@
 import { useState, KeyboardEvent } from "react";
 import InputTypeIn from "@opal/components/inputs/texts/input-type-in/components";
 import { Tag } from "@opal/components/tag/components";
+import type { RichStr } from "@opal/types";
+import { useInputDisabled } from "@opal/components/inputs/disabled";
 
 export interface InputListProps {
   values: string[];
@@ -10,6 +12,8 @@ export interface InputListProps {
   placeholder?: string;
   disabled?: boolean;
   error?: boolean;
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
 }
 
 /**
@@ -20,14 +24,19 @@ export interface InputListProps {
  * @param onChange - The function to call when the value changes.
  * @param placeholder - The placeholder text to display in the input field.
  * @param disabled - Whether the input field is disabled.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too. The text field shows `tooltip`.
  **/
 export function InputList({
   values,
   onChange,
   placeholder = "",
-  disabled = false,
+  disabled: disabledProp,
   error = false,
+  tooltip,
 }: InputListProps) {
+  const disabled = useInputDisabled(disabledProp);
   const [inputValue, setInputValue] = useState("");
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -53,6 +62,7 @@ export function InputList({
       <InputTypeIn
         placeholder={placeholder}
         value={inputValue}
+        tooltip={tooltip}
         variant={disabled ? "disabled" : error ? "error" : undefined}
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -63,7 +73,6 @@ export function InputList({
           {values.map((value, index) => (
             <Tag
               key={index}
-              size="md"
               title={value}
               disabled={disabled}
               onRemove={() => removeValue(index)}

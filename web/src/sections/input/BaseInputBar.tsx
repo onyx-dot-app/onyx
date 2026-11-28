@@ -1,11 +1,13 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   forwardRef,
   memo,
   useCallback,
   useImperativeHandle,
   useRef,
+  useState,
   type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -13,13 +15,13 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
-import { deleteTokenBeforeCursor, getTextContent } from "@/lib/contentEditable";
+import type { CaretText } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
 import { Button, Text } from "@opal/components";
-import { SvgArrowUp, SvgLoader, SvgSimpleLoader, SvgStop } from "@opal/icons";
+import { SvgArrowUp, SvgLoader, SvgStop } from "@opal/icons";
 import Keycap from "@/refresh-components/Keycap";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
@@ -29,21 +31,19 @@ import {
   EMPTY_QUEUED_MESSAGES,
   MAX_QUEUED_MESSAGES,
   type QueuedMessage,
-} from "@/app/app/interfaces";
+} from "@/app/app/types";
 
 export interface BaseInputBarHandle {
   reset: () => void;
   focus: () => void;
   setMessage: (message: string) => void;
   pasteText: (text: string) => void;
-  getTextBeforeCursor: () => string | null;
-  getCaretRect: () => DOMRect | null;
-  /** Delete `token` immediately before the caret (e.g. `"/pptx"`). */
-  deleteBeforeToken: (token: string) => boolean;
+  /** Delete `token` around the caret (e.g. `/pp` before it, `tx` after). */
+  deleteToken: (token: CaretText) => boolean;
 }
 
 export interface BaseInputBarProps {
-  onSubmit: (message: string) => void;
+  onSubmit: (message: string) => boolean | void | Promise<boolean | void>;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -54,7 +54,7 @@ export interface BaseInputBarProps {
   submitBlocked?: boolean;
 
   queuedMessages?: readonly QueuedMessage[];
-  onQueueMessage?: (text: string) => void;
+  onQueueMessage?: (text: string) => boolean | void;
   onRemoveQueuedMessage?: (index: number) => void;
 
   onInterrupt?: () => void;
@@ -68,8 +68,9 @@ export interface BaseInputBarProps {
   /** Return true to consume the pasted text (skips pasteText). */
   onPasteText?: (text: string) => boolean;
   onPasteFiles?: (files: File[]) => void;
-  onInputCallback?: () => void;
-  onSelectionChange?: () => void;
+  onContentChange?: (text: string) => void;
+  onInputCallback?: (event: SyntheticEvent<HTMLDivElement>) => void;
+  onFocus?: () => void;
 }
 
 const BaseInputBar = memo(
@@ -78,7 +79,7 @@ const BaseInputBar = memo(
       {
         onSubmit,
         isRunning,
-        disabled = false,
+        disabled: disabledProp = false,
         placeholder,
         noBottomRounding = false,
         pasteTilesEnabled = false,
@@ -94,11 +95,15 @@ const BaseInputBar = memo(
         bottomRightSlot,
         onPasteText,
         onPasteFiles,
+        onContentChange,
         onInputCallback,
-        onSelectionChange,
+        onFocus,
       },
       ref
     ) => {
+      const [submitting, setSubmitting] = useState(false);
+      const submittingRef = useRef(false);
+      const disabled = disabledProp || submitting;
       const t = useTranslations("chat.input");
       const queueEnabled = !!onQueueMessage;
       const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
@@ -111,6 +116,7 @@ const BaseInputBar = memo(
         message,
         setMessage,
         clearMessage,
+        deleteToken,
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
@@ -128,15 +134,22 @@ const BaseInputBar = memo(
         expandTile,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
+        onContentChange,
         pasteTilesEnabled,
         disabled,
       });
 
+      const editQueuedMessage = (index: number) => {
+        const queued = queue[index];
+        if (!queued) return;
+        onRemoveQueuedMessage?.(index);
+        setMessage(queued.text);
+      };
       const queueNav = useQueuedMessageNavigation({
         messages: queue,
         inputIsEmpty: !message,
         onRemove: (index) => onRemoveQueuedMessage?.(index),
-        onEdit: setMessage,
+        onEdit: editQueuedMessage,
       });
 
       useImperativeHandle(ref, () => ({
@@ -149,41 +162,7 @@ const BaseInputBar = memo(
         },
         setMessage: (msg: string) => setMessage(msg),
         pasteText: (text: string) => pasteText(text),
-        getTextBeforeCursor: (): string | null => {
-          const el = inputRef.current;
-          if (!el) return null;
-          const sel = window.getSelection();
-          if (!sel || sel.rangeCount === 0) return null;
-          const range = sel.getRangeAt(0);
-          if (!el.contains(range.startContainer)) return null;
-          const cloned = range.cloneRange();
-          cloned.selectNodeContents(el);
-          cloned.setEnd(range.startContainer, range.startOffset);
-          const tmp = document.createElement("div");
-          tmp.appendChild(cloned.cloneContents());
-          return getTextContent(tmp);
-        },
-        getCaretRect: (): DOMRect | null => {
-          const sel = window.getSelection();
-          if (!sel || sel.rangeCount === 0) return null;
-          const range = sel.getRangeAt(0).cloneRange();
-          range.collapse(true);
-          const rect = range.getBoundingClientRect();
-          if (
-            rect.top === 0 &&
-            rect.left === 0 &&
-            rect.width === 0 &&
-            rect.height === 0
-          ) {
-            return inputRef.current?.getBoundingClientRect() ?? null;
-          }
-          return rect;
-        },
-        deleteBeforeToken: (token: string): boolean => {
-          const el = inputRef.current;
-          if (!el) return false;
-          return deleteTokenBeforeCursor(el, token);
-        },
+        deleteToken,
       }));
 
       const handlePaste = useCallback(
@@ -204,20 +183,33 @@ const BaseInputBar = memo(
         [disabled, onPasteFiles, onPasteText, pasteText]
       );
 
-      const handleSubmit = useCallback(() => {
-        if (disabled || submitBlocked || sandboxInitializing || isInterrupting)
+      const handleSubmit = useCallback(async () => {
+        if (
+          submittingRef.current ||
+          disabled ||
+          submitBlocked ||
+          sandboxInitializing ||
+          isInterrupting
+        )
           return;
         const text = message.trim();
         if (isRunning) {
           if (onQueueMessage && text && queue.length < MAX_QUEUED_MESSAGES) {
-            onQueueMessage(text);
-            clearMessage();
+            if (onQueueMessage(text) !== false) clearMessage();
           }
           return;
         }
         if (text) {
-          onSubmit(text);
-          clearMessage();
+          submittingRef.current = true;
+          setSubmitting(true);
+          try {
+            if ((await onSubmit(text)) !== false) clearMessage();
+          } catch (error) {
+            console.error("Message submission failed", error);
+          } finally {
+            submittingRef.current = false;
+            setSubmitting(false);
+          }
         }
       }, [
         message,
@@ -235,7 +227,7 @@ const BaseInputBar = memo(
       const handleInput = useCallback(
         (event: SyntheticEvent<HTMLDivElement>) => {
           onInput(event);
-          onInputCallback?.();
+          onInputCallback?.(event);
         },
         [onInput, onInputCallback]
       );
@@ -255,10 +247,6 @@ const BaseInputBar = memo(
         [handleSubmit, handleTileKeyDown, queueNav]
       );
 
-      const handleSelectionChange = useCallback(() => {
-        onSelectionChange?.();
-      }, [onSelectionChange]);
-
       const canSubmit =
         message.trim().length > 0 &&
         !disabled &&
@@ -277,9 +265,10 @@ const BaseInputBar = memo(
           {queueEnabled && (
             <QueuedMessageBar
               messages={queue}
-              highlightedIndex={queueNav.highlightedIndex}
+              highlightedId={queueNav.highlightedId}
               onDiscard={(index) => onRemoveQueuedMessage?.(index)}
-              onHighlight={queueNav.setHighlightedIndex}
+              onEdit={editQueuedMessage}
+              canEdit={!message.trim()}
             />
           )}
           <div
@@ -309,9 +298,8 @@ const BaseInputBar = memo(
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
-                onKeyUp={handleSelectionChange}
-                onMouseUp={handleSelectionChange}
-                onBlur={() => queueNav.setHighlightedIndex(null)}
+                onFocus={onFocus}
+                onBlur={() => queueNav.setHighlightedId(null)}
                 className={cn(
                   "w-full h-full min-h-[44px] outline-hidden bg-transparent",
                   "whitespace-pre-wrap wrap-break-word overscroll-contain",
@@ -370,7 +358,7 @@ const BaseInputBar = memo(
                 >
                   <Button
                     prominence="tertiary"
-                    icon={isInterrupting ? SvgSimpleLoader : SvgStop}
+                    icon={isInterrupting ? IconLoader : SvgStop}
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}
                     tooltip={t("baseInputBar.stopButton.tooltip")}

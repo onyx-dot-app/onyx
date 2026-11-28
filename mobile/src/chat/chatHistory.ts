@@ -14,8 +14,12 @@ export function processRawChatHistory(
   let agentMessageInd = 0;
 
   rawMessages.forEach((messageInfo) => {
-    const packetsForMessage = packets[agentMessageInd];
-    if (messageInfo.message_type === "assistant") {
+    // Only assistant messages own a packet list.
+    const isAssistant = messageInfo.message_type === "assistant";
+    const packetsForMessage = isAssistant
+      ? packets[agentMessageInd]
+      : undefined;
+    if (isAssistant) {
       agentMessageInd++;
     }
 
@@ -23,6 +27,7 @@ export function processRawChatHistory(
       // reuse message_id as nodeId — only uniqueness matters
       nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
+      responseStatus: messageInfo.response_status,
       // errored turns carry text in `error`; render it as the message (web parity)
       message: messageInfo.error ?? messageInfo.message,
       type: messageInfo.error

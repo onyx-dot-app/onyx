@@ -1,12 +1,18 @@
 """Unit tests for search utility functions."""
 
 from typing import NamedTuple
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import InferenceChunk, InferenceSection
+from onyx.tools.tool_implementations.search import search_utils
 from onyx.tools.tool_implementations.search.search_tool import deduplicate_queries
 from onyx.tools.tool_implementations.search.search_utils import (
+    _retrieve_adjacent_chunks,
     weighted_reciprocal_rank_fusion,
+    weighted_reciprocal_rank_fusion_with_scores,
 )
 
 # =============================================================================
@@ -28,6 +34,18 @@ class MockDocument(NamedTuple):
 
 class TestWeightedReciprocalRankFusion:
     """Test suite for weighted_reciprocal_rank_fusion function."""
+
+    def test_scores_are_the_weighted_reciprocal_rank_sums(self) -> None:
+        fused = weighted_reciprocal_rank_fusion_with_scores(
+            ranked_results=[["a", "b"], ["b"], []],
+            weights=[1.0, 2.0, 1.0],
+            id_extractor=str,
+            k=10,
+        )
+
+        assert [item for item, _ in fused] == ["b", "a"]
+        assert fused[0][1] == pytest.approx(1 / 12 + 2 / 11)
+        assert fused[1][1] == pytest.approx(1 / 11)
 
     def test_single_result_list(self) -> None:
         """Test RRF with a single result list."""
@@ -570,3 +588,181 @@ class TestDeduplicateQueries:
         assert len(result) == 1
         assert result[0][0] == "Café"
         assert result[0][1] == 4.5
+
+
+# =============================================================================
+# Tests for _retrieve_adjacent_chunks
+# =============================================================================
+
+
+def _inference_chunk(document_id: str, chunk_id: int) -> InferenceChunk:
+    return InferenceChunk(
+        document_id=document_id,
+        chunk_id=chunk_id,
+        content=f"content-{chunk_id}",
+        source_type=DocumentSource.MOCK_CONNECTOR,
+        semantic_identifier=document_id,
+        title=document_id,
+        boost=1,
+        score=0.5,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+        image_file_id=None,
+        source_links={},
+        section_continuation=False,
+        blurb=f"blurb-{chunk_id}",
+    )
+
+
+def _section(document_id: str, chunk_ids: list[int]) -> InferenceSection:
+    chunks = [_inference_chunk(document_id, chunk_id) for chunk_id in chunk_ids]
+    return InferenceSection(
+        center_chunk=chunks[0],
+        chunks=chunks,
+        combined_content=" ".join(chunk.content for chunk in chunks),
+    )
+
+
+class TestRetrieveAdjacentChunks:
+    """`_retrieve_adjacent_chunks` expands a search hit with its neighbors."""
+
+    def test_passes_the_raw_document_id(self) -> None:
+        """OpenSearch stores document IDs unchanged, so the lookup must not
+        rewrite them. The former Vespa backend replaced `'` with `_`, which made
+        expansion miss every document whose ID has an apostrophe."""
+        document_id = "https://example.com/o'brien's-notes"
+        document_index = MagicMock()
+        document_index.id_based_retrieval.return_value = []
+
+        _retrieve_adjacent_chunks(
+            section=_section(document_id, [3, 4]),
+            document_index=document_index,
+            user=MagicMock(),
+            num_chunks_above=2,
+            num_chunks_below=2,
+        )
+
+        requested_ids = {
+            call.kwargs["chunk_requests"][0].document_id
+            for call in document_index.id_based_retrieval.call_args_list
+        }
+        assert requested_ids == {document_id}
+
+    def test_requests_the_ranges_around_the_section(self) -> None:
+        document_index = MagicMock()
+        document_index.id_based_retrieval.return_value = []
+
+        _retrieve_adjacent_chunks(
+            section=_section("doc", [3, 4]),
+            document_index=document_index,
+            user=MagicMock(),
+            num_chunks_above=2,
+            num_chunks_below=3,
+        )
+
+        ranges = [
+            (
+                call.kwargs["chunk_requests"][0].min_chunk_ind,
+                call.kwargs["chunk_requests"][0].max_chunk_ind,
+            )
+            for call in document_index.id_based_retrieval.call_args_list
+        ]
+        assert ranges == [(1, 2), (5, 7)]
+        for call in document_index.id_based_retrieval.call_args_list:
+            # Permissions were already enforced when the section was found.
+            assert call.kwargs["filters"].access_control_list is None
+            assert call.kwargs["batch_retrieval"] is True
+
+    def test_skips_above_request_at_document_start(self) -> None:
+        document_index = MagicMock()
+        document_index.id_based_retrieval.return_value = []
+
+        _retrieve_adjacent_chunks(
+            section=_section("doc", [0, 1]),
+            document_index=document_index,
+            user=MagicMock(),
+            num_chunks_above=2,
+            num_chunks_below=1,
+        )
+
+        assert document_index.id_based_retrieval.call_count == 1
+        request = document_index.id_based_retrieval.call_args.kwargs["chunk_requests"][
+            0
+        ]
+        assert (request.min_chunk_ind, request.max_chunk_ind) == (2, 2)
+
+    def test_sorts_results_and_tolerates_index_errors(self) -> None:
+        document_index = MagicMock()
+        document_index.id_based_retrieval.side_effect = [
+            [_inference_chunk("doc", 2), _inference_chunk("doc", 1)],
+            RuntimeError("index unavailable"),
+        ]
+
+        above, below = _retrieve_adjacent_chunks(
+            section=_section("doc", [3]),
+            document_index=document_index,
+            user=MagicMock(),
+            num_chunks_above=2,
+            num_chunks_below=2,
+        )
+
+        assert [chunk.chunk_id for chunk in above] == [1, 2]
+        assert below == []
+
+    def test_censors_neighbors_for_the_user(self) -> None:
+        """A source can decide access per record inside one document, so a
+        visible section does not clear its neighbors."""
+        document_index = MagicMock()
+        document_index.id_based_retrieval.side_effect = [
+            [_inference_chunk("doc", 1), _inference_chunk("doc", 2)],
+            [_inference_chunk("doc", 4), _inference_chunk("doc", 5)],
+        ]
+        user = MagicMock()
+
+        with patch.object(
+            search_utils,
+            "censor_chunks_for_user",
+            side_effect=lambda chunks, _user: [c for c in chunks if c.chunk_id != 4],
+        ) as censor:
+            above, below = _retrieve_adjacent_chunks(
+                section=_section("doc", [3]),
+                document_index=document_index,
+                user=user,
+                num_chunks_above=2,
+                num_chunks_below=2,
+            )
+
+        censor.assert_called_once()
+        assert [chunk.chunk_id for chunk in censor.call_args.args[0]] == [1, 2, 4, 5]
+        assert censor.call_args.args[1] is user
+        assert [chunk.chunk_id for chunk in above] == [1, 2]
+        assert [chunk.chunk_id for chunk in below] == [5]
+
+
+def test_expansion_without_llm_fallback_raises_when_the_decision_call_fails() -> None:
+    chunk = MagicMock(semantic_identifier="Doc", content="text")
+    section = MagicMock(center_chunk=chunk, combined_content="text", chunks=[chunk])
+    with (
+        patch.object(search_utils, "_retrieve_adjacent_chunks", return_value=([], [])),
+        patch.object(
+            search_utils,
+            "decide_context_expansion",
+            side_effect=RuntimeError("decision model down"),
+        ),
+        patch.object(search_utils, "classify_section_relevance") as classify,
+        pytest.raises(RuntimeError),
+    ):
+        search_utils.expand_section_with_context(
+            section=section,
+            user_query="query",
+            llm=MagicMock(),
+            document_index=MagicMock(),
+            user=MagicMock(),
+            decision_client=MagicMock(),
+            llm_fallback=False,
+        )
+    classify.assert_not_called()

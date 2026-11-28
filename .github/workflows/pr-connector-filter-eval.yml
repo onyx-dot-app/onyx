@@ -1,6 +1,6 @@
 name: Connector Filter Eval
 concurrency:
-  group: Connector-Filter-Eval-${{ github.head_ref || github.run_id }}
+  group: Connector-Filter-Eval-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 # Regression gate for the source-scope filter extraction prompt. Runs the
@@ -22,16 +22,23 @@ permissions:
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
-  # MinIO
+  # Object store (dev overlay publishes it on 9004)
   S3_ENDPOINT_URL: "http://localhost:9004"
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   connector-filter-eval:
     # Informative, not a merge gate: a single failing eval case fails the run,
-    # but some cases document behaviors the prompt does not handle yet, so a
-    # red eval must never block the PR.
+    # and the backoff advance-vs-re-search cases can flake with cheap models.
     continue-on-error: true
     runs-on:
       - runs-on
@@ -81,7 +88,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
             up -d \
-            minio \
+            object-store \
             relational_db \
             cache \
             opensearch

@@ -10,10 +10,11 @@ from typing import Any
 from googleapiclient.errors import HttpError
 
 from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
-from onyx.connectors.google_drive.models import GoogleDriveFileType
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder
+from onyx.utils.threadpool_concurrency import record_pushback
 
 logger = setup_logger()
 
@@ -41,6 +42,18 @@ def _is_rate_limit_error(error: HttpError) -> bool:
 # long retry period (~20 minutes of trying, one request a minute.)
 # This is no longer necessary due to checkpointing.
 add_retries = retry_builder(tries=5, max_delay=10)
+
+# Connection-level drops (broken pipe, reset, TLS EOF, timeout) on a reused
+# socket. Narrow SSL to SSLEOFError so permanent SSL errors still fail fast.
+TRANSIENT_CONNECTION_ERRORS = (
+    TimeoutError,
+    socket.timeout,
+    ConnectionError,
+    ssl.SSLEOFError,
+)
+retry_transient_connection_errors = retry_builder(
+    tries=5, max_delay=10, exceptions=TRANSIENT_CONNECTION_ERRORS
+)
 
 NEXT_PAGE_TOKEN_KEY = "nextPageToken"
 PAGE_TOKEN_KEY = "pageToken"
@@ -70,13 +83,13 @@ def _execute_with_retry(request: Any) -> Any:
         # 3. The retry-after has a maximum and we've already hit the limit for the day
         # or it's something else...
         try:
-            return request.execute()
+            return retry_transient_connection_errors(request.execute)()
         except HttpError as error:
             attempt += 1
 
             if _is_rate_limit_error(error):
-                # Attempt to get 'Retry-After' from headers
-                retry_after = parse_retry_after_seconds(error.resp.get("Retry-After"))
+                # httplib2 stores header names in lowercase.
+                retry_after = parse_retry_after_seconds(error.resp.get("retry-after"))
                 if retry_after is not None:
                     sleep_time = bound_server_wait(retry_after, "google")
                 else:
@@ -103,6 +116,7 @@ def _execute_with_retry(request: Any) -> Any:
                         sleep_time = 60
 
                 sleep_time += 3  # Add a buffer to be safe
+                record_pushback()
 
                 logger.info(
                     "Rate limit exceeded. Attempt %s/%s. Sleeping for %s seconds.",
@@ -113,10 +127,44 @@ def _execute_with_retry(request: Any) -> Any:
                 time.sleep(sleep_time)
 
             else:
+                if error.resp.status >= 500:
+                    # The caller may retry it, so count it as pushback here.
+                    record_pushback()
                 raise
 
     # If we've exhausted all attempts
     raise Exception(f"Failed to execute request after {max_attempts} attempts")
+
+
+_ACCESS_PROBE_SERVER_ERROR_TRIES = 3
+
+
+def is_access_denied(error: HttpError) -> bool:
+    """A 403 or 404 that is not a rate limit in disguise."""
+    return error.resp.status in (403, 404) and not _is_rate_limit_error(error)
+
+
+def execute_access_probe(request: Any) -> Any | None:
+    """Run a request whose 403 or 404 means "this principal has no access".
+
+    Returns None for that case. Rate limits (including Google's 403
+    userRateLimitExceeded) and server errors are retried, and raise if they
+    persist: a caller that read them as "no access" would pick a weaker
+    principal or skip a scope, and a prune would then delete its documents.
+    """
+    for attempt in range(1, _ACCESS_PROBE_SERVER_ERROR_TRIES + 1):
+        try:
+            return _execute_with_retry(request)
+        except HttpError as error:
+            if is_access_denied(error):
+                return None
+            if error.resp.status < 500 or attempt == _ACCESS_PROBE_SERVER_ERROR_TRIES:
+                raise
+            logger.warning(
+                "Server error on access probe (attempt %s): %s", attempt, error
+            )
+            time.sleep(attempt)
+    raise RuntimeError("unreachable")
 
 
 def get_file_owners(file: GoogleDriveFileType, primary_admin_email: str) -> list[str]:
@@ -141,6 +189,8 @@ def _execute_single_retrieval(
         results = retrieval_function(**request_kwargs).execute()
     except HttpError as e:
         if e.resp.status >= 500:
+            # A server error under load is pushback as much as a rate limit.
+            record_pushback()
             results = add_retries(
                 lambda: retrieval_function(**request_kwargs).execute()
             )()
@@ -163,6 +213,7 @@ def _execute_single_retrieval(
             logger.error("Error executing request: %s", e)
             raise e
         elif _is_rate_limit_error(e):
+            record_pushback()
             results = _execute_with_retry(retrieval_function(**request_kwargs))
         elif e.resp.status == 404 or e.resp.status == 403:
             if continue_on_404_or_403:
@@ -173,11 +224,8 @@ def _execute_single_retrieval(
         else:
             logger.exception("Error executing request:")
             raise e
-    except (TimeoutError, socket.timeout, ConnectionError, ssl.SSLEOFError) as error:
-        # Connection-level drops (broken pipe, reset, TLS EOF) hit mid-crawl on
-        # long parallel Drive paginations. Retry the page instead of failing the
-        # whole attempt. Narrow SSL to SSLEOFError so permanent SSL errors
-        # (cert/version) still fail fast.
+    except TRANSIENT_CONNECTION_ERRORS as error:
+        # Retry the page instead of failing the whole attempt
         logger.warning(
             "Transient network error executing Google API request; retrying with backoff. Details: %s",
             error,

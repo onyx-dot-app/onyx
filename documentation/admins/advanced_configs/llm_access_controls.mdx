@@ -1,0 +1,77 @@
+---
+title: "Language Model Access Controls"
+description: "Control which users and agents can use a language model provider"
+icon: "lock"
+---
+
+## Overview
+
+Each language model provider has a **Models Access** setting.
+It controls **who** can use the provider's models and **which agents** can use them.
+Use it to keep expensive or specialized models for the teams and agents that need them.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/llm_access_controls.webp" alt="Models Access in the provider form"/>
+
+<Info>
+  **Business Plan Feature**
+
+  Group restrictions require a Business plan or higher. Agent restrictions are available on every plan.
+  Onyx Cloud includes both. [View plans](/admins/billing/overview).
+</Info>
+
+## Access Levels
+
+<AccordionGroup>
+  <Accordion title="All Users & Agents" icon="lock-open">
+    Every user and every agent can use the provider. This is the default.
+
+    You can still add agents. When you do, all users keep access, but only the listed agents can use the provider.
+  </Accordion>
+
+  <Accordion title="Named Groups & Agents" icon="users">
+    Only the groups and agents you add can use the provider.
+
+    - **Groups** restrict **who** can use the provider. Users outside the groups do not see its models.
+    Admins, and anyone with the manage-models permission, keep access.
+    - **Agents** restrict **where** the provider can be used. The models appear only in those agents.
+    This applies to admins too.
+    - With both groups and agents, a user must be in a group **and** use a listed agent.
+    - With neither, only admins can use the provider.
+  </Accordion>
+</AccordionGroup>
+
+## Configure Access
+
+<Steps>
+  <Step title="Open the provider">
+    Open **Admin Panel → Language Models** and open an existing provider, or add a new one.
+  </Step>
+
+  <Step title="Set Models Access">
+    Under **Models Access**, select **All Users & Agents** or **Named Groups & Agents**.
+    Use **Add groups and agents** to pick the groups and agents. The **Admin** row is always shared.
+  </Step>
+
+  <Step title="Save">
+    Save the provider. The change applies to new chats at once.
+  </Step>
+</Steps>
+
+## Access Rules
+
+| Access level | Groups added | Agents added | Who can use the provider |
+|---|---|---|---|
+| All Users & Agents | — | No | Everyone |
+| All Users & Agents | — | Yes | Everyone, only in the listed agents |
+| Named Groups & Agents | Yes | No | Group members and admins |
+| Named Groups & Agents | No | Yes | Everyone, only in the listed agents |
+| Named Groups & Agents | Yes | Yes | Group members and admins, only in the listed agents |
+| Named Groups & Agents | No | No | Admins only |
+
+## What Users See
+
+Users see only the providers they can use:
+
+- In the model picker in chat
+- When they create or edit an agent
+- When they list providers through the API

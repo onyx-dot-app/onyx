@@ -1,11 +1,22 @@
 import ipaddress
 import socket
+import threading
 import unicodedata
 from collections.abc import Iterator
-from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from enum import Enum
+from typing import Any, Literal, NamedTuple
+from urllib.parse import (
+    parse_qs,
+    parse_qsl,
+    urlencode,
+    urlparse,
+    urlsplit,
+    urlunparse,
+    urlunsplit,
+)
 
 import requests
+import urllib3
 from requests.adapters import HTTPAdapter
 
 from onyx.utils.logger import setup_logger
@@ -347,16 +358,18 @@ class _NoRedirectSession(requests.Session):
         return iter(())
 
 
-def _pinned_get(
+def _pinned_request(
+    method: str,
     url: str,
     validated_ip: str,
     hostname: str,
     port: int,
     headers: dict[str, str] | None,
     timeout: float | tuple[float, float],
+    trust_env: bool = True,
     **kwargs: Any,
 ) -> requests.Response:
-    """GET the already-validated IP directly, presenting ``hostname`` for the
+    """Send to the already-validated IP directly, presenting ``hostname`` for the
     Host header and (on https) SNI + certificate verification."""
     parsed = urlparse(url)
     ip_literal = f"[{validated_ip}]" if ":" in validated_ip else validated_ip
@@ -369,9 +382,11 @@ def _pinned_get(
     request_headers["Host"] = f"{hostname}:{port}" if port != default_port else hostname
 
     with _NoRedirectSession() as session:
+        session.trust_env = trust_env
         if parsed.scheme == "https":
             session.mount("https://", _PinnedHostAdapter(hostname))
-        return session.get(
+        return session.request(
+            method,
             request_url,
             headers=request_headers,
             timeout=timeout,
@@ -410,7 +425,7 @@ def _resolve_permissive_ip(
     )
 
 
-def _make_ssrf_safe_request(
+def ssrf_safe_request(
     url: str,
     headers: dict[str, str] | None = None,
     timeout: float | tuple[float, float] = 15,
@@ -418,10 +433,11 @@ def _make_ssrf_safe_request(
     block_loopback_and_link_local: bool = True,
     block_link_local_only: bool = False,
     https_only: bool = False,
+    method: str = "GET",
     **kwargs: Any,
 ) -> requests.Response:
     """
-    Make a single GET request with SSRF protection (no redirect following).
+    Make a single request with SSRF protection (no redirect following).
 
     Returns the response which may be a redirect (3xx status).
 
@@ -460,14 +476,21 @@ def _make_ssrf_safe_request(
             block_loopback=block_loopback,
             block_link_local=block_link_local,
         )
-        return _pinned_get(
-            url, validated_ip, hostname, port, headers, timeout, **kwargs
+        return _pinned_request(
+            method, url, validated_ip, hostname, port, headers, timeout, **kwargs
         )
 
     # Validate and resolve the URL to get a safe IP
     validated_ip, original_hostname, port = _validate_and_resolve_url(url)
-    return _pinned_get(
-        url, validated_ip, original_hostname, port, headers, timeout, **kwargs
+    return _pinned_request(
+        method,
+        url,
+        validated_ip,
+        original_hostname,
+        port,
+        headers,
+        timeout,
+        **kwargs,
     )
 
 
@@ -480,6 +503,7 @@ def ssrf_safe_get(
     block_loopback_and_link_local: bool = True,
     block_link_local_only: bool = False,
     https_only: bool = False,
+    trust_env: bool = True,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -498,6 +522,7 @@ def ssrf_safe_get(
             IPs. Use only when the operator has explicitly opted in (e.g. trusted
             self-hosted deployment fetching internal docs). Scheme, credential, and
             blocked-hostname checks still apply on each hop.
+        trust_env: Use environment proxies, CA bundles, and netrc credentials.
         **kwargs: Additional arguments passed to requests.get()
 
     Returns:
@@ -508,7 +533,7 @@ def ssrf_safe_get(
         ValueError: If the URL is malformed
         requests.RequestException: If the request fails
     """
-    response = _make_ssrf_safe_request(
+    response = ssrf_safe_request(
         url,
         headers,
         timeout,
@@ -516,6 +541,7 @@ def ssrf_safe_get(
         block_loopback_and_link_local=block_loopback_and_link_local,
         block_link_local_only=block_link_local_only,
         https_only=https_only,
+        trust_env=trust_env,
         **kwargs,
     )
 
@@ -549,7 +575,7 @@ def ssrf_safe_get(
             # Validate and follow the redirect (this will raise SSRFException if invalid)
             response.close()
             current_url = redirect_url
-            response = _make_ssrf_safe_request(
+            response = ssrf_safe_request(
                 redirect_url,
                 headers,
                 timeout,
@@ -557,6 +583,7 @@ def ssrf_safe_get(
                 block_loopback_and_link_local=block_loopback_and_link_local,
                 block_link_local_only=block_link_local_only,
                 https_only=https_only,
+                trust_env=trust_env,
                 **kwargs,
             )
 
@@ -567,6 +594,87 @@ def ssrf_safe_get(
         raise
 
     return response
+
+
+_BODY_CHUNK_BYTES = 64 * 1024
+
+
+class BodyReadFailure(str, Enum):
+    TOO_LARGE = "too_large"
+    DEADLINE = "deadline"
+
+
+class BodyReadError(Exception):
+    def __init__(self, failure: BodyReadFailure) -> None:
+        super().__init__(failure.value)
+        self.failure = failure
+
+
+class BoundedBody(NamedTuple):
+    content: bytes
+    # The body is longer than the limit; ``content`` holds the first part.
+    truncated: bool
+
+
+def read_bounded_body(
+    response: requests.Response,
+    *,
+    max_bytes: int | None,
+    deadline_seconds: float,
+    truncate: bool = False,
+) -> BoundedBody:
+    """Read the decoded body of a streamed response. A per-read socket timeout
+    lets a server that sends a few bytes at a time hold the call open, so the
+    read also ends at a wall-clock deadline. A body over ``max_bytes`` raises,
+    or with ``truncate`` returns its first ``max_bytes``. Raises
+    ``BodyReadError`` and the read errors of urllib3."""
+    declared = response.headers.get("Content-Length")
+    if (
+        not truncate
+        and max_bytes is not None
+        and declared is not None
+        and declared.isdigit()
+        and int(declared) > max_bytes
+    ):
+        raise BodyReadError(BodyReadFailure.TOO_LARGE)
+
+    deadline_hit = threading.Event()
+
+    def _on_deadline() -> None:
+        deadline_hit.set()
+        # Shutting down the read side ends a read blocked on a stalled server.
+        try:
+            response.raw.shutdown()
+        except Exception:
+            pass
+
+    timer = threading.Timer(deadline_seconds, _on_deadline)
+    timer.daemon = True
+    timer.start()
+    chunks: list[bytes] = []
+    total = 0
+    truncated = False
+    try:
+        # read1 returns what is available; urllib3 bounds decoded output.
+        while chunk := response.raw.read1(_BODY_CHUNK_BYTES, decode_content=True):
+            if deadline_hit.is_set():
+                break
+            if max_bytes is not None and total + len(chunk) > max_bytes:
+                if not truncate:
+                    raise BodyReadError(BodyReadFailure.TOO_LARGE)
+                chunks.append(chunk[: max_bytes - total])
+                truncated = True
+                break
+            total += len(chunk)
+            chunks.append(chunk)
+    except urllib3.exceptions.HTTPError:
+        if not deadline_hit.is_set():
+            raise
+    finally:
+        timer.cancel()
+    if deadline_hit.is_set():
+        raise BodyReadError(BodyReadFailure.DEADLINE)
+    return BoundedBody(b"".join(chunks), truncated)
 
 
 def normalize_url(url: str) -> str:
@@ -595,6 +703,64 @@ def normalize_url(url: str) -> str:
     )
 
     return normalized
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+McpUrlProblem = Literal["variable", "credential", "invalid"]
+
+_CREDENTIAL_QUERY_KEYS = frozenset(
+    {"key", "apikey", "token", "auth", "secret", "password", "sig", "signature"}
+)
+_CREDENTIAL_QUERY_SUFFIXES = ("_key", "_token", "_secret", "_password")
+
+
+def _is_credential_query_key(key: str) -> bool:
+    key = key.lower().replace("-", "_")
+    return key in _CREDENTIAL_QUERY_KEYS or key.endswith(_CREDENTIAL_QUERY_SUFFIXES)
+
+
+def mcp_server_url_problem(url: str) -> McpUrlProblem | None:
+    """Why an MCP server URL cannot be a match key. Each viewer of a plugin
+    sees the key, so a URL with a credential (user info, or a query or
+    fragment value such as ``api_key``) is refused."""
+    if "${" in url:
+        return "variable"
+    try:
+        parts = urlsplit(url.strip())
+        _ = parts.port
+    except ValueError:
+        return "invalid"
+    if parts.scheme.lower() not in _DEFAULT_PORTS or not parts.hostname:
+        return "invalid"
+    if "@" in parts.netloc or any(
+        _is_credential_query_key(key)
+        for part in (parts.query, parts.fragment)
+        for key, _ in parse_qsl(part, keep_blank_values=True)
+    ):
+        return "credential"
+    return None
+
+
+def normalize_mcp_server_url(url: str) -> str | None:
+    """The match key of an MCP server URL, or None when
+    ``mcp_server_url_problem`` gives a problem."""
+    if mcp_server_url_problem(url) is not None:
+        return None
+    parts = urlsplit(url.strip())
+    scheme = parts.scheme.lower()
+    host = parts.hostname
+    if host is None:
+        raise RuntimeError("Bug: a URL without a problem has a host.")
+    if ":" in host:
+        host = f"[{host}]"
+    port = parts.port
+    if port is not None and port != _DEFAULT_PORTS[scheme]:
+        host = f"{host}:{port}"
+    return urlunsplit(
+        (scheme, host, parts.path.removesuffix("/"), parts.query, parts.fragment)
+    )
 
 
 def add_url_params(url: str, params: dict) -> str:

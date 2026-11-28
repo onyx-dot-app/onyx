@@ -58,7 +58,7 @@ spec:
       containers:
         - name: celery-worker-docfetching
           securityContext:
-            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
+            {{- include "onyx.containerSecurityContext" .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
@@ -94,6 +94,11 @@ spec:
                 name: {{ . }}
             {{- end }}
           env:
+            {{- if eq (include "onyx.docconversion.deployed" .) "true" }}
+            # Docfetching lists, and the docconversion worker fetches.
+            - name: ENABLE_CONVERSION_STAGE
+              value: "true"
+            {{- end }}
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}

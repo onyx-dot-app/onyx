@@ -9,8 +9,10 @@
    `currentColor` so `text-text-03` on the root cascades through.
 ============================================================================ */
 
+/* `relative` contains the absolute `sr-only` "(opens in new tab)" span.
+   Without it the span escapes any scroll container and grows `<body>`. */
 .opal-link-button {
-  @apply inline-flex flex-row items-center gap-0.5 text-text-03;
+  @apply relative inline-flex flex-row items-center gap-0.5 text-text-03;
   background: transparent;
   border: 0;
   padding: 0;

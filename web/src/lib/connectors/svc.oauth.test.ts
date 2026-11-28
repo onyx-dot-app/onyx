@@ -1,5 +1,5 @@
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 const SALESFORCE_URL_ERROR =
   "Invalid OAuth configuration: Salesforce URL must use HTTPS";

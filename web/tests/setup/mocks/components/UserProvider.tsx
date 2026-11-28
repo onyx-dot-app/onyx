@@ -34,20 +34,9 @@ const mockUserContext: UserContextType = {
   refreshUser: async () => {},
   isCloudSuperuser: false,
   authTypeMetadata: undefined,
-  updateUserAutoScroll: async () => {},
-  updateUserShortcuts: async () => {},
-  updateUserPasteAsTile: async () => {},
-  toggleAgentPinnedStatus: async () => true,
-  updateUserTemperatureOverrideEnabled: async () => {},
+  updatePreferences: async () => true,
   updateUserPersonalization: async () => {},
-  updateUserThemePreference: async () => {},
   updateUserLanguage: async () => {},
-  updateUserChatBackground: async () => {},
-  updateUserDefaultModel: async () => {},
-  updateUserDefaultAppMode: async () => {},
-  updateUserVoiceSettings: async () => {},
-  updateUserTemperatureDefault: async () => {},
-  updateUserReasoningEffortDefault: async () => {},
 };
 
 const UserContext = createContext<UserContextType | undefined>(mockUserContext);

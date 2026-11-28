@@ -27,8 +27,13 @@ export interface TimelineUIStateInput {
   lastStepIsResearchAgent: boolean;
   parallelActiveStepSupportsCollapsedStreaming: boolean;
   parallelActiveStepHasCollapsedContent: boolean;
-  isGeneratingImage: boolean;
   finalAnswerComing: boolean;
+  // A code mode program runs between tool calls; it is the current activity even when the last
+  // turn group is parallel.
+  codeModeWorking: boolean;
+  // A tool call waits for the user's decision or answers. The wait is the current activity, so a
+  // parallel turn shows the normal header with the waiting text.
+  awaitingUser: boolean;
 }
 
 export interface TimelineUIStateResult {
@@ -63,19 +68,29 @@ export function useTimelineUIState(
       lastStepIsResearchAgent,
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
-      isGeneratingImage,
       finalAnswerComing,
+      codeModeWorking,
+      awaitingUser,
     } = input;
 
+    // A wait for the user stays the current activity after display content.
+    // A question has no step, so its wait shows as a header alone.
+    const isActivelyExecuting =
+      !stopPacketSeen && (!hasDisplayContent || awaitingUser);
     let uiState: TimelineUIState;
-    if (!hasPackets && !hasDisplayContent && !stopPacketSeen) {
+    if (
+      !hasPackets &&
+      (!hasDisplayContent || awaitingUser) &&
+      !stopPacketSeen
+    ) {
       uiState = TimelineUIState.EMPTY;
-    } else if (hasDisplayContent && !hasPackets && !isGeneratingImage) {
+    } else if (hasDisplayContent && !hasPackets) {
       uiState = TimelineUIState.DISPLAY_CONTENT_ONLY;
-    } else if (!stopPacketSeen && (!hasDisplayContent || isGeneratingImage)) {
-      uiState = lastTurnGroup?.isParallel
-        ? TimelineUIState.STREAMING_PARALLEL
-        : TimelineUIState.STREAMING_SEQUENTIAL;
+    } else if (isActivelyExecuting) {
+      uiState =
+        lastTurnGroup?.isParallel && !codeModeWorking && !awaitingUser
+          ? TimelineUIState.STREAMING_PARALLEL
+          : TimelineUIState.STREAMING_SEQUENTIAL;
     } else if (userStopped) {
       uiState = TimelineUIState.STOPPED;
     } else if (isExpanded) {
@@ -91,8 +106,6 @@ export function useTimelineUIState(
       uiState === TimelineUIState.COMPLETED_COLLAPSED ||
       uiState === TimelineUIState.COMPLETED_EXPANDED ||
       uiState === TimelineUIState.STOPPED;
-    const isActivelyExecuting =
-      !stopPacketSeen && (!hasDisplayContent || isGeneratingImage);
 
     const showParallelTabs =
       uiState === TimelineUIState.STREAMING_PARALLEL &&

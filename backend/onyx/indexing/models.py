@@ -1,12 +1,15 @@
 import contextlib
 from collections.abc import Generator
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional, Protocol
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from onyx.access.models import DocumentAccess
-from onyx.connectors.models import Document
-from onyx.db.enums import EmbeddingPrecision, SwitchoverType
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import Document, IndexAttemptMetadata
+from onyx.db.enums import SwitchoverType, VectorQuantization
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.enums import EmbeddingProvider
@@ -86,7 +89,6 @@ class DocAwareChunk(BaseChunk):
 
 class IndexChunk(DocAwareChunk):
     embeddings: ChunkEmbedding
-    title_embedding: Embedding | None
 
 
 # TODO(rkuo): currently, this extra metadata sent during indexing is just for speed,
@@ -112,10 +114,14 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     personas: list[int]
     boost: int
     aggregated_chunk_boost_factor: float
+    source_types: tuple[DocumentSource, ...] = ()
     # Full ancestor path from root hierarchy node to document's parent.
     # Stored as an integer array in OpenSearch for hierarchy-based filtering.
     # Empty list means no hierarchy info (document excluded from hierarchy searches).
     ancestor_hierarchy_node_ids: list[int]
+    # IDs of the cc-pairs the source document belongs to. Empty for chunks with
+    # no cc-pair (user files).
+    cc_pair_ids: list[int] = []
 
     @classmethod
     def from_index_chunk(
@@ -129,6 +135,8 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         aggregated_chunk_boost_factor: float,
         tenant_id: str,
         ancestor_hierarchy_node_ids: list[int] | None = None,
+        source_types: tuple[DocumentSource, ...] | None = None,
+        cc_pair_ids: list[int] | None = None,
     ) -> "DocMetadataAwareIndexChunk":
         return cls.model_construct(
             **shallow_model_dump(index_chunk),
@@ -140,6 +148,8 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
             tenant_id=tenant_id,
             ancestor_hierarchy_node_ids=ancestor_hierarchy_node_ids or [],
+            source_types=source_types or (index_chunk.source_document.source,),
+            cc_pair_ids=cc_pair_ids or [],
         )
 
 
@@ -185,12 +195,8 @@ class IndexingSetting(EmbeddingModelDetail):
     model_dim: int
     index_name: str | None
     multipass_indexing: bool
-    # Defaults to FLOAT (float32). OpenSearch ignores embedding_precision and
-    # stores vectors as float32 regardless — see
-    # onyx/document_index/opensearch/opensearch_document_index.py. BFLOAT16
-    # still works for existing Vespa deployments.
-    embedding_precision: EmbeddingPrecision = EmbeddingPrecision.FLOAT
     reduced_dimension: int | None = None
+    vector_quantization: VectorQuantization = VectorQuantization.NONE
 
     switchover_type: SwitchoverType = SwitchoverType.REINDEX
     enable_contextual_rag: bool
@@ -221,8 +227,8 @@ class IndexingSetting(EmbeddingModelDetail):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
-            embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
+            vector_quantization=search_settings.vector_quantization,
             switchover_type=search_settings.switchover_type,
             enable_contextual_rag=search_settings.enable_contextual_rag,
             contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
@@ -256,11 +262,16 @@ class IndexingBatchAdapter(Protocol):
     connector_id: int | None
     credential_id: int | None
 
+    @property
+    def index_attempt_metadata(self) -> IndexAttemptMetadata | None: ...
+
     def prepare(
         self,
         documents: list[Document],
         ignore_time_skip: bool,
         index_to_secondary: bool,
+        force_update: bool = False,
+        skip_document_row_writes: bool = False,
     ) -> Optional["DocumentBatchPrepareContext"]: ...
 
     @contextlib.contextmanager
@@ -290,4 +301,28 @@ class IndexingBatchAdapter(Protocol):
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,
+        failed_document_ids: set[str],
     ) -> None: ...
+
+
+class ChatArtifactIndexInput(BaseModel):
+    """What the indexing task of a published file reads when it picks the
+    artifact up (db/chat.py:start_chat_artifact_indexing): its newest
+    available version and its owner."""
+
+    artifact_id: UUID
+    # The artifact's latest change (publish or rename) and its pickups, when
+    # it was picked up. Its row becomes INDEXED only if both are unchanged
+    # when the write lands. The latest change is also the document's update
+    # time.
+    updated_at: datetime
+    index_attempts: int
+    created_at: datetime
+    # The owner's current email, the document's only ACL entry.
+    owner_email: str
+    # The version's artifact_url, the document's link.
+    link: str
+    file_id: str
+    file_name: str
+    file_size: int
+    title: str | None

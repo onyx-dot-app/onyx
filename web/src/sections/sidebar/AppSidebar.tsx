@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import {
   useCallback,
   useMemo,
@@ -9,12 +10,12 @@ import {
   useRef,
 } from "react";
 import useNotifications from "@/hooks/useNotifications";
-import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
-import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
+import { useTrackChatRuns } from "@/lib/chat/hooks";
 import { AgentButton } from "@/lib/agents/components";
 import { DragEndEvent } from "@dnd-kit/core";
 import {
@@ -49,11 +50,15 @@ import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
-import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { renderSidebarLogo } from "@/lib/sidebar/utils";
-import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
-import { Button as OpalButton } from "@opal/components";
+import { SidebarLoader } from "@opal/loaders";
+import { SidebarLayouts, useSidebarState, Section } from "@opal/layouts";
+import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
+import { Button as OpalButton, Text } from "@opal/components";
 import { cn } from "@opal/utils";
+import { Disabled } from "@opal/core";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+import { BetaTag, PlanTag } from "@/lib/tiers/components";
+import { Tier } from "@/lib/tiers/types";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { PHFeatureFlag, usePHFeatureFlag } from "@/lib/analytics/hooks";
 import {
@@ -62,14 +67,16 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { SidebarTab } from "@opal/components";
-import { ChatSession } from "@/app/app/interfaces";
+import { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
-import { getFirstPermittedAdminRoute } from "@/lib/permissions";
-import { useAppPosition } from "@/lib/position/hooks";
+import { getFirstPermittedAdminRoute } from "@/lib/permissions/utils";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
+  SvgClock,
   SvgDevKit,
+  SvgSliders,
   SvgEditBig,
   SvgFolderPlus,
   SvgMoreHorizontal,
@@ -77,21 +84,48 @@ import {
   SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
-import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
+import type { IconProps } from "@opal/types";
+import {
+  useUnviewedChatScheduledTaskCount,
+  useUnviewedScheduledTaskCount,
+} from "@/lib/scheduledTasks/hooks";
+import { SCHEDULED_TASKS_PATH } from "@/lib/scheduledTasks/paths";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
-import { NotificationType } from "@/lib/notifications/interfaces";
+import { NotificationType } from "@/lib/notifications/types";
 import { dismissNotification } from "@/lib/notifications/api";
-import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { AccountPopover } from "@/lib/app/components";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
-import { useQueryController } from "@/providers/QueryControllerProvider";
+import ChatShortcuts, {
+  useChatJumpHint,
+} from "@/sections/sidebar/ChatShortcuts";
+import { JUMP_TO_CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
+import { formatHotkey } from "@/lib/shortcuts/utils";
+import { useChatShortcutActions } from "@/lib/shortcuts/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
+import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
+/** The Scheduled Tasks icon with the unread marker, for the folded sidebar,
+ * which hides the tab's right side. */
+function ScheduledTasksUnseenIcon(props: IconProps) {
+  const t = useTranslations("scheduledTasks");
+  return (
+    <span className="relative inline-block">
+      <SvgClock {...props} />
+      <UnseenMarker
+        label={t("unviewedResults")}
+        className="absolute -top-0.5 -end-0.5"
+      />
+    </span>
+  );
+}
+
 function buildVisibleAgents(
   pinnedAgents: MinimalAgent[],
   activeAgent: MinimalAgent | undefined
@@ -110,14 +144,9 @@ function buildVisibleAgents(
   return [visibleAgents, currentAgentIsPinned];
 }
 
-const SKELETON_WIDTHS_BASE = ["w-4/5", "w-4/5", "w-3/5"];
-
-function shuffleWidths(): string[] {
-  return [...SKELETON_WIDTHS_BASE].sort(() => Math.random() - 0.5);
-}
-
 interface RecentsSectionProps {
   chatSessions: ChatSession[];
+  isLoading: boolean;
   hasMore: boolean;
   isLoadingMore: boolean;
   onLoadMore: () => void;
@@ -125,20 +154,24 @@ interface RecentsSectionProps {
 
 function RecentsSection({
   chatSessions,
+  isLoading,
   hasMore,
   isLoadingMore,
   onLoadMore,
 }: RecentsSectionProps) {
   const t = useTranslations("sidebar");
+  const { modifier: jumpHintModifier, isMac } = useChatJumpHint();
+  const keyNames = {
+    ctrl: t("chatSearch.keys.ctrl"),
+    alt: t("chatSearch.keys.alt"),
+    shift: t("chatSearch.keys.shift"),
+  };
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
       type: DRAG_TYPES.RECENTS,
     },
   });
-
-  // Re-shuffle skeleton widths each time loaded session count changes
-  const skeletonWidths = useMemo(shuffleWidths, [chatSessions.length]);
 
   // Sentinel ref for IntersectionObserver-based infinite scroll
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -178,32 +211,48 @@ function RecentsSection({
       )}
     >
       <SidebarLayouts.Section title={t("appSidebar.recents.title")}>
-        {chatSessions.length === 0 ? (
-          <Text as="p" text01 className="px-3">
-            {t("appSidebar.recents.empty.text")}
-          </Text>
+        {isLoading ? (
+          <SidebarLoader count={5} />
+        ) : chatSessions.length === 0 ? (
+          <div className="px-3">
+            <Text as="p" color="text-01">
+              {t("appSidebar.recents.empty.text")}
+            </Text>
+          </div>
         ) : (
           <>
-            {chatSessions.map((chatSession) => (
+            {chatSessions.map((chatSession, index) => (
               <ChatButton
                 key={chatSession.id}
                 chatSession={chatSession}
                 draggable
+                jumpShortcut={
+                  jumpHintModifier && index < JUMP_TO_CHAT_SHORTCUTS.length
+                    ? {
+                        label: formatHotkey(
+                          `${jumpHintModifier}+${index + 1}`,
+                          isMac,
+                          keyNames
+                        ),
+                        width: isMac ? "2.5rem" : "4.5rem",
+                      }
+                    : undefined
+                }
               />
             ))}
-            {hasMore &&
-              skeletonWidths.map((width, i) => (
-                <div
-                  key={i}
-                  ref={i === 0 ? sentinelRef : undefined}
-                  className={cn(
-                    "transition-opacity duration-300",
-                    isLoadingMore ? "opacity-100" : "opacity-40"
-                  )}
-                >
-                  <SidebarTabSkeleton textWidth={width} />
-                </div>
-              ))}
+            {hasMore && (
+              <div
+                ref={sentinelRef}
+                // Waiting to scroll into view, nothing is loading yet.
+                aria-hidden={!isLoadingMore}
+                className={cn(
+                  "transition-opacity duration-300",
+                  isLoadingMore ? "opacity-100" : "opacity-40"
+                )}
+              >
+                <SidebarLoader count={3} />
+              </div>
+            )}
           </>
         )}
       </SidebarLayouts.Section>
@@ -213,12 +262,14 @@ function RecentsSection({
 
 export default function AppSidebar() {
   const t = useTranslations("sidebar");
+  const tCraftUpgrade = useTranslations("craft.upgrade");
   const moveChatErrorMessage = t("appSidebar.moveChatError.message");
   const { folded } = useSidebarState();
-  const router = useRouter();
+  const navigation = useNavigation();
   const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
-  const { setAppMode, reset } = useQueryController();
+  const { resetNewSession } = useChatShortcutActions();
+  useTrackChatRuns();
 
   // Use SWR hooks for data fetching
   const {
@@ -242,12 +293,8 @@ export default function AppSidebar() {
     isLoading: isLoadingPinnedAgents,
   } = usePinnedAgents();
 
-  // Wait for ALL dynamic data before showing any sections
-  const isLoadingDynamicContent =
-    isLoadingChatSessions ||
-    isLoadingProjects ||
-    isLoadingAgents ||
-    isLoadingPinnedAgents;
+  // Each section shows its own skeleton until its own data loads.
+  const isLoadingAgentList = isLoadingAgents || isLoadingPinnedAgents;
 
   // Still need some context for stateful operations
   const { refreshCurrentProjectDetails, currentProjectId } =
@@ -259,12 +306,23 @@ export default function AppSidebar() {
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const moveCustomAgentModal = useCreateModal();
 
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
   const isOnyxCraftEnabled = combinedSettingsData?.onyx_craft_enabled === true;
+  const isOnyxCraftUpsell =
+    !isOnyxCraftEnabled &&
+    combinedSettingsData?.onyx_craft_requires_upgrade === true;
+  // Gated like a Business admin page: below that tier the tab is disabled.
+  const hasCraftTier = useTierAtLeast(Tier.BUSINESS);
+  const tTasks = useTranslations("craft.tasks");
+  const unviewedTaskCount = useUnviewedScheduledTaskCount(
+    isOnyxCraftEnabled && hasCraftTier
+  );
+  const tScheduledTasks = useTranslations("scheduledTasks");
+  const unviewedChatTaskCount = useUnviewedChatScheduledTaskCount();
+  const plans = usePlans();
 
   // Fetch notifications for build mode intro
   const { notifications, refresh: mutateNotifications } = useNotifications({
@@ -451,7 +509,7 @@ export default function AppSidebar() {
         if (shouldShowMoveModal(chatSession)) {
           setPendingMoveChatSession(chatSession);
           setPendingMoveProjectId(targetProject.id);
-          setShowMoveCustomAgentModal(true);
+          moveCustomAgentModal.toggle(true);
           return;
         }
 
@@ -490,16 +548,14 @@ export default function AppSidebar() {
       refreshCurrentProjectDetails,
       refreshProjects,
       moveChatErrorMessage,
+      moveCustomAgentModal.toggle,
     ]
   );
 
-  const { hasAdminAccess, adminCapabilities, user } = useUser();
+  const { hasAdminAccess, adminCapabilities, isAdmin } = useUser();
   const activeSidebarTab = useAppPosition();
+  const craftLink = navigation.linkTo(CRAFT_PATH, { scroll: false });
   const createProjectModal = useCreateModal();
-  const showLogoWhenFolded = useShowLogoWhenFolded();
-  const defaultAppMode =
-    (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
-    "chat";
 
   const moreAgentsButton = (
     <div data-testid="AppSidebar/more-agents">
@@ -509,7 +565,7 @@ export default function AppSidebar() {
             ? SvgOnyxOctagon
             : SvgMoreHorizontal
         }
-        href="/app/agents"
+        {...navigation.linkTo("/app/agents", { scroll: false })}
         selected={activeSidebarTab.isMoreAgents()}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
@@ -539,14 +595,15 @@ export default function AppSidebar() {
 
   return (
     <>
+      <ChatShortcuts />
       <createProjectModal.Provider>
         <CreateProjectModal />
       </createProjectModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={() => {
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
           }}
@@ -559,7 +616,7 @@ export default function AppSidebar() {
             }
             const chat = pendingMoveChatSession;
             const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
             if (chat && target != null) {
@@ -571,7 +628,7 @@ export default function AppSidebar() {
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
       {/* Intro animation overlay */}
       <AnimatePresence>
@@ -592,7 +649,7 @@ export default function AppSidebar() {
               onTryBuildMode={() => {
                 setShowIntroAnimation(false);
                 dismissBuildModeNotification();
-                router.push(CRAFT_PATH);
+                navigation.go(CRAFT_PATH);
               }}
             />
           </motion.div>
@@ -600,19 +657,16 @@ export default function AppSidebar() {
       </AnimatePresence>
 
       <SidebarLayouts.Root foldable>
-        <SidebarLayouts.Header
-          showLogoWhenFolded={showLogoWhenFolded}
-          renderAppLogo={renderSidebarLogo}
-        >
+        <BrandedSidebarHeader>
           <div data-testid="AppSidebar/new-session">
             <SidebarTab
               icon={SvgEditBig}
-              href="/app"
+              href={activeSidebarTab.linkToNewSession().href}
               selected={activeSidebarTab.isNewSession()}
-              onClick={() => {
-                if (!activeSidebarTab.isNewSession()) return;
-                setAppMode(defaultAppMode);
-                reset();
+              onClick={(event) => {
+                const handledBefore = event.defaultPrevented;
+                activeSidebarTab.linkToNewSession().onClick(event);
+                if (!handledBefore && event.defaultPrevented) resetNewSession();
               }}
             >
               {t("appSidebar.newSession.label")}
@@ -625,89 +679,163 @@ export default function AppSidebar() {
               </SidebarTab>
             )}
           />
-          {isOnyxCraftEnabled && (
+          {(isOnyxCraftEnabled || isOnyxCraftUpsell) && (
             <div data-testid="AppSidebar/build">
-              <SidebarTab
-                icon={SvgDevKit}
-                href={CRAFT_PATH}
-                onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
+              <Disabled
+                disabled={!hasCraftTier}
+                // Only admins can open billing, so others are told to ask one.
+                tooltip={
+                  isAdmin
+                    ? plans[Tier.BUSINESS].tooltip
+                    : tCraftUpgrade("userDescription")
+                }
               >
-                {t("appSidebar.craft.label")}
-              </SidebarTab>
-            </div>
-          )}
-          {folded && moreAgentsButton}
-          {folded && <FoldedProjectsPopover />}
-        </SidebarLayouts.Header>
-
-        <SidebarLayouts.Body scrollKey="app-sidebar">
-          {isLoadingDynamicContent ? null : (
-            <>
-              {/* Agents */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleAgentDragEnd}
-              >
-                <SidebarLayouts.Section title={t("appSidebar.agents.title")}>
-                  <SortableContext
-                    items={visibleAgentIds}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {visibleAgents.map((visibleAgent) => (
-                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
-                    ))}
-                  </SortableContext>
-                  {moreAgentsButton}
-                </SidebarLayouts.Section>
-              </DndContext>
-
-              {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={pointerWithin}
-                modifiers={[
-                  restrictToFirstScrollableAncestor,
-                  restrictToVerticalAxis,
-                ]}
-                onDragEnd={handleChatProjectDragEnd}
-              >
-                {/* Projects */}
-                <SidebarLayouts.Section
-                  title={t("appSidebar.projects.title")}
-                  action={
-                    <OpalButton
-                      icon={SvgFolderPlus}
-                      prominence="tertiary"
-                      size="md"
-                      tooltip={t("appSidebar.newProject.tooltip")}
-                      onClick={() => createProjectModal.toggle(true)}
-                    />
+                <SidebarTab
+                  icon={SvgDevKit}
+                  href={hasCraftTier ? craftLink.href : undefined}
+                  onClick={
+                    hasCraftTier
+                      ? (event) => {
+                          track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR);
+                          craftLink.onClick(event);
+                        }
+                      : undefined
+                  }
+                  rightChildren={
+                    isOnyxCraftUpsell ? (
+                      <PlanTag plan={Tier.BUSINESS} />
+                    ) : (
+                      <Section
+                        flexDirection="row"
+                        gap={1.5}
+                        width="fit"
+                        height="fit"
+                      >
+                        {unviewedTaskCount > 0 && (
+                          <UnseenMarker label={tTasks("unviewedResults")} />
+                        )}
+                        <BetaTag />
+                      </Section>
+                    )
                   }
                 >
-                  {projects.map((project) => (
-                    <ProjectFolderButton key={project.id} project={project} />
-                  ))}
-                  {projects.length === 0 && newProjectButton}
-                </SidebarLayouts.Section>
-
-                {/* Recents */}
-                <RecentsSection
-                  chatSessions={chatSessions}
-                  hasMore={hasMore}
-                  isLoadingMore={isLoadingMore}
-                  onLoadMore={loadMore}
-                />
-              </DndContext>
-            </>
+                  {t("appSidebar.craft.label")}
+                </SidebarTab>
+              </Disabled>
+            </div>
           )}
+          <div data-testid="AppSidebar/scheduled-tasks">
+            <SidebarTab
+              icon={
+                folded && unviewedChatTaskCount > 0
+                  ? ScheduledTasksUnseenIcon
+                  : SvgClock
+              }
+              {...navigation.linkTo(SCHEDULED_TASKS_PATH, { scroll: false })}
+              selected={activeSidebarTab.isScheduledTasks()}
+              rightChildren={
+                unviewedChatTaskCount > 0 ? (
+                  <UnseenMarker label={tScheduledTasks("unviewedResults")} />
+                ) : undefined
+              }
+            >
+              {t("appSidebar.scheduledTasks.label")}
+            </SidebarTab>
+          </div>
+          <SidebarTab
+            icon={SvgSliders}
+            {...navigation.linkTo(CUSTOMIZE_PATH, { scroll: false })}
+            selected={activeSidebarTab.isCustomize()}
+          >
+            {t("appSidebar.customize.label")}
+          </SidebarTab>
+          {/* Folded, the body's sections collapse into the header, in the
+              unfolded order: Agents, then Projects. */}
+          {folded && moreAgentsButton}
+          {folded && <FoldedProjectsPopover />}
+        </BrandedSidebarHeader>
+
+        <SidebarLayouts.Body scrollKey="app-sidebar">
+          <>
+            {/* Agents */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleAgentDragEnd}
+            >
+              <SidebarLayouts.Section title={t("appSidebar.agents.title")}>
+                <SortableContext
+                  items={visibleAgentIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {isLoadingAgentList ? (
+                    <SidebarLoader count={3} />
+                  ) : (
+                    visibleAgents.map((visibleAgent) => (
+                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
+                    ))
+                  )}
+                </SortableContext>
+                {!isLoadingAgentList && moreAgentsButton}
+              </SidebarLayouts.Section>
+            </DndContext>
+
+            {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={pointerWithin}
+              modifiers={[
+                restrictToFirstScrollableAncestor,
+                restrictToVerticalAxis,
+              ]}
+              onDragEnd={handleChatProjectDragEnd}
+            >
+              {/* Projects */}
+              <SidebarLayouts.Section
+                title={t("appSidebar.projects.title")}
+                action={
+                  <OpalButton
+                    icon={SvgFolderPlus}
+                    prominence="tertiary"
+                    size="md"
+                    tooltip={t("appSidebar.newProject.tooltip")}
+                    onClick={() => createProjectModal.toggle(true)}
+                  />
+                }
+              >
+                {isLoadingProjects ? (
+                  <SidebarLoader count={2} />
+                ) : (
+                  <>
+                    {projects.map((project) => (
+                      <ProjectFolderButton key={project.id} project={project} />
+                    ))}
+                    {projects.length === 0 && newProjectButton}
+                  </>
+                )}
+              </SidebarLayouts.Section>
+
+              {/* Recents */}
+              <RecentsSection
+                chatSessions={chatSessions}
+                isLoading={isLoadingChatSessions}
+                hasMore={hasMore}
+                isLoadingMore={isLoadingMore}
+                onLoadMore={loadMore}
+              />
+            </DndContext>
+          </>
         </SidebarLayouts.Body>
 
         <SidebarLayouts.Footer>
           <div>
             {hasAdminAccess && (
               <SidebarTab
-                href={getFirstPermittedAdminRoute(adminCapabilities)}
+                {...navigation.linkTo(
+                  // SAFETY: the first permitted admin route is a page of this app.
+                  getFirstPermittedAdminRoute(adminCapabilities) as Route,
+                  { scroll: false }
+                )}
                 icon={SvgSettings}
               >
                 {t("appSidebar.adminPanel.label")}

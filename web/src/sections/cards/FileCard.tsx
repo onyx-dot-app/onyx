@@ -1,14 +1,18 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import type { ProjectFile } from "@/lib/projects/types";
 import { UserFileStatus } from "@/lib/projects/types";
+import { isFilePending } from "@/lib/projects/utils";
 import { isImageFile } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import { SvgFileText, SvgX, SvgSimpleLoader } from "@opal/icons";
+import { SvgFileText, SvgX } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
-import { AttachmentItemButton } from "@opal/components";
+import { AttachmentItemButton, ProgressRing } from "@opal/components";
+import { Section } from "@opal/layouts";
+import { useUploadProgress } from "@/lib/projects/hooks";
 
 interface RemovableProps {
   onRemove?: () => void;
@@ -94,6 +98,8 @@ interface ImageFileCardProps {
   onFileClick?: (file: ProjectFile) => void;
   isProcessing?: boolean;
   compact?: boolean;
+  removable: boolean;
+  uploadProgress: number | undefined;
 }
 function ImageFileCard({
   file,
@@ -102,19 +108,17 @@ function ImageFileCard({
   onFileClick,
   isProcessing = false,
   compact = false,
+  removable,
+  uploadProgress,
 }: ImageFileCardProps) {
   const sizeClass = compact ? "h-11 w-11" : "h-20 w-20";
   const loaderSize = compact ? "h-5 w-5" : "h-8 w-8";
   const iconSize = compact ? "h-5 w-5" : "h-8 w-8";
   const [imgError, setImgError] = useState(false);
 
-  const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
-
   return (
     <Removable
-      onRemove={
-        removeFile && doneUploading ? () => removeFile(file.id) : undefined
-      }
+      onRemove={removeFile && removable ? () => removeFile(file.id) : undefined}
     >
       <FileThumbnail
         className={cn(
@@ -128,9 +132,13 @@ function ImageFileCard({
           onFileClick && !isProcessing ? () => onFileClick(file) : undefined
         }
       >
-        {!doneUploading || !imageUrl ? (
+        {uploadProgress !== undefined ? (
+          <Section>
+            <ProgressRing value={uploadProgress} max={1} />
+          </Section>
+        ) : isProcessing || !imageUrl ? (
           <div className="h-full w-full flex items-center justify-center">
-            <SvgSimpleLoader className={loaderSize} />
+            <IconLoader className={loaderSize} />
           </div>
         ) : imgError ? (
           <div className="h-full w-full flex items-center justify-center">
@@ -152,18 +160,20 @@ function ImageFileCard({
 export interface FileCardProps {
   file: ProjectFile;
   removeFile?: (fileId: string) => void;
-  hideProcessingState?: boolean;
   onFileClick?: (file: ProjectFile) => void;
   compactImages?: boolean;
+  /** Shows the remove control during the upload; `removeFile` must cancel it. */
+  removableWhileUploading?: boolean;
 }
 export function FileCard({
   file,
   removeFile,
-  hideProcessingState = false,
   onFileClick,
   compactImages = false,
+  removableWhileUploading = false,
 }: FileCardProps) {
   const t = useTranslations("cards");
+  const format = useFormatter();
   const typeLabel = useMemo(() => {
     const name = String(file.name || "");
     const lastDotIndex = name.lastIndexOf(".");
@@ -184,14 +194,15 @@ export function FileCard({
     return null;
   }, [isImage, file.file_id]);
 
-  const isActuallyProcessing =
-    String(file.status) === UserFileStatus.UPLOADING ||
-    String(file.status) === UserFileStatus.PROCESSING;
+  const isProcessing = isFilePending(file.status);
 
-  // When hideProcessingState is true, we treat processing files as completed for display purposes
-  const isProcessing = hideProcessingState ? false : isActuallyProcessing;
-
-  const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
+  const isUploading = String(file.status) === UserFileStatus.UPLOADING;
+  const removable = !isUploading || removableWhileUploading;
+  const progress = useUploadProgress(file.id);
+  const uploadProgress =
+    isUploading && progress !== undefined && progress < 1
+      ? progress
+      : undefined;
 
   // For images, always show the larger preview layout (even while processing)
   if (isImage) {
@@ -203,28 +214,33 @@ export function FileCard({
         onFileClick={onFileClick}
         isProcessing={isProcessing}
         compact={compactImages}
+        removable={removable}
+        uploadProgress={uploadProgress}
       />
     );
   }
 
   return (
     <Removable
-      onRemove={
-        removeFile && doneUploading ? () => removeFile(file.id) : undefined
-      }
+      onRemove={removeFile && removable ? () => removeFile(file.id) : undefined}
     >
       <div className="min-w-0 max-w-48">
         <Interactive.Container border size="fit" width="full">
           <AttachmentItemButton
             presentational
-            icon={isProcessing ? SvgSimpleLoader : SvgFileText}
+            icon={isProcessing ? IconLoader : SvgFileText}
             title={file.name}
             description={
-              isProcessing
-                ? file.status === UserFileStatus.UPLOADING
+              uploadProgress !== undefined
+                ? format.number(Math.floor(uploadProgress * 100) / 100, {
+                    style: "percent",
+                    maximumFractionDigits: 0,
+                  })
+                : isUploading
                   ? t("file.uploading.description")
-                  : t("file.processing.description")
-                : typeLabel
+                  : isProcessing
+                    ? t("file.processing.description")
+                    : typeLabel
             }
           />
         </Interactive.Container>

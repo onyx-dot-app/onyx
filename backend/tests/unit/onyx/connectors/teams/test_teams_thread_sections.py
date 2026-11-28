@@ -10,7 +10,7 @@ import requests
 
 from onyx.connectors.models import ConnectorFailure, Document, SlimDocument
 from onyx.connectors.teams.connector import TeamsCheckpoint, TeamsConnector
-from onyx.connectors.teams.models import ChannelRef
+from onyx.connectors.teams.models import ChannelCursor, ChannelRef
 from onyx.connectors.teams.utils import GraphRetriesExhausted, message_delta_url
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL,
@@ -276,14 +276,14 @@ def test_a_step_walks_one_page_and_the_checkpoint_resumes_on_the_next() -> None:
 
     items, checkpoint = step(teams_connector, channel_checkpoint())
     assert [document.id for document in _documents(items)] == ["m1"]
-    assert checkpoint.current_channel == CHANNEL
-    assert checkpoint.next_messages_url == page_two
+    assert checkpoint.active == [
+        ChannelCursor(channel=CHANNEL, next_messages_url=page_two)
+    ]
     assert checkpoint.has_more is True
 
     items, checkpoint = step(teams_connector, checkpoint)
     assert [document.id for document in _documents(items)] == ["m2"]
-    assert checkpoint.current_channel is None
-    assert checkpoint.next_messages_url is None
+    assert checkpoint.active == []
     assert checkpoint.has_more is False
 
 
@@ -384,8 +384,9 @@ def test_a_thread_whose_replies_cannot_be_read_is_one_failure_and_the_page_goes_
     assert len(failures) == 1
     assert failures[0].failed_entity is not None
     assert failures[0].failed_entity.entity_id == "m1"
-    assert checkpoint.current_channel == CHANNEL
-    assert checkpoint.next_messages_url == page_two
+    assert checkpoint.active == [
+        ChannelCursor(channel=CHANNEL, next_messages_url=page_two)
+    ]
 
 
 @pytest.mark.parametrize(
@@ -447,8 +448,7 @@ def test_a_saved_page_graph_rejects_restarts_the_channel_once(status: int) -> No
 
     items, checkpoint = step(teams_connector, saved)
     assert items == []
-    assert checkpoint.current_channel == CHANNEL
-    assert checkpoint.next_messages_url is None
+    assert checkpoint.active == [ChannelCursor(channel=CHANNEL)]
 
     items, checkpoint = step(teams_connector, checkpoint)
     assert [document.id for document in _documents(items)] == ["m1"]
@@ -478,17 +478,20 @@ def test_a_channel_restarts_once_per_attempt_and_again_on_the_next() -> None:
     first_attempt = connector(client)
 
     _, checkpoint = step(first_attempt, saved)
-    assert checkpoint.next_messages_url is None
+    assert checkpoint.active == [ChannelCursor(channel=CHANNEL)]
     items, checkpoint = step(first_attempt, checkpoint)
     assert [document.id for document in _documents(items)] == ["m1"]
-    assert checkpoint.next_messages_url == page_two
+    assert checkpoint.active == [
+        ChannelCursor(channel=CHANNEL, next_messages_url=page_two)
+    ]
     with pytest.raises(requests.HTTPError):
         step(first_attempt, checkpoint)
-    assert checkpoint.next_messages_url == page_two
+    assert checkpoint.active == [
+        ChannelCursor(channel=CHANNEL, next_messages_url=page_two)
+    ]
 
     _, checkpoint = step(connector(client), checkpoint)
-    assert checkpoint.current_channel == CHANNEL
-    assert checkpoint.next_messages_url is None
+    assert checkpoint.active == [ChannelCursor(channel=CHANNEL)]
 
 
 def _sdk_channel(channel_id: str, name: str) -> MagicMock:
@@ -545,14 +548,11 @@ def test_the_walk_lists_teams_then_channels_then_pages_and_ends(
         "B",
     ]
     assert checkpoints[1].todo_team_ids == []
-    # Channels are popped from the end, so B is walked first.
-    assert checkpoints[2].current_channel is None
-    assert [channel.display_name for channel in checkpoints[2].todo_channels] == [
-        "General"
-    ]
-    assert checkpoints[3].current_channel is None
-    assert checkpoints[3].has_more is False
-    assert len(checkpoints) == 4
+    # Both channels fit one step and have one page each, so one step ends them.
+    assert checkpoints[2].active == []
+    assert checkpoints[2].todo_channels == []
+    assert checkpoints[2].has_more is False
+    assert len(checkpoints) == 3
 
 
 def test_a_dummy_checkpoint_with_no_teams_ends_at_once(

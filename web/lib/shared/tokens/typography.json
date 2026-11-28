@@ -3,12 +3,24 @@
     "value": "\"Hanken Grotesk\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto,\n    sans-serif",
     "type": "fontFamily"
   },
+  "font-interface": {
+    "value": "{font-hanken-grotesk}",
+    "type": "fontFamily"
+  },
+  "font-content": {
+    "value": "{font-interface}",
+    "type": "fontFamily"
+  },
   "font-dm-mono": {
     "value": "\"DM Mono\", \"SF Mono\", Monaco, \"Cascadia Code\", \"Roboto Mono\", Consolas,\n    \"Courier New\", monospace",
     "type": "fontFamily"
   },
   "font-kh-teka": {
     "value": "\"KH Teka\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+    "type": "fontFamily"
+  },
+  "font-sf-pro": {
+    "value": "\"SF Pro\", \"SF Pro Text\", -apple-system, BlinkMacSystemFont, system-ui,\n    sans-serif",
     "type": "fontFamily"
   }
 }

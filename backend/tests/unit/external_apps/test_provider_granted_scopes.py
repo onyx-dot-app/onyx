@@ -1,7 +1,7 @@
 """Per-provider granted-scope extraction (ENG-4261).
 
 On the OAuth callback each provider derives the scopes the user actually
-granted, persisted onto ``ExternalAppUserCredential.granted_scopes`` for
+granted, persisted onto ``integration_connection.granted_scopes`` for
 downstream action gating. Most providers echo the RFC 6749 ``scope`` field and
 inherit the base default; only Slack (nested) and HubSpot (out-of-band lookup)
 override. A signal we can't read is recorded as ``None`` — never an empty

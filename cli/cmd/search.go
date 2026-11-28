@@ -358,6 +358,7 @@ func largestFit(
 type searchFlags struct {
 	query            string
 	sources          []string
+	documentSets     []string
 	days             int
 	agentID          int
 	defaultAgentID   int
@@ -376,13 +377,16 @@ func buildSearchRequest(flags searchFlags) models.SearchRequest {
 			req.Sources = append(req.Sources, source)
 		}
 	}
+	req.DocumentSets = cleanDocumentSets(flags.documentSets)
 	if flags.daysSet {
 		cutoff := time.Now().UTC().Add(-time.Duration(flags.days) * 24 * time.Hour).Format(time.RFC3339)
 		req.TimeCutoff = &cutoff
 	}
+	// Explicit document sets replace an agent's knowledge scope server-side,
+	// so the configured default agent is not sent alongside them.
 	if flags.agentIDSet {
 		req.PersonaID = &flags.agentID
-	} else if flags.defaultAgentID != 0 {
+	} else if flags.defaultAgentID != 0 && req.DocumentSets == nil {
 		req.PersonaID = &flags.defaultAgentID
 	}
 	if flags.noQueryExpansion {
@@ -391,9 +395,22 @@ func buildSearchRequest(flags searchFlags) models.SearchRequest {
 	return req
 }
 
+// cleanDocumentSets drops blank entries and keeps the rest verbatim, since the
+// server matches names exactly; nil means no filter.
+func cleanDocumentSets(names []string) []string {
+	var out []string
+	for _, name := range names {
+		if strings.TrimSpace(name) != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 func newSearchCmd(ios *iostreams.IOStreams) *cobra.Command {
 	var (
 		searchSources          string
+		searchDocumentSets     []string
 		searchDays             int
 		searchAgentID          int
 		searchAgentName        string
@@ -435,6 +452,7 @@ result sets pass through whole.`,
 		Example: `  onyx-cli search "What is our deployment process?"
   onyx-cli search "Q3 roadmap" "hiring plan" "incident postmortem template"
   onyx-cli search --source slack "auth migration status"
+  onyx-cli search --document-set "Engineering Wiki" "on-call runbook"
   onyx-cli search --days 30 "recent production incidents"
   onyx-cli search --agent-id 5 "engineering roadmap"
   onyx-cli search --agent-name "Support Agent" "engineering roadmap"
@@ -472,6 +490,18 @@ result sets pass through whole.`,
 				sources = strings.Split(searchSources, ",")
 			}
 
+			documentSetsSet := cmd.Flags().Changed("document-set")
+			if documentSetsSet {
+				if cleanDocumentSets(searchDocumentSets) == nil {
+					return exitcodes.New(exitcodes.BadRequest,
+						"--document-set needs at least one document set name\n  Run `onyx-cli document-sets` to list the available names")
+				}
+				if cmd.Flags().Changed("agent-id") || cmd.Flags().Changed("agent-name") {
+					return exitcodes.New(exitcodes.BadRequest,
+						"--document-set cannot be combined with --agent-id or --agent-name: explicit document sets replace the agent's knowledge scope instead of narrowing it")
+				}
+			}
+
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
@@ -490,6 +520,7 @@ result sets pass through whole.`,
 
 			baseFlags := searchFlags{
 				sources:          sources,
+				documentSets:     searchDocumentSets,
 				days:             searchDays,
 				daysSet:          cmd.Flags().Changed("days"),
 				agentID:          resolvedAgentID,
@@ -617,6 +648,8 @@ result sets pass through whole.`,
 	}
 
 	cmd.Flags().StringVar(&searchSources, "source", "", "Filter by source type (comma-separated: slack,google_drive)")
+	cmd.Flags().StringArrayVar(&searchDocumentSets, "document-set", nil,
+		"Filter by document set name (repeat the flag for more than one; list names with onyx-cli document-sets)")
 	cmd.Flags().IntVar(&searchDays, "days", 0, "Only return results from the last N days")
 	cmd.Flags().IntVar(&searchAgentID, "agent-id", 0, "Agent ID for scoped search")
 	cmd.Flags().StringVar(&searchAgentName, "agent-name", "", "Agent name for scoped search (exact or unique substring)")

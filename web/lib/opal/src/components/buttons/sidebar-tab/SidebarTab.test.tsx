@@ -13,7 +13,6 @@ import {
   SidebarStateProvider,
   useSidebarState,
 } from "@opal/layouts";
-import { renderSidebarLogo } from "@/lib/sidebar/utils";
 
 jest.mock("@opal/hooks/useScreenSize", () => ({
   __esModule: true,
@@ -24,7 +23,7 @@ function FoldedSidebar({ foldable }: { foldable?: boolean }) {
   return (
     <SidebarStateProvider defaultFolded>
       <SidebarLayouts.Root foldable={foldable}>
-        <SidebarLayouts.Header renderAppLogo={renderSidebarLogo}>
+        <SidebarLayouts.Header logo={null} wordmark={null}>
           <SidebarTab href="/settings">Settings</SidebarTab>
         </SidebarLayouts.Header>
       </SidebarLayouts.Root>
@@ -77,7 +76,7 @@ it("does not show the folded tooltip for a tab the pointer already left", async 
     const { setFolded } = useSidebarState();
     return (
       <SidebarLayouts.Root foldable>
-        <SidebarLayouts.Header renderAppLogo={renderSidebarLogo}>
+        <SidebarLayouts.Header logo={null} wordmark={null}>
           <SidebarTab href="/settings">Settings</SidebarTab>
         </SidebarLayouts.Header>
         <button onClick={() => setFolded(true)}>Fold</button>
@@ -112,6 +111,25 @@ it("names the tab for assistive technology in both states", () => {
   render(<FoldedSidebar foldable />);
   // The label is hidden by CSS while folded, so the name comes from the link.
   expect(screen.getByLabelText("Settings")).toBeInTheDocument();
+});
+
+it("gives a loading title's line box the same font as the plain title", () => {
+  // jsdom does no layout. The block that holds a loading title must take the
+  // title's font, or its line box takes the inherited, taller line height and
+  // the title sits lower than on a plain tab.
+  const { rerender } = render(<SidebarTab href="/app">My chat</SidebarTab>);
+  const plainFont = screen
+    .getByText("My chat")
+    .className.match(/font-\S+/)?.[0];
+  expect(plainFont).toBeDefined();
+
+  rerender(
+    <SidebarTab href="/app" loading>
+      My chat
+    </SidebarTab>
+  );
+  const wave = screen.getByText("My chat").closest(".opal-text-loader-wave");
+  expect(wave).toHaveClass(plainFont!);
 });
 
 it("keeps the same DOM node when children switch from a label to an element", () => {

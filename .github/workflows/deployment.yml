@@ -5,6 +5,11 @@ on:
     tags:
       - "*"
   workflow_dispatch:
+    inputs:
+      desktop:
+        description: "Test run: also build unsigned desktop installers into a draft release"
+        type: boolean
+        default: false
 
 # Set restrictive default permissions for all jobs. Jobs that need more permissions
 # should explicitly declare them.
@@ -29,6 +34,7 @@ jobs:
       build-web-cloud: ${{ steps.check.outputs.build-web-cloud }}
       build-backend: ${{ steps.check.outputs.build-backend }}
       build-model-server: ${{ steps.check.outputs.build-model-server }}
+      build-sandbox: ${{ steps.check.outputs.build-sandbox }}
       is-cloud-tag: ${{ steps.check.outputs.is-cloud-tag }}
       is-beta: ${{ steps.check.outputs.is-beta }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
@@ -37,6 +43,7 @@ jobs:
       is-test-run: ${{ steps.check.outputs.is-test-run }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
       short-sha: ${{ steps.check.outputs.short-sha }}
+      commit-date: ${{ steps.commit-date.outputs.commit-date }}
     steps:
       - name: Checkout (for git tags)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -45,14 +52,22 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
-        with:
-          version: "0.11.25"
-          enable-cache: false
+      - name: Read the commit date
+        id: commit-date
+        run: echo "commit-date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
 
-      - name: Install ods from uv.lock
-        run: uv sync --frozen --no-install-project --only-group ods
+      # Routing lives in tools/ods next to this workflow, so build ods from the
+      # same commit: a pinned release would lag behind the outputs used here.
+      # go.sum verifies every module. No cache, so a poisoned cache entry
+      # cannot reach a release build.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: tools/ods/go.mod
+          cache: false
+
+      - name: Build ods
+        working-directory: tools/ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
 
       - name: Check which components to build and version info
         id: check
@@ -63,7 +78,7 @@ jobs:
           # `ods release classify` owns the routing rules; see
           # tools/ods/internal/release/classify.go. The checkout above fetches
           # all tags, which the "latest" decision needs.
-          uv run --no-sync ods release classify \
+          "${RUNNER_TEMP}/ods" release classify \
             --ref "${GITHUB_REF_NAME}" \
             --sha "${GITHUB_SHA}" \
             --event "${EVENT_NAME}" >> "$GITHUB_OUTPUT"
@@ -79,22 +94,27 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read # checkout + read lockfiles
-      id-token: write # OIDC for fetching the S3 allowlist
-      security-events: read # read Dependabot alerts
+      id-token: write # OIDC for fetching the S3 allowlist and the registry credentials
+      vulnerability-alerts: read # read Dependabot alerts
+      security-events: write # SARIF uploads of the image audits
+    outputs:
+      sandbox-status: ${{ steps.base-image-audit.outputs.sandbox-status }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          version: "0.11.25"
-          enable-cache: false
+          go-version-file: tools/ods/go.mod
+          cache: false
 
-      - name: Install ods from uv.lock
-        run: uv sync --frozen --no-install-project --only-group ods
+      - name: Build audit from this revision
+        working-directory: tools/ods
+        run: |
+          go build -o "${RUNNER_TEMP}/ods-audit" ./odsaudit
+          echo "${RUNNER_TEMP}" >> "$GITHUB_PATH"
 
       - name: Configure AWS credentials
         continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
@@ -106,7 +126,149 @@ jobs:
       - name: Run dependency audit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-sync ods audit --fail-on=critical
+        run: ods-audit --fail-on=critical
+
+      # The same registry credentials the builds use, fetched the same way, so
+      # the bases scanned are the bases shipped. Missing credentials fail the
+      # gate, since the builds would ship hardened bases the gate never saw.
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Login to the hardened base images
+        uses: ./.github/actions/dhi-base-images
+        with:
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
+
+      # Everything a shipped image holds outside its lockfiles: the pinned
+      # runtime base for web and model-server, the backend's and the sandbox's
+      # os stage built here. All four are scanned before the step fails, so one run shows
+      # every blocker, and --strict keeps an empty scan from passing.
+      - name: Run base image audit
+        id: base-image-audit
+        run: |
+          status=0
+          for component in web model-server backend sandbox; do
+            image="$(.github/scripts/base-image-ref.sh "${component}")"
+            args=()
+            if [ "${component}" = sandbox ]; then
+              args+=(--sbom /opt/chrome/browser.cdx.json --update-policy s3://onyx-internal-tools/audit/updates.json)
+            fi
+            component_status=success
+            ods-audit image "${image}" "${args[@]}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || component_status=failure
+            if [ "${component}" = sandbox ]; then
+              echo "sandbox-status=${component_status}" >> "$GITHUB_OUTPUT"
+            elif [ "${component_status}" != success ]; then
+              status=1
+            fi
+            if [ ! -s "image-audit-${component}.sarif" ]; then
+              # $schema is a literal SARIF key, not a shell variable.
+              # shellcheck disable=SC2016
+              echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > "image-audit-${component}.sarif"
+            fi
+            # A stage built here is named "name:tag" with no registry path, which
+            # the Security tab reads as a URI scheme and rejects; point its
+            # findings at the Dockerfile the stage comes from.
+            case "${component}" in
+              backend) dockerfile=backend/Dockerfile ;;
+              sandbox) dockerfile=backend/onyx/server/features/build/sandbox/image/Dockerfile ;;
+              *) dockerfile="" ;;
+            esac
+            if [ -n "${dockerfile}" ]; then
+              jq --arg uri "${dockerfile}" '(.runs[]?.results[]?.locations[]?.physicalLocation.artifactLocation.uri) |= $uri' \
+                "image-audit-${component}.sarif" > "image-audit-${component}.sarif.tmp"
+              mv "image-audit-${component}.sarif.tmp" "image-audit-${component}.sarif"
+            fi
+          done
+          exit "${status}"
+
+      # Rolling main-HEAD builds map to refs/heads/main so the Security tab stays
+      # authoritative for main; test runs upload against their own ref. Release
+      # tags sit on older commits, so they gate without uploading.
+      - name: Upload the web image audit to the GitHub Security tab
+        id: upload-web
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-web.sarif
+          category: image-audit-web
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      - name: Upload the model-server image audit to the GitHub Security tab
+        id: upload-model-server
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-model-server.sarif
+          category: image-audit-model-server
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      - name: Upload the backend image audit to the GitHub Security tab
+        id: upload-backend
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-backend.sarif
+          category: image-audit-backend
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      - name: Upload the sandbox image audit to the GitHub Security tab
+        id: upload-sandbox
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-sandbox.sarif
+          category: image-audit-sandbox
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      # A rejected upload leaves the Security tab stale without failing the
+      # job, so it is called out where the run is read.
+      - name: Report failed uploads
+        if: always() && (steps.upload-web.outcome == 'failure' || steps.upload-model-server.outcome == 'failure' || steps.upload-backend.outcome == 'failure' || steps.upload-sandbox.outcome == 'failure')
+        env:
+          WEB: ${{ steps.upload-web.outcome }}
+          MODEL_SERVER: ${{ steps.upload-model-server.outcome }}
+          BACKEND: ${{ steps.upload-backend.outcome }}
+          SANDBOX: ${{ steps.upload-sandbox.outcome }}
+        run: |
+          failed=""
+          [ "${WEB}" = failure ] && failed="${failed} web"
+          [ "${MODEL_SERVER}" = failure ] && failed="${failed} model-server"
+          [ "${BACKEND}" = failure ] && failed="${failed} backend"
+          [ "${SANDBOX}" = failure ] && failed="${failed} sandbox"
+          echo "::warning::The Security tab upload failed for:${failed}. The tab is stale until the next nightly upload succeeds."
+          echo "Security tab upload failed for:${failed}" >> "${GITHUB_STEP_SUMMARY}"
 
   # Validate that a pushed release tag is versioned correctly, via
   # `ods release --check`. A cloud tag must be the tag `ods release cloud`
@@ -121,7 +283,7 @@ jobs:
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
-    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
+    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && !startsWith(github.ref_name, 'dev-build-') && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -129,19 +291,22 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      # Routing lives in tools/ods next to this workflow, so build ods from the
+      # same commit: a pinned release would lag behind the outputs used here.
+      # go.sum verifies every module. No cache, so a poisoned cache entry
+      # cannot reach a release build.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
         with:
-          version: "0.11.25"
-          # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
-          enable-cache: false
+          go-version-file: tools/ods/go.mod
+          cache: false
 
-      - name: Install ods from uv.lock
-        run: uv sync --frozen --no-install-project --only-group ods
+      - name: Build ods
+        working-directory: tools/ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
 
       - name: Validate the tag is versioned correctly
         run: |
-          uv run --no-sync ods release --check --ref "$GITHUB_REF_NAME"
+          "${RUNNER_TEMP}/ods" release --check --ref "$GITHUB_REF_NAME"
 
   notify-slack-on-tag-check-failure:
     needs:
@@ -171,7 +336,7 @@ jobs:
     needs:
       - determine-builds
       - audit-gate
-    if: needs.determine-builds.outputs.build-desktop == 'true'
+    if: needs.determine-builds.outputs.build-desktop == 'true' || (inputs.desktop && needs.determine-builds.outputs.is-test-run == 'true')
     runs-on: ubuntu-slim
     timeout-minutes: 10
     permissions:
@@ -230,11 +395,18 @@ jobs:
           fi
           echo "id=${release_id}" >> "$GITHUB_OUTPUT"
 
+  # The desktop app (desktop/). tauri-action uploads each installer to the
+  # release as [name]_[arch][ext]: Onyx_universal.dmg, Onyx_x64.exe,
+  # Onyx_x64.msi, Onyx_arm64.exe, Onyx_amd64.deb, Onyx_x86_64.rpm,
+  # Onyx_amd64.AppImage, Onyx_arm64.deb and Onyx_aarch64.rpm, plus the update
+  # archives and their .sig files. The docs link to the first three and to
+  # Onyx_amd64.deb through releases/latest/download/.
   build-desktop:
+    name: build-desktop (${{ matrix.name }})
     needs:
       - determine-builds
       - create-release
-    if: needs.determine-builds.outputs.build-desktop == 'true'
+    if: needs.determine-builds.outputs.build-desktop == 'true' || (inputs.desktop && needs.determine-builds.outputs.is-test-run == 'true')
     permissions:
       id-token: write
       contents: write
@@ -243,66 +415,61 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest" # Build a universal image for macOS.
-            args: "--target universal-apple-darwin"
+          - name: macOS universal
+            platform: macos-latest
+            args: "--target universal-apple-darwin --bundles app,dmg"
             rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
-          - platform: "ubuntu-24.04"
+            bundle-dir: desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          # Ubuntu 22.04: the Linux bundles need the glibc they are built
+          # with or newer (libc6 >= 2.35 in tauri.conf.json).
+          - name: Linux x64
+            platform: ubuntu-22.04
+            args: "--bundles deb,rpm,appimage"
+            bundle-dir: desktop/src-tauri/target/release/bundle
+          - name: Linux arm64
+            platform: ubuntu-22.04-arm # Only available in public repos.
             args: "--bundles deb,rpm"
-          - platform: "ubuntu-24.04-arm" # Only available in public repos.
-            args: "--bundles deb,rpm"
-          - platform: "windows-latest"
-            args: ""
-          # Cross-compiled Windows ARM64 build. Only the NSIS bundle supports
-          # ARM64 (WiX/MSI does not), hence --bundles nsis.
-          - platform: "windows-latest"
+            bundle-dir: desktop/src-tauri/target/release/bundle
+          - name: Windows x64
+            platform: windows-latest
+            args: "--bundles nsis,msi"
+            bundle-dir: desktop/src-tauri/target/release/bundle
+          # Cross-compiled. Only the NSIS bundle supports ARM64 (WiX/MSI does
+          # not), hence --bundles nsis.
+          - name: Windows arm64
+            platform: windows-latest
             args: "--target aarch64-pc-windows-msvc --bundles nsis"
             rust-targets: "aarch64-pc-windows-msvc"
+            bundle-dir: desktop/src-tauri/target/aarch64-pc-windows-msvc/release/bundle
 
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 90
     environment: release
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
         with:
           # NOTE: persist-credentials is needed for tauri-action to upload assets to GitHub releases.
           persist-credentials: true # zizmor: ignore[artipacked]
 
-      - name: Configure AWS credentials
-        if: startsWith(matrix.platform, 'macos-')
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
-
-      - name: Get AWS Secrets
-        if: startsWith(matrix.platform, 'macos-')
-        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
-        with:
-          secret-ids: |
-            APPLE_ID, deploy/apple-id
-            APPLE_PASSWORD, deploy/apple-password
-            APPLE_CERTIFICATE, deploy/apple-certificate
-            APPLE_CERTIFICATE_PASSWORD, deploy/apple-certificate-password
-            KEYCHAIN_PASSWORD, deploy/keychain-password
-            APPLE_TEAM_ID, deploy/apple-team-id
-          parse-json-secrets: true
-
-      - name: install dependencies (ubuntu only)
-        if: startsWith(matrix.platform, 'ubuntu-')
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
-            libglib2.0-dev \
-            libgirepository1.0-dev \
-            libgtk-3-dev \
-            libjavascriptcoregtk-4.1-dev \
-            libwebkit2gtk-4.1-dev \
+            file \
             libayatana-appindicator3-dev \
-            gobject-introspection \
-            pkg-config \
-            curl \
-            xdg-utils
+            libdbus-1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            pkg-config
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
@@ -316,7 +483,13 @@ jobs:
           # Jobs building only for the host architecture leave this empty.
           targets: ${{ matrix.rust-targets || '' }}
 
-      - name: install frontend dependencies
+      # The app builds Opal from web/lib/opal and resolves React from web/.
+      - name: Install web dependencies
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+
+      - name: Install desktop dependencies
+        working-directory: ./desktop
         run: bun install --frozen-lockfile
 
       - name: Inject version (Unix)
@@ -333,19 +506,14 @@ jobs:
           fi
           echo "Injecting version: $VERSION"
 
-          # Update Cargo.toml
           sed "s/^version = .*/version = \"$VERSION\"/" src-tauri/Cargo.toml > src-tauri/Cargo.toml.tmp
           mv src-tauri/Cargo.toml.tmp src-tauri/Cargo.toml
 
-          # Update tauri.conf.json
           jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp
           mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
 
-          # Update package.json
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp
           mv package.json.tmp package.json
-
-          echo "Versions set to: $VERSION"
 
       - name: Inject version (Windows)
         if: runner.os == 'Windows'
@@ -363,42 +531,105 @@ jobs:
           }
           Write-Host "Injecting version: $VERSION"
 
-          # Update Cargo.toml
           $cargo = Get-Content src-tauri/Cargo.toml -Raw
           $cargo = $cargo -replace '(?m)^version = .*', "version = `"$VERSION`""
           Set-Content src-tauri/Cargo.toml $cargo -NoNewline
 
-          # Update tauri.conf.json
           $json = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
           $json.version = $VERSION
           $json | ConvertTo-Json -Depth 100 | Set-Content src-tauri/tauri.conf.json
 
-          # Update package.json
           $pkg = Get-Content package.json | ConvertFrom-Json
           $pkg.version = $VERSION
           $pkg | ConvertTo-Json -Depth 100 | Set-Content package.json
 
-          Write-Host "Versions set to: $VERSION"
+      # Third-party JavaScript runs here, before the job has any secret. The
+      # release config below sets a null beforeBuildCommand, so Vite does not
+      # run again with the secrets set.
+      - name: Build the local windows
+        working-directory: ./desktop
+        run: bun run vite:build
+
+      # createUpdaterArtifacts: the update archives and their signatures.
+      # signCommand: the Authenticode hook. It is empty until release
+      # engineering sets the repository variable DESKTOP_WINDOWS_SIGN_COMMAND
+      # and the signing credentials (desktop/README.md, "Windows code
+      # signing"). Tauri then signs the app, the uninstaller and the installers.
+      # A test run (the `desktop` input) gets no signing secret at all: it
+      # builds unsigned installers with no update archives.
+      - name: Write the release config
+        env:
+          SIGNED: ${{ needs.determine-builds.outputs.is-test-run != 'true' }}
+          WINDOWS_SIGN_COMMAND: ${{ runner.os == 'Windows' && needs.determine-builds.outputs.is-test-run != 'true' && vars.DESKTOP_WINDOWS_SIGN_COMMAND || '' }}
+          RELEASE_CONFIG: ${{ runner.temp }}/desktop-release.conf.json
+        run: |
+          bun -e '
+            const config = { build: { beforeBuildCommand: null }, bundle: { createUpdaterArtifacts: process.env.SIGNED === "true" } };
+            if (process.env.WINDOWS_SIGN_COMMAND) config.bundle.windows = { signCommand: process.env.WINDOWS_SIGN_COMMAND };
+            require("fs").writeFileSync(process.env.RELEASE_CONFIG, JSON.stringify(config));
+          '
+
+      - name: Configure AWS credentials
+        if: needs.determine-builds.outputs.is-test-run != 'true'
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      # The updater key pair signs the update archives. Its public half is
+      # plugins.updater.pubkey in desktop/src-tauri/tauri.conf.json.
+      - name: Get the updater signing key
+        if: needs.determine-builds.outputs.is-test-run != 'true'
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            TAURI_SIGNING_PRIVATE_KEY, deploy/desktop-v2-updater-private-key
+            TAURI_SIGNING_PRIVATE_KEY_PASSWORD, deploy/desktop-v2-updater-private-key-password
+
+      - name: Get the Apple secrets
+        if: runner.os == 'macOS' && needs.determine-builds.outputs.is-test-run != 'true'
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            APPLE_ID, deploy/apple-id
+            APPLE_PASSWORD, deploy/apple-password
+            APPLE_CERTIFICATE, deploy/apple-certificate
+            APPLE_CERTIFICATE_PASSWORD, deploy/apple-certificate-password
+            KEYCHAIN_PASSWORD, deploy/keychain-password
+            APPLE_TEAM_ID, deploy/apple-team-id
+          parse-json-secrets: true
 
       - name: Import Apple Developer Certificate
-        if: startsWith(matrix.platform, 'macos-')
+        if: runner.os == 'macOS' && needs.determine-builds.outputs.is-test-run != 'true'
         run: |
-          echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+          CERT="${RUNNER_TEMP}/certificate.p12"
+          echo "${APPLE_CERTIFICATE}" | base64 --decode > "${CERT}"
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
-          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security import "${CERT}" -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
-          security find-identity -v -p codesigning build.keychain
+          rm "${CERT}"
+          CERT_ID=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application" | head -n 1 | awk -F'"' '{print $2}')
+          echo "CERT_ID=$CERT_ID" >> "$GITHUB_ENV"
 
-      - name: Verify Certificate
-        if: startsWith(matrix.platform, 'macos-')
+      # APPIMAGE_EXTRACT_AND_RUN: the runner has no FUSE for linuxdeploy.
+      # NO_STRIP: linuxdeploy's strip cannot read some system libraries.
+      # Cargo strips the Linux app binary instead.
+      - name: Set Linux build options
+        if: runner.os == 'Linux'
         run: |
-          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep -E "(Developer ID Application|Apple Distribution|Apple Development)" | head -n 1)
-          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
-          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
-          echo "Certificate imported."
+          {
+            echo "APPIMAGE_EXTRACT_AND_RUN=1"
+            echo "NO_STRIP=true"
+            echo "CARGO_PROFILE_RELEASE_STRIP=symbols"
+          } >> "$GITHUB_ENV"
+
+      - name: Remove stale bundles
+        env:
+          BUNDLE_DIR: ${{ matrix.bundle-dir }}
+        run: rm -rf "${BUNDLE_DIR}"
 
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # ratchet:tauri-apps/tauri-action@action-v1.0.0
         env:
@@ -413,7 +644,129 @@ jobs:
           # when multiple matrix jobs try to create/update the same release simultaneously
           releaseId: ${{ needs.create-release.outputs.release-id }}
           releaseAssetNamePattern: "[name]_[arch][ext]"
-          args: ${{ matrix.args }}
+          # publish-desktop-update-feed writes one latest.json for all platforms.
+          uploadUpdaterJson: false
+          args: ${{ matrix.args }} --config ${{ runner.temp }}/desktop-release.conf.json
+
+      - name: Check Authenticode signatures
+        if: runner.os == 'Windows' && needs.determine-builds.outputs.is-test-run != 'true' && vars.DESKTOP_WINDOWS_SIGN_COMMAND != ''
+        working-directory: ${{ matrix.bundle-dir }}
+        shell: pwsh
+        # Tauri restores the unsigned app in target/release after each
+        # package, so the app is checked inside the installers.
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installers = @(Get-ChildItem nsis/*.exe) + @(Get-ChildItem msi/*.msi -ErrorAction SilentlyContinue)
+          $payload = Join-Path $env:RUNNER_TEMP 'signed-payload'
+          foreach ($msi in Get-ChildItem msi/*.msi -ErrorAction SilentlyContinue) {
+            $process = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/a', "`"$($msi.FullName)`"", '/qn', "TARGETDIR=`"$payload\msi-$($msi.BaseName)`"")
+            if ($process.ExitCode -ne 0) { throw "Could not extract $($msi.Name) (exit code $($process.ExitCode))." }
+          }
+          foreach ($nsis in Get-ChildItem nsis/*.exe) {
+            7z x $nsis.FullName "-o$payload\nsis-$($nsis.BaseName)" -y | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not extract $($nsis.Name)." }
+          }
+          $apps = @(Get-ChildItem -Path $payload -Recurse -Filter onyx.exe)
+          if ($apps.Count -ne $installers.Count) { throw "Found $($apps.Count) packaged apps for $($installers.Count) installers." }
+          $files = $installers + $apps
+          $unsigned = $files | Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne 'Valid' }
+          foreach ($file in $unsigned) { Write-Error "No valid Authenticode signature: $($file.Name)" -ErrorAction Continue }
+          if ($unsigned) { exit 1 }
+
+      # No file in the .deb or the AppImage may need a newer glibc than the
+      # libc6 (>= 2.35) that the .deb declares.
+      - name: Check the glibc floor
+        if: runner.os == 'Linux'
+        working-directory: ${{ matrix.bundle-dir }}
+        run: |
+          set -euo pipefail
+          FLOOR=2.35
+          WORK="${RUNNER_TEMP}/glibc-check"
+          mkdir -p "${WORK}"
+          dpkg-deb -x deb/*.deb "${WORK}/deb"
+          for APPIMAGE in "${PWD}"/appimage/*.AppImage; do
+            [ -e "${APPIMAGE}" ] || continue
+            (cd "${WORK}" && "${APPIMAGE}" --appimage-extract > /dev/null)
+          done
+          NEEDED=$(find "${WORK}" -type f -exec sh -c 'file -b "$1" | grep -q "^ELF" && objdump -T "$1"' _ {} \; 2> /dev/null \
+            | grep -o 'GLIBC_[0-9.]*' | sed 's/^GLIBC_//' | sort -uV | tail -n 1)
+          echo "The bundles need glibc ${NEEDED} or newer."
+          if [ "$(printf '%s\n' "${NEEDED}" "${FLOOR}" | sort -V | tail -n 1)" != "${FLOOR}" ]; then
+            echo "glibc ${NEEDED} is newer than the declared floor ${FLOOR}." >&2
+            exit 1
+          fi
+
+  # One latest.json for every platform, from the update archives and the .sig
+  # files that build-desktop uploaded. The app reads it from
+  # releases/latest/download/latest.json (plugins.updater.endpoints), so it
+  # takes effect when this release is published as the latest release.
+  publish-desktop-update-feed:
+    needs:
+      - determine-builds
+      - create-release
+      - build-desktop
+    # A test run builds no signed update archives, so it gets no feed.
+    if: needs.determine-builds.outputs.build-desktop == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Write and upload latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release-id }}
+          IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
+          SHORT_SHA: ${{ needs.determine-builds.outputs.short-sha }}
+        run: |
+          set -euo pipefail
+          if [ "${IS_TEST_RUN}" == "true" ]; then
+            VERSION="0.0.0-dev+${SHORT_SHA}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          RELEASE=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")
+          TAG=$(jq -r .tag_name <<< "${RELEASE}")
+          ASSETS=$(jq '.assets' <<< "${RELEASE}")
+          # Prints the signature file's contents.
+          signature() {
+            local id
+            id=$(jq -r --arg n "$1.sig" '.[] | select(.name == $n) | .id' <<< "${ASSETS}")
+            if [ -z "${id}" ]; then
+              echo "::error::The release has no $1.sig." >&2
+              return 1
+            fi
+            gh api -H "Accept: application/octet-stream" "repos/${GITHUB_REPOSITORY}/releases/assets/${id}"
+          }
+          entry() {
+            local sig
+            sig=$(signature "$1") || return 1
+            jq -n --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/$1" \
+              --arg sig "${sig}" '{url: $url, signature: $sig}'
+          }
+          MAC=$(entry Onyx_universal.app.tar.gz)
+          WIN=$(entry Onyx_x64.exe)
+          WIN_ARM=$(entry Onyx_arm64.exe)
+          LINUX=$(entry Onyx_amd64.AppImage)
+          jq -n --arg v "${VERSION}" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg notes "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
+            --argjson mac "${MAC}" \
+            --argjson win "${WIN}" \
+            --argjson winarm "${WIN_ARM}" \
+            --argjson linux "${LINUX}" \
+            '{version: $v, notes: $notes, pub_date: $date, platforms: {
+               "darwin-aarch64": $mac, "darwin-x86_64": $mac,
+               "windows-x86_64": $win, "windows-aarch64": $winarm,
+               "linux-x86_64": $linux}}' > "${RUNNER_TEMP}/latest.json"
+          cat "${RUNNER_TEMP}/latest.json"
+          # By release ID: the tag of a draft release does not exist yet.
+          OLD=$(jq -r '.[] | select(.name == "latest.json") | .id' <<< "${ASSETS}")
+          if [ -n "${OLD}" ]; then
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${OLD}"
+          fi
+          UPLOAD_URL=$(jq -r '.upload_url' <<< "${RELEASE}" | sed 's/{.*}$//')
+          gh api --method POST "${UPLOAD_URL}?name=latest.json" \
+            -H "Content-Type: application/json" --input "${RUNNER_TEMP}/latest.json" > /dev/null
 
   build-web-amd64:
     needs:
@@ -584,8 +937,7 @@ jobs:
       - determine-builds
       - build-web-amd64
       - build-web-arm64
-      - image-audit
-    if: always() && needs.build-web-amd64.result == 'success' && needs.build-web-arm64.result == 'success' && needs.image-audit.result == 'success'
+    if: always() && needs.build-web-amd64.result == 'success' && needs.build-web-arm64.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -860,8 +1212,7 @@ jobs:
       - determine-builds
       - build-web-cloud-amd64
       - build-web-cloud-arm64
-      - image-audit
-    if: always() && needs.build-web-cloud-amd64.result == 'success' && needs.build-web-cloud-arm64.result == 'success' && needs.image-audit.result == 'success'
+    if: always() && needs.build-web-cloud-amd64.result == 'success' && needs.build-web-cloud-arm64.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1000,6 +1351,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1021,6 +1375,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -1096,6 +1453,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1117,6 +1477,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -1130,8 +1493,7 @@ jobs:
       - determine-builds
       - build-backend-amd64
       - build-backend-arm64
-      - image-audit
-    if: always() && needs.build-backend-amd64.result == 'success' && needs.build-backend-arm64.result == 'success' && needs.image-audit.result == 'success'
+    if: always() && needs.build-backend-amd64.result == 'success' && needs.build-backend-arm64.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1405,8 +1767,7 @@ jobs:
       - determine-builds
       - build-model-server-amd64
       - build-model-server-arm64
-      - image-audit
-    if: always() && needs.build-model-server-amd64.result == 'success' && needs.build-model-server-arm64.result == 'success' && needs.image-audit.result == 'success'
+    if: always() && needs.build-model-server-amd64.result == 'success' && needs.build-model-server-arm64.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1492,7 +1853,7 @@ jobs:
     needs:
       - determine-builds
       - audit-gate
-    if: needs.determine-builds.outputs.is-test-run == 'true' || (needs.determine-builds.outputs.is-stable == 'true' || needs.determine-builds.outputs.is-beta-standalone == 'true' || needs.determine-builds.outputs.is-cloud-tag == 'true' || startsWith(github.ref_name, 'nightly-latest') || github.ref_name == 'edge')
+    if: needs.determine-builds.outputs.build-sandbox == 'true'
     runs-on: ubuntu-slim
     timeout-minutes: 10
     environment: release
@@ -1506,6 +1867,15 @@ jobs:
       REGISTRY_IMAGE: onyxdotapp/sandbox
       SANDBOX_CONTEXT: backend/onyx/server/features/build/sandbox/image
     steps:
+      - name: Require a passing sandbox audit before sandbox publication
+        env:
+          SANDBOX_STATUS: ${{ needs.audit-gate.outputs.sandbox-status }}
+        run: |
+          if [ "$SANDBOX_STATUS" != success ]; then
+            echo "::error::Sandbox image audit failed. See audit-gate for the policy and vulnerability findings."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
@@ -1710,8 +2080,7 @@ jobs:
       - prepare-sandbox
       - build-sandbox-amd64
       - build-sandbox-arm64
-      - image-audit
-    if: always() && needs.prepare-sandbox.result == 'success' && needs.image-audit.result == 'success' && (needs.prepare-sandbox.outputs.context-exists == 'true' || (needs.build-sandbox-amd64.result == 'success' && needs.build-sandbox-arm64.result == 'success'))
+    if: always() && needs.prepare-sandbox.result == 'success' && (needs.prepare-sandbox.outputs.context-exists == 'true' || (needs.build-sandbox-amd64.result == 'success' && needs.build-sandbox-arm64.result == 'success'))
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1879,170 +2248,51 @@ jobs:
             -f event_type=new-cloud-image \
             -F "client_payload[version]=${VERSION}"
 
-  # Scan each freshly built image (amd64 digest) via `ods audit image`, reusing
-  # osv-scanner and the shared S3 allowlist from the dependency `audit-gate`.
-  # Runs before merge-* and every merge-* depends on it, so an unsuppressed
-  # CRITICAL blocks the public tags. SARIF goes to the Security tab regardless.
-  image-audit:
-    needs:
-      - determine-builds
-      - build-web-amd64
-      - build-web-cloud-amd64
-      - build-backend-amd64
-      - build-model-server-amd64
+  # Production docs follow the latest stable release (see docs-publish.yml).
+  publish-docs:
+    needs: determine-builds
     if: >-
-      always() && !cancelled() &&
-      (needs.build-web-amd64.result == 'success' ||
-       needs.build-web-cloud-amd64.result == 'success' ||
-       needs.build-backend-amd64.result == 'success' ||
-       needs.build-model-server-amd64.result == 'success')
-    runs-on:
-      - runs-on
-      # amd64 to match the images scanned: `ods audit image` uses the docker CLI,
-      # which won't pull an amd64 image onto an arm64 host.
-      - runner=2cpu-linux-x64
-      # osv-scanner pulls the image and writes a full `docker save` tar (~2x its
-      # size); size the root volume up so large images don't fill the disk.
-      - volume=60gb
-      - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
-      - extras=ecr-cache
+      needs.determine-builds.outputs.is-latest == 'true'
+      && needs.determine-builds.outputs.is-test-run != 'true'
     permissions:
-      contents: read # checkout + uv project context
-      id-token: write # OIDC for fetching the S3 allowlist
-      security-events: write # SARIF uploads
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - component: web
-            registry-image: onyxdotapp/onyx-web-server
-          - component: web-cloud
-            registry-image: onyxdotapp/onyx-web-server
-          - component: backend
-            registry-image: onyxdotapp/onyx-backend
-          - component: model-server
-            registry-image: onyxdotapp/onyx-model-server
+      contents: read
+    uses: ./.github/workflows/docs-publish.yml
+    with:
+      tag: ${{ github.ref_name }}
+    # Environment secrets reach a reusable workflow only when the caller passes them.
+    secrets: inherit # zizmor: ignore[secrets-inherit] docs-publish.yml reads only its release-environment secrets
+
+  # A failed audit usually means a new advisory, so the CVE Alerts run opens
+  # its tracking issue, fix PR, and Slack post. Every release tag also gets a
+  # run once its images are published, since a release branch has no schedule
+  # and that run is what closes the branch's issues after a fix ships.
+  dispatch-cve-alerts:
+    needs: [determine-builds, audit-gate, merge-web, merge-backend, merge-model-server]
+    if: >-
+      always() && !cancelled() && needs.determine-builds.outputs.is-test-run != 'true' &&
+      (needs.audit-gate.result == 'failure' || needs.audit-gate.outputs.sandbox-status == 'failure' || startsWith(github.ref_name, 'v'))
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: write # dispatch cve-alerts.yml
+      contents: read # look up the release branch
     steps:
-      - name: Check if this scan should run
-        id: should-run
-        run: |
-          case "$COMPONENT" in
-            web) RESULT="$BUILD_WEB" ;;
-            web-cloud) RESULT="$BUILD_WEB_CLOUD" ;;
-            backend) RESULT="$BUILD_BACKEND" ;;
-            model-server) RESULT="$BUILD_MODEL_SERVER" ;;
-          esac
-          if [ "$RESULT" == "success" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+      # A release tag's findings live on its release branch, so the run scans
+      # that branch. Anything else, such as the nightly tag, scans main.
+      - name: Dispatch CVE Alerts
         env:
-          COMPONENT: ${{ matrix.component }}
-          BUILD_WEB: ${{ needs.build-web-amd64.result }}
-          BUILD_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.result }}
-          BUILD_BACKEND: ${{ needs.build-backend-amd64.result }}
-          BUILD_MODEL_SERVER: ${{ needs.build-model-server-amd64.result }}
-
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
-        if: steps.should-run.outputs.run == 'true'
-
-      - name: Checkout
-        if: steps.should-run.outputs.run == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Setup uv
-        if: steps.should-run.outputs.run == 'true'
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
-        with:
-          version: "0.11.25"
-          enable-cache: false
-
-      - name: Install ods from uv.lock
-        if: steps.should-run.outputs.run == 'true'
-        run: uv sync --frozen --no-install-project --only-group ods
-
-      - name: Configure AWS credentials
-        if: steps.should-run.outputs.run == 'true'
-        continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6.2.3
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
-
-      - name: Login to Docker Hub
-        if: steps.should-run.outputs.run == 'true'
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      # Scan the by-digest image the build pushed, before merge-* tags it (same
-      # content in the ECR cache for test runs).
-      - name: Determine scan image
-        if: steps.should-run.outputs.run == 'true'
-        id: scan-image
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
         run: |
-          case "$COMPONENT" in
-            web) DIGEST="$DIGEST_WEB" ;;
-            web-cloud) DIGEST="$DIGEST_WEB_CLOUD" ;;
-            backend) DIGEST="$DIGEST_BACKEND" ;;
-            model-server) DIGEST="$DIGEST_MODEL_SERVER" ;;
-          esac
-          if [ "$IS_TEST_RUN" == "true" ]; then
-            echo "image=${RUNS_ON_ECR_CACHE}@${DIGEST}" >> "$GITHUB_OUTPUT"
-          else
-            echo "image=docker.io/${REGISTRY_IMAGE}@${DIGEST}" >> "$GITHUB_OUTPUT"
+          ref=main
+          if [[ "${TAG}" =~ ^v([0-9]+\.[0-9]+)\. ]] && gh api "repos/${REPO}/branches/release/v${BASH_REMATCH[1]}" > /dev/null 2>&1; then
+            ref="release/v${BASH_REMATCH[1]}"
           fi
-        env:
-          COMPONENT: ${{ matrix.component }}
-          IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
-          REGISTRY_IMAGE: ${{ matrix.registry-image }}
-          DIGEST_WEB: ${{ needs.build-web-amd64.outputs.digest }}
-          DIGEST_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.outputs.digest }}
-          DIGEST_BACKEND: ${{ needs.build-backend-amd64.outputs.digest }}
-          DIGEST_MODEL_SERVER: ${{ needs.build-model-server-amd64.outputs.digest }}
+          gh workflow run cve-alerts.yml --repo "${REPO}" --ref "${ref}" -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
 
-      - name: Run image vulnerability audit
-        if: steps.should-run.outputs.run == 'true'
-        # Exits non-zero on unsuppressed CRITICAL (gates the release). --format
-        # writes SARIF to stdout (redirected to the file for the Security tab
-        # upload) and the human-readable report + runbook to stderr, so the CI log
-        # shows which advisories blocked and how to resolve/suppress them. On a
-        # hard scan failure nothing is written, so seed a valid empty SARIF to keep
-        # the always() upload below from choking.
-        run: |
-          uv run --no-sync ods audit image "$IMAGE" \
-            --fail-on=critical --format=sarif,text > image-audit.sarif || status=$?
-          if [ ! -s image-audit.sarif ]; then
-            # $schema is a literal SARIF key, not a shell variable.
-            # shellcheck disable=SC2016
-            echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > image-audit.sarif
-          fi
-          exit "${status:-0}"
-        env:
-          IMAGE: ${{ steps.scan-image.outputs.image }}
-
-      # Rolling main-HEAD builds (nightly-latest / edge) map to refs/heads/main so
-      # the Security tab stays authoritative for main and alerts auto-resolve on
-      # later main builds. Test runs (manual workflow_dispatch) upload against their
-      # own ref/sha instead, so the scan + upload can be verified without polluting
-      # main's alerts. Release/beta tags sit on older commits — they still gate, they
-      # just don't upload.
-      - name: Upload audit results to GitHub Security tab
-        if: >-
-          always() && steps.should-run.outputs.run == 'true' &&
-          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
-           needs.determine-builds.outputs.is-test-run == 'true')
-        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
-        with:
-          sarif_file: image-audit.sarif
-          category: image-audit-${{ matrix.component }}
-          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
-          sha: ${{ github.sha }}
 
   notify-slack-on-failure:
     needs:
@@ -2050,6 +2300,7 @@ jobs:
       - audit-gate
       - create-release
       - build-desktop
+      - publish-desktop-update-feed
       - build-web-amd64
       - build-web-arm64
       - merge-web
@@ -2066,8 +2317,7 @@ jobs:
       - build-sandbox-amd64
       - build-sandbox-arm64
       - merge-sandbox
-      - image-audit
-    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure' || needs.image-audit.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.publish-desktop-update-feed.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
@@ -2091,6 +2341,9 @@ jobs:
           fi
           if [ "${NEEDS_BUILD_DESKTOP_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-desktop\\n"
+          fi
+          if [ "${NEEDS_PUBLISH_DESKTOP_UPDATE_FEED_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• publish-desktop-update-feed\\n"
           fi
           if [ "${NEEDS_BUILD_WEB_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-amd64\\n"
@@ -2147,6 +2400,7 @@ jobs:
           NEEDS_AUDIT_GATE_RESULT: ${{ needs.audit-gate.result }}
           NEEDS_CREATE_RELEASE_RESULT: ${{ needs.create-release.result }}
           NEEDS_BUILD_DESKTOP_RESULT: ${{ needs.build-desktop.result }}
+          NEEDS_PUBLISH_DESKTOP_UPDATE_FEED_RESULT: ${{ needs.publish-desktop-update-feed.result }}
           NEEDS_BUILD_WEB_AMD64_RESULT: ${{ needs.build-web-amd64.result }}
           NEEDS_BUILD_WEB_ARM64_RESULT: ${{ needs.build-web-arm64.result }}
           NEEDS_MERGE_WEB_RESULT: ${{ needs.merge-web.result }}

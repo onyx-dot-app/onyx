@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { InputSingleSelect } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import { PersonaOwnerGroup } from "@/lib/agents/types";
 import { MinimalUserSnapshot } from "@/lib/types";
-import { Tag, Text } from "@opal/components";
+import { Badge, Text } from "@opal/components";
 import { SvgUser, SvgUsers } from "@opal/icons";
 
 export type TransferOwnershipTarget =
@@ -47,7 +47,7 @@ export function TransferOwnershipView({
     // Only sync the field when a real selection arrives. A null target comes
     // from the user typing to change the selection, where their input must stand.
     if (selectedTarget) {
-      setInputValue(selectedTarget.label);
+      setInputValue(selectedTarget.value);
     }
   }, [selectedTarget]);
 
@@ -58,14 +58,14 @@ export function TransferOwnershipView({
 
     const userOptions = users.map((user) => ({
       value: `user-${user.id}`,
-      label: user.email,
+      title: user.email,
       description: ownerUserId === user.id ? currentOwnerLabel : undefined,
       disabled: ownerUserId === user.id,
     }));
 
     const groupOptions = groups.map((group) => ({
       value: `group-${group.id}`,
-      label: group.name,
+      title: group.name,
       description: ownerGroupId === group.id ? currentOwnerLabel : undefined,
       disabled: ownerGroupId === group.id,
     }));
@@ -82,7 +82,7 @@ export function TransferOwnershipView({
 
     if (value.startsWith("user-")) {
       onSelectedTargetChange({
-        label: selectedOption.label,
+        label: selectedOption.title,
         type: "user",
         value: value as `user-${string}`,
       });
@@ -90,7 +90,7 @@ export function TransferOwnershipView({
     }
 
     onSelectedTargetChange({
-      label: selectedOption.label,
+      label: selectedOption.title,
       type: "group",
       value: value as `group-${number}`,
     });
@@ -103,7 +103,7 @@ export function TransferOwnershipView({
           {t("transferOwnership.targetInput.label")}
         </Text>
 
-        <InputSingleSelect
+        <InputSingleComboBox
           onChange={(event) => {
             setInputValue(event.target.value);
             onSelectedTargetChange(null);
@@ -130,7 +130,10 @@ export function TransferOwnershipView({
           </div>
 
           {selectedTarget.type === "group" ? (
-            <Tag color="gray" title={t("transferOwnership.groupTag.label")} />
+            <Badge
+              color="default"
+              title={t("transferOwnership.groupTag.label")}
+            />
           ) : null}
         </div>
       ) : null}

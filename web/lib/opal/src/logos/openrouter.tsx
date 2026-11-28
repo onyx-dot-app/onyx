@@ -1,6 +1,6 @@
 import type { IconProps } from "@opal/types";
 
-const SvgOpenrouter = ({ size, ...props }: IconProps) => (
+const SvgOpenRouter = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -19,4 +19,4 @@ const SvgOpenrouter = ({ size, ...props }: IconProps) => (
   </svg>
 );
 
-export default SvgOpenrouter;
+export default SvgOpenRouter;

@@ -5,6 +5,13 @@ export const AUTH_PATH_PREFIX = "/auth";
 
 export const LOGIN_PATH = "/auth/login";
 
+export const SIGNUP_PATH = "/auth/signup";
+
+export const AUTH_ERROR_PATH = "/auth/error";
+
+/** Playground: the person chose to start a new team on /auth/error. */
+export const START_NEW_TEAM_PARAM = "start_new_team";
+
 /** Stamped by the proxy with the request path and query, since layouts
  * cannot read the URL; requireAuth() hands it back as the login `next`. */
 export const ORIGINAL_PATH_HEADER = "x-onyx-original-path";
@@ -33,6 +40,26 @@ export function loginPath({
   }
   const query = params.toString();
   return query ? `${LOGIN_PATH}?${query}` : LOGIN_PATH;
+}
+
+type SignupPath = typeof SIGNUP_PATH | `${typeof SIGNUP_PATH}?${string}`;
+
+export function signupPath({
+  startNewTeam = false,
+}: { startNewTeam?: boolean } = {}): SignupPath {
+  return startNewTeam
+    ? `${SIGNUP_PATH}?${START_NEW_TEAM_PARAM}=true`
+    : SIGNUP_PATH;
+}
+
+type AuthErrorPath =
+  | typeof AUTH_ERROR_PATH
+  | `${typeof AUTH_ERROR_PATH}?${string}`;
+
+/** The error page, showing `error` (a known code or a sentence) if given. */
+export function authErrorPath(error?: string | null): AuthErrorPath {
+  if (!error) return AUTH_ERROR_PATH;
+  return `${AUTH_ERROR_PATH}?${new URLSearchParams({ error }).toString()}`;
 }
 
 /**

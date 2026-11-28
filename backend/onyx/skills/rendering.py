@@ -1,25 +1,50 @@
 """Render dynamic skill templates for the per-user skills fileset."""
 
 import re
+from collections.abc import Collection, Mapping
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource, DocumentSourceDescription
 from onyx.db.connector import _INTERNAL_ONLY_SOURCES
-from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
-from onyx.db.enums import EndpointPolicy, ExternalAppType
-from onyx.db.models import User
+from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
+    get_connector_credential_pairs_for_user,
+)
+from onyx.db.enums import ExternalAppType
+from onyx.db.external_app import get_external_app_by_id
+from onyx.db.integration import get_integration_by_kind_row
+from onyx.db.models import ExternalApp, Integration, User
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
-    action_policy_views,
+    get_endpoint_catalog,
+    get_provider_for_app,
     uses_cloud_scope,
     withheld_on_cloud,
 )
+from onyx.integrations.connections import preset_organization_values
+from onyx.integrations.policy import admin_blocked_actions
+from onyx.server.features.build.configs import (
+    SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
+from onyx.skills.built_in import iter_builtin_skill_files
+from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
+from onyx.tools.tool_name import preset_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_SKILL_TEMPLATE_NAME = f"{SKILL_MD_NAME}{TEMPLATE_SUFFIX}"
+
 ACTION_AVAILABILITY_PLACEHOLDER = "{{ACTION_AVAILABILITY_SECTION}}"
+
+# ``{{APP:<key>}}`` carries a value the provider resolved from the app's own
+# configuration. An unknown key renders as ``_UNCONFIGURED_VALUE`` so a
+# half-configured app says so rather than failing the push.
+_APP_VALUE_RE = re.compile(r"\{\{APP:([A-Za-z0-9_]+)\}\}")
+_UNCONFIGURED_VALUE = "(not configured — ask an admin to finish setting up this app)"
 
 # ``{{#IF_CLOUD_SCOPE}}`` blocks render only on cloud (``uses_cloud_scope``);
 # ``{{^IF_CLOUD_SCOPE}}`` (mustache-style inverted) only elsewhere. Markers
@@ -36,6 +61,10 @@ _CLOUD_DESCRIPTION_RE = re.compile(
 )
 _DESCRIPTION_RE = re.compile(r"^description:[^\n]*\n", re.MULTILINE)
 
+# Claude Code replaces this in a skill's text with the skill's folder. OpenCode
+# does not, so bash expands it to an empty string.
+CLAUDE_SKILL_DIR_PLACEHOLDER = "${CLAUDE_SKILL_DIR}"
+
 
 def build_available_sources_section(
     db_session: Session,
@@ -45,7 +74,7 @@ def build_available_sources_section(
     cc_pairs = get_connector_credential_pairs_for_user(
         db_session,
         user,
-        get_editable=False,
+        access_level=CCPairAccessLevel.READ,
         eager_load_connector=True,
     )
 
@@ -99,21 +128,20 @@ def render_company_search_skill(
 
 def build_action_availability_section(
     app_type: ExternalAppType,
-    stored: dict[str, EndpointPolicy],
+    blocked: Collection[str],
 ) -> str:
     """The warning listing the app's unavailable actions — cloud-withheld plus
-    the ``DENY`` entries from ``stored`` (the admin's per-action overrides) —
-    or "" when none apply. Available actions are omitted: the skill body
-    already documents those."""
-    # Cloud-withheld actions never reach the filtered catalog, so the DENY
+    the actions the admin blocked — or "" when none apply. Available actions
+    are omitted: the skill body already documents those."""
+    # Cloud-withheld actions never reach the filtered catalog, so the blocked
     # loop below can't see them.
     unavailable: list[str] = [
         endpoint.normalised_name for endpoint in withheld_on_cloud(app_type)
     ]
     unavailable.extend(
-        view.normalised_name
-        for view in action_policy_views(app_type, stored)
-        if view.state == EndpointPolicy.DENY
+        endpoint.normalised_name
+        for endpoint in get_endpoint_catalog(app_type)
+        if endpoint.id.value in blocked
     )
     if not unavailable:
         return ""
@@ -121,14 +149,62 @@ def build_action_availability_section(
     return "\n".join([header, "", *(f"- {name}" for name in unavailable)])
 
 
+def build_app_tools_section(integration_id: int) -> str:
+    """How the commands of the skill and the chat tools of the app divide the
+    work. A chat has one tool for each action of the app. A tool, and a
+    command that exec_command waits on, can ask the user for approval."""
+    prefix = preset_tool_name(integration_id, "")
+    client_timeout = (
+        SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS
+    )
+    return "\n".join(
+        [
+            f"When you have tools whose names start with `{prefix}`, each one "
+            "is one action of this app:",
+            "",
+            "- Use the tool for a single call. The tool asks the user for "
+            "approval when the action needs it.",
+            "- Use the commands below in a script for work with many calls. "
+            "When a request of the script needs approval, the user sees an "
+            "approval card while exec_command waits on the script, and the "
+            "request waits for the decision for up to "
+            f"**{SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS} seconds**. Set a client "
+            f"timeout of **at least {client_timeout} seconds** so you don't "
+            "give up before the user decides. A rejected or expired request "
+            "fails with a 403.",
+            "- A request that needs approval from a background process fails "
+            "with `approval_needs_tool`. Do not retry it in the background. "
+            "Run the script in the foreground, or send the request through "
+            "the tool that the error names.",
+        ]
+    )
+
+
+def resolve_skill_dir_placeholder(skill_md: str, skill_dir: str) -> str:
+    """Replace each ``${CLAUDE_SKILL_DIR}`` with the skill's absolute folder."""
+    return skill_md.replace(CLAUDE_SKILL_DIR_PLACEHOLDER, skill_dir)
+
+
+def substitute_app_values(template: str, values: Mapping[str, str]) -> str:
+    """Fill ``{{APP:<key>}}`` from ``values``; an unknown or blank key renders
+    as ``_UNCONFIGURED_VALUE`` so a half-configured app says so."""
+    return _APP_VALUE_RE.sub(
+        lambda match: values.get(match.group(1)) or _UNCONFIGURED_VALUE, template
+    )
+
+
 def render_external_app_skill(
     template: str,
     app_type: ExternalAppType,
-    stored: dict[str, EndpointPolicy],
+    blocked: Collection[str],
+    app_values: Mapping[str, str] | None = None,
+    integration_id: int | None = None,
 ) -> str:
     """Pure template rendering for an external-app SKILL.md: apply the cloud
-    description override, resolve the cloud-scope blocks, then fill the
-    action-availability placeholder."""
+    description override, resolve the cloud-scope blocks, substitute the
+    provider's ``{{APP:<key>}}`` values, then fill the action-availability
+    placeholder with the chat tools of the app (``integration_id``) and the
+    unavailable actions."""
     is_cloud = uses_cloud_scope(app_type)
 
     cloud_description = _CLOUD_DESCRIPTION_RE.search(template)
@@ -144,7 +220,15 @@ def render_external_app_skill(
         return match.group(2) if keep else ""
 
     template = _CLOUD_SCOPE_BLOCK_RE.sub(_resolve_block, template)
-    section = build_action_availability_section(app_type, stored)
+    template = substitute_app_values(template, app_values or {})
+    section = "\n\n".join(
+        part
+        for part in (
+            build_app_tools_section(integration_id) if integration_id else "",
+            build_action_availability_section(app_type, blocked),
+        )
+        if part
+    )
     if section:
         rendered = template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
     else:
@@ -155,4 +239,87 @@ def render_external_app_skill(
         # Fail loudly rather than ship unresolved markup to the agent.
         offending = next(line for line in rendered.splitlines() if "{{" in line)
         raise ValueError(f"Unresolved skill-template markup: {offending!r}")
+    return rendered
+
+
+def _app_template_values(
+    external_app: ExternalApp | None, organization_values: Mapping[str, str]
+) -> dict[str, str]:
+    """The provider's ``{{APP:<key>}}`` values for this app row, or ``{}`` when
+    there is no row or its config no longer resolves — rendering is a read-only
+    projection, so a rejected config leaves placeholders unconfigured."""
+    if external_app is None:
+        return {}
+    provider = get_provider_for_app(external_app)
+    if provider is None:
+        return {}
+    # Only public fields may enter files sent to a sandbox or shown in previews.
+    public = {
+        field.key: organization_values.get(field.key, "")
+        for field in provider.spec.descriptor.required_org_credential_fields
+        if not field.secret
+    }
+    try:
+        return provider.skill_template_values(public)
+    except OnyxError:
+        logger.warning(
+            "Could not resolve app config for external_app %s; rendering its "
+            "skill with unconfigured placeholders",
+            external_app.id,
+        )
+        return {}
+
+
+def render_external_app_files(
+    db_session: Session,
+    external_app_id: int | None,
+    app_type: ExternalAppType,
+    source_dir: Path,
+) -> dict[str, str]:
+    """Every rendered file for an external-app built-in, keyed by its path in
+    the sandbox: ``SKILL.md`` plus any other ``*.template`` sibling, which is
+    how a bundled helper gets the connected account baked in rather than taking
+    it as an argument it could only ever be given one value for.
+
+    ``external_app_id`` None renders unconfigured placeholders."""
+    external_app = (
+        get_external_app_by_id(db_session, external_app_id)
+        if external_app_id is not None
+        else None
+    )
+    integration = (
+        get_integration_by_kind_row(
+            Integration.external_app_id, external_app.id, db_session
+        )
+        if external_app is not None
+        else None
+    )
+    integration_id = integration.id if integration is not None else None
+    blocked = (
+        admin_blocked_actions(db_session, integration_id)
+        if integration_id is not None
+        else set()
+    )
+    values = _app_template_values(
+        external_app,
+        (
+            preset_organization_values(integration_id, db_session)
+            if integration_id is not None
+            else {}
+        ),
+    )
+    rendered = {
+        SKILL_MD_NAME: render_external_app_skill(
+            (source_dir / _SKILL_TEMPLATE_NAME).read_text(),
+            app_type,
+            blocked,
+            values,
+            integration_id,
+        )
+    }
+    for path in iter_builtin_skill_files(source_dir):
+        if path.suffix != TEMPLATE_SUFFIX or path == source_dir / _SKILL_TEMPLATE_NAME:
+            continue
+        name = path.relative_to(source_dir).with_suffix("").as_posix()
+        rendered[name] = substitute_app_values(path.read_text(), values)
     return rendered

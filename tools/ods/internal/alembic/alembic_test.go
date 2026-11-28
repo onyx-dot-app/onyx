@@ -1,15 +1,19 @@
 package alembic
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 
+	log "github.com/sirupsen/logrus"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
 
@@ -109,6 +113,7 @@ func TestFindAlembicBinary(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindAlembicBinary failed: %v", err)
 		}
+		want, _ = filepath.EvalSymlinks(want)
 		if got != want {
 			t.Fatalf("expected %q, got %q", want, got)
 		}
@@ -141,63 +146,118 @@ func TestFindAlembicBinary(t *testing.T) {
 	})
 }
 
-func TestRun_locallyWhenPostgresHostIsSet(t *testing.T) {
+func (f fixture) target() devstack.Target {
+	return devstack.Target{Root: f.root, Project: "onyx", Mode: devstack.Isolated}
+}
+
+func TestRun_explicitNetworkHostNeverUsesDocker(t *testing.T) {
 	f := newFixture(t)
 	t.Setenv("POSTGRES_HOST", "db.test")
+	t.Setenv("POSTGRES_PORT", "26432")
 	t.Setenv("POSTGRES_USER", "alice")
-	alembic := f.venvAlembic(t, "")
+	binary := f.venvAlembic(t, "")
 	docker := f.docker(t, "exit 1")
-
-	if err := Upgrade("", SchemaPrivate); err != nil {
-		t.Fatalf("Upgrade failed: %v", err)
+	target := f.target()
+	target.Ports = map[string]int{"POSTGRES_HOST_PORT": 25432}
+	if err := Upgrade(target, "", SchemaPrivate); err != nil {
+		t.Fatal(err)
 	}
-
-	assertLines(t, calls(t, alembic), []string{"-n schema_private upgrade head"})
-	if got := calls(t, docker); got != nil {
-		t.Fatalf("expected no docker calls with POSTGRES_HOST set, got %q", got)
+	assertLines(t, calls(t, binary), []string{"-n schema_private upgrade head"})
+	if got := calls(t, docker); len(got) != 0 {
+		t.Fatalf("network target selected Docker: %v", got)
 	}
-	backend, err := filepath.EvalSymlinks(filepath.Join(f.root, "backend"))
+	env, err := os.ReadFile(binary + ".env")
 	if err != nil {
 		t.Fatal(err)
 	}
-	env, err := os.ReadFile(alembic + ".env")
+	for _, value := range []string{"host=db.test\n", "port=26432\n", "user=alice\n", "password=password\n"} {
+		if !strings.Contains(string(env), value) {
+			t.Fatalf("missing %q in private runtime environment", value)
+		}
+	}
+}
+
+func TestRun_fileNetworkHostNeverUsesDocker(t *testing.T) {
+	f := newFixture(t)
+	binary := f.venvAlembic(t, "")
+	docker := f.docker(t, "exit 1")
+	if err := os.MkdirAll(filepath.Join(f.root, ".vscode"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.root, ".vscode", ".env"), []byte("POSTGRES_HOST=remote.example\nPOSTGRES_PORT=26432\nPOSTGRES_PASSWORD=file-secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Current(f.target(), SchemaDefault); err != nil {
+		t.Fatal(err)
+	}
+	if got := calls(t, docker); len(got) != 0 {
+		t.Fatalf("file network target selected Docker: %v", got)
+	}
+	env, err := os.ReadFile(binary + ".env")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Unset variables get the postgres package defaults.
-	assertLines(t, strings.Split(strings.TrimSpace(string(env)), "\n"), []string{
-		"dir=" + backend,
-		"host=db.test",
-		"port=5432",
-		"user=alice",
-		"password=password",
-		"db=postgres",
-	})
+	if !strings.Contains(string(env), "host=remote.example\n") || !strings.Contains(string(env), "port=26432\n") {
+		t.Fatal("file network target was not preserved")
+	}
+}
+
+func TestRun_fileLoopbackAliasesUseSelectedComposePort(t *testing.T) {
+	for _, host := range []string{"localhost.", "LOCALHOST", "127.0.0.2", "127.255.255.254", "[::1]"} {
+		t.Run(host, func(t *testing.T) {
+			f := newFixture(t)
+			binary := f.venvAlembic(t, "")
+			docker := f.docker(t, `case "$1 $2 $4" in
+"inspect -f selected-relational_db-1") echo true ;;
+"port selected-relational_db-1 "*) echo 0.0.0.0:25432 ;;
+*) exit 1 ;;
+esac`)
+			if err := os.MkdirAll(filepath.Join(f.root, ".vscode"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(f.root, ".vscode", ".env"), []byte("POSTGRES_HOST="+host+"\nPOSTGRES_PORT=15432\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			target := f.target()
+			target.Project = "selected"
+			if err := Current(target, SchemaDefault); err != nil {
+				t.Fatal(err)
+			}
+			env, err := os.ReadFile(binary + ".env")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(env), "host=localhost\n") || !strings.Contains(string(env), "port=25432\n") {
+				t.Fatalf("loopback file bypassed selected Compose binding: %s", env)
+			}
+			if got := calls(t, docker); len(got) < 2 || !strings.Contains(strings.Join(got, "\n"), "selected-relational_db-1") {
+				t.Fatalf("selected project not inspected: %v", got)
+			}
+		})
+	}
 }
 
 func TestRun_commandArguments(t *testing.T) {
 	cases := []struct {
 		name string
-		run  func() error
+		run  func(devstack.Target) error
 		want string
 	}{
-		{"upgrade to a revision", func() error { return Upgrade("abc123", SchemaDefault) }, "upgrade abc123"},
-		{"downgrade", func() error { return Downgrade("-1", SchemaDefault) }, "downgrade -1"},
-		{"current", func() error { return Current(SchemaPrivate) }, "-n schema_private current"},
-		{"history", func() error { return History(SchemaDefault, false) }, "history"},
-		{"verbose history", func() error { return History(SchemaDefault, true) }, "history -v"},
+		{"upgrade", func(target devstack.Target) error { return Upgrade(target, "abc123", SchemaDefault) }, "upgrade abc123"},
+		{"downgrade", func(target devstack.Target) error { return Downgrade(target, "-1", SchemaDefault) }, "downgrade -1"},
+		{"current", func(target devstack.Target) error { return Current(target, SchemaPrivate) }, "-n schema_private current"},
+		{"history", func(target devstack.Target) error { return History(target, SchemaDefault, false) }, "history"},
+		{"verbose", func(target devstack.Target) error { return History(target, SchemaPrivate, true) }, "-n schema_private history -v"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFixture(t)
 			t.Setenv("POSTGRES_HOST", "db.test")
-			alembic := f.venvAlembic(t, "")
-
-			if err := c.run(); err != nil {
-				t.Fatalf("expected success, got %v", err)
+			binary := f.venvAlembic(t, "")
+			if err := c.run(f.target()); err != nil {
+				t.Fatal(err)
 			}
-
-			assertLines(t, calls(t, alembic), []string{c.want})
+			assertLines(t, calls(t, binary), []string{c.want})
 		})
 	}
 }
@@ -206,163 +266,249 @@ func TestRun_returnsTheAlembicExitStatus(t *testing.T) {
 	f := newFixture(t)
 	t.Setenv("POSTGRES_HOST", "db.test")
 	f.venvAlembic(t, "exit 4")
-
-	err := Current(SchemaDefault)
-
+	err := Current(f.target(), SchemaDefault)
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 4 {
-		t.Fatalf("expected exit status 4, got %v", err)
+		t.Fatalf("expected exit 4, got %v", err)
 	}
 }
 
-func TestRun_locallyFailures(t *testing.T) {
-	t.Run("outside a repository", func(t *testing.T) {
-		f := newFixture(t)
-		t.Setenv("POSTGRES_HOST", "db.test")
-		writeScript(t, filepath.Join(f.binDir, "alembic"), "")
-		outside := t.TempDir()
-		t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(outside))
-		t.Chdir(outside)
-
-		err := Current(SchemaDefault)
-
-		if err == nil || !strings.HasPrefix(err.Error(), "failed to find backend directory: ") {
-			t.Fatalf("expected a backend directory error, got %v", err)
-		}
-	})
-
-	t.Run("without alembic", func(t *testing.T) {
-		newFixture(t)
-		t.Setenv("POSTGRES_HOST", "db.test")
-
-		err := Current(SchemaDefault)
-
-		if err == nil || !strings.HasPrefix(err.Error(), "alembic not found") {
-			t.Fatalf("expected an alembic not found error, got %v", err)
-		}
-	})
+func TestRun_usesTheSelectedRootEvenOutsideTheCheckout(t *testing.T) {
+	f := newFixture(t)
+	t.Setenv("POSTGRES_HOST", "db.test")
+	binary := f.venvAlembic(t, "")
+	t.Chdir(t.TempDir())
+	if err := Current(f.target(), SchemaDefault); err != nil {
+		t.Fatal(err)
+	}
+	assertLines(t, calls(t, binary), []string{"current"})
 }
 
-func TestRun_withoutPostgresHostRunsLocallyWhenThePortIsReachable(t *testing.T) {
-	// Without a running project container, one lookup tries every known
-	// container name and then docker ps.
-	search := []string{
-		"inspect -f {{.State.Running}} onyx-relational_db-1",
-		"inspect -f {{.State.Running}} onyx_postgres",
-		"inspect -f {{.State.Running}} onyx-relational_db-1",
-		"inspect -f {{.State.Running}} onyx-stack-relational_db-1",
-		"inspect -f {{.State.Running}} docker_compose-relational_db-1",
-		"inspect -f {{.State.Running}} relational_db",
-		"ps --format {{.Names}}\t{{.Image}}",
+func TestRun_withoutAlembic(t *testing.T) {
+	f := newFixture(t)
+	t.Setenv("POSTGRES_HOST", "db.test")
+	if err := Current(f.target(), SchemaDefault); err == nil || !strings.Contains(err.Error(), "alembic not found") {
+		t.Fatalf("expected missing binary error, got %v", err)
 	}
-	cases := []struct {
-		name   string
-		docker string
-		want   []string
-	}{
-		{
-			name: "exposed port",
-			docker: `case "$1" in
+}
+
+func TestRun_usesTheActualLeasedPostgresPort(t *testing.T) {
+	f := newFixture(t)
+	binary := f.venvAlembic(t, "")
+	f.docker(t, `case "$1" in
 inspect) echo true ;;
-port) echo 0.0.0.0:5432 ;;
-esac`,
-			// shouldUseDockerExec and the host detection both look the port up.
-			want: []string{
-				"inspect -f {{.State.Running}} onyx-relational_db-1",
-				"port onyx-relational_db-1 5432",
-				"inspect -f {{.State.Running}} onyx-relational_db-1",
-				"port onyx-relational_db-1 5432",
-			},
-		},
-		{
-			name: "no postgres container",
-			docker: `case "$1" in
-inspect) echo false ;;
-esac`,
-			// shouldUseDockerExec and the host detection both search.
-			want: slices.Concat(search, search),
-		},
+port) echo 0.0.0.0:25432 ;;
+esac`)
+	if err := os.MkdirAll(filepath.Join(f.root, ".vscode"), 0755); err != nil {
+		t.Fatal(err)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			f := newFixture(t)
-			alembic := f.venvAlembic(t, "")
-			docker := f.docker(t, c.docker)
-
-			if err := Current(SchemaDefault); err != nil {
-				t.Fatalf("Current failed: %v", err)
-			}
-
-			assertLines(t, calls(t, alembic), []string{"current"})
-			assertLines(t, calls(t, docker), c.want)
-			for _, call := range calls(t, docker) {
-				if strings.HasPrefix(call, "exec") {
-					t.Fatalf("expected alembic to run locally, got docker %q", call)
-				}
-			}
-			env, err := os.ReadFile(alembic + ".env")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !strings.Contains(string(env), "host=localhost\n") {
-				t.Fatalf("expected POSTGRES_HOST=localhost, got:\n%s", env)
-			}
-		})
+	if err := os.WriteFile(filepath.Join(f.root, ".vscode", ".env"), []byte("POSTGRES_PORT=5432\nPOSTGRES_PASSWORD=file-secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	target := f.target()
+	target.Ports = map[string]int{"POSTGRES_HOST_PORT": 15432}
+	if err := Current(target, SchemaDefault); err != nil {
+		t.Fatal(err)
+	}
+	env, err := os.ReadFile(binary + ".env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(env), "port=25432\n") || !strings.Contains(string(env), "password=file-secret\n") {
+		t.Fatal("leased port or file credentials were not passed to Alembic")
+	}
+	if target.Ports["POSTGRES_HOST_PORT"] != 15432 {
+		t.Fatal("Run mutated its caller's target")
 	}
 }
 
-func TestRun_viaDockerExecWhenThePortIsHidden(t *testing.T) {
-	cases := []struct {
-		name      string
-		container string
-	}{
-		{"project container", "onyx-api_server-1"},
-		{"legacy container", "api_server"},
+func TestFindAlembicContainer_rejectsUnrelatedAPIContainers(t *testing.T) {
+	f := newFixture(t)
+	docker := f.docker(t, `case "$4" in api_server|onyx-stack-api_server-1) echo true ;; *) exit 1 ;; esac`)
+	if container, err := findAlembicContainer("onyx"); err == nil {
+		t.Fatalf("selected unrelated API container %q", container)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			f := newFixture(t)
-			alembic := f.venvAlembic(t, "")
-			docker := f.docker(t, `case "$1 $4" in
-"inspect onyx-relational_db-1"|"inspect `+c.container+`") echo true ;;
-inspect*) echo "Error: No such object" >&2; exit 1 ;;
+	assertLines(t, calls(t, docker), []string{"inspect -f {{.State.Running}} onyx-api_server-1"})
+}
+
+func TestRun_viaSelectedDockerExecWhenPortIsHidden(t *testing.T) {
+	f := newFixture(t)
+	binary := f.venvAlembic(t, "")
+	docker := f.docker(t, `case "$1 $4" in
+"inspect selected-relational_db-1"|"inspect selected-api_server-1") echo true ;;
+inspect*) echo false ;;
 port*) exit 1 ;;
 exec*) exit 6 ;;
 esac`)
+	target := f.target()
+	target.Project = "selected"
+	err := History(target, SchemaPrivate, true)
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 6 {
+		t.Fatalf("expected Docker exit 6, got %v", err)
+	}
+	got := calls(t, docker)
+	if !strings.Contains(got[len(got)-1], "selected-api_server-1 alembic -n schema_private history -v") {
+		t.Fatalf("wrong Alembic target: %v", got)
+	}
+	if !strings.Contains(got[len(got)-1], "POSTGRES_HOST=selected-relational_db-1 -e POSTGRES_PORT=5432") {
+		t.Fatalf("container fallback did not pin the selected database: %v", got)
+	}
+	if len(calls(t, binary)) != 0 {
+		t.Fatal("local Alembic ran for a hidden port")
+	}
+}
 
-			err := History(SchemaPrivate, true)
-
-			var exitErr *exec.ExitError
-			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 6 {
-				t.Fatalf("expected the docker exec status 6, got %v", err)
+func TestRun_dockerFallbackKeepsPasswordOutOfArguments(t *testing.T) {
+	for _, source := range []string{"shell", "file"} {
+		t.Run(source, func(t *testing.T) {
+			f := newFixture(t)
+			const secret = "selected-database-secret"
+			if err := os.MkdirAll(filepath.Join(f.root, ".vscode"), 0o755); err != nil {
+				t.Fatal(err)
 			}
-			got := calls(t, docker)
-			if want := "exec -i " + c.container + " alembic -n schema_private history -v"; got[len(got)-1] != want {
-				t.Fatalf("expected %q last, got %q", want, got)
+			password := secret
+			if source == "shell" {
+				password = "overridden-file-password"
+				t.Setenv("POSTGRES_PASSWORD", secret)
 			}
-			if got := calls(t, alembic); got != nil {
-				t.Fatalf("expected the local alembic not to run, got %q", got)
+			if err := os.WriteFile(filepath.Join(f.root, ".vscode", ".env"), []byte("POSTGRES_PASSWORD="+password+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			docker := f.docker(t, `case "$1 $4" in
+"inspect selected-relational_db-1"|"inspect selected-api_server-1") echo true ;;
+inspect*) echo false ;;
+port*) exit 1 ;;
+exec*) printf '%s' "$POSTGRES_PASSWORD" > "$0.password" ;;
+esac`)
+			var logs bytes.Buffer
+			logger := log.StandardLogger()
+			previous := logger.Out
+			logger.SetOutput(&logs)
+			t.Cleanup(func() { logger.SetOutput(previous) })
+			target := f.target()
+			target.Project = "selected"
+			if err := History(target, SchemaPrivate, true); err != nil {
+				t.Fatal(err)
+			}
+			arguments := strings.Join(calls(t, docker), "\n")
+			if strings.Contains(arguments, secret) || strings.Contains(logs.String(), secret) {
+				t.Fatal("database password exposed in process arguments or logs")
+			}
+			want := "exec -i -e POSTGRES_HOST=selected-relational_db-1 -e POSTGRES_PORT=5432 -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD -e POSTGRES_DB=postgres selected-api_server-1 alembic -n schema_private history -v"
+			if got := calls(t, docker); got[len(got)-1] != want {
+				t.Fatalf("Docker arguments = %q, want %q", got[len(got)-1], want)
+			}
+			data, err := os.ReadFile(docker + ".password")
+			if err != nil || string(data) != secret {
+				t.Fatalf("Docker password = %q, err = %v", data, err)
 			}
 		})
 	}
 }
 
-func TestRun_viaDockerExecWithoutAnAlembicContainer(t *testing.T) {
+func TestRun_missingSelectedDatabaseNeverUsesAnotherProject(t *testing.T) {
 	f := newFixture(t)
-	docker := f.docker(t, `case "$1 $4" in
-"inspect onyx-relational_db-1") echo true ;;
-inspect*) echo "Error: No such object" >&2; exit 1 ;;
-port*) exit 1 ;;
-esac`)
-
-	err := Upgrade("head", SchemaDefault)
-
-	if err == nil || err.Error() != "cannot connect to database" {
-		t.Fatalf("expected %q, got %v", "cannot connect to database", err)
+	binary := f.venvAlembic(t, "")
+	docker := f.docker(t, `case "$4" in onyx-relational_db-1|onyx-api_server-1) echo true ;; *) exit 1 ;; esac`)
+	target := f.target()
+	target.Project = "missing"
+	if err := Upgrade(target, "head", SchemaDefault); err == nil {
+		t.Fatal("missing project was accepted")
 	}
-	for _, call := range calls(t, docker) {
-		if strings.HasPrefix(call, "exec") {
-			t.Fatalf("expected no docker exec, got %q", call)
+	assertLines(t, calls(t, docker), []string{"inspect -f {{.State.Running}} missing-relational_db-1"})
+	if len(calls(t, binary)) != 0 {
+		t.Fatal("Alembic ran against an unknown endpoint")
+	}
+}
+
+func TestRun_rejectsUnreadableEnvironmentBeforeLaunching(t *testing.T) {
+	f := newFixture(t)
+	binary := f.venvAlembic(t, "")
+	docker := f.docker(t, "exit 1")
+	if err := os.MkdirAll(filepath.Join(f.root, ".vscode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.root, ".vscode", ".env"), []byte("POSTGRES_PASSWORD="+strings.Repeat("x", 65536)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Current(f.target(), SchemaDefault); !errors.Is(err, bufio.ErrTooLong) {
+		t.Fatalf("expected environment read error, got %v", err)
+	}
+	assertLines(t, calls(t, docker), nil)
+	assertLines(t, calls(t, binary), nil)
+}
+
+func TestRun_rejectsEnvironmentChangedDuringDiscovery(t *testing.T) {
+	f := newFixture(t)
+	binary := f.venvAlembic(t, "")
+	if err := os.MkdirAll(filepath.Join(f.root, ".vscode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	envPath := filepath.Join(f.root, ".vscode", ".env")
+	if err := os.WriteFile(envPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEST_ENV_FILE", envPath)
+	docker := f.docker(t, `case "$1" in
+inspect) echo true ;;
+port) printf '%065537d\n' 0 > "$TEST_ENV_FILE"; echo 0.0.0.0:25432 ;;
+*) exit 1 ;;
+esac`)
+	if err := Current(f.target(), SchemaDefault); !errors.Is(err, bufio.ErrTooLong) {
+		t.Fatalf("expected changed environment read error, got %v", err)
+	}
+	assertLines(t, calls(t, docker), []string{
+		"inspect -f {{.State.Running}} onyx-relational_db-1",
+		"port onyx-relational_db-1 5432",
+	})
+	assertLines(t, calls(t, binary), nil)
+}
+
+func TestRun_missingSelectedBackendNeverUsesCurrentCheckout(t *testing.T) {
+	f := newFixture(t)
+	t.Setenv("POSTGRES_HOST", "db.test")
+	binary := f.venvAlembic(t, "")
+	docker := f.docker(t, "exit 1")
+	target := f.target()
+	target.Root = t.TempDir()
+	if err := Current(target, SchemaDefault); err == nil || err.Error() != "failed to find backend directory for selected checkout" {
+		t.Fatalf("expected missing selected backend error, got %v", err)
+	}
+	assertLines(t, calls(t, binary), nil)
+	assertLines(t, calls(t, docker), nil)
+}
+
+func TestRun_hiddenPortNeverUsesUnrelatedAPIContainer(t *testing.T) {
+	f := newFixture(t)
+	binary := f.venvAlembic(t, "")
+	docker := f.docker(t, `case "$1 $4" in
+"inspect selected-relational_db-1"|"inspect onyx-api_server-1") echo true ;;
+*) exit 1 ;;
+esac`)
+	target := f.target()
+	target.Project = "selected"
+	err := Current(target, SchemaDefault)
+	want := `PostgreSQL for project "selected" has no exposed port and no selected api_server container: no running api_server container found for project "selected"`
+	if err == nil || err.Error() != want {
+		t.Fatalf("expected missing selected API error, got %v", err)
+	}
+	assertLines(t, calls(t, docker), []string{
+		"inspect -f {{.State.Running}} selected-relational_db-1",
+		"port selected-relational_db-1 5432",
+		"inspect -f {{.State.Running}} selected-api_server-1",
+	})
+	assertLines(t, calls(t, binary), nil)
+}
+
+func TestFindAlembicContainer_requiresSelectedProject(t *testing.T) {
+	f := newFixture(t)
+	docker := f.docker(t, "echo true")
+	for _, project := range []string{"", " \t\n"} {
+		container, err := findAlembicContainer(project)
+		if err == nil || err.Error() != "an Alembic project must be selected" || container != "" {
+			t.Fatalf("expected project selection error for %q, got %q, %v", project, container, err)
 		}
 	}
+	assertLines(t, calls(t, docker), nil)
 }

@@ -118,4 +118,28 @@ describe("useEscapeInterrupt", () => {
     expect(onInterrupt).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
   });
+
+  it("with `within`, handles only an Escape pressed inside that element", () => {
+    const onInterrupt = jest.fn();
+    const panel = document.createElement("div");
+    const inside = document.createElement("button");
+    panel.appendChild(inside);
+    document.body.appendChild(panel);
+    renderHook(() =>
+      useEscapeInterrupt({
+        enabled: true,
+        onInterrupt,
+        within: { current: panel },
+      })
+    );
+
+    const outside = dispatchEscape();
+    expect(onInterrupt).not.toHaveBeenCalled();
+    expect(outside.defaultPrevented).toBe(false);
+
+    act(() => {
+      inside.dispatchEvent(escapeEvent());
+    });
+    expect(onInterrupt).toHaveBeenCalledTimes(1);
+  });
 });

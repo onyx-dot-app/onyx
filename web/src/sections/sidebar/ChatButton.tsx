@@ -1,14 +1,19 @@
 "use client";
 
-import React, { useState, memo, useMemo, useEffect } from "react";
-import { useTranslations } from "next-intl";
+import React, { useState, memo, useMemo, useEffect, useRef } from "react";
+import { useFormatter, useTranslations } from "next-intl";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
-import { ChatSession } from "@/app/app/interfaces";
-import { ConfirmationModalLayout } from "@opal/layouts";
+import { ChatSession } from "@/app/app/types";
+import { ConfirmationModalLayout, Section } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
-import { Popover, PopoverMenu } from "@opal/components";
+import { cn } from "@opal/utils";
+import {
+  Dropdown,
+  type DropdownMenuItem,
+  type DropdownView,
+} from "@opal/components";
 import type { Project } from "@/lib/projects/types";
 import {
   removeChatSessionFromProject,
@@ -18,80 +23,68 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { Button, LineItemButton, SidebarTab } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
+import { Button, SidebarTab, Text, useCreateModal } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { useFocusOnMount } from "@opal/hooks";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
   shouldShowMoveModal,
   showErrorNotification,
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
+import { compactElapsed } from "@/lib/sidebar/relativeTime";
+import { useNowMinute } from "@opal/hooks";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import {
+  SvgAlertCircle,
+  SvgAlertTriangle,
+  SvgCheck,
   SvgChevronLeft,
+  SvgHelpCircle,
   SvgEdit,
   SvgFolder,
   SvgFolderIn,
   SvgFolderPlus,
+  SvgMail,
   SvgMoreHorizontal,
+  SvgRefreshCw,
   SvgShare,
   SvgTrash,
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
+import { markRecentChatShortcutTarget } from "@/lib/shortcuts/utils";
 import { usePinChatAgent } from "@/lib/agents/hooks";
+import { useChatExportMenu, useChatRunStatus } from "@/lib/chat/hooks";
+import { useUnseenRuns, type ChatRunStatus } from "@/lib/chat/runStatus";
+import type { IconFunctionComponent } from "@opal/types";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
 
-export interface PopoverSearchInputProps {
-  setShowMoveOptions: (show: boolean) => void;
-  onSearch: (term: string) => void;
-}
+const RUN_STATUS_ICONS = {
+  approval: { icon: SvgAlertTriangle, className: "stroke-status-warning-05" },
+  question: { icon: SvgHelpCircle, className: "stroke-status-warning-05" },
+  failed: { icon: SvgAlertCircle, className: "stroke-status-error-05" },
+} satisfies Record<
+  Exclude<ChatRunStatus, "working" | "done">,
+  { icon: IconFunctionComponent; className: string }
+>;
 
-export function PopoverSearchInput({
-  setShowMoveOptions,
-  onSearch,
-}: PopoverSearchInputProps) {
-  const t = useTranslations("sidebar");
-  const [searchTerm, setSearchTerm] = useState("");
-  const focusOnMount = useFocusOnMount<HTMLInputElement>();
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    onSearch(value);
-  };
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Escape") {
-      setShowMoveOptions(false);
-    }
-  };
-
-  const handleClickBackButton = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    setShowMoveOptions(false);
-    setSearchTerm("");
-  };
-
+/** The mark at the row's end for a status the user should see; none while
+ * working, as the title shimmers then. */
+function renderRunStatusMarker(
+  status: ChatRunStatus,
+  label: string
+): React.ReactNode {
+  if (status === "working") return null;
+  if (status === "done")
+    return <UnseenMarker label={label} className="mx-2 block" />;
+  const { icon: Icon, className } = RUN_STATUS_ICONS[status];
   return (
-    <div className="flex flex-row items-center">
-      <Button
-        icon={SvgChevronLeft}
-        onClick={handleClickBackButton}
-        prominence="tertiary"
-        size="sm"
-      />
-      <InputTypeIn
-        type="text"
-        value={searchTerm}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        placeholder={t("chatButton.projectSearchInput.placeholder")}
-        onClick={noProp()}
-        variant="internal"
-        ref={focusOnMount}
-      />
-    </div>
+    <Icon
+      size={16}
+      role="img"
+      aria-label={label}
+      className={cn("mx-1 shrink-0", className)}
+    />
   );
 }
 
@@ -99,29 +92,38 @@ export interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;
+  jumpShortcut?: { label: string; width: string };
 }
 
 const ChatButton = memo(
-  ({ chatSession, project, draggable = false }: ChatButtonProps) => {
+  ({
+    chatSession,
+    project,
+    draggable = false,
+    jumpShortcut,
+  }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
+    const format = useFormatter();
+    const nowMinute = useNowMinute();
     const appPosition = useAppPosition();
-    const activeSidebarTab = useAppPosition();
     const active = useMemo(
-      () =>
-        activeSidebarTab.isChat() && activeSidebarTab.chat() === chatSession.id,
-      [activeSidebarTab, chatSession.id]
+      () => appPosition.isChat() && appPosition.chat() === chatSession.id,
+      [appPosition, chatSession.id]
     );
     const mounted = useOnMount();
+    const runStatus = useChatRunStatus(chatSession.id);
     const [displayName, setDisplayName] = useState(
       chatSession.name || UNNAMED_CHAT
     );
     const [renaming, setRenaming] = useState(false);
-    const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-      useState(false);
-    const [showMoveOptions, setShowMoveOptions] = useState(false);
-    const [showShareModal, setShowShareModal] = useState(false);
+    const [regeneratingTitle, setRegeneratingTitle] = useState(false);
+    const [contextPoint, setContextPoint] = useState<{
+      x: number;
+      y: number;
+    } | null>(null);
+    const deleteModal = useCreateModal();
+    const shareModal = useCreateModal();
     const [searchTerm, setSearchTerm] = useState("");
-    const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
     const { refreshChatSessions, removeSession } = useChatSessions();
     const {
       refreshCurrentProjectDetails,
@@ -131,12 +133,29 @@ const ChatButton = memo(
       createProject,
     } = useProjectsContext();
     const pinChatAgent = usePinChatAgent();
-    const [popoverOpen, setPopoverOpen] = useState(false);
+    const { exportMenuItem } = useChatExportMenu(chatSession);
+    const markUnseen = useUnseenRuns((state) => state.markUnseen);
+    const markSeen = useUnseenRuns((state) => state.markSeen);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const optionsRef = useRef<HTMLDivElement>(null);
+    const focusOptionsOnOpen = useRef(false);
+
+    // The menu's keys are handled on its trigger, so a menu opened from the
+    // row needs focus there.
+    useEffect(() => {
+      if (!menuOpen) {
+        focusOptionsOnOpen.current = false;
+        return;
+      }
+      if (!focusOptionsOnOpen.current) return;
+      focusOptionsOnOpen.current = false;
+      optionsRef.current?.querySelector("button")?.focus();
+    }, [menuOpen]);
+    const [optionsFocused, setOptionsFocused] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
     >(null);
-    const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-      useState(false);
+    const moveCustomAgentModal = useCreateModal();
     const [navigateAfterMoveProjectId, setNavigateAfterMoveProjectId] =
       useState<number | null>(null);
 
@@ -181,129 +200,207 @@ const ChatButton = memo(
     }, [chatSession.name, mounted]);
 
     const filteredProjects = useMemo(() => {
-      if (!searchTerm) return projects;
-      const term = searchTerm.toLowerCase();
+      // Trimmed, as the list's own filter trims it.
+      const term = searchTerm.trim().toLowerCase();
+      if (!term) return projects;
       return projects.filter((project) =>
         project.name.toLowerCase().includes(term)
       );
     }, [projects, searchTerm]);
 
-    useEffect(() => {
-      if (!showMoveOptions) {
-        const popoverItems = [
-          <LineItemButton
-            key="share"
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgShare}
-            title={t("chatButton.share.label")}
-            onClick={noProp(() => setShowShareModal(true))}
-          />,
-          <LineItemButton
-            key="rename"
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgEdit}
-            title={t("chatButton.rename.label")}
-            onClick={noProp(() => setRenaming(true))}
-          />,
-          <LineItemButton
-            key="move"
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgFolderIn}
-            title={t("chatButton.moveToProject.label")}
-            onClick={noProp(() => setShowMoveOptions(true))}
-          />,
-          project && (
-            <LineItemButton
-              key="remove"
-              sizePreset="main-ui"
-              rounding={2}
-              icon={SvgFolder}
-              title={t("chatButton.removeFromProject.label", {
-                projectName: project.name,
-              })}
-              onClick={noProp(() => handleRemoveFromProject())}
-            />
+    const availableProjects = filteredProjects.filter(
+      (candidateProject) => candidateProject.id !== project?.id
+    );
+    // The move page: the view's own search filters the projects; the way
+    // back and the create row stay pinned above the filter.
+    const moveView: DropdownView = {
+      search: {
+        placeholder: t("chatButton.projectSearchInput.placeholder"),
+        onChange: setSearchTerm,
+      },
+      items: [
+        {
+          kind: "action",
+          id: "back",
+          pinned: true,
+          icon: SvgChevronLeft,
+          title: t("chatButton.moveToProject.label"),
+          onSelect: (views) => views.pop(),
+        },
+        ...projects
+          .filter((candidateProject) => candidateProject.id !== project?.id)
+          .map(
+            (targetProject): DropdownMenuItem => ({
+              kind: "action",
+              id: `project-${targetProject.id}`,
+              icon: SvgFolder,
+              title: targetProject.name,
+              onSelect: () => handleChatMove(targetProject),
+            })
           ),
-          null,
-          <LineItemButton
-            key="delete"
-            sizePreset="main-ui"
-            rounding={2}
-            color="danger"
-            icon={SvgTrash}
-            title={t("chatButton.delete.label")}
-            onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-          />,
-        ];
-        setPopoverItems(popoverItems);
-      } else {
-        const availableProjects = filteredProjects.filter(
-          (candidateProject) => candidateProject.id !== project?.id
-        );
-
-        const popoverItems = [
-          <PopoverSearchInput
-            key="search"
-            setShowMoveOptions={setShowMoveOptions}
-            onSearch={setSearchTerm}
-          />,
-          ...availableProjects.map((targetProject) => (
-            <LineItemButton
-              key={targetProject.id}
-              sizePreset="main-ui"
-              rounding={2}
-              icon={SvgFolder}
-              title={targetProject.name}
-              onClick={noProp(() => handleChatMove(targetProject))}
-            />
-          )),
-          // Show "Create New Project" option when no projects match the search
-          ...(availableProjects.length === 0 && searchTerm.trim() !== ""
-            ? [
-                null,
-                <LineItemButton
-                  key="create-new"
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgFolderPlus}
-                  title={t("chatButton.createProject.label", {
-                    projectName: searchTerm.trim(),
-                  })}
-                  onClick={noProp(() =>
-                    handleCreateProjectAndMove(searchTerm.trim())
-                  )}
-                />,
-              ]
-            : []),
-        ];
-        setPopoverItems(popoverItems);
-      }
-    }, [
-      showMoveOptions,
-      filteredProjects,
-      refreshChatSessions,
-      fetchProjects,
-      currentProjectId,
-      refreshCurrentProjectDetails,
-      project,
-      chatSession.id,
-      searchTerm,
-      createProject,
-      t,
-    ]);
+        // A create row when no project matches the search.
+        ...(availableProjects.length === 0 && searchTerm.trim() !== ""
+          ? [
+              {
+                kind: "group" as const,
+                items: [
+                  {
+                    kind: "action" as const,
+                    id: "create-new",
+                    pinned: true,
+                    icon: SvgFolderPlus,
+                    title: t("chatButton.createProject.label", {
+                      projectName: searchTerm.trim(),
+                    }),
+                    onSelect: () =>
+                      handleCreateProjectAndMove(searchTerm.trim()),
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
+    };
+    const unread = runStatus === "done" || runStatus === "failed";
+    const canToggleUnread = runStatus === null || unread;
+    const menuItems: DropdownMenuItem[] = [
+      {
+        kind: "action",
+        id: "share",
+        icon: SvgShare,
+        title: t("chatButton.share.label"),
+        onSelect: () => shareModal.toggle(true),
+      },
+      {
+        kind: "action",
+        id: "rename",
+        icon: SvgEdit,
+        title: t("chatButton.rename.label"),
+        onSelect: () => setRenaming(true),
+      },
+      {
+        kind: "action",
+        id: "regenerate-title",
+        icon: SvgRefreshCw,
+        title: t("chatButton.regenerateTitle.label"),
+        disabled: regeneratingTitle,
+        onSelect: () => void handleRegenerateTitle(),
+      },
+      ...(canToggleUnread
+        ? [
+            {
+              kind: "action" as const,
+              id: "toggle-unread",
+              icon: unread ? SvgCheck : SvgMail,
+              title: unread
+                ? t("chatButton.markRead.label")
+                : t("chatButton.markUnread.label"),
+              onSelect: () =>
+                unread
+                  ? markSeen(chatSession.id)
+                  : markUnseen(chatSession.id, "done"),
+            },
+          ]
+        : []),
+      {
+        kind: "action",
+        id: "move",
+        icon: SvgFolderIn,
+        title: t("chatButton.moveToProject.label"),
+        onSelect: (views) => views.push("move"),
+      },
+      exportMenuItem,
+      ...(project
+        ? [
+            {
+              kind: "action" as const,
+              id: "remove",
+              icon: SvgFolder,
+              title: t("chatButton.removeFromProject.label", {
+                projectName: project.name,
+              }),
+              onSelect: () => handleRemoveFromProject(),
+            },
+          ]
+        : []),
+      {
+        kind: "group",
+        items: [
+          {
+            kind: "action",
+            id: "delete",
+            icon: SvgTrash,
+            danger: true,
+            title: t("chatButton.delete.label"),
+            onSelect: () => deleteModal.toggle(true),
+          },
+        ],
+      },
+    ];
 
     // Pin the chat's agent when clicking on the conversation
-    async function handleClick() {
+    const chatLink = appPosition.linkToChat(chatSession.id);
+
+    async function handleClick(event: React.MouseEvent<HTMLElement>) {
+      chatLink.onClick(event);
       await pinChatAgent(chatSession);
+    }
+
+    // A project's chat rows read the projects cache, not the recents list.
+    async function refreshAfterRename() {
+      await Promise.all([
+        refreshChatSessions(),
+        project ? fetchProjects() : undefined,
+        project && currentProjectId
+          ? refreshCurrentProjectDetails()
+          : undefined,
+      ]);
     }
 
     async function handleRename(newName: string) {
       setDisplayName(newName);
       await renameChatSession(chatSession.id, newName);
-      await refreshChatSessions();
+      await refreshAfterRename();
+    }
+
+    async function handleRegenerateTitle() {
+      setRegeneratingTitle(true);
+      try {
+        const response = await renameChatSession(chatSession.id, null, true);
+        if (!response.ok) throw new Error(`Rename failed: ${response.status}`);
+        await refreshAfterRename();
+      } catch (error) {
+        console.error("Failed to regenerate chat title:", error);
+        showErrorNotification(t("chatButton.regenerateTitleError.message"));
+      } finally {
+        setRegeneratingTitle(false);
+      }
+    }
+
+    function handleContextMenu(event: React.MouseEvent<HTMLElement>) {
+      if (renaming || event.target instanceof HTMLInputElement) return;
+      event.preventDefault();
+      setContextPoint({ x: event.clientX, y: event.clientY });
+      setMenuOpen(true);
+      focusOptionsOnOpen.current = true;
+    }
+
+    function handleDoubleClick(event: React.MouseEvent<HTMLElement>) {
+      if (
+        renaming ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        (event.target instanceof Element &&
+          event.target.closest('[data-testid="ChatButton/options"]'))
+      )
+        return;
+      event.preventDefault();
+      // The first click opens the chat, which focuses the composer on load
+      // and would blur the rename input.
+      markRecentChatShortcutTarget(chatSession.id);
+      setRenaming(true);
     }
 
     async function handleChatDelete() {
@@ -311,14 +408,18 @@ const ChatButton = memo(
         await deleteChatSession(chatSession.id);
         removeSession(chatSession.id);
 
+        // Never leave the user on the chat they deleted.
+        if (active) {
+          if (project) {
+            appPosition.openProject(project.id, { replace: true });
+          } else {
+            appPosition.openNewSession({ replace: true });
+          }
+        }
+
         if (project) {
           await fetchProjects();
           await refreshCurrentProjectDetails();
-
-          // Only route if the deleted chat is the currently opened chat session
-          if (active) {
-            appPosition.openProject(project.id);
-          }
         }
         await refreshChatSessions();
       } catch (error) {
@@ -337,7 +438,6 @@ const ChatButton = memo(
           fetchProjects,
           currentProjectId,
         });
-        setShowMoveOptions(false);
         setSearchTerm("");
       } catch (error) {
         // handleMoveOperation already handles error notification
@@ -348,7 +448,7 @@ const ChatButton = memo(
     async function handleChatMove(targetProject: Project) {
       if (shouldShowMoveModal(chatSession)) {
         setPendingMoveProjectId(targetProject.id);
-        setShowMoveCustomAgentModal(true);
+        moveCustomAgentModal.toggle(true);
         return;
       }
       await performMove(targetProject.id);
@@ -361,7 +461,6 @@ const ChatButton = memo(
           ? refreshCurrentProjectDetails()
           : fetchProjects();
         await Promise.all([refreshChatSessions(), projectRefreshPromise]);
-        setShowMoveOptions(false);
         setSearchTerm("");
       } catch (error) {
         console.error("Failed to remove chat from project:", error);
@@ -382,8 +481,7 @@ const ChatButton = memo(
         // Check if we should show the move modal for custom agents
         if (shouldShowMoveModal(chatSession)) {
           setPendingMoveProjectId(newProject.id);
-          setShowMoveCustomAgentModal(true);
-          setShowMoveOptions(false);
+          moveCustomAgentModal.toggle(true);
           setSearchTerm("");
           return;
         }
@@ -401,90 +499,171 @@ const ChatButton = memo(
       }
     }
 
+    const runStatusLabel = runStatus
+      ? t(`chatButton.runStatus.${runStatus}.label`)
+      : undefined;
+    const runStatusMarker =
+      runStatus && runStatusLabel
+        ? renderRunStatusMarker(runStatus, runStatusLabel)
+        : null;
+    const elapsed = compactElapsed(chatSession.time_updated, nowMinute);
+    const updatedDate = new Date(chatSession.time_updated);
+    const hasUpdatedDate = !Number.isNaN(updatedDate.getTime());
+    const timeLabel = hasUpdatedDate ? (
+      <div className="mx-1 shrink-0">
+        <Text
+          as="p"
+          font="secondary-body"
+          color="text-03"
+          wordWrap="whitespace-nowrap"
+        >
+          {elapsed
+            ? format.number(elapsed.value, {
+                style: "unit",
+                unit: elapsed.unit,
+                unitDisplay: "narrow",
+              })
+            : t("chatButton.updatedNow.label")}
+        </Text>
+      </div>
+    ) : null;
+    const restingMarker = runStatusMarker ?? timeLabel;
+    const optionsButton = (
+      <Dropdown.Trigger asChild>
+        <Button
+          icon={SvgMoreHorizontal}
+          prominence="internal"
+          size="sm"
+          interaction={menuOpen ? "hover" : "rest"}
+          aria-label={t("chatButton.options.label")}
+          onFocus={() => setOptionsFocused(true)}
+          onBlur={() => setOptionsFocused(false)}
+        />
+      </Dropdown.Trigger>
+    );
+
     const rightMenu = (
       <>
-        <Popover.Trigger asChild onClick={noProp()}>
-          <div data-testid="ChatButton/options">
-            {/* While renaming the row is an input, so the menu stays away unless
-                its own popover is already open. */}
-            {(!renaming || popoverOpen) && (
-              <Hoverable.Item group="ChatButton">
-                <Button
-                  icon={SvgMoreHorizontal}
-                  prominence="internal"
-                  size="sm"
-                  interaction={popoverOpen ? "hover" : "rest"}
-                />
-              </Hoverable.Item>
-            )}
-          </div>
-        </Popover.Trigger>
-        <Popover.Content
-          data-testid="ChatButton/popover"
-          side="right"
-          align="start"
-          width="md"
+        {/* The click stays here: the row underneath opens the chat. */}
+        <div
+          role="presentation"
+          ref={optionsRef}
+          data-testid="ChatButton/options"
+          onClick={noProp()}
         >
-          <PopoverMenu>{popoverItems}</PopoverMenu>
-        </Popover.Content>
+          {/* While renaming the row is an input, so the menu stays away unless
+              its own list is already open. */}
+          {!renaming && runStatusMarker && (
+            <span
+              data-touch-run-marker
+              className="pointer-events-none hidden no-hover:block absolute end-6 top-1/2 -translate-y-1/2"
+            >
+              {runStatusMarker}
+            </span>
+          )}
+          {(!renaming || menuOpen) &&
+            (restingMarker ? (
+              <Hoverable.Item
+                group="ChatButton"
+                variant="replace-on-hover"
+                resting={restingMarker}
+              >
+                {optionsButton}
+              </Hoverable.Item>
+            ) : (
+              <Hoverable.Item group="ChatButton">
+                {optionsButton}
+              </Hoverable.Item>
+            ))}
+        </div>
+        <Dropdown.Data
+          label={t("chatButton.options.label")}
+          // The default 15rem cap hides "Delete" below a scroll.
+          maxHeight="none"
+          items={menuItems}
+          views={{ move: moveView }}
+        />
       </>
     );
 
+    const jumpHint =
+      jumpShortcut && !renaming && !menuOpen && !optionsFocused ? (
+        <span dir="ltr" aria-hidden="true" className="pointer-events-none!">
+          <Text
+            font="figure-keystroke"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
+            {jumpShortcut.label}
+          </Text>
+        </span>
+      ) : null;
+
     const popover = (
-      <Popover
-        onOpenChange={(state) => {
-          setPopoverOpen(state);
-          if (!state) {
-            setShowMoveOptions(false);
-            setSearchTerm("");
-          }
+      <Dropdown
+        width={60}
+        side="right"
+        open={menuOpen}
+        virtualAnchor={
+          contextPoint
+            ? {
+                getBoundingClientRect: () =>
+                  new DOMRect(contextPoint.x, contextPoint.y, 0, 0),
+              }
+            : undefined
+        }
+        onOpenChange={(open) => {
+          setMenuOpen(open);
+          if (!open) setContextPoint(null);
         }}
       >
-        <Popover.Anchor>
-          <Hoverable.Root
-            group="ChatButton"
-            data-testid="ChatButton"
-            interaction={popoverOpen ? "hover" : "rest"}
+        <Hoverable.Root
+          group="ChatButton"
+          data-testid="ChatButton"
+          onContextMenu={handleContextMenu}
+          onDoubleClick={handleDoubleClick}
+          interaction={menuOpen ? "hover" : "rest"}
+        >
+          <SidebarTab
+            /* While renaming, drop the click target so the input stays usable. */
+            href={isDragging || renaming ? undefined : chatLink.href}
+            onClick={renaming ? undefined : handleClick}
+            selected={active}
+            loading={runStatus === "working" || regeneratingTitle}
+            rightChildren={jumpHint ?? rightMenu}
+            rightChildrenAtRest={
+              (jumpHint && jumpShortcut?.width) ||
+              (!renaming &&
+                (runStatusMarker ? true : timeLabel ? "2rem" : false))
+            }
+            nested={!!project}
           >
-            <SidebarTab
-              /* While renaming, drop the click target so the input stays usable. */
-              href={
-                isDragging || renaming
-                  ? undefined
-                  : `/app?chatId=${chatSession.id}`
-              }
-              onClick={renaming ? undefined : handleClick}
-              selected={active}
-              rightChildren={rightMenu}
-              nested={!!project}
-            >
-              {renaming ? (
-                <ButtonRenaming
-                  initialName={chatSession.name}
-                  onRename={handleRename}
-                  onClose={() => setRenaming(false)}
-                />
-              ) : (
-                displayName
-              )}
-            </SidebarTab>
-          </Hoverable.Root>
-        </Popover.Anchor>
-      </Popover>
+            {renaming ? (
+              <ButtonRenaming
+                initialName={chatSession.name}
+                onRename={handleRename}
+                onClose={() => setRenaming(false)}
+              />
+            ) : (
+              displayName
+            )}
+          </SidebarTab>
+        </Hoverable.Root>
+      </Dropdown>
     );
 
     return (
       <>
-        {deleteConfirmationModalOpen && (
+        <deleteModal.Provider>
           <ConfirmationModalLayout
             title={t("chatButton.deleteConfirmation.title")}
             icon={SvgTrash}
-            onClose={() => setDeleteConfirmationModalOpen(false)}
+            onClose={() => deleteModal.toggle(false)}
             submit={
               <Button
                 variant="danger"
                 onClick={() => {
-                  setDeleteConfirmationModalOpen(false);
+                  deleteModal.toggle(false);
                   handleChatDelete();
                 }}
               >
@@ -494,12 +673,12 @@ const ChatButton = memo(
           >
             {t("chatButton.deleteConfirmation.description")}
           </ConfirmationModalLayout>
-        )}
+        </deleteModal.Provider>
 
-        {showMoveCustomAgentModal && (
+        <moveCustomAgentModal.Provider>
           <MoveCustomAgentChatModal
             onCancel={() => {
-              setShowMoveCustomAgentModal(false);
+              moveCustomAgentModal.toggle(false);
               setPendingMoveProjectId(null);
               setNavigateAfterMoveProjectId(null);
             }}
@@ -512,7 +691,7 @@ const ChatButton = memo(
               }
               const target = pendingMoveProjectId;
               const shouldNavigate = navigateAfterMoveProjectId;
-              setShowMoveCustomAgentModal(false);
+              moveCustomAgentModal.toggle(false);
               setPendingMoveProjectId(null);
               if (target != null) {
                 await performMove(target);
@@ -524,14 +703,14 @@ const ChatButton = memo(
               }
             }}
           />
-        )}
+        </moveCustomAgentModal.Provider>
 
-        {showShareModal && (
+        <shareModal.Provider>
           <ShareChatSessionModal
             chatSession={chatSession}
-            onClose={() => setShowShareModal(false)}
+            onClose={() => shareModal.toggle(false)}
           />
-        )}
+        </shareModal.Provider>
 
         {draggable ? (
           <div
