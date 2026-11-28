@@ -1,10 +1,18 @@
 """Tests for the routes the control plane calls on the data plane."""
 
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from ee.onyx.server.license.models import CustomerTier
-from ee.onyx.server.tenants.control_plane_api import update_tier
-from ee.onyx.server.tenants.models import TierUpdateRequest
+from ee.onyx.server.tenants.control_plane_api import (
+    push_usage_limit_overrides,
+    update_tier,
+)
+from ee.onyx.server.tenants.models import (
+    TierUpdateRequest,
+    UsageLimitOverridesPushRequest,
+)
+from onyx.db.usage import UsageType
 
 
 class TestUpdateTier:
@@ -66,3 +74,53 @@ class TestUpdateTier:
 
         assert result.updated is False
         mock_invalidate.assert_called_once()
+
+
+class TestPushUsageLimitOverrides:
+    """Tests for the /tenants/usage-limit-overrides receiver."""
+
+    def _request(self) -> UsageLimitOverridesPushRequest:
+        return UsageLimitOverridesPushRequest(
+            tenant_id="tenant_abc",
+            trial_start=datetime(2026, 11, 25, 14, 7, tzinfo=timezone.utc),
+            limits={"llm_cost_cents": 10000},
+        )
+
+    def test_stores_the_state_on_the_playground(self) -> None:
+        with (
+            patch("ee.onyx.server.tenants.control_plane_api.IS_PLAYGROUND", True),
+            patch(
+                "ee.onyx.server.tenants.control_plane_api.store_tenant_usage_limit_state",
+                return_value=True,
+            ) as store,
+        ):
+            result = push_usage_limit_overrides(self._request(), None)
+
+        assert result.updated is True
+        tenant_id, state = store.call_args.args
+        assert tenant_id == "tenant_abc"
+        assert state.limits == {UsageType.LLM_COST: 10000}
+
+    def test_refused_off_the_playground(self) -> None:
+        with (
+            patch("ee.onyx.server.tenants.control_plane_api.IS_PLAYGROUND", False),
+            patch(
+                "ee.onyx.server.tenants.control_plane_api.store_tenant_usage_limit_state"
+            ) as store,
+        ):
+            result = push_usage_limit_overrides(self._request(), None)
+
+        assert result.updated is False
+        store.assert_not_called()
+
+    def test_reports_a_failed_write_so_the_control_plane_retries(self) -> None:
+        with (
+            patch("ee.onyx.server.tenants.control_plane_api.IS_PLAYGROUND", True),
+            patch(
+                "ee.onyx.server.tenants.control_plane_api.store_tenant_usage_limit_state",
+                return_value=False,
+            ),
+        ):
+            result = push_usage_limit_overrides(self._request(), None)
+
+        assert result.updated is False

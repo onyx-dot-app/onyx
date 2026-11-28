@@ -5,6 +5,7 @@ import time
 import requests
 
 from ee.onyx.server.tenants.access import generate_data_plane_token
+from ee.onyx.server.tenants.models import TenantUsageLimitState
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL, DEV_MODE
 from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
 from onyx.server.usage_limits import NO_LIMIT
@@ -18,6 +19,24 @@ _tenant_usage_limit_overrides: dict[str, TenantUsageLimitOverrides] | None = Non
 _last_fetch_time: float = 0.0
 _FETCH_INTERVAL = 60 * 60 * 24  # 24 hours
 _ERROR_FETCH_INTERVAL = 30 * 60  # 30 minutes (if the last fetch failed)
+
+# Short, because a cache miss waits for this call inside a user request.
+_TENANT_FETCH_TIMEOUT_S = 5
+
+
+def fetch_tenant_usage_limit_state(tenant_id: str) -> TenantUsageLimitState:
+    """Read one playground tenant's trial start and overrides from the control
+    plane. Raises on any HTTP or parse error; the caller decides what to do."""
+    response = requests.get(
+        f"{CONTROL_PLANE_API_BASE_URL}/tenants/{tenant_id}/usage-limit-overrides",
+        headers={
+            "Authorization": f"Bearer {generate_data_plane_token()}",
+            "Content-Type": "application/json",
+        },
+        timeout=_TENANT_FETCH_TIMEOUT_S,
+    )
+    response.raise_for_status()
+    return TenantUsageLimitState.model_validate(response.json())
 
 
 def fetch_usage_limit_overrides() -> dict[str, TenantUsageLimitOverrides] | None:

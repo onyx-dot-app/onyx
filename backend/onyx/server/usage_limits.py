@@ -14,6 +14,7 @@ Limit values:
 A tenant override replaces the plan's value. It is not added to it.
 """
 
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
@@ -31,7 +32,6 @@ from onyx.db.usage import (
     UsagePeriod,
     UsageType,
     check_usage_limit,
-    current_calendar_period,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -202,12 +202,69 @@ _INCREMENT_POLICY = PLAYGROUND if IS_PLAYGROUND else CLOUD_TRIAL
 
 def tenant_trial_start(tenant_id: str) -> datetime | None:  # noqa: ARG001
     """When the tenant's trial started. Periods that count from the trial start
-    begin here.
-
-    Always None for now. The next PR in this stack reads the real date from the
-    control plane. Until then, those periods use the calendar week instead.
-    """
+    begin here. The EE version reads it from the control plane; without EE
+    there is no trial start."""
     return None
+
+
+def tenant_trial_start_fn(tenant_id: str) -> datetime | None:
+    fn: Callable[[str], datetime | None] = fetch_versioned_implementation(
+        "onyx.server.usage_limits", "tenant_trial_start"
+    )
+    return fn(tenant_id)
+
+
+def tenant_limit_override(
+    tenant_id: str,  # noqa: ARG001
+    usage_type: UsageType,  # noqa: ARG001
+) -> int | None:
+    """A playground tenant's override for one usage type. The EE version reads
+    it from the control plane; without EE there are none."""
+    return None
+
+
+def tenant_limit_override_fn(tenant_id: str, usage_type: UsageType) -> int | None:
+    fn: Callable[[str, UsageType], int | None] = fetch_versioned_implementation(
+        "onyx.server.usage_limits", "tenant_limit_override"
+    )
+    return fn(tenant_id, usage_type)
+
+
+# When each tenant was last warned about a missing trial start, so the warning
+# appears at most once an hour per tenant in each process. Kept in memory on
+# purpose: a few duplicate log lines across processes cost less than a shared
+# cache write on every period lookup.
+_TRIAL_START_WARNING_INTERVAL_SECONDS = 3600
+_trial_start_warned_at: dict[str, float] = {}
+
+
+def _warn_missing_trial_start(tenant_id: str) -> None:
+    now = time.monotonic()
+    last = _trial_start_warned_at.get(tenant_id)
+    if last is not None and now - last < _TRIAL_START_WARNING_INTERVAL_SECONDS:
+        return
+    _trial_start_warned_at[tenant_id] = now
+    logger.warning(
+        "Tenant %s has no valid trial start. Limits that count from the trial "
+        "start use calendar periods of the same length, or one period that "
+        "never ends for a whole-trial limit.",
+        tenant_id,
+    )
+
+
+# Where a whole-trial limit counts while the tenant's trial start is unknown.
+_NO_TRIAL_START_WHOLE_TRIAL = UsagePeriod(
+    anchor=WindowAnchor.CALENDAR, start=datetime(1970, 1, 1, tzinfo=timezone.utc)
+)
+
+
+def _calendar_period(now: datetime, length_seconds: int) -> UsagePeriod:
+    start = get_window_start(now, length_seconds)
+    return UsagePeriod(
+        anchor=WindowAnchor.CALENDAR,
+        start=start,
+        end=start + timedelta(seconds=length_seconds),
+    )
 
 
 def period_for(
@@ -219,18 +276,18 @@ def period_for(
     if window.anchor == WindowAnchor.CALENDAR:
         if window.length_seconds is None:
             raise RuntimeError("A calendar period needs a length")
-        start = get_window_start(now, window.length_seconds)
-        return UsagePeriod(
-            anchor=WindowAnchor.CALENDAR,
-            start=start,
-            end=start + timedelta(seconds=window.length_seconds),
-        )
+        return _calendar_period(now, window.length_seconds)
 
-    trial_start = tenant_trial_start(tenant_id)
+    trial_start = tenant_trial_start_fn(tenant_id)
     if trial_start is None or trial_start.utcoffset() is None or trial_start > now:
-        # No usable trial start: use the calendar week. Expected until the next
-        # PR in this stack supplies the date, so nothing is logged here yet.
-        return current_calendar_period(now)
+        # No usable trial start. The tenant stays limited: a limit with a length
+        # uses calendar periods of that length (the calendar week for 7 days),
+        # and a whole-trial limit counts in one period that never ends, so it
+        # cannot reset every week.
+        _warn_missing_trial_start(tenant_id)
+        if window.length_seconds is None:
+            return _NO_TRIAL_START_WHOLE_TRIAL
+        return _calendar_period(now, window.length_seconds)
     if window.length_seconds is None:
         return UsagePeriod(anchor=WindowAnchor.TENANT_START, start=trial_start)
     period_length = timedelta(seconds=window.length_seconds)
@@ -342,7 +399,20 @@ def get_limit_for_usage_type(
     allowance = policy.allowances.get(usage_type)
     if allowance is None:
         return NO_LIMIT
-    # Playground overrides arrive in the next PR. Until then, the plan value applies.
+    # A playground override comes from the control plane through the cache.
+    if policy.name == LimitPolicyName.PLAYGROUND:
+        override = (
+            tenant_limit_override_fn(tenant_id, usage_type) if tenant_id else None
+        )
+        if override is not None:
+            logger.debug(
+                "Using playground override for %s.%s: %s",
+                tenant_id,
+                usage_type,
+                override,
+            )
+            return override
+        return allowance.limit
     if tenant_id and allowance.override_field is not None:
         field_name = allowance.override_field.value
         override = _get_tenant_override(tenant_id, field_name)

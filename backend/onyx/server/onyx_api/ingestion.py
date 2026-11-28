@@ -20,7 +20,7 @@ from onyx.db.document import (
     get_documents_by_cc_pair,
     get_ingestion_documents,
 )
-from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.port_orphan_candidate import (
@@ -30,6 +30,7 @@ from onyx.db.port_orphan_candidate import (
 from onyx.db.search_settings import (
     get_active_search_settings,
 )
+from onyx.db.usage import UsageType
 from onyx.db.user_file import get_owned_file_ids, get_user_file_by_id
 from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -44,8 +45,10 @@ from onyx.server.onyx_api.models import (
     IngestionDocument,
     IngestionResult,
 )
+from onyx.server.usage_limits import check_usage_and_raise, record_usage
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import IS_PLAYGROUND, USAGE_LIMITS_ENABLED
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -187,6 +190,12 @@ def upsert_ingestion_doc(
             "Document ID is reserved for a user file",
         )
 
+    # On the playground, documents pushed here count against the chunk limit, as
+    # connector indexing does. Cloud does not count them yet.
+    count_chunks = IS_PLAYGROUND and USAGE_LIMITS_ENABLED
+    if count_chunks:
+        _check_chunk_limit(db_session, tenant_id)
+
     # Index into the primary and, while one is building, the secondary index.
     # Embedder, index and settings id of each write come from the same settings
     # row: a swap between two lookups would pair one model's embedder with
@@ -219,6 +228,9 @@ def upsert_ingestion_doc(
         written_search_settings_id=active_search_settings.primary.id,
     )
 
+    if count_chunks and indexing_pipeline_result.total_chunks > 0:
+        _count_ingested_chunks(tenant_id, indexing_pipeline_result.total_chunks)
+
     # If there's a secondary index being built, index the doc but don't use it for return here
     sec_search_settings = active_search_settings.secondary
     if sec_search_settings is not None:
@@ -245,6 +257,34 @@ def upsert_ingestion_doc(
         document_id=document.id,
         already_existed=indexing_pipeline_result.new_docs == 0,
     )
+
+
+def _check_chunk_limit(db_session: Session, tenant_id: str) -> None:
+    """Refuse the document if the tenant's chunk allowance is used up. At least
+    one chunk is about to be added, so a tenant exactly at the limit refuses."""
+    check_usage_and_raise(
+        db_session=db_session,
+        usage_type=UsageType.CHUNKS_INDEXED,
+        tenant_id=tenant_id,
+        pending_amount=1,
+    )
+
+
+def _count_ingested_chunks(tenant_id: str, chunks: int) -> None:
+    """Add ingested chunks to the tenant's chunk usage. A failure is logged and
+    does not fail the request: the document is already in the primary index,
+    and the secondary write must still run, as in connector indexing."""
+    try:
+        with get_session_with_current_tenant() as usage_db_session:
+            record_usage(
+                db_session=usage_db_session,
+                usage_type=UsageType.CHUNKS_INDEXED,
+                amount=chunks,
+                tenant_id=tenant_id,
+            )
+            usage_db_session.commit()
+    except Exception:
+        logger.exception("Failed to count ingested chunks for tenant %s", tenant_id)
 
 
 @router.delete("/ingestion/{document_id}", dependencies=[Depends(require_vector_db)])
