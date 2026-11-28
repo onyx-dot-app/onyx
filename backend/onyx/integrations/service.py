@@ -136,7 +136,7 @@ from onyx.integrations.policy import (
     always_asks,
 )
 from onyx.integrations.presets import (
-    PRESET_OAUTH_REDIRECT_URI,
+    OAUTH_REDIRECT_URI,
     PRESETS,
     Preset,
     get_preset,
@@ -416,7 +416,7 @@ def _preset_view(preset: Preset) -> PresetView:
         ],
         setup_steps=list(descriptor.setup_steps),
         setup_url=descriptor.setup_url,
-        callback_url=PRESET_OAUTH_REDIRECT_URI if oauth else None,
+        callback_url=OAUTH_REDIRECT_URI if oauth else None,
         scopes=oauth.spec.oauth.requested_scopes() if oauth else [],
     )
 

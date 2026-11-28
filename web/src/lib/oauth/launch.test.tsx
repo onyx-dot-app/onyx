@@ -284,6 +284,9 @@ test("older desktop builds without the flag keep the in-app tab", async () => {
 
 test("desktop callbacks are recognised only on allowlisted paths", () => {
   expect(
+    isDesktopOAuthCallback("/integrations/oauth/callback", "s.desktop")
+  ).toBe(true);
+  expect(
     isDesktopOAuthCallback("/craft/v1/apps/oauth/callback", "s.desktop")
   ).toBe(true);
   expect(
@@ -330,6 +333,16 @@ test("desktop state helpers", () => {
   const returnUrl = new URL(desktopOAuthReturnUrl(callback));
   expect(returnUrl.protocol).toBe("onyx:");
   expect(returnUrl.searchParams.get("origin")).toBe("https://onyx.example");
+  expect(returnUrl.searchParams.get("path")).toBe(
+    "/mcp/oauth/callback?code=x&state=abc.desktop"
+  );
+});
+
+test("the desktop return URL uses a path that older desktop builds accept", () => {
+  const callback = new URL(
+    "https://onyx.example/integrations/oauth/callback?code=x&state=abc.desktop"
+  );
+  const returnUrl = new URL(desktopOAuthReturnUrl(callback));
   expect(returnUrl.searchParams.get("path")).toBe(
     "/mcp/oauth/callback?code=x&state=abc.desktop"
   );

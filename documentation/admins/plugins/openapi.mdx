@@ -135,8 +135,10 @@ Click **Add Header** to send more headers.
 For **OAuth**, create an OAuth client in the provider with this redirect URI:
 
 ```text
-https://<your-onyx-domain>/oauth-config/callback
+https://<your-onyx-domain>/integrations/oauth/callback
 ```
+
+An integration added before this URI keeps `/oauth-config/callback` until you enter a new client ID.
 
 Then enter the **Authorization URL**, **Token URL**, **Client ID**, and **Client Secret**. Optionally, enter **Scopes**.
 

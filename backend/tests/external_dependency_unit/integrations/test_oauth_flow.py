@@ -28,6 +28,7 @@ from onyx.db.enums import (
 from onyx.db.integration import (
     get_external_app_for_integration,
     get_mcp_server_for_integration,
+    upsert_oauth_client__no_commit,
 )
 from onyx.db.integration_connection import get_connection, get_oauth_client
 from onyx.db.models import Integration
@@ -122,7 +123,7 @@ def test_individual_manual_sign_in_stores_user_connection(
     url = start_integration_oauth(integration, user, db_session, "/plugins")
     query = _query(url)
     assert query["client_id"] == "manual-client"
-    assert query["redirect_uri"] == f"{WEB_DOMAIN}/oauth-config/callback"
+    assert query["redirect_uri"] == f"{WEB_DOMAIN}/integrations/oauth/callback"
     assert query["scope"] == "read write"
     assert query["code_challenge_method"] == "S256"
 
@@ -239,6 +240,44 @@ def test_settings_change_during_the_token_exchange_is_refused(
     assert get_connection(db_session, integration.id, user.id) is None
 
 
+def test_older_client_keeps_its_redirect_path_until_its_client_id_changes(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = _manual(db_session, IntegrationAuthMode.INDIVIDUAL)
+    oauth_client = get_oauth_client(db_session, integration.id)
+    assert oauth_client is not None
+    oauth_client.legacy_redirect_path = "/oauth-config/callback"
+    db_session.flush()
+    user = make_test_user("oauth_legacy_redirect")
+
+    def redirect_uri() -> str:
+        return _query(start_integration_oauth(integration, user, db_session))[
+            "redirect_uri"
+        ]
+
+    assert redirect_uri() == f"{WEB_DOMAIN}/oauth-config/callback"
+
+    def save(client_id: str) -> None:
+        upsert_oauth_client__no_commit(
+            integration_id=integration.id,
+            provider_mode=IntegrationOAuthProviderMode.MANUAL,
+            authorization_url=oauth_client.authorization_url,
+            token_url=oauth_client.token_url,
+            scopes=oauth_client.scopes,
+            additional_params=None,
+            pkce=True,
+            client_id=client_id,
+            client_secret="manual-secret",
+            db_session=db_session,
+        )
+
+    save("manual-client")
+    assert redirect_uri() == f"{WEB_DOMAIN}/oauth-config/callback"
+    save("new-client")
+    assert redirect_uri() == f"{WEB_DOMAIN}/integrations/oauth/callback"
+
+
 def test_preset_sign_in_uses_provider(
     db_session: Session,
     make_test_user: MakeTestUser,
@@ -258,7 +297,7 @@ def test_preset_sign_in_uses_provider(
     url = start_integration_oauth(integration, user, db_session)
     query = _query(url)
     assert urlparse(url).netloc == "linear.app"
-    assert query["redirect_uri"] == f"{WEB_DOMAIN}/craft/v1/apps/oauth/callback"
+    assert query["redirect_uri"] == f"{WEB_DOMAIN}/integrations/oauth/callback"
 
     post = MagicMock(
         return_value=token_response(

@@ -92,7 +92,7 @@ def test_create_each_shape(admin_user: DATestUser) -> None:
     github = presets["GITHUB"]
     # The setup panel shows the redirect URI the sign-in sends.
     assert github.callback_url is not None
-    assert github.callback_url.endswith("/craft/v1/apps/oauth/callback")
+    assert github.callback_url.endswith("/integrations/oauth/callback")
     assert github.scopes == ["repo", "read:org", "read:user"]
     assert github.setup_steps
 

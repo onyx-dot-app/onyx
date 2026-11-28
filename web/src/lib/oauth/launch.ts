@@ -101,11 +101,20 @@ export function stripDesktopOAuthState(state: string): string {
     : state;
 }
 
+// The desktop builds that use this handoff accept only the callback paths
+// they shipped with. /mcp/oauth/callback renders the same page, and the
+// backend takes the redirect URI from the integration, not from this path.
+const DESKTOP_CALLBACK_ALIASES: Record<string, string> = {
+  "/integrations/oauth/callback": "/mcp/oauth/callback",
+};
+
 /** The URL that hands a browser-side callback back to the desktop app. */
 export function desktopOAuthReturnUrl(callback: URL): string {
+  const pathname =
+    DESKTOP_CALLBACK_ALIASES[callback.pathname] ?? callback.pathname;
   const query = new URLSearchParams({
     origin: callback.origin,
-    path: callback.pathname + callback.search,
+    path: pathname + callback.search,
   });
   return `${DESKTOP_OAUTH_RETURN_URL}?${query.toString()}`;
 }

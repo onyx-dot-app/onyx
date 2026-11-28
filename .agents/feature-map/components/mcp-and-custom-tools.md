@@ -186,9 +186,11 @@ OpenAPI tool, external app). Queries are in `db/integration_connection.py`.
 The one sign-in flow is `integrations/oauth.py`, served by
 `POST /integrations/{integration_id}/oauth/start` and
 `POST /integrations/oauth/callback`. The attempt store namespace is
-`integration`. Each kind keeps the redirect URI admins registered before:
-`/mcp/oauth/callback`, `/craft/v1/apps/oauth/callback` (presets) and
-`/oauth-config/callback` (manual clients). A preset reads its host values, such
+`integration`. MCP servers use `/mcp/oauth/callback`. A new preset or manual
+client uses `/integrations/oauth/callback`. A client from before keeps the path
+admins registered in `IntegrationOAuthClient.legacy_redirect_path`
+(`/craft/v1/apps/oauth/callback` for presets, `/oauth-config/callback` for
+manual clients) until its client id changes. A preset reads its host values, such
 as the Zendesk subdomain, from the OAuth client only
 (`integrations/connections.py:preset_host_values`): `additional_params`, or the tagged
 registration of an old client. MCP servers use the SDK with

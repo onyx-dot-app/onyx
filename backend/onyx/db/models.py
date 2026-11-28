@@ -6500,6 +6500,10 @@ class IntegrationOAuthClient(Base):
     # mcp_config. Read it with the old shape; a write saves the new format and
     # clears it. NULL: the new format.
     legacy_format: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The redirect path that admins registered for a client from before
+    # /integrations/oauth/callback, such as /oauth-config/callback. A new
+    # client id clears it. NULL: the current path.
+    legacy_redirect_path: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -66,10 +66,11 @@ A [URL-pattern App](#url-pattern-apps) gives Craft credentials and network acces
     On self-hosted Onyx, create an OAuth application in the provider. Use this redirect URI, with your Onyx domain:
 
     ```text
-    https://<your-onyx-domain>/craft/v1/apps/oauth/callback
+    https://<your-onyx-domain>/integrations/oauth/callback
     ```
 
     The scheme, host, and path must match exactly. Onyx builds the URI from `WEB_DOMAIN`.
+    An App added before this URI keeps `/craft/v1/apps/oauth/callback` until you enter a new client ID.
     See [Provider setup](#provider-setup) for each provider.
   </Step>
 

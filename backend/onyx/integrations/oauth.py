@@ -52,7 +52,7 @@ from onyx.integrations.connections import (
     sign_in_host,
     sign_in_settings_for,
 )
-from onyx.integrations.presets import PRESET_OAUTH_REDIRECT_URI
+from onyx.integrations.presets import OAUTH_REDIRECT_URI
 from onyx.integrations.service import manages_integration
 from onyx.oauth.authorization_attempt import (
     AuthorizationAttemptStore,
@@ -83,10 +83,6 @@ from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 
 logger = setup_logger()
 
-# The legacy manual OAuth redirect URI; see PRESET_OAUTH_REDIRECT_URI.
-_MANUAL_REDIRECT_URI = f"{WEB_DOMAIN}/oauth-config/callback"
-
-
 INTEGRATION_OAUTH_ATTEMPTS = AuthorizationAttemptStore(
     cache_backend_provider=get_cache_backend,
     namespace="integration",
@@ -99,9 +95,9 @@ def integration_oauth_redirect_uri(
 ) -> str:
     if integration.kind is IntegrationKind.MCP:
         return mcp_oauth_redirect_uri()
-    if oauth_client.provider_mode is IntegrationOAuthProviderMode.PRESET:
-        return PRESET_OAUTH_REDIRECT_URI
-    return _MANUAL_REDIRECT_URI
+    if oauth_client.legacy_redirect_path:
+        return f"{WEB_DOMAIN}{oauth_client.legacy_redirect_path}"
+    return OAUTH_REDIRECT_URI
 
 
 def _configuration_fingerprint(

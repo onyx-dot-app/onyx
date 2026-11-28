@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-// The redirect URI of preset sign-ins (backend presets.py). Its page must
-// render with Craft off, so it cannot sit under the gated /craft layout.
+// The redirect URI of preset sign-ins before /integrations/oauth/callback.
+// Older OAuth clients still use it (backend legacy_redirect_path), and its
+// page must render with Craft off, outside the gated /craft layout.
 const PRESET_CALLBACK = "/craft/v1/apps/oauth/callback";
 const APP_DIR = path.join(__dirname, "../../app");
 
@@ -23,4 +24,8 @@ test("the preset OAuth callback renders outside the Craft layout", async () => {
   expect(hasPage(PRESET_CALLBACK)).toBe(false);
   expect(target.startsWith("/craft")).toBe(false);
   expect(hasPage(target)).toBe(true);
+});
+
+test("the integration OAuth callback has its own page", () => {
+  expect(hasPage("/integrations/oauth/callback")).toBe(true);
 });
