@@ -15,6 +15,7 @@ from starlette.testclient import TestClient, WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
 from onyx.browser_extension import relay
+from onyx.configs.app_configs import WEB_DOMAIN
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -244,7 +245,8 @@ def test_the_preview_socket_streams_the_current_tab(
         _next(socket, "grant_saved")
         with cast(TestClient, client).websocket_connect(
             f"/chat/sessions/{chat_id}/browser/chrome/ws",
-            headers={"cookie": _cookie(user)},
+            # A browser sends its page's origin; the server checks it.
+            headers={"cookie": _cookie(user), "origin": WEB_DOMAIN},
         ) as viewer:
             assert json.loads(viewer.receive_text()) == {
                 "type": "control",
