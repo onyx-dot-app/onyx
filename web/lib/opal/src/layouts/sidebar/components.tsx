@@ -10,6 +10,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { usePathname } from "@opal/navigation/next";
 import {
@@ -43,6 +44,18 @@ const SIDEBAR_LOGO_HEIGHT_PX = 28;
 // ---------------------------------------------------------------------------
 
 const SidebarFoldableContext = createContext(false);
+const SidebarRailedContext = createContext(false);
+
+/**
+ * Under a rail: the height of the sidebar header's logo row. The header
+ * reports it, and the rail's top cell takes it, so the rail's rows stay level
+ * with the sidebar's when the name runs to two lines.
+ */
+interface SidebarBrandRow {
+  height: number | undefined;
+  setHeight: (height: number | undefined) => void;
+}
+const SidebarBrandRowContext = createContext<SidebarBrandRow | null>(null);
 
 interface SidebarRootProps {
   /**
@@ -52,12 +65,24 @@ interface SidebarRootProps {
    * regardless of this prop.
    */
   foldable?: boolean;
+  /**
+   * A `SidebarLayouts.Rail` shown before the sidebar. With a rail the sidebar
+   * always folds, and folding hides the sidebar fully while the rail stays.
+   */
+  rail?: React.ReactNode;
   children: React.ReactNode;
 }
 
-function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
+function SidebarRoot({ foldable = false, rail, children }: SidebarRootProps) {
   const { isMobile, isSmallScreen, isMounted } = useScreenSize();
   const { folded, setFolded } = useSidebarState();
+  const railed = rail !== undefined;
+  const canFold = foldable || railed;
+  const [brandHeight, setBrandHeight] = useState<number>();
+  const brandRow = useMemo(
+    () => ({ height: brandHeight, setHeight: setBrandHeight }),
+    [brandHeight]
+  );
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
 
@@ -67,7 +92,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   // types too: no text field uses the shortcut, so it always means the
   // sidebar.
   useHotkey("mod+e", () => setFolded((prev) => !prev), {
-    enabled: foldable || isMobile || isSmallScreen,
+    enabled: canFold || isMobile || isSmallScreen,
     whileTyping: true,
   });
 
@@ -79,23 +104,23 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     if (isMobile || isSmallScreen) {
       // The overlay hides the page behind it, so it starts closed.
       setFolded(true);
-    } else if (!foldable) {
+    } else if (!canFold) {
       // A non-foldable desktop sidebar is a column that is always open.
       setFolded(false);
     }
-  }, [isMounted, isMobile, isSmallScreen, foldable, setFolded]);
+  }, [isMounted, isMobile, isSmallScreen, canFold, setFolded]);
 
   const foldedAttr = String(folded);
 
   // The overlays always fold; a desktop column only folds when `foldable`.
   // Tabs read this derived value, not the app-wide raw state, so tabs outside
   // a sidebar (and inside a non-foldable one) never collapse.
-  const effectiveFolded = (isMobile || isSmallScreen || foldable) && folded;
+  const effectiveFolded = (isMobile || isSmallScreen || canFold) && folded;
 
   // The same value in two forms: context for the parts that need JS (the
   // folded-only tooltip), and `data-folded` for the parts CSS can do on its
   // own. The attribute lets descendants restyle without re-rendering.
-  const inner = (
+  const panel = (
     <SidebarFoldedContext.Provider value={effectiveFolded}>
       <div
         className="opal-sidebar-root__inner"
@@ -106,6 +131,27 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     </SidebarFoldedContext.Provider>
   );
 
+  // The rail is a second, always-folded sidebar inner beside the panel, so its
+  // tabs show icons with label tooltips.
+  const inner = railed ? (
+    <SidebarRailedContext.Provider value={true}>
+      <SidebarBrandRowContext.Provider value={brandRow}>
+        <SidebarFoldedContext.Provider value={true}>
+          <div
+            className="opal-sidebar-root__inner opal-sidebar-root__rail"
+            data-folded="true"
+          >
+            {rail}
+          </div>
+        </SidebarFoldedContext.Provider>
+        {panel}
+      </SidebarBrandRowContext.Provider>
+    </SidebarRailedContext.Provider>
+  ) : (
+    panel
+  );
+  const railedAttr = railed || undefined;
+
   if (isMobile) {
     return (
       <SidebarFoldableContext.Provider value={true}>
@@ -113,6 +159,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
           className="opal-sidebar-root__overlay"
           data-variant="mobile"
           data-folded={foldedAttr}
+          data-railed={railedAttr}
         >
           {inner}
         </div>
@@ -136,6 +183,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
           className="opal-sidebar-root__overlay"
           data-variant="small"
           data-folded={foldedAttr}
+          data-railed={railedAttr}
         >
           {inner}
         </div>
@@ -152,10 +200,11 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   }
 
   return (
-    <SidebarFoldableContext.Provider value={foldable}>
+    <SidebarFoldableContext.Provider value={canFold}>
       <div
         className="opal-sidebar-root__column"
-        data-folded={foldable ? foldedAttr : undefined}
+        data-folded={canFold ? foldedAttr : undefined}
+        data-railed={railedAttr}
       >
         {inner}
       </div>
@@ -186,7 +235,8 @@ type SidebarHeaderBrandingProps =
        * The name beside the mark. It fades in place as the sidebar folds,
        * while the fold button, anchored to the row's end, moves with the
        * column's edge. Folded, the fold button takes the mark's place on
-       * hover, keyboard focus, or a device without hover.
+       * hover, keyboard focus, or a device without hover. Under a rail the
+       * row is the mark and the name only; the rail holds the fold button.
        */
       wordmark: React.ReactNode;
     };
@@ -211,7 +261,26 @@ function SidebarHeader(props: SidebarHeaderProps) {
     [setFolded]
   );
 
+  const railed = useContext(SidebarRailedContext);
   const foldLabel = folded ? strings.sidebarOpen : strings.sidebarClose;
+
+  // Under a rail, report the logo row's height to the rail (see
+  // `SidebarBrandRowContext`).
+  const brandRowRef = useRef<HTMLDivElement>(null);
+  const setBrandHeight = useContext(SidebarBrandRowContext)?.setHeight;
+  useLayoutEffect(() => {
+    const row = brandRowRef.current;
+    if (!row || !setBrandHeight || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(() => setBrandHeight(row.offsetHeight));
+    observer.observe(row);
+    setBrandHeight(row.offsetHeight);
+    return () => {
+      observer.disconnect();
+      setBrandHeight(undefined);
+    };
+  }, [setBrandHeight]);
 
   const closeButton = useMemo(
     () => (
@@ -228,6 +297,32 @@ function SidebarHeader(props: SidebarHeaderProps) {
     ),
     [folded, foldLabel, toggleFolded]
   );
+
+  // Under a rail, the header shows the full logo: the mark and the name
+  // together. The rail holds the fold control.
+  if (railed) {
+    return (
+      <div className="opal-sidebar-header">
+        {props.wordmark && (
+          <div className="opal-sidebar-header__topbar">
+            <div
+              ref={brandRowRef}
+              className="opal-sidebar-header__railed-brand"
+              style={{ minHeight: SIDEBAR_LOGO_HEIGHT_PX }}
+            >
+              <div className="opal-sidebar-header__mark">{props.logo}</div>
+              <div className="opal-sidebar-header__railed-wordmark">
+                {props.wordmark}
+              </div>
+            </div>
+          </div>
+        )}
+        {children && (
+          <div className="opal-sidebar-header__content">{children}</div>
+        )}
+      </div>
+    );
+  }
 
   if (props.renderAppLogo === undefined) {
     return (
@@ -320,6 +415,60 @@ function SidebarHeader(props: SidebarHeaderProps) {
       {children && (
         <div className="opal-sidebar-header__content">{children}</div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Rail — the thin column of window tabs, passed to `Root` as `rail`
+// ---------------------------------------------------------------------------
+
+interface SidebarRailProps {
+  /**
+   * The logo mark at the top of the rail, shown while the sidebar is folded.
+   * Hover shows the open button in its place. Unfolded, the close button
+   * takes the spot, and the sidebar's header shows the full logo.
+   */
+  logo?: React.ReactNode;
+  /** Bottom items (e.g. a settings tab, the account). */
+  footer?: React.ReactNode;
+  /** Window tabs, usually `SidebarTab`s with an icon and a string label. */
+  children?: React.ReactNode;
+}
+
+function SidebarRail({ logo, footer, children }: SidebarRailProps) {
+  const { folded, setFolded } = useSidebarState();
+  const strings = useOpalStrings();
+  const foldLabel = folded ? strings.sidebarOpen : strings.sidebarClose;
+  const brandHeight = useContext(SidebarBrandRowContext)?.height;
+  return (
+    <div className="opal-sidebar-rail">
+      {/* Folded, the fold button sits over the mark and shows on hover or
+          keyboard focus. Unfolded, it shows alone. The cell is as tall as
+          the sidebar's logo row, so the tabs below line up. */}
+      <div
+        className="opal-sidebar-rail__logo"
+        data-folded={String(folded)}
+        style={{ height: brandHeight ?? SIDEBAR_LOGO_HEIGHT_PX }}
+      >
+        {folded && <div className="opal-sidebar-rail__mark">{logo}</div>}
+        <div
+          className="opal-sidebar-rail__fold-button"
+          style={{ height: SIDEBAR_LOGO_HEIGHT_PX }}
+        >
+          <Button
+            icon={SvgSidebar}
+            prominence="tertiary"
+            aria-label={foldLabel}
+            tooltip={foldLabel}
+            tooltipSide="end"
+            size="md"
+            onClick={() => setFolded((prev) => !prev)}
+          />
+        </div>
+      </div>
+      <div className="opal-sidebar-rail__tabs">{children}</div>
+      {footer && <div className="opal-sidebar-rail__footer">{footer}</div>}
     </div>
   );
 }
@@ -470,10 +619,11 @@ function SidebarDivider() {
 
 export {
   SidebarRoot as Root,
+  SidebarRail as Rail,
   SidebarHeader as Header,
   SidebarBody as Body,
   SidebarFooter as Footer,
   SidebarSection as Section,
   SidebarDivider as Divider,
 };
-export type { SidebarRootProps };
+export type { SidebarRootProps, SidebarRailProps };

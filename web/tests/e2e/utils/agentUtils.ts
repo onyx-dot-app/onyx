@@ -20,7 +20,7 @@ export async function createAgent(page: Page, params: AgentParams) {
   }
 
   // Open Assistants modal/list
-  await page.getByTestId("AppSidebar/more-agents").click();
+  await page.getByTestId("AppRail/agents").click();
   await page.getByLabel("AgentsPage/new-agent-button").click();
 
   // Fill required fields

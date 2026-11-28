@@ -3,7 +3,7 @@ import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
-import Layout from "@/app/app/settings/layout";
+import SettingsSidebarContent from "@/sections/settings/SettingsSidebarContent";
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -42,7 +42,7 @@ const mockUseSettings = useSettings as jest.MockedFunction<typeof useSettings>;
 
 // The user provider mock has no permissions, so nothing else opens the tab:
 // no tokens, no OAuth provider, no federated connectors, no visible model.
-describe("settings layout, 3rd Party Access tab", () => {
+describe("settings sidebar, 3rd Party Access tab", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseTierAtLeast.mockReturnValue(true);
@@ -60,11 +60,7 @@ describe("settings layout, 3rd Party Access tab", () => {
       playground_restrictions: none,
     } as ReturnType<typeof useSettings>);
 
-    render(
-      <Layout>
-        <div />
-      </Layout>
-    );
+    render(<SettingsSidebarContent />);
 
     expect(screen.queryByText("3rd Party Access")).not.toBeInTheDocument();
   });
@@ -76,13 +72,8 @@ describe("settings layout, 3rd Party Access tab", () => {
       playground_restrictions: [PlaygroundRestrictedFeature.LLM_GATEWAY],
     } as ReturnType<typeof useSettings>);
 
-    render(
-      <Layout>
-        <div />
-      </Layout>
-    );
+    render(<SettingsSidebarContent />);
 
-    // Once in the narrow-screen select, once in the wide-screen tab list.
-    expect(screen.getAllByText("3rd Party Access").length).toBeGreaterThan(0);
+    expect(screen.getByText("3rd Party Access")).toBeInTheDocument();
   });
 });

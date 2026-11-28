@@ -1137,17 +1137,28 @@ specific routes under `web/src/app/api/` take precedence over this one.
 
 ---
 
-**The sidebar.** `web/src/sections/sidebar/AppSidebar.tsx:AppSidebar` shows
-its header tabs and section titles at once. Each section (agents, projects,
-recents) shows Opal's `SidebarLoader` until its own data loads, so a fast
-section does not wait for a slow one; `usePinnedAgents` stays loading until the
-user's pins are in its list. Folded, the header keeps the unfolded button
-order. The header is
-`web/src/sections/sidebar/BrandedSidebarHeader.tsx:BrandedSidebarHeader`, which
-the admin and Craft sidebars share: the logo mark and the wordmark from
-[[whitelabelling-and-theme]], and the fold button, which moves with the
-column's edge as the sidebar folds. A sidebar renders it rather than setting
-up its own branding.
+**The rail and the sidebar.** The app shell is a thin rail of windows and a
+sidebar beside it. `web/src/sections/sidebar/AppRail.tsx:AppRail` is the rail:
+the fold control, then Chat, Agents and Customize, then the admin gear (admins only) and the account menu. `lib/sidebar/utils.ts:sidebarWindow`
+maps the path to a window, and the sidebar shows that window's content:
+Chat (`/app`, scheduled tasks, `/nrf`), Agents (`/app/agents/**`, pinned
+agents), Customize (`/app/customize/**`), Settings (`/app/settings/**`) and
+Admin (`/admin/**`, `AdminSidebar`). `AppSidebar` and `AdminSidebar` both pass
+`AppRail` as the `rail` of `SidebarLayouts.Root`, so the rail is the same on app
+and admin pages. Open, the rail's top corner is the close button, and the
+sidebar's header shows the full logo: the mark and the wordmark together, so a
+whitelabel logo and name stay side by side. Fold (⌘E or the button) hides the
+sidebar fully and keeps the rail; the corner then shows the square logo mark,
+and hover shows the open button in its place. On a phone both open as one overlay.
+
+Each section (agents, projects, recents) shows Opal's `SidebarLoader` until its
+own data loads, so a fast section does not wait for a slow one;
+`usePinnedAgents` stays loading until the user's pins are in its list. The
+header is `web/src/sections/sidebar/BrandedSidebarHeader.tsx:BrandedSidebarHeader`,
+which the admin and Craft sidebars share: the logo mark and the wordmark from
+[[whitelabelling-and-theme]]. Under a rail it shows the mark and the wordmark
+without a fold button. Craft has no rail and keeps the fold button in it. A sidebar renders it rather than setting up its own
+branding.
 
 **Run status on chat rows.** Each chat row (`sections/sidebar/ChatButton.tsx`)
 shows live status from the session store and unseen Done or Failed status

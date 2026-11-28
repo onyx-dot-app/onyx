@@ -359,7 +359,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
         <div id="onyx-user-dropdown">
           <SidebarTab
             icon={(props) => (
-              <div className="w-[16px] flex flex-col justify-center items-center">
+              <div className="relative w-[16px] flex flex-col justify-center items-center">
                 <UserAvatar
                   {...props}
                   name={getUserAddressedName(user)}
@@ -367,6 +367,13 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
                   imageUrl={buildUserProfileImageUrl(user)}
                   size={props.size}
                 />
+                {/* Folded, the label and its count are hidden; a dot on the
+                    avatar keeps unread notifications visible. */}
+                {folded && undismissedCount > 0 && (
+                  <span className="absolute -top-0.5 -end-0.5 flex">
+                    <SvgNotificationBubble size={6} />
+                  </span>
+                )}
               </div>
             )}
             rightChildren={

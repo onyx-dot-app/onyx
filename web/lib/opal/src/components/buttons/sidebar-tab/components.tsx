@@ -227,6 +227,7 @@ function SidebarTab({
         href={href as Route}
         scroll={false}
         onClick={onClick}
+        aria-current={selected ? "true" : undefined}
         {...labelProps}
         className={controlClassName}
       />

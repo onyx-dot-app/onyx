@@ -40,7 +40,7 @@ test.describe("Live Agent Tests", () => {
     await verifyDefaultAgentIsChosen(page);
 
     // Test creation of a new assistant
-    await page.getByTestId("AppSidebar/more-agents").click();
+    await page.getByTestId("AppRail/agents").click();
     await page.getByLabel("AgentsPage/new-agent-button").click();
     await page.locator('input[name="name"]').click();
     await page.locator('input[name="name"]').fill("Test Assistant");

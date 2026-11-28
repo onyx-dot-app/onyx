@@ -13636,14 +13636,6 @@
         },
         "title": "إنشاء مشروع جديد"
       },
-      "foldedPopover": {
-        "empty": {
-          "title": "لم يتم العثور على مشاريع"
-        },
-        "search": {
-          "placeholder": "البحث في المشاريع..."
-        }
-      },
       "folder": {
         "collapse": {
           "ariaLabel": "طي المشروع"
@@ -16552,9 +16544,6 @@
       "header": {
         "title": "الإعدادات"
       },
-      "sectionSelect": {
-        "placeholder": "اختر قسمًا"
-      },
       "tabs": {
         "appearance": {
           "label": "المظهر"
@@ -16977,14 +16966,16 @@
       }
     },
     "adminSidebar": {
-      "exitAdminPanel": {
-        "label": "الخروج من لوحة الإدارة"
-      },
-      "search": {
-        "label": "بحث"
-      },
       "searchInput": {
         "placeholder": "بحث..."
+      }
+    },
+    "appRail": {
+      "agents": {
+        "label": "الوكلاء"
+      },
+      "chat": {
+        "label": "الدردشة"
       }
     },
     "appSidebar": {
@@ -16999,9 +16990,6 @@
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"
-      },
-      "moreAgents": {
-        "label": "المزيد من الوكلاء"
       },
       "moveChatError": {
         "message": "فشل نقل المحادثة. يرجى المحاولة مرة أخرى."
@@ -18233,7 +18221,6 @@
   "customize": {
     "title": "التخصيص",
     "tabs": {
-      "label": "أقسام التخصيص",
       "skills": "المهارات",
       "integrations": "عمليات التكامل",
       "plugins": "الإضافات"

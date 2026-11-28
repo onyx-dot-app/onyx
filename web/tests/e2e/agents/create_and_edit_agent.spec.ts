@@ -308,6 +308,16 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(agentIdMatch).toBeTruthy();
       const agentId = agentIdMatch ? agentIdMatch[1] : null;
       expect(agentId).not.toBeNull();
+      // Store assistant ID for cleanup
+      knowledgeAssistantId = Number(agentId);
+
+      const mainContainer = page.locator("[data-main-container]");
+      await expect(mainContainer).toBeVisible();
+      await expectElementScreenshot(mainContainer, {
+        name: "welcome-page-with-assistant-main",
+        hide: ["[data-testid='model-selector']"],
+      });
+
       // Split the previous full-page screenshot into two scoped element
       // screenshots. The full-page variant was flaky because the sidebar can
       // pick up agents/projects/recents created by other tests; scoping to the
@@ -317,6 +327,8 @@ test.describe("Assistant Creation and Edit Verification", () => {
       // test id: SidebarSection roots are the only elements carrying
       // `data-hover-group="sidebar-section"`, and we filter to the one whose
       // section title is exactly "Agents".
+      // The Agents section lives in the Agents window of the rail.
+      await page.getByTestId("AppRail/agents").click();
       const agentsSidebarSection = page
         .locator('[data-hover-group="sidebar-section"]')
         .filter({ has: page.getByText("Agents", { exact: true }) });
@@ -324,16 +336,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expectElementScreenshot(agentsSidebarSection, {
         name: "welcome-page-with-assistant-agents-sidebar",
       });
-
-      const mainContainer = page.locator("[data-main-container]");
-      await expect(mainContainer).toBeVisible();
-      await expectElementScreenshot(mainContainer, {
-        name: "welcome-page-with-assistant-main",
-        hide: ["[data-testid='model-selector']"],
-      });
-
-      // Store assistant ID for cleanup
-      knowledgeAssistantId = Number(agentId);
 
       // Verify SearchTool is persisted in the agent's tools via API
       const createdAgent =

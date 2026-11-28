@@ -291,7 +291,7 @@ covers new files that match it.
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/src/app/app/customize/`, `web/src/sections/customize/`, `web/src/lib/customize/` | plugins, skills, chat-frontend |
 | `web/src/app/app/settings/usage/` | observability |
-| `web/src/views/settings/`, `web/src/app/app/settings/account/`, `web/src/app/app/settings/appearance/`, `web/src/app/app/settings/chat-preferences/`, `web/src/app/app/settings/layout.tsx`, `web/src/providers/WideChatProvider.tsx`, `web/src/providers/AppearancePreferencesProvider.tsx`, `web/src/lib/appearance/` | chat-preferences |
+| `web/src/views/settings/`, `web/src/app/app/settings/account/`, `web/src/app/app/settings/appearance/`, `web/src/app/app/settings/chat-preferences/`, `web/src/app/app/settings/layout.tsx`, `web/src/sections/settings/SettingsSidebarContent.tsx`, `web/src/providers/WideChatProvider.tsx`, `web/src/providers/AppearancePreferencesProvider.tsx`, `web/src/lib/appearance/` | chat-preferences |
 | `web/src/views/settings/ThirdPartyAccessSettings.tsx`, `web/src/views/settings/PATModal.tsx`, `web/src/app/app/settings/third-party-access/` | auth-and-identity, federated-search |
 | `web/src/views/settings/LLMGatewaySection.tsx` | llm-gateway |
 | `web/src/hooks/useUserPersonalization.ts`, `web/src/hooks/usePromptShortcuts.ts`, `web/src/hooks/useMemoryManager.ts`, `web/src/sections/settings/Memories.tsx`, `web/src/refresh-components/modals/MemoriesModal.tsx` | chat-preferences |

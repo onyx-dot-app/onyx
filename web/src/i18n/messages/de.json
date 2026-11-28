@@ -13636,14 +13636,6 @@
         },
         "title": "Neues Projekt erstellen"
       },
-      "foldedPopover": {
-        "empty": {
-          "title": "Keine Projekte gefunden"
-        },
-        "search": {
-          "placeholder": "Projekte durchsuchen..."
-        }
-      },
       "folder": {
         "collapse": {
           "ariaLabel": "Projekt einklappen"
@@ -16552,9 +16544,6 @@
       "header": {
         "title": "Einstellungen"
       },
-      "sectionSelect": {
-        "placeholder": "Bereich auswählen"
-      },
       "tabs": {
         "appearance": {
           "label": "Erscheinungsbild"
@@ -16977,14 +16966,16 @@
       }
     },
     "adminSidebar": {
-      "exitAdminPanel": {
-        "label": "Admin-Bereich verlassen"
-      },
-      "search": {
-        "label": "Suche"
-      },
       "searchInput": {
         "placeholder": "Suchen..."
+      }
+    },
+    "appRail": {
+      "agents": {
+        "label": "Agenten"
+      },
+      "chat": {
+        "label": "Chat"
       }
     },
     "appSidebar": {
@@ -16999,9 +16990,6 @@
       },
       "exploreAgents": {
         "label": "Agenten erkunden"
-      },
-      "moreAgents": {
-        "label": "Weitere Agenten"
       },
       "moveChatError": {
         "message": "Chat konnte nicht verschoben werden. Bitte versuchen Sie es erneut."
@@ -18233,7 +18221,6 @@
   "customize": {
     "title": "Anpassen",
     "tabs": {
-      "label": "Bereiche zum Anpassen",
       "skills": "Skills",
       "integrations": "Integrationen",
       "plugins": "Plugins"

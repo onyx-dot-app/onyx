@@ -13636,14 +13636,6 @@
         },
         "title": "Criar novo projeto"
       },
-      "foldedPopover": {
-        "empty": {
-          "title": "Nenhum projeto encontrado"
-        },
-        "search": {
-          "placeholder": "Pesquisar projetos..."
-        }
-      },
       "folder": {
         "collapse": {
           "ariaLabel": "Recolher projeto"
@@ -16552,9 +16544,6 @@
       "header": {
         "title": "Configurações"
       },
-      "sectionSelect": {
-        "placeholder": "Selecione uma seção"
-      },
       "tabs": {
         "appearance": {
           "label": "Aparência"
@@ -16977,14 +16966,16 @@
       }
     },
     "adminSidebar": {
-      "exitAdminPanel": {
-        "label": "Sair do painel de administração"
-      },
-      "search": {
-        "label": "Pesquisar"
-      },
       "searchInput": {
         "placeholder": "Pesquisar..."
+      }
+    },
+    "appRail": {
+      "agents": {
+        "label": "Agentes"
+      },
+      "chat": {
+        "label": "Chat"
       }
     },
     "appSidebar": {
@@ -16999,9 +16990,6 @@
       },
       "exploreAgents": {
         "label": "Explorar agentes"
-      },
-      "moreAgents": {
-        "label": "Mais agentes"
       },
       "moveChatError": {
         "message": "Falha ao mover o chat. Tente novamente."
@@ -18233,7 +18221,6 @@
   "customize": {
     "title": "Personalizar",
     "tabs": {
-      "label": "Seções de personalização",
       "skills": "Habilidades",
       "integrations": "Integrações",
       "plugins": "Plugins"

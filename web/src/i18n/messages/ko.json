@@ -13636,14 +13636,6 @@
         },
         "title": "새 프로젝트 만들기"
       },
-      "foldedPopover": {
-        "empty": {
-          "title": "프로젝트를 찾을 수 없습니다"
-        },
-        "search": {
-          "placeholder": "프로젝트 검색..."
-        }
-      },
       "folder": {
         "collapse": {
           "ariaLabel": "프로젝트 접기"
@@ -16552,9 +16544,6 @@
       "header": {
         "title": "설정"
       },
-      "sectionSelect": {
-        "placeholder": "섹션 선택"
-      },
       "tabs": {
         "appearance": {
           "label": "모양"
@@ -16977,14 +16966,16 @@
       }
     },
     "adminSidebar": {
-      "exitAdminPanel": {
-        "label": "관리자 패널 나가기"
-      },
-      "search": {
-        "label": "검색"
-      },
       "searchInput": {
         "placeholder": "검색..."
+      }
+    },
+    "appRail": {
+      "agents": {
+        "label": "에이전트"
+      },
+      "chat": {
+        "label": "채팅"
       }
     },
     "appSidebar": {
@@ -16999,9 +16990,6 @@
       },
       "exploreAgents": {
         "label": "에이전트 둘러보기"
-      },
-      "moreAgents": {
-        "label": "에이전트 더 보기"
       },
       "moveChatError": {
         "message": "채팅을 이동하지 못했습니다. 다시 시도하세요."
@@ -18233,7 +18221,6 @@
   "customize": {
     "title": "사용자 지정",
     "tabs": {
-      "label": "사용자 지정 섹션",
       "skills": "스킬",
       "integrations": "통합",
       "plugins": "플러그인"

@@ -13636,14 +13636,6 @@
         },
         "title": "创建新项目"
       },
-      "foldedPopover": {
-        "empty": {
-          "title": "未找到项目"
-        },
-        "search": {
-          "placeholder": "搜索项目..."
-        }
-      },
       "folder": {
         "collapse": {
           "ariaLabel": "折叠项目"
@@ -16552,9 +16544,6 @@
       "header": {
         "title": "设置"
       },
-      "sectionSelect": {
-        "placeholder": "选择一个部分"
-      },
       "tabs": {
         "appearance": {
           "label": "外观"
@@ -16977,14 +16966,16 @@
       }
     },
     "adminSidebar": {
-      "exitAdminPanel": {
-        "label": "退出管理面板"
-      },
-      "search": {
-        "label": "搜索"
-      },
       "searchInput": {
         "placeholder": "搜索…"
+      }
+    },
+    "appRail": {
+      "agents": {
+        "label": "智能体"
+      },
+      "chat": {
+        "label": "聊天"
       }
     },
     "appSidebar": {
@@ -16999,9 +16990,6 @@
       },
       "exploreAgents": {
         "label": "探索智能体"
-      },
-      "moreAgents": {
-        "label": "更多智能体"
       },
       "moveChatError": {
         "message": "移动对话失败。请重试。"
@@ -18233,7 +18221,6 @@
   "customize": {
     "title": "自定义",
     "tabs": {
-      "label": "自定义分区",
       "skills": "技能",
       "integrations": "集成",
       "plugins": "插件"

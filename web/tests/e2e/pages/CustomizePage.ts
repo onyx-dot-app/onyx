@@ -16,15 +16,13 @@ export class CustomizePage {
 
   async goto(tab: CustomizeTab = "Plugins"): Promise<void> {
     await this.page.goto(`/app/customize/${tab.toLowerCase()}`);
-    await expect(
-      this.page.getByRole("tab", { name: tab, exact: true })
-    ).toHaveAttribute("aria-selected", "true");
+    await expect(this.page.getByLabel("admin-page-title")).toHaveText(tab);
   }
 
   /** Opens a tab and waits for its list, so a next click does not race the
    * route that is still loading. */
   async openTab(tab: CustomizeTab): Promise<void> {
-    await this.page.getByRole("tab", { name: tab, exact: true }).click();
+    await this.page.getByRole("link", { name: tab, exact: true }).click();
     await expect(this.page).toHaveURL(
       new RegExp(`/app/customize/${tab.toLowerCase()}$`)
     );

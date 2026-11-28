@@ -13636,14 +13636,6 @@
         },
         "title": "Créer un nouveau projet"
       },
-      "foldedPopover": {
-        "empty": {
-          "title": "Aucun projet trouvé"
-        },
-        "search": {
-          "placeholder": "Rechercher des projets..."
-        }
-      },
       "folder": {
         "collapse": {
           "ariaLabel": "Réduire le projet"
@@ -16552,9 +16544,6 @@
       "header": {
         "title": "Paramètres"
       },
-      "sectionSelect": {
-        "placeholder": "Sélectionnez une section"
-      },
       "tabs": {
         "appearance": {
           "label": "Apparence"
@@ -16977,14 +16966,16 @@
       }
     },
     "adminSidebar": {
-      "exitAdminPanel": {
-        "label": "Quitter le panneau d'administration"
-      },
-      "search": {
-        "label": "Rechercher"
-      },
       "searchInput": {
         "placeholder": "Rechercher..."
+      }
+    },
+    "appRail": {
+      "agents": {
+        "label": "Agents"
+      },
+      "chat": {
+        "label": "Chat"
       }
     },
     "appSidebar": {
@@ -16999,9 +16990,6 @@
       },
       "exploreAgents": {
         "label": "Explorer les agents"
-      },
-      "moreAgents": {
-        "label": "Plus d'agents"
       },
       "moveChatError": {
         "message": "Impossible de déplacer la discussion. Veuillez réessayer."
@@ -18233,7 +18221,6 @@
   "customize": {
     "title": "Personnaliser",
     "tabs": {
-      "label": "Sections de personnalisation",
       "skills": "Compétences",
       "integrations": "Intégrations",
       "plugins": "Plugins"

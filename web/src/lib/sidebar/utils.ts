@@ -64,3 +64,25 @@ export function highlightMatch(text: string, query: string): React.ReactNode {
       : React.createElement(React.Fragment, { key: i }, part)
   );
 }
+
+/** A window of the app rail. Each window has its own sidebar. */
+export type SidebarWindow =
+  | "chat"
+  | "agents"
+  | "customize"
+  | "settings"
+  | "admin";
+
+function isUnder(pathname: string, base: string): boolean {
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
+
+/** The rail window a path belongs to. Paths outside the others are Chat. */
+export function sidebarWindow(pathname: string): SidebarWindow {
+  if (isUnder(pathname, "/admin") || isUnder(pathname, "/ee/admin"))
+    return "admin";
+  if (isUnder(pathname, "/app/agents")) return "agents";
+  if (isUnder(pathname, "/app/customize")) return "customize";
+  if (isUnder(pathname, "/app/settings")) return "settings";
+  return "chat";
+}

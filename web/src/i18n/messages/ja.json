@@ -13636,14 +13636,6 @@
         },
         "title": "新しいプロジェクトを作成"
       },
-      "foldedPopover": {
-        "empty": {
-          "title": "プロジェクトが見つかりません"
-        },
-        "search": {
-          "placeholder": "プロジェクトを検索..."
-        }
-      },
       "folder": {
         "collapse": {
           "ariaLabel": "プロジェクトを折りたたむ"
@@ -16552,9 +16544,6 @@
       "header": {
         "title": "設定"
       },
-      "sectionSelect": {
-        "placeholder": "セクションを選択"
-      },
       "tabs": {
         "appearance": {
           "label": "外観"
@@ -16977,14 +16966,16 @@
       }
     },
     "adminSidebar": {
-      "exitAdminPanel": {
-        "label": "管理パネルを終了"
-      },
-      "search": {
-        "label": "検索"
-      },
       "searchInput": {
         "placeholder": "検索..."
+      }
+    },
+    "appRail": {
+      "agents": {
+        "label": "エージェント"
+      },
+      "chat": {
+        "label": "チャット"
       }
     },
     "appSidebar": {
@@ -16999,9 +16990,6 @@
       },
       "exploreAgents": {
         "label": "エージェントを探す"
-      },
-      "moreAgents": {
-        "label": "その他のエージェント"
       },
       "moveChatError": {
         "message": "チャットを移動できませんでした。もう一度お試しください。"
@@ -18233,7 +18221,6 @@
   "customize": {
     "title": "カスタマイズ",
     "tabs": {
-      "label": "カスタマイズのセクション",
       "skills": "スキル",
       "integrations": "インテグレーション",
       "plugins": "プラグイン"
