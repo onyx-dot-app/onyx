@@ -304,10 +304,15 @@ def restore_chat_default(db_session: Session) -> Generator[None, None, None]:
 
 
 def _sync_on_playground(
-    db_session: Session, catalog: list[str], offered: set[str], default: str | None
+    db_session: Session,
+    catalog: list[str],
+    offered: set[str],
+    default: str | None,
+    onyx_key: bool = True,
 ) -> None:
     with (
         patch(f"{_SERVICE}.IS_PLAYGROUND", True),
+        patch(f"{_SERVICE}.is_onyx_managed_api_key", return_value=onyx_key),
         patch(
             f"{_SERVICE}.is_offered_on_playground",
             side_effect=lambda _provider, name, _rec: name in offered,
@@ -469,6 +474,7 @@ def test_playground_sync_takes_a_replacement_default_from_another_provider(
         with (
             patch(_CATALOG_PATH, side_effect=lambda name: catalogs[name]),
             patch(f"{_SERVICE}.IS_PLAYGROUND", True),
+            patch(f"{_SERVICE}.is_onyx_managed_api_key", return_value=True),
             patch(
                 f"{_SERVICE}.is_offered_on_playground",
                 side_effect=lambda _provider, name, _rec: name == "claude-cheap",
@@ -490,3 +496,25 @@ def test_playground_sync_takes_a_replacement_default_from_another_provider(
     finally:
         db_session.rollback()
         _cleanup_provider(db_session, other_name)
+
+
+def test_playground_sync_leaves_a_provider_on_the_tenants_own_key_alone(
+    db_session: Session, provider_name: str
+) -> None:
+    _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-a": True, "gpt-pricey": True},
+    )
+    _sync_with_catalog(db_session, ["gpt-a", "gpt-pricey"])
+
+    _sync_on_playground(
+        db_session, ["gpt-a", "gpt-pricey"], {"gpt-a"}, "gpt-a", onyx_key=False
+    )
+
+    assert _visibility(db_session, provider_name) == {
+        "gpt-a": True,
+        "gpt-pricey": True,
+    }

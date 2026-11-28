@@ -26,6 +26,7 @@ from onyx.llm.playground_models import (
     playground_default_model,
 )
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
+from onyx.server.usage_limits import is_onyx_managed_api_key
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import IS_PLAYGROUND, ONYX_AIRGAPPED
 
@@ -178,8 +179,13 @@ def _offered_on_playground(
 
     Only models in the lab's current catalog count: a retired model kept
     hidden because an agent still uses it stays hidden. None without a
-    catalog, so that run changes nothing."""
+    catalog, so that run changes nothing, and None for a provider on the
+    tenant's own key: the rule, like the playground's model check, only bounds
+    what runs on Onyx's keys."""
     if catalog is None:
+        return None
+    api_key = provider.api_key.get_value(apply_mask=False) if provider.api_key else None
+    if not is_onyx_managed_api_key(api_key):
         return None
     available = set(catalog)
     return {
