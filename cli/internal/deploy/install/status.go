@@ -113,6 +113,7 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 	}
 	// The overlay on disk is what the lifecycle verbs stack, manifest or not.
 	st.Dev = st.Dev || in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel))
+	st.IncludeSandbox = st.IncludeSandbox || in.overlayOnDisk(filepath.Base(deployfiles.SandboxOverlay.DestRel))
 
 	st.Services, st.RunningTag, st.AccessURL = in.inspectContainers(ctx)
 	// Prod publishes 80/443 behind a real domain; the port-derived localhost

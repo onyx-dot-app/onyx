@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 )
 
@@ -710,5 +711,24 @@ func TestPublishedHostPort(t *testing.T) {
 		if got := publishedHostPort(in); got != want {
 			t.Errorf("publishedHostPort(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Lifecycle verbs stack an overlay on disk without a manifest, so status
+// reports it too.
+func TestStatusFindsTheSandboxOverlayWithoutAManifest(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.2.0")
+	if err := os.Remove(filepath.Join(root, state.FileName)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "deployment", "docker-compose.sandbox.yml"), []byte("services: {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	// No container runs here, so status exits non-zero; only the JSON matters.
+	_ = RunStatus(context.Background(), deps, Options{Dir: root}, true)
+	if out := outBuf(deps).String(); !strings.Contains(out, `"include_sandbox": true`) {
+		t.Errorf("JSON misses the sandbox overlay:\n%s", out)
 	}
 }

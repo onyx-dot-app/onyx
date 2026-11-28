@@ -84,5 +84,6 @@ func (in *installer) applySandboxEnv(env, tag string) string {
 const sandboxSecurityWarning = `⚠  Chat sandbox containers: api_server and background bind-mount
 ⚠  /var/run/docker.sock (RW = root on host on compromise);
 ⚠  sandbox-proxy bind-mounts it RO. Only enable on hosts you fully
-⚠  control. On EC2, require IMDSv2 (HttpTokens=required) so
-⚠  sandboxes cannot pull IAM credentials from instance metadata.`
+⚠  control. On EC2, IMDSv2 alone does not stop containers from
+⚠  reading instance metadata: also set HttpPutResponseHopLimit=1, or
+⚠  drop bridge traffic to 169.254.169.254 in the DOCKER-USER chain.`

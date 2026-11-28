@@ -179,6 +179,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 
 	if in.opts.DryRun {
+		in.recoverOverlaysForPlan()
 		in.printPlan(getLatestTag())
 		return nil
 	}
@@ -1041,6 +1042,20 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	return effectiveTag, hostPort, nil
 }
 
+// recoverOverlaysForPlan adds the overlays that a real rerun keeps (the
+// manifest, or the files on disk), so the dry-run plan shows them. It only
+// reads files: no Docker probes.
+func (in *installer) recoverOverlaysForPlan() {
+	manifest, err := state.Load(in.root.Dir)
+	if err != nil || manifest == nil {
+		manifest = &state.Manifest{}
+	}
+	in.craft = in.craft || manifest.IncludeCraft ||
+		in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
+	in.sandbox = !in.lite && (in.sandbox || manifest.IncludeSandbox ||
+		in.overlayOnDisk(filepath.Base(deployfiles.SandboxOverlay.DestRel)))
+}
+
 // guardRunningServices reports whether the deployment's services are up, and
 // settles what that means for a scripted run: reconfiguring a live deployment
 // needs --force, and the refusal carries the remedy (install.sh printed
@@ -1051,7 +1066,14 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 // --force-recreate, so the current version keeps serving while the images
 // download and each container is replaced only once its replacement is ready.
 func (in *installer) guardRunningServices(ctx context.Context) (bool, error) {
-	files := in.composeFileNames(true)
+	// Only files on disk: an overlay this run requests comes later, and a
+	// missing -f fails `ps`, which would read as "not running".
+	var files []string
+	for _, name := range in.composeFileNames(true) {
+		if in.overlayOnDisk(name) {
+			files = append(files, name)
+		}
+	}
 	cmd := in.compose.Command(in.deploymentDir(), stopFallbackEnv(), files, "ps", "-q")
 	res, err := in.deps.Runner.Run(ctx, cmd)
 	if err != nil || strings.TrimSpace(res.Stdout) == "" {
