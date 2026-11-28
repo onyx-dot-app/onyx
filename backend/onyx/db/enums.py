@@ -415,6 +415,17 @@ class UserFileStatus(str, PyEnum):
     DELETING = "DELETING"
 
 
+class ChatArtifactIndexStatus(str, PyEnum):
+    """Where a published file's newest version stands in the search index.
+    INDEXED means its document holds that version. REMOVED means its chat is
+    deleted and it has no document; nothing indexes it again."""
+
+    PENDING = "PENDING"
+    INDEXED = "INDEXED"
+    FAILED = "FAILED"
+    REMOVED = "REMOVED"
+
+
 class ThemePreference(str, PyEnum):
     LIGHT = "light"
     DARK = "dark"
@@ -544,6 +555,8 @@ class ApprovalDecidedVia(str, PyEnum):
     SESSION_GRANT = "SESSION_GRANT"
     # The action policy blocked the action when the user approved it.
     POLICY = "POLICY"
+    # Approved for the rest of one chat VM command (`action_approval` only).
+    COMMAND_GRANT = "COMMAND_GRANT"
 
 
 class QuestionOutcome(str, PyEnum):
@@ -610,6 +623,11 @@ class ScheduledTaskErrorClass(str, PyEnum):
     # CANCELLED runs: an approval that nobody answered, or a user Stop.
     SUPERSEDED_BY_NEXT_FIRE = "superseded_by_next_fire"
     APPROVAL_TIMEOUT = "approval_timeout"
+    # The owner hard-deleted the run's chat; the run keeps no chat id.
+    CHAT_DELETED = "chat_deleted"
+    # The owner is inactive or lost chat access; the task is paused.
+    OWNER_CANNOT_CHAT = "owner_cannot_chat"
+    RATE_LIMITED = "rate_limited"
     USER_CANCELLED = "user_cancelled"
 
 

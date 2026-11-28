@@ -12,6 +12,7 @@ from onyx.chat.files import load_chat_files
 from onyx.db.enums import UserFileStatus
 from onyx.db.user_file import prepare_chat_file_inputs
 from onyx.file_store.models import ChatFileType, FileDescriptor
+from onyx.file_store.utils import plaintext_file_name_for_id
 
 
 def test_attachment_metadata_is_read_before_workers() -> None:
@@ -47,7 +48,7 @@ def test_attachment_metadata_is_read_before_workers() -> None:
         patch(
             "onyx.db.user_file.get_user_file_processing_info", side_effect=get_metadata
         ),
-        patch("onyx.chat.files._get_or_extract_plaintext", side_effect=read_plaintext),
+        patch("onyx.chat.files.get_or_extract_plaintext", side_effect=read_plaintext),
         patch("onyx.chat.files.get_default_file_store") as store,
     ):
         loaded = load_chat_files(prepare_chat_file_inputs(descriptors, session))
@@ -78,13 +79,13 @@ def test_loading_preserves_processing_plaintext_guard(
     with (
         patch("onyx.db.user_file.get_user_file_processing_info", return_value=metadata),
         patch(
-            "onyx.chat.files._get_or_extract_plaintext", return_value="text"
+            "onyx.chat.files.get_or_extract_plaintext", return_value="text"
         ) as plaintext,
     ):
         loaded = load_chat_files(prepare_chat_file_inputs([descriptor], session))[0]
     assert loaded.token_count == 0
     assert loaded.content_pending is pending
-    assert plaintext.call_args.args[0] == user_file_id
+    assert plaintext.call_args.args[0] == plaintext_file_name_for_id(user_file_id)
     assert plaintext.call_args.kwargs["store_on_miss"] is not pending
 
 

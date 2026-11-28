@@ -137,6 +137,7 @@ async def authenticate_oauth_provider_request(
         UsageCredentialType.OAUTH_PROVIDER,
         str(info.grant.id),
         info.grant.client_name,
+        oauth_client_id=info.grant.client_id,
     )
     request.scope[_TOKEN_INFO_SCOPE_KEY] = info
     return user

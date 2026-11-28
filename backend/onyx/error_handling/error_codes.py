@@ -97,6 +97,19 @@ class OnyxErrorCode(Enum):
     # A message sent to a chat that waits for the user's approval. The client
     # keeps the draft until the user decides the pending requests.
     APPROVAL_PENDING = ("APPROVAL_PENDING", 409)
+    # The file can have a PDF preview, but none is stored yet: the client
+    # asks for the conversion (POST /chat/file/{file_id}/preview).
+    PREVIEW_NOT_READY = ("PREVIEW_NOT_READY", 409)
+
+    # --------------------------------------------------------------------------
+    # Unprocessable (422)
+    # --------------------------------------------------------------------------
+    # The file has no preview of the requested kind. The PDF preview's GET:
+    # the file is not a PowerPoint or Word file, or no upload or published
+    # file owns it (or its upload is being deleted). Its POST also: the file
+    # is too large, its conversion failed or ran out of time, or the
+    # deployment has no sandbox. Clients offer the download instead.
+    PREVIEW_UNAVAILABLE = ("PREVIEW_UNAVAILABLE", 422)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)

@@ -11,39 +11,24 @@ import {
   InputSingleSelect,
   MessageCard,
   Dropdown,
-  type DropdownMenuRow,
-  Text,
   useCreateModal,
 } from "@opal/components";
 import {
-  ConfirmationModalLayout,
   IllustrationContent,
   SettingsLayouts,
   Toolbar,
-  Content,
   Section,
   toast,
 } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
-  SvgAlertTriangle,
   SvgBlocks,
-  SvgCheckCircle,
   SvgEdit,
-  SvgMoreHorizontal,
   SvgPlus,
-  SvgShare,
-  SvgTrash,
   SvgUploadCloud,
   SvgUsers,
-  SvgXCircle,
 } from "@opal/icons";
-import { SvgGitHub } from "@opal/logos";
-import AddMarketplaceModal from "@/sections/marketplaces/AddMarketplaceModal";
-import MarketplacesSection from "@/sections/marketplaces/MarketplacesSection";
-import { useMarketplaceAdded } from "@/lib/marketplaces/hooks";
-import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
-import { useUser } from "@/providers/UserProvider";
+import { usePluginBulkActions } from "@/sections/skills/usePluginBulkActions";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import useOnMount from "@/hooks/useOnMount";
@@ -58,34 +43,18 @@ import SkillPublishingCard from "@/sections/skills/SkillPublishingCard";
 import type { CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
-import {
-  deleteUserSkill,
-  bulkUpdateSkills,
-  type SkillShareUpdatePayload,
-} from "@/lib/skills/api";
+import { canManageSkill } from "@/lib/skills/sharing";
 import { useSettings } from "@/lib/settings/hooks";
-import { useSkillEnablement } from "@/lib/skills/hooks";
+import { usePluginDelete, usePluginEnablement } from "@/lib/skills/hooks";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
-import {
-  adminSkillHref,
-  newSkillHref,
-  pluginHref,
-} from "@/lib/customize/paths";
+import { adminSkillHref, newSkillHref } from "@/lib/customize/paths";
 
 export default function AdminSkillsPage() {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
-  const { isAdmin } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
   );
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [bulkSharingOpen, setBulkSharingOpen] = useState(false);
-  const bulkDeleteModal = useCreateModal();
-  const [bulkFailures, setBulkFailures] = useState<
-    { name: string; detail: string }[]
-  >([]);
   const { appName } = useSettings();
   const navigation = useNavigation();
   const { data, error, isLoading, refresh } = useUserSkills();
@@ -97,12 +66,23 @@ export default function AdminSkillsPage() {
   }
   const [deleteTarget, setDeleteTarget] = useState<CustomSkill | null>(null);
   const deleteModal = useCreateModal();
-  const [deleting, setDeleting] = useState(false);
+  // Drop the skill now, so a failed refresh does not show it.
+  const deletion = usePluginDelete({
+    noun: "skill",
+    onDeleted: async (deleted) => {
+      await refresh(
+        (current) =>
+          current && {
+            ...current,
+            customs: current.customs.filter((skill) => skill.id !== deleted.id),
+          },
+        { revalidate: false }
+      );
+    },
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
-  const onMarketplaceAdded = useMarketplaceAdded();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<CustomSkill | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -112,52 +92,24 @@ export default function AdminSkillsPage() {
   });
 
   async function deleteSkill() {
-    if (
-      !deleteTarget ||
-      deleting ||
-      (deleteTarget.user_permission !== "OWNER" &&
-        deleteTarget.user_permission !== "EDITOR")
-    )
-      return;
-    setDeleting(true);
-    try {
-      await deleteUserSkill(deleteTarget.id);
-      await refresh(
-        (current) =>
-          current && {
-            ...current,
-            customs: current.customs.filter(
-              (skill) => skill.id !== deleteTarget.id
-            ),
-          },
-        { revalidate: false }
-      );
-      void revalidateSkills();
-      deleteModal.toggle(false);
-      toast.success(t("editor.toasts.deleted", { name: deleteTarget.name }));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("editor.toasts.deleteFailed")
-      );
-    } finally {
-      setDeleting(false);
-    }
+    if (!deleteTarget || !canManageSkill(deleteTarget)) return;
+    if (await deletion.remove(deleteTarget)) deleteModal.toggle(false);
   }
 
-  const loadedItems = useMemo<CustomSkill[]>(
+  const items = useMemo<CustomSkill[]>(
     () =>
       (data?.customs ?? [])
-        .filter((skill): skill is CustomSkill => skill.source === "custom")
+        // Plugins have their own admin page.
+        .filter(
+          (skill): skill is CustomSkill =>
+            skill.source === "custom" && skill.kind !== "plugin"
+        )
         .sort((a, b) =>
           a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
         ),
     [data]
   );
-  const enablement = useSkillEnablement(loadedItems, refresh);
-  const items = loadedItems.map((item) => ({
-    ...item,
-    enabled: enablement.enabledOf(item),
-  }));
+  const enablement = usePluginEnablement(items, refresh);
 
   // The groups of the summaries the caller may see.
   const groupOptions = useMemo(() => {
@@ -197,90 +149,11 @@ export default function AdminSkillsPage() {
     );
   }, [activeGroupId, items, searchQuery, organizationLibrary]);
 
-  const selectableItems = visibleItems;
-  const selectedItems = selectableItems.filter((item) =>
-    selectedIds.has(item.id)
-  );
-  // The skills the bulk-delete confirm lists. Snapshotted on open: the
-  // selection clears when the delete lands, while the card still fades out.
-  const [bulkDeleteTargets, setBulkDeleteTargets] = useState(selectedItems);
-  const canManageSelected =
-    selectedItems.length > 0 &&
-    selectedItems.every(
-      (item) =>
-        item.user_permission === "OWNER" || item.user_permission === "EDITOR"
-    );
-  const toggleableItems = selectedItems.filter((item) => item.can_toggle);
-  // A card toggle still in flight must settle before a bulk action may race it.
-  const bulkLocked =
-    bulkBusy || selectedItems.some((item) => enablement.isPending(item.id));
-
-  const bulkToggleActions: DropdownMenuRow[] = [];
-  if (selectedItems.some((item) => !item.enabled)) {
-    bulkToggleActions.push({
-      kind: "action",
-      id: "enable",
-      icon: SvgCheckCircle,
-      title: bulkCopy("enable"),
-      disabled: bulkLocked || toggleableItems.length === 0,
-      onSelect: () => void runBulk("enable"),
-    });
-  }
-  if (selectedItems.some((item) => item.enabled)) {
-    bulkToggleActions.push({
-      kind: "action",
-      id: "disable",
-      icon: SvgXCircle,
-      title: bulkCopy("disable"),
-      disabled: bulkLocked || toggleableItems.length === 0,
-      onSelect: () => void runBulk("disable"),
-    });
-  }
-
-  async function runBulk(
-    action: "share" | "enable" | "disable" | "delete",
-    sharing?: SkillShareUpdatePayload
-  ) {
-    const pool = action === "delete" ? bulkDeleteTargets : selectedItems;
-    if (bulkLocked || pool.length === 0) return;
-    setBulkBusy(true);
-    setBulkFailures([]);
-    try {
-      // Delete acts on exactly the skills its confirm listed.
-      const targets =
-        action === "enable" || action === "disable"
-          ? toggleableItems
-          : action === "delete"
-            ? bulkDeleteTargets
-            : selectedItems;
-      const skill_ids = targets.map((item) => item.id);
-      const result = await bulkUpdateSkills(
-        action === "share"
-          ? { action, skill_ids, sharing: sharing ?? {} }
-          : { action, skill_ids }
-      );
-      setSelectedIds(new Set(result.failed.map((failure) => failure.skill_id)));
-      // Names come from the request targets: a skill deleted elsewhere in the
-      // meantime is gone from the refreshed list but must still be reported.
-      setBulkFailures(
-        result.failed.map((failure) => ({
-          name:
-            targets.find((item) => item.id === failure.skill_id)?.name ??
-            failure.skill_id,
-          detail: failure.detail,
-        }))
-      );
-      if (result.succeeded.length)
-        toast.success(bulkCopy("updated", { count: result.succeeded.length }));
-      setBulkSharingOpen(false);
-      bulkDeleteModal.toggle(false);
-      await revalidateSkills();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : bulkCopy("failed"));
-    } finally {
-      setBulkBusy(false);
-    }
-  }
+  const bulk = usePluginBulkActions({
+    items: visibleItems,
+    enablement,
+    noun: "skill",
+  });
 
   return (
     <SettingsLayouts.Root width="lg" data-testid="SkillsPage/container">
@@ -320,14 +193,6 @@ export default function AdminSkillsPage() {
                   description: t("page.createMenu.upload.description"),
                   onSelect: () => setCreateOpen(true),
                 },
-                {
-                  kind: "action",
-                  id: "marketplace",
-                  icon: SvgGitHub,
-                  title: t("page.createMenu.marketplace.title"),
-                  description: t("page.createMenu.marketplace.description"),
-                  onSelect: () => setMarketplaceOpen(true),
-                },
               ]}
             />
           </Dropdown>,
@@ -339,15 +204,7 @@ export default function AdminSkillsPage() {
         {canManageOrgSkills && (
           <SkillReviewRequests onReviewed={() => void revalidateSkills()} />
         )}
-        {bulkFailures.length > 0 && (
-          <MessageCard
-            variant="error"
-            title={bulkCopy("partialFailure", { count: bulkFailures.length })}
-            description={bulkFailures
-              .map((failure) => `${failure.name}: ${failure.detail}`)
-              .join("\n")}
-          />
-        )}
+        {bulk.failures}
 
         {isLoading && <IconLoader />}
 
@@ -368,11 +225,10 @@ export default function AdminSkillsPage() {
                     ref={searchInputRef}
                     placeholder={t("page.search.placeholder")}
                     value={searchQuery}
-                    readOnly={bulkBusy}
+                    readOnly={bulk.busy}
                     onChange={(event) => {
                       setSearchQuery(event.target.value);
-                      setSelectedIds(new Set());
-                      setBulkFailures([]);
+                      bulk.reset();
                     }}
                     icon="search"
                   />
@@ -390,7 +246,7 @@ export default function AdminSkillsPage() {
                               : String(activeGroupId)
                           }
                           defaultOption="all"
-                          disabled={bulkBusy}
+                          disabled={bulk.busy}
                           options={[
                             {
                               value: "all",
@@ -405,68 +261,13 @@ export default function AdminSkillsPage() {
                           ]}
                           onValueChange={(value) => {
                             setGroupFilter(value);
-                            setSelectedIds(new Set());
-                            setBulkFailures([]);
+                            bulk.reset();
                           }}
                         />,
                       ]
                     : []
                 }
-                actions={
-                  selectedItems.length > 0 && (
-                    <>
-                      <Text as="p" font="secondary-body" color="text-03">
-                        {bulkCopy("selected", { count: selectedItems.length })}
-                      </Text>
-                      <Button
-                        prominence="secondary"
-                        icon={SvgShare}
-                        disabled={bulkLocked || !canManageSelected}
-                        onClick={() => setBulkSharingOpen(true)}
-                      >
-                        {bulkCopy("share")}
-                      </Button>
-                      <Dropdown align="end" disabled={bulkLocked}>
-                        <Dropdown.Trigger asChild>
-                          <Button
-                            prominence="tertiary"
-                            icon={SvgMoreHorizontal}
-                            aria-label={bulkCopy("moreActions")}
-                            tooltip={bulkCopy("moreActions")}
-                            disabled={bulkLocked}
-                          />
-                        </Dropdown.Trigger>
-                        <Dropdown.Data
-                          label={bulkCopy("moreActions")}
-                          items={[
-                            { kind: "group", items: bulkToggleActions },
-                            {
-                              kind: "group",
-                              items: [
-                                {
-                                  kind: "action",
-                                  id: "delete",
-                                  icon: SvgTrash,
-                                  title: bulkCopy("delete"),
-                                  danger: true,
-                                  disabled:
-                                    selectedItems.length === 0 ||
-                                    selectedItems.some(
-                                      (item) => !item.can_delete
-                                    ),
-                                  onSelect: () => {
-                                    setBulkDeleteTargets(selectedItems);
-                                    bulkDeleteModal.toggle(true);
-                                  },
-                                },
-                              ],
-                            },
-                          ]}
-                        />
-                      </Dropdown>
-                    </>
-                  )
-                }
+                actions={bulk.toolbarActions}
               />
             )}
             {visibleItems.length === 0 ? (
@@ -486,103 +287,26 @@ export default function AdminSkillsPage() {
                 }
               />
             ) : (
-              <>
-                {selectableItems.length > 0 ? (
-                  <Section height="auto" alignItems="stretch">
-                    <AdminSkillsTable
-                      skills={selectableItems}
-                      selectedIds={selectedIds}
-                      onSelectionChange={(ids) => setSelectedIds(new Set(ids))}
-                      busy={bulkBusy}
-                      isPending={enablement.isPending}
-                      enabledOf={enablement.enabledOf}
-                      onEnabledChange={(skill, enabled) =>
-                        void enablement.setEnabled(skill, enabled)
-                      }
-                      onOpen={(skill) =>
-                        navigation.go(
-                          skill.kind === "plugin"
-                            ? pluginHref(skill.id)
-                            : adminSkillHref(skill.id)
-                        )
-                      }
-                      onShare={setShareTarget}
-                      onDelete={(skill) => {
-                        setDeleteTarget(skill);
-                        deleteModal.toggle(true);
-                      }}
-                    />
-                  </Section>
-                ) : !searchQuery.trim() ? (
-                  <IllustrationContent
-                    illustration={SvgNoResult}
-                    title={t("page.empty.noSkills.title")}
-                    description={t("page.empty.noSkills.description")}
-                  />
-                ) : null}
-              </>
+              <Section height="auto" alignItems="stretch">
+                <AdminSkillsTable
+                  skills={visibleItems}
+                  bulk={bulk}
+                  enablement={enablement}
+                  onOpen={(skill) => navigation.go(adminSkillHref(skill.id))}
+                  onShare={setShareTarget}
+                  onDelete={(skill) => {
+                    setDeleteTarget(skill);
+                    deleteModal.toggle(true);
+                  }}
+                />
+              </Section>
             )}
           </>
         )}
-        <MarketplacesSection onAdd={() => setMarketplaceOpen(true)} />
         {canManageOrgSkills && <SkillPublishingCard />}
       </SettingsLayouts.Body>
 
-      <BulkSkillSharingModal
-        count={selectedItems.length}
-        canChangeOrgAccess={
-          isAdmin ||
-          selectedItems.every((item) => item.user_permission === "OWNER")
-        }
-        open={bulkSharingOpen}
-        saving={bulkBusy}
-        onClose={() => setBulkSharingOpen(false)}
-        onSave={(sharing) => runBulk("share", sharing)}
-      />
-      <bulkDeleteModal.Provider>
-        <ConfirmationModalLayout
-          icon={SvgAlertTriangle}
-          title={bulkCopy("deleteTitle", { count: bulkDeleteTargets.length })}
-          description={bulkCopy("deleteDescription", {
-            count: bulkDeleteTargets.length,
-          })}
-          onClose={() => {
-            if (!bulkBusy) bulkDeleteModal.toggle(false);
-          }}
-          submit={
-            <Button
-              variant="danger"
-              disabled={bulkBusy}
-              onClick={() => void runBulk("delete")}
-            >
-              {bulkCopy("delete")}
-            </Button>
-          }
-        >
-          <Section
-            role="list"
-            height="auto"
-            alignItems="stretch"
-            gap={2}
-            className="max-h-60 overflow-y-auto"
-          >
-            {bulkDeleteTargets.map((item) => (
-              <Section
-                key={item.id}
-                role="listitem"
-                height="auto"
-                alignItems="stretch"
-              >
-                <Content
-                  font="main-ui-body"
-                  icon={SvgBlocks}
-                  title={item.name}
-                />
-              </Section>
-            ))}
-          </Section>
-        </ConfirmationModalLayout>
-      </bulkDeleteModal.Provider>
+      {bulk.modals}
 
       {shareTarget && (
         <ShareSkillModal
@@ -606,15 +330,6 @@ export default function AdminSkillsPage() {
         }}
       />
 
-      <AddMarketplaceModal
-        open={marketplaceOpen}
-        onClose={() => setMarketplaceOpen(false)}
-        onAdded={(marketplace) => {
-          setMarketplaceOpen(false);
-          onMarketplaceAdded(marketplace);
-        }}
-      />
-
       <deleteModal.Provider>
         {deleteTarget && (
           <ConfirmEntityModal
@@ -623,12 +338,12 @@ export default function AdminSkillsPage() {
             entityName={deleteTarget.name}
             additionalDetails={t("editor.delete.description")}
             actionButtonText={t(
-              deleting
+              deletion.deleting
                 ? "editor.deleteModal.pendingLabel"
                 : "editor.deleteModal.label"
             )}
             onClose={() => {
-              if (!deleting) deleteModal.toggle(false);
+              if (!deletion.deleting) deleteModal.toggle(false);
             }}
             onSubmit={() => void deleteSkill()}
           />

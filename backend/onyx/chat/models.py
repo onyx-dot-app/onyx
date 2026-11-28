@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
@@ -40,6 +40,7 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
     IncognitoRecordMode,
+    IntegrationKind,
     QuestionAnsweredVia,
     QuestionOutcome,
 )
@@ -84,11 +85,11 @@ from onyx.tools.models import (
     ToolOptions,
     ToolPreference,
 )
+from onyx.tools.tool_implementations.api_app.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeExecutionResult,
     SavedCodeCell,
 )
-from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.question.models import (
     ToolQuestion,
     ToolQuestionAnswer,
@@ -111,6 +112,13 @@ class PendingChatMessage(BaseModel):
     deep_research: bool = False
     llm_override: LLMOverride | None = None
     mentions: Mentions
+
+
+class AgentStreamPointer(BaseModel):
+    """The live stream of a background run, and the tool call it last started."""
+
+    stream_id: int
+    activity_tool: str | None = None
 
 
 class QueuedChatTurn(BaseModel):
@@ -271,9 +279,53 @@ class MessageRendering(BaseModel):
     mode: PresentationMode = PresentationMode.ANSWER
     is_clarification: bool = False
     citation_mode: CitationMode | None = None
+    # The citation numbers and documents that this step adds to its run's;
+    # see RunDocuments. A step can also hold the run's whole set so far,
+    # which gives the same result.
     citation_documents: dict[int, str] = Field(default_factory=dict)
     document_ids: list[str] = Field(default_factory=list)
     pre_answer_seconds: float | None = None
+
+
+class RunDocuments(BaseModel):
+    """The documents and citations that a run's messages show after some of
+    its steps. Each step's MessageRendering adds to them: `add_steps` folds a
+    run's steps in order."""
+
+    model_config = ConfigDict(frozen=True)
+    # By document ID, in the order first shown, each in its latest copy.
+    shown: dict[str, SearchDoc] = Field(default_factory=dict)
+    # Citation numbers, each with the document of the step that added it.
+    cited: dict[int, SearchDoc] = Field(default_factory=dict)
+
+    def add_steps(
+        self, steps: Iterable[tuple[MessageRendering, Mapping[str, SearchDoc]]]
+    ) -> "RunDocuments":
+        """The documents after more steps, in order; each step's mapping
+        resolves its document IDs."""
+        shown = dict(self.shown)
+        cited = dict(self.cited)
+        for setting, documents in steps:
+            shown.update(
+                (key, documents[key])
+                for key in setting.document_ids
+                if key in documents
+            )
+            cited.update(
+                (number, documents[key])
+                for number, key in setting.citation_documents.items()
+                if key in documents
+            )
+        # The values are already validated documents.
+        return RunDocuments.model_construct(shown=shown, cited=cited)
+
+    @property
+    def citations(self) -> dict[int, SearchDoc]:
+        """Citation numbers and their documents, in the latest shown copy."""
+        return {
+            number: self.shown.get(document.document_id, document)
+            for number, document in self.cited.items()
+        }
 
 
 def read_message_rendering(value: dict[str, JsonValue]) -> MessageRendering:
@@ -380,7 +432,7 @@ class AgentResultState(BaseModel):
     def is_active(self) -> bool:
         """An active background agent: an unfinished run that delivers this result.
 
-        Only `spawn_agent` runs have result rows, so foreground workers never count.
+        Only the spawn tool's runs have result rows, so foreground workers never count.
         A run that waits for the user without an owner (parked) counts.
         """
         return not self.status.is_terminal
@@ -392,7 +444,7 @@ class AgentResultState(BaseModel):
 
 
 class AgentWait(BaseModel):
-    """A root `wait_agents` call on a branch, as `AgentWaitDetails` records it."""
+    """A root's wait call on a branch, as `AgentWaitDetails` records it."""
 
     response_id: int
     agent_ids: frozenset[UUID] | None
@@ -571,6 +623,10 @@ class SavedAgentContext(BaseModel):
 class ChatMessageMetadata(BaseModel):
     """Source references and display settings attached to a generated chat message."""
 
+    # The citation numbers and gathered documents that are new since the
+    # run's earlier steps, or new copies; together the run's steps hold them
+    # all (see RunDocuments). Every chat step, the answer too, holds only
+    # these; a research report step holds its full map (new_sources).
     sources: dict[int, SearchDoc] = Field(default_factory=dict)
     documents: list[SearchDoc] = Field(default_factory=list)
     include_citations: bool = True
@@ -648,7 +704,7 @@ class ToolCallResponse(BaseModel):
     tool_result: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
-    # Files that publish_files gave the user; each downloads from
+    # Files that the call published to the user; each downloads from
     # /chat/file/{file_id}.
     published_files: list[PublishedFile] | None = None
     # Reasoning that led to the tool call
@@ -841,7 +897,9 @@ class AvailableFiles(BaseModel):
 
 
 class ChatReminderContext(BaseModel):
-    has_open_url_tool: bool
+    # The reminder to open pages after a web search, naming the tools as the
+    # model calls them; None without the URL reading tool.
+    open_url_reminder: str | None
     out_of_cycles: bool
     persona_task_prompt: str | None
     has_context_documents: bool
@@ -938,8 +996,11 @@ class ChatTurnSetup(BaseModel):
     persona: PersonaPromptConfig
     base_system_prompt: str
     tool_configuration: PersonaToolConfiguration
-    # The turn offers the sandbox tools (sandbox_tools.py:sandbox_tools_for_model).
+    # The turn offers the sandbox tools (sandbox_tools.py:SANDBOX_TOOLS).
     sandbox_tools: bool
+    # With the sandbox tools, also the browser tools (the browser_enabled
+    # setting when the turn began).
+    browser_tools: bool = False
     # The chat's files in its sandbox (chat/files.py:place_chat_files); none
     # without the sandbox tools.
     vm_chat_files: list[VmChatFile]
@@ -996,6 +1057,12 @@ class ChatTurnSetup(BaseModel):
     # The suspended response that this turn continues after its approvals,
     # under a new stream ID; None for a turn that starts a response.
     resumed_response_id: int | None = None
+
+    @property
+    def is_deep_research(self) -> bool:
+        """Whether the turn runs deep research: one model with the request's
+        deep research option."""
+        return len(self.responses) == 1 and self.new_msg_req.deep_research
 
 
 class ResponseOwner(BaseModel):
@@ -1077,6 +1144,7 @@ class SavedToolApproval(BaseModel):
     # belongs to.
     chat_message_id: int
     tool_call_id: str
+    action_id: str
     tool_name: str
     display_name: str
     arguments: dict[str, JsonValue]
@@ -1084,6 +1152,11 @@ class SavedToolApproval(BaseModel):
     decision: ApprovalDecision | None
     decided_via: ApprovalDecidedVia | None
     decided_at: datetime | None
+    # The kind of the request's integration. None for a built-in action and
+    # after the integration is deleted.
+    integration_kind: IntegrationKind | None = None
+    # The integration's name; None when it is gone or the loader skips it.
+    app_name: str | None = None
 
 
 class SavedToolQuestion(BaseModel):

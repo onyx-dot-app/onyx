@@ -125,7 +125,7 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
     await apiLogin(page, member.email, member.password);
 
     const detail = new CustomizeIntegrationPage(page);
-    await detail.goto(integrationId, "Configuration");
+    await detail.goto(integrationId);
     await detail.expectStatus("Not connected");
     await detail.connectWithCredentials(serverName, FIELDS);
     await detail.expectStatus("Connected");

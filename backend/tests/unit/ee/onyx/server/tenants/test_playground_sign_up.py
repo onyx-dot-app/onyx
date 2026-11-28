@@ -17,9 +17,11 @@ from ee.onyx.server.tenants.provisioning import (
     PLAYGROUND_CHECK_FAILED_CODE,
     PLAYGROUND_FREE_MAIL_CODE,
     PLAYGROUND_REFUSAL_CODES,
+    check_playground_address,
     check_playground_sign_up,
     fetch_sign_up_domain_state,
     get_or_provision_tenant,
+    is_team_choice_refusal,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -173,6 +175,35 @@ class TestCheckPlaygroundSignUp:
                 await check_playground_sign_up(EMAIL, start_new_team=True)
 
         assert exc_info.value.detail == "PLAYGROUND_LIMIT_REACHED"
+
+
+class TestMagicLinkHooks:
+    """What the magic link routes reach for on the playground."""
+
+    def test_the_address_check_refuses_free_mail_alone(self) -> None:
+        with patch(f"{_MODULE}.is_free_mail_email", return_value=True):
+            with pytest.raises(OnyxError) as exc_info:
+                check_playground_address("someone@gmail.com")
+        assert exc_info.value.detail == PLAYGROUND_FREE_MAIL_CODE
+
+        with patch(f"{_MODULE}.is_free_mail_email", return_value=False):
+            check_playground_address(EMAIL)
+
+    @pytest.mark.parametrize(
+        ("code", "is_question"),
+        [
+            (PLAYGROUND_REFUSAL_CODES[SignUpDomainState.ACTIVE_TENANT], True),
+            (PLAYGROUND_REFUSAL_CODES[SignUpDomainState.EMAIL_USED], False),
+            (PLAYGROUND_REFUSAL_CODES[SignUpDomainState.LIMIT_REACHED], False),
+            (PLAYGROUND_CHECK_FAILED_CODE, False),
+            (PLAYGROUND_FREE_MAIL_CODE, False),
+        ],
+    )
+    def test_only_a_running_trial_is_a_question(
+        self, code: str, is_question: bool
+    ) -> None:
+        error = OnyxError(OnyxErrorCode.REGISTRATION_DISABLED, code)
+        assert is_team_choice_refusal(error) is is_question
 
 
 class TestGetOrProvisionTenant:

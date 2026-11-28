@@ -33,7 +33,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
-from onyx.integrations.models import UsableIntegrationIds
+from onyx.integrations.models import ApiShape, UsableIntegrationIds
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.models import InjectionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
@@ -128,6 +128,7 @@ def make_flow(
     peername: tuple[str, int] | None = ("10.0.0.1", 12345),
     raw_content: bytes | None = b"{}",
     port: int = 443,
+    scheme: str = "https",
     method: str = "POST",
     path_components: tuple[str, ...] = (),
     conn_id: str = "conn-default",
@@ -142,6 +143,7 @@ def make_flow(
     flow.request = MagicMock()
     flow.request.host = host
     flow.request.port = port
+    flow.request.scheme = scheme
     flow.request.method = method
     flow.request.path_components = path_components
     flow.request.raw_content = raw_content
@@ -167,11 +169,13 @@ class StubResolver(SandboxIdentityResolver):
         sandbox_exc: Exception | None = None,
         session_by_id: UUID | None = None,
         session_by_id_exc: Exception | None = None,
+        chat_session: UUID | None = None,
     ) -> None:
         self._sandbox = sandbox
         self._sandbox_exc = sandbox_exc
         self._session_by_id = session_by_id
         self._session_by_id_exc = session_by_id_exc
+        self._chat_session = chat_session
         self.resolve_sandbox_calls = 0
         self.resolve_session_by_id_calls: list[tuple[UUID, UUID, str]] = []
 
@@ -194,6 +198,14 @@ class StubResolver(SandboxIdentityResolver):
         if self._session_by_id_exc is not None:
             raise self._session_by_id_exc
         return self._session_by_id
+
+    def resolve_chat_session(
+        self,
+        session_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> UUID | None:
+        return self._chat_session
 
 
 class RecordingCredentialResolver(CredentialResolver):
@@ -252,7 +264,10 @@ def make_matched_actions(
             ),
         ),
         target=GatedTarget(
-            integration_id=external_app_id, kind=IntegrationKind.API, app_name=app_name
+            integration_id=external_app_id,
+            kind=IntegrationKind.API,
+            app_name=app_name,
+            api_shape=ApiShape.PRESET,
         ),
         payload=payload if payload is not None else {},
     )
@@ -279,6 +294,7 @@ class NoMatchedRequest(RequestEvaluator):
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        session_tag: UUID | None = None,  # noqa: ARG002
     ) -> AllMatchedActions | None:
         return None
 

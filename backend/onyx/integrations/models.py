@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, InstanceOf
+from pydantic import BaseModel, ConfigDict, InstanceOf, field_validator
 
 from onyx.db.enums import (
     ExternalAppType,
@@ -14,6 +14,9 @@ from onyx.db.enums import (
 )
 from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.skills.models import PluginNeed
+
+# The action key prefix of built-in Onyx actions, such as `onyx:artifacts.delete`.
+BUILTIN_ACTION_PREFIX = "onyx:"
 
 
 class IntegrationActionSpec(BaseModel):
@@ -32,6 +35,18 @@ class IntegrationActionSpec(BaseModel):
     output_schema: dict[str, Any] | None = None
     http_method: str | None = None
     path_template: str | None = None
+
+    @field_validator("key")
+    @classmethod
+    def key_is_not_builtin(cls, key: str) -> str:
+        # A deleted integration's approval rows keep their action key, so an
+        # integration key with the built-in prefix could match built-in grants.
+        if key.startswith(BUILTIN_ACTION_PREFIX):
+            raise ValueError(
+                f"The action name {key!r} starts with {BUILTIN_ACTION_PREFIX!r}, "
+                "which is reserved for Onyx's built-in actions. Rename it."
+            )
+        return key
 
 
 class MatchedIntegrationAction(BaseModel):
@@ -70,27 +85,42 @@ class McpServerConfig(BaseModel):
 
 
 class ApiShape(str, Enum):
-    # An OpenAPI custom tool: the spec gives the actions.
+    # A REST app: the operations of its OpenAPI spec give the actions.
     OPENAPI = "openapi"
+    # A GraphQL app: the root fields of its schema give the actions.
+    GRAPHQL = "graphql"
     # An external app with a built-in provider: the catalog gives the actions.
     PRESET = "preset"
-    # An external app with no provider: one action for all of its URLs.
-    CUSTOM = "custom"
+    # An external app with no provider: one action for all of its URL
+    # patterns. The value "custom" is stored and sent to the web app.
+    URL_PATTERN = "custom"
+
+    @classmethod
+    def of_external_app(cls, app_type: ExternalAppType) -> "ApiShape":
+        return cls.URL_PATTERN if app_type == ExternalAppType.CUSTOM else cls.PRESET
+
+    @property
+    def has_chat_tools(self) -> bool:
+        """A URL-pattern app has no chat tools: the sandbox VM reaches it
+        only with proxied requests."""
+        return self is not ApiShape.URL_PATTERN
 
 
 class ApiConfig(BaseModel):
-    """The settings of an ``api`` integration, from its OpenAPI ``tool`` row or
-    its ``external_app`` row."""
+    """The settings of an ``api`` integration, from its ``api_app`` row or its
+    ``external_app`` row."""
 
     model_config = ConfigDict(frozen=True)
 
     shape: ApiShape
-    # Set for OPENAPI.
-    tool_id: int | None = None
-    openapi_spec: dict[str, Any] | None = None
     base_url: str | None = None
-    # Set for PRESET and CUSTOM.
+    openapi_spec: dict[str, Any] | None = None
+    # The schema as SDL, for GRAPHQL.
+    graphql_schema: str | None = None
+    # Set for PRESET and URL_PATTERN.
     app_type: ExternalAppType | None = None
+    # The regexes of the URLs that the credential of the app can go to.
+    url_regexes: tuple[str, ...] = ()
 
 
 IntegrationConfig = McpServerConfig | ApiConfig

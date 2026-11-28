@@ -15,7 +15,7 @@ import {
   MARKETPLACE_DEFAULT_POLICIES,
   isMarketplaceDefaultPolicy,
 } from "@/lib/marketplaces/utils";
-import { usePolicyOptions, useRefreshSkillLists } from "@/lib/skills/hooks";
+import { usePolicyOptions, useRefreshPluginLists } from "@/lib/skills/hooks";
 
 interface MarketplaceDefaultAccessModalProps {
   marketplace: MarketplaceSummary;
@@ -30,7 +30,7 @@ export default function MarketplaceDefaultAccessModal({
 }: MarketplaceDefaultAccessModalProps) {
   const t = useTranslations("plugins.marketplaces.defaultAccess");
   const options = usePolicyOptions({ levels: MARKETPLACE_DEFAULT_POLICIES });
-  const refreshSkillLists = useRefreshSkillLists();
+  const refreshSkillLists = useRefreshPluginLists();
   const [policy, setPolicy] = useState<MarketplaceDefaultPolicy>(
     marketplace.default_installation_policy ?? "AVAILABLE"
   );

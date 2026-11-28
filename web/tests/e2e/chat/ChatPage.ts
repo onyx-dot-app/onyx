@@ -46,11 +46,17 @@ export class ChatPage {
   readonly humanMessages: Locator;
   readonly humanMessageBubbles: Locator;
   readonly aiMessages: Locator;
-  readonly agentResultsDividers: Locator;
+  readonly agentResultsFollowUps: Locator;
+  /** The chat's activity card, which opens when agents start. */
+  readonly activityPanel: Locator;
+  /** One Stop button per live agent in the activity card. */
+  readonly stopAgentButtons: Locator;
   /** One row per message; far from the viewport, an empty placeholder. */
   readonly messageRows: Locator;
   readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
+  /** Shows above the composer while a sent message is edited there. */
+  readonly editMessageBanner: Locator;
   readonly errorBanners: Locator;
   /** The toggle at the header's end that opens and closes the right panel. */
   readonly rightPanelToggle: Locator;
@@ -83,16 +89,20 @@ export class ChatPage {
     this.humanMessages = page.locator("#onyx-human-message");
     this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
-    this.agentResultsDividers = this.scrollContainer.getByText(
-      "Subagent results received",
-      { exact: true }
+    this.agentResultsFollowUps = this.scrollContainer.locator(
+      "[data-agent-results]"
     );
+    this.activityPanel = page.getByRole("region", { name: "Activity" });
+    this.stopAgentButtons = this.activityPanel.getByRole("button", {
+      name: /^Stop /,
+    });
     this.messageRows = this.scrollContainer.locator('[id^="message-"]');
     this.scrollToBottomButton = page.getByRole("button", {
       name: "Scroll to bottom",
     });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
     this.errorBanners = page.getByTestId("chat-error-banner");
+    this.editMessageBanner = page.getByTestId("edit-message-banner");
     this.rightPanelToggle = page.getByRole("button", {
       name: "Toggle panel",
     });
@@ -224,62 +234,6 @@ export class ChatPage {
       controls.getByRole("button", { name: "Next page" })
     ).toBeDisabled();
     await expect(this.rightPanelDownload).toBeVisible();
-  }
-
-  /**
-   * Opens a reply card's PowerPoint deck in the right panel and checks its
-   * slides: the first shows `firstSlideText`, and the arrows step through
-   * the rest.
-   */
-  async expectPptxPreview(
-    title: string,
-    slideCount: number,
-    firstSlideText: string
-  ): Promise<void> {
-    await this.publishedFileCard(title).click();
-    const preview = this.publishedFilePreview(title);
-    const controls = preview.getByRole("toolbar", {
-      name: "Presentation controls",
-    });
-    await expect(controls).toContainText(`Slide 1 of ${slideCount}`);
-    await expect(
-      preview.getByRole("region", { name: `Slide 1 of ${slideCount}` })
-    ).toContainText(firstSlideText);
-    await expect(
-      preview
-        .getByRole("toolbar", { name: "Slides" })
-        .getByRole("button", { name: /^Slide \d+ of/ })
-    ).toHaveCount(slideCount);
-    for (let slide = 2; slide <= slideCount; slide++) {
-      await controls.getByRole("button", { name: "Next slide" }).click();
-      await expect(controls).toContainText(`Slide ${slide} of ${slideCount}`);
-    }
-    await expect(this.rightPanelDownload).toBeVisible();
-  }
-
-  /**
-   * Opens a reply card's Word file in the right panel and checks that its
-   * first page fits the panel's width. The page scale settles after the
-   * pages insert, so the width is read again on each try.
-   */
-  async expectDocxPreviewFitsPanel(title: string): Promise<void> {
-    await this.publishedFileCard(title).click();
-    const preview = this.publishedFilePreview(title);
-    const firstPage = preview.locator("section.docx").first();
-    await expect(firstPage).toBeVisible();
-    await expect
-      .poll(async () => {
-        const [previewBox, pageBox] = await Promise.all([
-          preview.boundingBox(),
-          firstPage.boundingBox(),
-        ]);
-        return (
-          previewBox !== null &&
-          pageBox !== null &&
-          pageBox.width <= previewBox.width
-        );
-      })
-      .toBe(true);
   }
 
   /** Checks that the right panel's resize handle is the top element at its center. */
@@ -444,7 +398,7 @@ export class ChatPage {
     const width = await this.rightPanelWidth();
     const viewport = this.page.viewportSize();
     if (!viewport) throw new Error("The page has no viewport");
-    // The panel slides open: drag once its edge is in place
+    // Drag once the panel's edge is in place
     await expect
       .poll(async () => (await handle.boundingBox())?.x ?? Infinity)
       .toBeLessThan(viewport.width - width + 2);
@@ -568,7 +522,10 @@ export class ChatPage {
 
   /** The tiles of the right panel's Files list, from the top. */
   publishedFilesPanelCards(): Locator {
-    return this.publishedFilesPanel.getByRole("button", { name: /^Open / });
+    // The Files tab's own panel: the "+" button ("Open a tab") sits outside it
+    return this.publishedFilesPanel
+      .getByRole("tabpanel", { name: "Files" })
+      .getByRole("button", { name: /^Open / });
   }
 
   /** Checks a tile of the Files list: the name it shows. */
@@ -621,6 +578,11 @@ export class ChatPage {
     return this.aiMessage(index).getByText(text, { exact: true });
   }
 
+  /** Clicks an artifact link, named `name`, in the answer at `index`. */
+  async clickArtifactLink(name: string, index = 0): Promise<void> {
+    await this.aiMessage(index).getByRole("link", { name }).click();
+  }
+
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
   async goto(sessionId?: string, { skills = false } = {}): Promise<void> {
@@ -640,6 +602,15 @@ export class ChatPage {
 
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
+  /** Stops one live agent, by its name, from the activity card. */
+  async stopAgent(name: string): Promise<void> {
+    // The Stop takes the place of the run time while the row is hovered
+    await this.activityPanel.getByText(name, { exact: true }).hover();
+    await this.activityPanel
+      .getByRole("button", { name: `Stop ${name}`, exact: true })
+      .click();
+  }
+
   async reload({ skills = false } = {}): Promise<void> {
     await this.page.reload();
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
@@ -1012,7 +983,10 @@ export class ChatPage {
   /** Opens the run card and checks one completed step of the tool that
    * shows `output`. The step's body is a code panel with the request and
    * the response, so the output is matched as text. */
-  async expectCustomToolResult(name: string, output: string): Promise<void> {
+  async expectCustomToolResult(
+    name: string,
+    output: string | readonly string[]
+  ): Promise<void> {
     // A long run folds its steps into a card whose button is named for the
     // step count; a short run shows each step as its own card.
     const fold = this.scrollContainer
@@ -1029,7 +1003,17 @@ export class ChatPage {
     });
     await expect(status).toBeVisible();
     await status.click();
-    await expect(this.scrollContainer.getByText(output).first()).toBeVisible();
+    if (typeof output === "string") {
+      await expect(
+        this.scrollContainer.getByText(output).first()
+      ).toBeVisible();
+      return;
+    }
+    for (const field of output) {
+      await expect(
+        this.scrollContainer.getByText(field, { exact: true }).first()
+      ).toBeVisible();
+    }
   }
 
   async startIncognito(): Promise<void> {
@@ -1165,6 +1149,19 @@ export class ChatPage {
     await this.page.keyboard.press("Escape");
   }
 
+  /** The first message version switcher on the page. */
+  messageSwitcher(): Locator {
+    return this.page.getByTestId("MessageSwitcher/container").first();
+  }
+
+  async selectPreviousVersion(): Promise<void> {
+    await this.messageSwitcher().getByRole("button").first().click();
+  }
+
+  async selectNextVersion(): Promise<void> {
+    await this.messageSwitcher().getByRole("button").last().click();
+  }
+
   async selectPreviousHumanMessage(index = 0): Promise<void> {
     await this.humanMessage(index)
       .getByTestId("MessageSwitcher/container")
@@ -1173,23 +1170,30 @@ export class ChatPage {
       .click();
   }
 
-  async editHumanMessage(text: string, index = 0): Promise<void> {
+  /** Loads the sent message into the composer for an edit. */
+  async startHumanMessageEdit(index = 0): Promise<void> {
     const message = this.humanMessage(index);
     await message.hover();
     await message.getByTestId("HumanMessage/edit-button").click();
-    await message.getByRole("textbox").fill(text);
+    await expect(this.editMessageBanner).toBeVisible();
   }
 
-  async submitHumanMessageEdit(index = 0): Promise<void> {
-    await this.humanMessage(index)
-      .getByRole("button", { name: "Submit", exact: true })
-      .click();
+  async editHumanMessage(text: string, index = 0): Promise<void> {
+    await this.startHumanMessageEdit(index);
+    await this.inputBar.fill(text);
   }
 
-  async cancelHumanMessageEdit(index = 0): Promise<void> {
-    await this.humanMessage(index)
-      .getByRole("button", { name: "Cancel", exact: true })
+  async submitHumanMessageEdit(): Promise<void> {
+    await this.inputBar.textbox.focus();
+    await this.inputBar.send();
+    await expect(this.editMessageBanner).toBeHidden();
+  }
+
+  async cancelHumanMessageEdit(): Promise<void> {
+    await this.editMessageBanner
+      .getByRole("button", { name: "Cancel editing message" })
       .click();
+    await expect(this.editMessageBanner).toBeHidden();
   }
 
   async expectHumanMessage(text: string, index = 0): Promise<void> {

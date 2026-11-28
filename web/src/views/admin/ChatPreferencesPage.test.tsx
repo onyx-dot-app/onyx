@@ -187,7 +187,22 @@ describe("ChatPreferencesPage", () => {
       expect(global.fetch).toHaveBeenCalledWith("/api/admin/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: expect.stringContaining('"company_name":"New team"'),
+        body: JSON.stringify({ company_name: "New team" }),
+      })
+    );
+  });
+
+  test("a switch saves only its own field", async () => {
+    const user = setupUser();
+    render(<ChatPreferencesPage />);
+
+    await user.click(screen.getByRole("switch", { name: /^Browser / }));
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ browser_enabled: false }),
       })
     );
   });

@@ -92,7 +92,7 @@ export interface ProcessorState {
   // arrival order and unique by file_id
   generatedImages: PlacedImage[];
 
-  // Files from every publish_files call, nested calls included, in arrival
+  // Files from every publishing call, nested calls included, in arrival
   // order and unique by file_id
   publishedFiles: PlacedPublishedFile[];
 

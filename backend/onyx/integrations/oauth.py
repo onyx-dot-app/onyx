@@ -52,6 +52,7 @@ from onyx.integrations.connections import (
     sign_in_host,
     sign_in_settings_for,
 )
+from onyx.integrations.presets import PRESET_OAUTH_REDIRECT_URI
 from onyx.integrations.service import manages_integration
 from onyx.oauth.authorization_attempt import (
     AuthorizationAttemptStore,
@@ -82,9 +83,7 @@ from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 
 logger = setup_logger()
 
-# The redirect URIs admins registered with each service before the
-# integration tables. Keep them, so no OAuth app needs a new registration.
-_PRESET_REDIRECT_URI = f"{WEB_DOMAIN}/craft/v1/apps/oauth/callback"
+# The legacy manual OAuth redirect URI; see PRESET_OAUTH_REDIRECT_URI.
 _MANUAL_REDIRECT_URI = f"{WEB_DOMAIN}/oauth-config/callback"
 
 
@@ -101,7 +100,7 @@ def integration_oauth_redirect_uri(
     if integration.kind is IntegrationKind.MCP:
         return mcp_oauth_redirect_uri()
     if oauth_client.provider_mode is IntegrationOAuthProviderMode.PRESET:
-        return _PRESET_REDIRECT_URI
+        return PRESET_OAUTH_REDIRECT_URI
     return _MANUAL_REDIRECT_URI
 
 

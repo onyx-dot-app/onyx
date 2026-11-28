@@ -4,15 +4,14 @@
  * wait in the region after the last message, and leave a record in the
  * reply's timeline once their resolution arrives.
  */
+import { createContext } from "react";
 import { create } from "zustand";
 import {
   Packet,
   PacketType,
   ToolApprovalRequest,
   ToolApprovalResolved,
-  ToolQuestionAnswer,
   ToolQuestionRequest,
-  ToolQuestionResolved,
 } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
@@ -23,6 +22,12 @@ import type { Message } from "@/app/app/types";
 import type { ApprovalStatus } from "@/lib/approvals/types";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 import { type CachedRead, readOnce } from "@/lib/chat/packetReads";
+import {
+  PENDING_QUESTION,
+  readToolQuestions,
+  type ToolQuestionCall,
+  type ToolQuestionStatus,
+} from "@/lib/chat/toolQuestions";
 
 /** What one response's packets say about an approval request. */
 export interface ToolApprovalEntry {
@@ -41,6 +46,7 @@ export interface ToolApproval {
 const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
   "approved",
   "approved_for_chat",
+  "approved_for_command",
   "rejected",
   "disabled",
   "cancelled",
@@ -88,58 +94,6 @@ export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
   });
 }
 
-/** What one response's packets say about a question call. */
-export interface ToolQuestionEntry {
-  turnIndex: number;
-  request: ToolQuestionRequest;
-  /** Null until the resolution packet arrives. */
-  resolution: ToolQuestionResolved | null;
-}
-
-export interface ToolQuestionRead {
-  entries: ToolQuestionEntry[];
-}
-
-const questionReads = new WeakMap<Packet[], CachedRead<ToolQuestionRead>>();
-const QUESTION_PACKETS: ReadonlySet<string> = new Set([
-  PacketType.TOOL_QUESTION_REQUEST,
-  PacketType.TOOL_QUESTION_RESOLVED,
-]);
-const QUESTION_OUTCOMES: ReadonlySet<string> = new Set<
-  ToolQuestionResolved["outcome"]
->(["answered", "cancelled"]);
-
-/**
- * The question calls in one response's packets and how they ended. As with
- * approvals, only the resolution packet ends a question; a stop does not.
- */
-export function readToolQuestions(packets: Packet[]): ToolQuestionRead {
-  return readOnce(questionReads, packets, QUESTION_PACKETS, (packets) => {
-    const entries = new Map<string, ToolQuestionEntry>();
-    const resolutions = new Map<string, ToolQuestionResolved>();
-    for (const packet of packets) {
-      if (packet.obj.type === PacketType.TOOL_QUESTION_REQUEST) {
-        entries.set(packet.obj.question_request_id, {
-          turnIndex: packet.placement.turn_index,
-          request: packet.obj,
-          resolution: null,
-        });
-      } else if (
-        packet.obj.type === PacketType.TOOL_QUESTION_RESOLVED &&
-        QUESTION_OUTCOMES.has(packet.obj.outcome)
-      ) {
-        resolutions.set(packet.obj.question_request_id, packet.obj);
-      }
-    }
-    return {
-      entries: Array.from(entries.values(), (entry) => ({
-        ...entry,
-        resolution: resolutions.get(entry.request.question_request_id) ?? null,
-      })),
-    };
-  });
-}
-
 /** Whether the response's packets hold an approval request or a question. */
 export function asksUser(packets: Packet[]): boolean {
   return (
@@ -165,6 +119,7 @@ export function toolApprovalStatus(
     case null:
       return localStatus ?? "pending";
     case "approved_for_chat":
+    case "approved_for_command":
       return "approvedForSession";
     case "cancelled":
       return "closed";
@@ -174,51 +129,20 @@ export function toolApprovalStatus(
 }
 
 /**
- * How a question call shows. "closed": nothing waits for an answer any more,
- * and this client does not know how it ended.
+ * What a reply waits for, for its timeline header: this viewer's approval or
+ * answer, or the owner's when the viewer only reads the chat.
  */
-export type ToolQuestionStatus =
-  | { kind: "pending" }
-  | { kind: "closed" }
-  | { kind: "cancelled" }
-  | {
-      kind: "answered";
-      /** The card's answers, in the order of the questions. */
-      answers: ToolQuestionAnswer[] | null;
-      /** The text that the user typed in the chat instead of the card. */
-      message: string | null;
-    };
-
-export const PENDING_QUESTION: ToolQuestionStatus = { kind: "pending" };
-const CANCELLED_QUESTION: ToolQuestionStatus = { kind: "cancelled" };
-
-/** A question call, as the card or its record shows it. */
-export interface ToolQuestionCall {
-  turnIndex: number;
-  request: ToolQuestionRequest;
-  status: ToolQuestionStatus;
-}
+export type AwaitingUser =
+  | "approval"
+  | "answer"
+  | "ownerApproval"
+  | "ownerAnswer";
 
 /**
- * As with approvals, the resolution packet decides the status. Before it
- * arrives, an answer this client sent decides it.
+ * Whether this viewer decides the chat's requests. A shared chat's viewer
+ * only reads them; the chat's owner decides them.
  */
-export function toolQuestionStatus(
-  entry: ToolQuestionEntry,
-  localStatus: ToolQuestionStatus | undefined
-): ToolQuestionStatus {
-  const { resolution } = entry;
-  if (resolution === null) return localStatus ?? PENDING_QUESTION;
-  if (resolution.outcome === "cancelled") return CANCELLED_QUESTION;
-  return {
-    kind: "answered",
-    answers: resolution.answers ?? null,
-    message: resolution.message ?? null,
-  };
-}
-
-/** What a reply waits for from its own user, for its timeline header. */
-export type AwaitingUser = "approval" | "answer";
+export const ToolRequestDeciderContext = createContext(true);
 
 /** A request that waits for the user, and the response that holds it. */
 export type WaitingToolRequest = {
@@ -321,7 +245,8 @@ export function decidedStatus(
 ): ApprovalStatus {
   if (response.decided_via === "POLICY") return "disabled";
   if (response.decision === "REJECTED") return "rejected";
-  return response.decided_via === "SESSION_GRANT"
+  return response.decided_via === "SESSION_GRANT" ||
+    response.decided_via === "COMMAND_GRANT"
     ? "approvedForSession"
     : "approved";
 }

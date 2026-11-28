@@ -82,8 +82,8 @@ You are on your last cycle and no longer have any tool calls available. You must
 
 # Reminder message that replaces the usual reminder if web_search was the last tool call
 OPEN_URL_REMINDER = """
-Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
-Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs. Open as many as you want.
+Remember that after using {web_search}, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
+Open the pages that look the most promising and high quality by calling the {open_url} tool with an array of URLs. Open as many as you want.
 
 If you do have enough to answer, remember to provide INLINE citations using the "document" field in the format [1], [2], [3], etc.
 """.strip()
@@ -167,5 +167,9 @@ SUBAGENT_INSTRUCTIONS = """You are an agent in a team of agents. Your parent age
 You can start your own agents with the same tools. Their results arrive as messages before you give your final answer."""
 
 
-ROOT_AGENT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Results from your agents arrive automatically as messages.
-To answer with the combined results of your agents, call wait_agents. To answer now, end your response; later results start a new response."""
+# The root agent's block; `{wait_line}` is the agent shape's
+# (AgentShape.wait_line).
+ROOT_AGENT_INSTRUCTIONS = """Agents you start run in the background. When one finishes, you get an agent notification with its answer. It is not a message from the user.
+Keep doing useful work that doesn't overlap with your agents' tasks, and use their results when they arrive. Don't redo an agent's task yourself.
+Don't predict or invent the results of agents that are still running.
+Before your final answer, wait for the agents whose results you need. Each notification lists the ones still running. {wait_line}"""

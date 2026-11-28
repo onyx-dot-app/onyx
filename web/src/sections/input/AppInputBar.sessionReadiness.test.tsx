@@ -50,7 +50,10 @@ jest.mock("@/lib/chat/sessionReadiness", () => ({
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
-    user: { preferences: { interrupt_on_send: mockInterruptOnSend } },
+    user: {
+      id: "test-user",
+      preferences: { interrupt_on_send: mockInterruptOnSend },
+    },
     isAdmin: false,
   }),
 }));
@@ -79,7 +82,12 @@ jest.mock("next/navigation", () => ({
 }));
 let mockChatId: string | null = "session";
 jest.mock("@/lib/navigation/hooks", () => ({
-  useAppPosition: () => ({ isNewSession: () => false, chat: () => mockChatId }),
+  useAppPosition: () => ({
+    isNewSession: () => false,
+    chat: () => mockChatId,
+    project: () => null,
+    agent: () => null,
+  }),
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
@@ -91,6 +99,9 @@ jest.mock("@/lib/projects/providers", () => ({
   }),
 }));
 jest.mock("@/lib/projects/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/projects/hooks")>(
+    "@/lib/projects/hooks"
+  ),
   useProjects: () => ({ isLoading: false }),
   useActiveProject: () => null,
 }));
@@ -110,9 +121,11 @@ jest.mock("@/hooks/usePromptShortcuts", () => ({
   default: () => ({ activePromptShortcuts: [] }),
 }));
 jest.mock("@/hooks/useDraft", () => ({
+  ...jest.requireActual("@/hooks/useDraft"),
   draftKey: (scope: string, id: string) => `${scope}:${id}`,
   writeDraft: (...args: unknown[]) => mockWriteDraft(...args),
   readDraft: () => null,
+  clearDraft: jest.fn(),
   useDraft: () => ({
     loaded: true,
     draft: undefined,
@@ -739,6 +752,7 @@ function awaitQuestion() {
                 { label: "All", description: "Every file." },
                 { label: "Docs", description: "Only the docs." },
               ],
+              multi_select: false,
             },
           ],
         },
@@ -818,7 +832,7 @@ describe("while a question waits", () => {
   test("a question answered here no longer takes typed text", async () => {
     useToolRequestUi.getState().recordAnswer("question-1", {
       kind: "answered",
-      answers: [{ question_id: "scope", option_label: "Docs" }],
+      answers: [{ question_id: "scope", option_labels: ["Docs"] }],
       message: null,
     });
     const answered = answerWith(() => new Response("{}"));
@@ -1413,9 +1427,10 @@ test("an edited queued message is saved as the draft before the composer shows i
   await waitFor(() => expect(textbox).toHaveTextContent(/^Queued follow-up$/));
   // A chat switch cancels the composer's delayed save, so the text is saved now.
   expect(mockWriteDraft).toHaveBeenCalledWith(
-    "chat:session",
-    { message: "Queued follow-up", mentions: [] },
-    expect.any(Function)
+    "chat::test-user:session",
+    expect.objectContaining({ message: "Queued follow-up", mentions: [] }),
+    expect.any(Function),
+    "local"
   );
 });
 
@@ -1475,9 +1490,10 @@ test("an edit that finishes after a chat switch returns its text to its own chat
   );
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
-      "chat:session",
-      { message: "Queued follow-up", mentions: [] },
-      expect.any(Function)
+      "chat::test-user:session",
+      expect.objectContaining({ message: "Queued follow-up", mentions: [] }),
+      expect.any(Function),
+      "local"
     )
   );
   expect(textbox).toHaveTextContent(/^$/);
@@ -1505,13 +1521,14 @@ test.each([
     );
     await waitFor(() =>
       expect(mockWriteDraft).toHaveBeenCalledWith(
-        "chat:session",
-        { message: "Keep this draft", mentions: [] },
-        expect.any(Function)
+        "chat::test-user:session",
+        expect.objectContaining({ message: "Keep this draft", mentions: [] }),
+        expect.any(Function),
+        "local"
       )
     );
     expect(mockWriteDraft).not.toHaveBeenCalledWith(
-      "chat:new",
+      "chat::test-user:new",
       expect.anything()
     );
   }
@@ -1539,27 +1556,22 @@ test("a failed submission that ends after the composer closes goes to the chat's
   );
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
-      "chat:session",
-      { message: "Keep this draft", mentions: [] },
-      expect.any(Function)
+      "chat::test-user:session",
+      expect.objectContaining({ message: "Keep this draft", mentions: [] }),
+      expect.any(Function),
+      "local"
     )
   );
 });
 
-test("Stop subagents interrupts background work and refreshes the status", async () => {
-  let active = true;
+test("the composer shows no subagent status; the activity card holds it", async () => {
   fetchSpy.mockImplementation(async (url, init) => {
-    const path = String(url);
-    if (path.endsWith("/stop-subagents")) {
-      active = false;
-      return new Response(JSON.stringify(null));
-    }
-    if (path.endsWith("/status"))
+    if (String(url).endsWith("/status"))
       return new Response(
         JSON.stringify({
           is_processing: false,
           current_stream: null,
-          has_active_subagents: active,
+          has_active_subagents: true,
           has_startable_input: false,
           approvals_version: "1",
           latest_response_id: 2,
@@ -1567,22 +1579,17 @@ test("Stop subagents interrupts background work and refreshes the status", async
       );
     return new Response(JSON.stringify(init?.method ? null : pending));
   });
-  const user = setupUser();
   render(<ChatInput {...props("input")} initialMessage="" />);
-  const stop = await screen.findByRole("button", { name: "Stop subagents" });
-  // Screen readers announce the status text without the control inside it.
-  expect(screen.getByRole("status")).not.toContainElement(stop);
-  await user.click(stop);
   await waitFor(() =>
-    expect(screen.queryByTestId("subagent-activity")).not.toBeInTheDocument()
+    expect(
+      fetchSpy.mock.calls.some(([url]) => String(url).endsWith("/status"))
+    ).toBe(true)
   );
+  await act(async () => undefined);
+  expect(screen.queryByText("Subagents working")).not.toBeInTheDocument();
   expect(
-    fetchSpy.mock.calls.filter(
-      ([url, init]) =>
-        String(url) === "/api/chat/chat-session/session/stop-subagents" &&
-        init?.method === "POST"
-    )
-  ).toHaveLength(1);
+    screen.queryByRole("button", { name: "Stop subagents" })
+  ).not.toBeInTheDocument();
 });
 
 describe("approvals version in the status", () => {

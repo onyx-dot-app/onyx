@@ -1,4 +1,3 @@
-import json
 from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 from uuid import UUID
@@ -35,7 +34,10 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_oauth_client
 from onyx.integrations.models import IntegrationActionSpec
-from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
+    inline_path_parameters,
+    openapi_to_url,
+)
 
 
 def get_integration_by_id(
@@ -104,15 +106,15 @@ def list_enabled_mcp_server_urls(
     )
 
 
-def list_enabled_openapi_schemas(
+def list_enabled_api_apps(
     db_session: Session, integration_id: int | None = None
-) -> list[tuple[int, dict[str, Any] | None]]:
-    """``(integration_id, openapi_schema)`` of each enabled OpenAPI integration,
-    or of only ``integration_id``."""
+) -> list[tuple[int, ApiApp]]:
+    """``(integration_id, api_app)`` of each enabled REST or GraphQL app, or of
+    only ``integration_id``."""
     return list(
         db_session.execute(
-            select(Integration.id, Tool.openapi_schema)
-            .join(Tool, Tool.id == Integration.tool_id)
+            select(Integration.id, ApiApp)
+            .join(ApiApp, ApiApp.id == Integration.api_app_id)
             .where(_enabled(integration_id))
             .order_by(Integration.id)
         ).tuples()
@@ -144,6 +146,32 @@ def get_openapi_tool_for_integration(
             Integration.id == integration_id,
             Tool.openapi_schema.is_not(None),
         )
+    )
+
+
+def list_api_apps_by_integration(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, ApiApp]:
+    if not integration_ids:
+        return {}
+    return dict(
+        db_session.execute(
+            select(Integration.id, ApiApp)
+            .join(ApiApp, ApiApp.id == Integration.api_app_id)
+            .where(Integration.id.in_(integration_ids))
+        )
+        .tuples()
+        .all()
+    )
+
+
+def get_api_app_for_integration(
+    integration_id: int, db_session: Session
+) -> ApiApp | None:
+    return db_session.scalar(
+        select(ApiApp)
+        .join(Integration, Integration.api_app_id == ApiApp.id)
+        .where(Integration.id == integration_id)
     )
 
 
@@ -267,24 +295,6 @@ def list_integration_actions_by_id(
     return actions
 
 
-def list_openapi_tools_by_integration(
-    integration_ids: Collection[int], db_session: Session
-) -> dict[int, Tool]:
-    if not integration_ids:
-        return {}
-    return dict(
-        db_session.execute(
-            select(Integration.id, Tool)
-            .join(Tool, Tool.id == Integration.tool_id)
-            .where(
-                Integration.id.in_(integration_ids), Tool.openapi_schema.is_not(None)
-            )
-        )
-        .tuples()
-        .all()
-    )
-
-
 def list_external_apps_by_integration(
     integration_ids: Collection[int], db_session: Session
 ) -> dict[int, ExternalApp]:
@@ -368,9 +378,13 @@ def replace_integration_actions__no_commit(
     source: IntegrationActionSource,
     specs: Sequence[IntegrationActionSpec],
     db_session: Session,
+    *,
+    keep_policies: bool = False,
 ) -> None:
     """Locks the integration row, so two syncs of one integration run one at a
-    time. If two specs have the same key, the first one wins."""
+    time. If two specs have the same key, the first one wins. The policies of
+    removed actions go too, unless ``keep_policies``: the specs are not the
+    server's list because the server did not answer."""
     db_session.execute(
         select(Integration.id).where(Integration.id == integration_id).with_for_update()
     )
@@ -390,15 +404,32 @@ def replace_integration_actions__no_commit(
             continue
         db_session.add(integration_action_from_spec(integration_id, spec))
 
-    stale_ids = [
-        action.id
+    stale = {
+        key: action.id
         for key, action in existing_by_key.items()
         if action.source == source and key not in kept_keys
-    ]
-    if stale_ids:
+    }
+    if stale:
         db_session.execute(
             delete(IntegrationAction)
-            .where(IntegrationAction.id.in_(stale_ids))
+            .where(IntegrationAction.id.in_(stale.values()))
+            .execution_options(synchronize_session="fetch")
+        )
+    if not keep_policies:
+        # A policy of a removed action must not come back with the action.
+        removed: ColumnElement[bool] = IntegrationActionPolicy.action.in_(stale.keys())
+        if source is IntegrationActionSource.MCP:
+            # Also the policies that a failed MCP sync kept without their
+            # actions. Other sources keep policies without actions on purpose,
+            # such as the other-request action of a REST app.
+            removed = and_(
+                # The "" row is the default for new actions.
+                IntegrationActionPolicy.action != "",
+                IntegrationActionPolicy.action.not_in(kept_keys),
+            )
+        db_session.execute(
+            delete(IntegrationActionPolicy)
+            .where(IntegrationActionPolicy.integration_id == integration_id, removed)
             .execution_options(synchronize_session="fetch")
         )
     db_session.flush()
@@ -437,16 +468,19 @@ def insert_integration__no_commit(
     mcp_server_id: int | None = None,
     external_app_id: int | None = None,
     tool_id: int | None = None,
+    api_app_id: int | None = None,
     db_session: Session,
 ) -> Integration:
     """Insert the integration of a kind row. Exactly one kind row id is set.
     The caller writes the document of an OpenAPI integration with
-    ``write_openapi_document__no_commit``."""
+    ``write_openapi_document__no_commit``; a GraphQL app passes
+    ``api_app_id``."""
     integration = Integration(
         kind=IntegrationKind.MCP if mcp_server_id is not None else IntegrationKind.API,
         mcp_server_id=mcp_server_id,
         external_app_id=external_app_id,
         tool_id=tool_id,
+        api_app_id=api_app_id,
         name=name,
         description=description,
         owner_user_id=owner_user_id,
@@ -533,16 +567,20 @@ def create_openapi_tool_row__no_commit(
 
 
 def write_openapi_document__no_commit(
-    integration: Integration, spec: dict[str, Any], db_session: Session
+    integration: Integration,
+    document: str,
+    spec: dict[str, Any],
+    db_session: Session,
 ) -> None:
-    """The one writer of an OpenAPI app's document. For one release it writes
-    both the tool row, which the readers use, and the ``api_app`` row.
-    Creates the ``api_app`` row when the integration has none, as for one
-    that older code made."""
+    """The one writer of an OpenAPI app's document. ``api_app`` stores the
+    text as given; for one release the tool row also gets the parsed object
+    in the shape the previous release reads, so a version rollback still
+    finds it. Creates the ``api_app`` row on the
+    first write."""
     tool = get_openapi_tool_for_integration(integration.id, db_session)
     if tool is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "The OpenAPI schema is missing.")
-    tool.openapi_schema = spec
+    tool.openapi_schema = inline_path_parameters(spec)
     app = (
         db_session.get(ApiApp, integration.api_app_id)
         if integration.api_app_id is not None
@@ -552,9 +590,22 @@ def write_openapi_document__no_commit(
         app = ApiApp(api_type=ApiAppType.REST)
         db_session.add(app)
     app.base_url = openapi_to_url(spec)
-    app.openapi_document = json.dumps(spec)
+    app.openapi_document = document
     db_session.flush()
     integration.api_app_id = app.id
+
+
+def create_graphql_app_row__no_commit(
+    *, endpoint_url: str, graphql_schema: str, db_session: Session
+) -> ApiApp:
+    app = ApiApp(
+        api_type=ApiAppType.GRAPHQL,
+        base_url=endpoint_url,
+        graphql_schema=graphql_schema,
+    )
+    db_session.add(app)
+    db_session.flush()
+    return app
 
 
 def create_external_app_row__no_commit(

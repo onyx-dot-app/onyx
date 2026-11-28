@@ -4,9 +4,10 @@ import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useNavigation } from "@opal/navigation";
 import { toast } from "@opal/layouts";
+import { usePanel } from "@/lib/customize/hooks";
 import { newSkillHref, pluginHref } from "@/lib/customize/paths";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
-import { useRefreshSkillLists } from "@/lib/skills/hooks";
+import { useRefreshPluginLists } from "@/lib/skills/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import UploadPluginModal from "@/sections/modals/plugins/UploadPluginModal";
 
@@ -22,8 +23,9 @@ export default function UploadPluginFlow({
   onClose,
 }: UploadPluginFlowProps) {
   const uploadCopy = useTranslations("plugins.upload");
+  const panel = usePanel();
   const navigation = useNavigation();
-  const revalidate = useRefreshSkillLists();
+  const revalidate = useRefreshPluginLists();
   const { mutate } = useSWRConfig();
   return (
     <UploadPluginModal
@@ -51,10 +53,13 @@ export default function UploadPluginFlow({
           toast.info(uploadCopy("saved.unchanged", values));
         } else if (name_conflicts.length > 0) {
           toast.warning(
-            uploadCopy("saved.off", {
-              ...values,
-              names: name_conflicts.join(", "),
-            })
+            uploadCopy(
+              target.kind === "new_version" ? "saved.clash" : "saved.off",
+              {
+                ...values,
+                names: name_conflicts.join(", "),
+              }
+            )
           );
         } else {
           toast.success(
@@ -63,9 +68,8 @@ export default function UploadPluginFlow({
               : uploadCopy("saved.newPlugin", values)
           );
         }
-        navigation.go(
-          pluginHref(plugin.id, needsAttention ? "integrations" : undefined)
-        );
+        const tab = needsAttention ? "integrations" : undefined;
+        navigation.go(pluginHref(plugin.id, tab, panel));
       }}
     />
   );

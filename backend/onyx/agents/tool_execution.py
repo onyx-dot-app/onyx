@@ -3,6 +3,7 @@
 import threading
 from collections.abc import Sequence
 from concurrent.futures import Future
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 from pydantic import JsonValue
@@ -53,20 +54,18 @@ NO_TOOL_CAN_RUN_RESULT = (
 )
 
 
-def _tool_view(message: Message) -> Message:
-    """An owned copy of a conversation message for a tool. Result details stay
-    with the runtime; tools read them from `recorded_results`."""
-    if isinstance(message, ToolResultMessage) and message.details is not None:
-        message = message.model_copy(update={"details": None})
-    return message.model_copy(deep=True)
-
-
 MAX_TOOL_CALLS_PER_STEP = 64
 # What the model sees for a call whose request was denied without a result.
 DENIED_CALL_MESSAGE = "The tool call was not approved, so it did not run."
 # What the model sees for an approved call whose tool was removed, or whose
 # parameters changed, while the call waited.
 UNAVAILABLE_CALL_MESSAGE = "This tool is no longer available, so this call did not run."
+# What the model sees for a call that started, then waited for input or lost
+# its owner, and whose tool was removed: its effects so far are not known.
+STOPPED_CALL_MESSAGE = (
+    "This tool is no longer available, so this call stopped before it finished "
+    "and was not run again. It may have had effects: check before you retry."
+)
 
 
 class ToolBatch:
@@ -93,7 +92,8 @@ class ToolBatch:
             raise ValueError("Tool execution requires a message ID")
         self.message_id = self.message.id
         self.options = progress.options
-        self.context_messages = history
+        # The model's view of the conversation, shared by every call of the step.
+        self.context_messages = tuple(history)
         # Every recorded tool result before this step.
         self.recorded_results = tuple(
             message for message in recorded if isinstance(message, ToolResultMessage)
@@ -110,11 +110,11 @@ class ToolBatch:
         self.futures: dict[str, Future[ToolOutcome]] = {}
 
     def _context(self, call: ToolCall) -> ToolCallContext:
-        return ToolCallContext(
+        return ToolCallContext.model_construct(
             step=self.step,
-            call=call.model_copy(deep=True),
-            options=self.options.model_copy(deep=True),
-            messages=[_tool_view(item) for item in self.context_messages],
+            call=call,
+            options=self.options,
+            messages=self.context_messages,
         )
 
     def decide_call(
@@ -125,11 +125,11 @@ class ToolBatch:
         run's before_tool_call hook, then the user's approval when the call
         requires it."""
         call = nested_call or tool_call
-        if self.run.before_tool_call is not None:
-            decision = self.run.before_tool_call(self._context(call))
+        if self.run.config.hooks.before_tool_call is not None:
+            decision = self.run.config.hooks.before_tool_call(self._context(call))
             if decision is not None:
                 return decision
-        if call.name not in self.run.approval_required:
+        if call.name not in self.run.config.approval_required:
             return None
         approvals = self.run.approvals
         if approvals is None:
@@ -211,7 +211,7 @@ class ToolBatch:
 
     def execute(self) -> bool:
         try:
-            with self.run.cancellation_signal.on_cancel(self.run.notify_tool_activity):
+            with self.run.cancellation_signal.on_cancel(self.run.work.notify_activity):
                 while True:
                     self.run.cancellation_signal.check()
                     self.run.begin_work_cycle()
@@ -226,7 +226,7 @@ class ToolBatch:
                         self.run.finish_tool(
                             call,
                             self._context(call)
-                            if self.run.after_tool_call is not None
+                            if self.run.config.hooks.after_tool_call is not None
                             else None,
                         )
                     completed_call_ids = self._completed_call_ids()
@@ -250,22 +250,25 @@ class ToolBatch:
                             suspend = self.run.suspension_requested
                         if suspend:
                             continue
+                        if (
+                            tool is None
+                            and not isinstance(pending, PendingToolInput)
+                            and self._was_started(call)
+                        ):
+                            # The call started, then waited for input or child
+                            # runs or lost its owner, and its tool was removed.
+                            if pending is not None:
+                                self.run.resolve_tool_wait(call)
+                            self.run.record_tool_results(
+                                ToolResult(content=STOPPED_CALL_MESSAGE, is_error=True),
+                                [call],
+                            )
+                            continue
                         if isinstance(pending, (PendingToolInput, NestedInputWait)):
                             self._continue_input_wait(call, pending)
                             continue
                         if isinstance(pending, ChildRunWait):
-                            if self.run.coordination is None:
-                                raise ValueError(
-                                    "Child dependency requires an execution coordinator"
-                                )
-                            children = self.run.coordination.completed_child_states(
-                                pending.run_ids
-                            )
-                            if children is None:
-                                self.run.watch_children(pending.run_ids)
-                                continue
-                            self.run.resolve_tool_wait(call)
-                            self._start([call], children=children)
+                            self._continue_child_wait(call, pending)
                             continue
                         self._start_compatible_calls(call, index, completed_call_ids)
                     if not self.run.suspension_requested:
@@ -276,15 +279,26 @@ class ToolBatch:
                         # See ToolInvocation.run_work. Work that ended since
                         # the cycle began, such as a program that parked
                         # after its offer, gets another cycle.
-                        if self.run.tool_phase_idle:
+                        if self.run.work.tool_phase_idle:
                             return False
                     # Each held job that ends, such as a call or a program
                     # that parks, starts another cycle.
                     self.run.wait_for_tool_activity()
         except BaseException:
             self.run.cancellation_signal.cancel()
-            self.run.notify_tool_activity()
+            self.run.work.notify_activity()
             raise
+
+    def _continue_child_wait(self, call: ToolCall, pending: ChildRunWait) -> None:
+        """Continue a call once its child runs completed, or watch them."""
+        if self.run.coordination is None:
+            raise ValueError("Child dependency requires an execution coordinator")
+        children = self.run.coordination.completed_child_states(pending.run_ids)
+        if children is None:
+            self.run.watch_children(pending.run_ids)
+            return
+        self.run.resolve_tool_wait(call)
+        self._start([call], children=children)
 
     def _continue_input_wait(
         self, call: ToolCall, pending: PendingToolInput | NestedInputWait
@@ -351,11 +365,11 @@ class ToolBatch:
             invocation = ToolInvocation(
                 call_id=call.id,
                 call_index=self.call_indices.get(call.id, 0),
-                arguments=call.model_copy(deep=True).arguments,
+                arguments=deepcopy(call.arguments),
                 cancellation=self.run.cancellation_signal,
                 # Nothing observes the call, which already returned.
                 update=lambda _progress: None,
-                messages=[_tool_view(message) for message in self.context_messages],
+                messages=self.context_messages,
                 recorded_results=self._recorded_before(),
                 nested_calls=_NestedCallGate(
                     self, call, opened.message_id, opened.step_index
@@ -386,8 +400,8 @@ class ToolBatch:
         if (
             tool is None
             or tool.merge_arguments is None
-            or self.run.before_tool_call is not None
-            or call.name in self.run.approval_required
+            or self.run.config.hooks.before_tool_call is not None
+            or call.name in self.run.config.approval_required
             or not call.arguments_complete
             or call.argument_error
             or self.message.stop_reason == "length"
@@ -395,7 +409,7 @@ class ToolBatch:
             self._start([call])
             return
         group = [call]
-        arguments = call.model_copy(deep=True).arguments
+        arguments = deepcopy(call.arguments)
         for candidate in self.calls[index + 1 :]:
             if candidate.name != call.name:
                 continue
@@ -410,9 +424,7 @@ class ToolBatch:
                 if tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
                     break
                 continue
-            merged = tool.merge_arguments(
-                arguments, candidate.model_copy(deep=True).arguments
-            )
+            merged = tool.merge_arguments(arguments, deepcopy(candidate.arguments))
             if merged is None:
                 if tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
                     break
@@ -456,18 +468,14 @@ class ToolBatch:
                 if options.tool_choice == ToolChoiceOptions.NONE
                 else f"Tool {call.name} is unavailable for this step."
             )
-            # A call of a tool that runs only inside an offered tool's calls,
-            # such as a code mode function, says how to call it there.
-            if tool is None and options.tool_choice != ToolChoiceOptions.NONE:
-                for offered in self.tools.values():
-                    hint = (
-                        offered.inner_call_hint(call.name)
-                        if offered.inner_call_hint is not None
-                        else None
-                    )
-                    if hint is not None:
-                        content = hint
-                        break
+            # The agent's hint can say what to call instead of an unknown
+            # tool, such as a code mode function or its own name for a tool.
+            if (
+                tool is None
+                and options.tool_choice != ToolChoiceOptions.NONE
+                and self.run.config.hooks.unknown_tool_hint is not None
+            ):
+                content = self.run.config.hooks.unknown_tool_hint(call.name) or content
             return ToolResult(content=content, is_error=True)
         if (
             call.argument_error
@@ -508,16 +516,17 @@ class ToolBatch:
             call_index=self.call_indices[call.id],
             arguments=merged_arguments
             if merged_arguments is not None
-            else call.model_copy(deep=True).arguments,
+            else deepcopy(call.arguments),
             cancellation=cancellation_signal,
             update=update,
-            messages=[_tool_view(message) for message in self.context_messages],
+            messages=self.context_messages,
             recorded_results=self._recorded_before(),
             agents=self.run.coordination.for_tool(call.id, self.message_id, active)
             if self.run.coordination
             else None,
             nested_calls=_NestedCallGate(self, call, self.message_id, self.step.index)
-            if self.run.before_tool_call is not None or self.run.approval_required
+            if self.run.config.hooks.before_tool_call is not None
+            or self.run.config.approval_required
             else None,
             run_work=self.run.work,
         )

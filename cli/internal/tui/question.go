@@ -341,7 +341,7 @@ func (m Model) handleQuestionKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 				m, cmd := m.answerStep(index, models.ToolQuestionAnswer{QuestionID: current.ID, UserNote: draft})
 				return m, cmd, true
 			}
-			if answer := question.Parse(current, draft); answer.OptionLabel != "" {
+			if answer := question.Parse(current, draft); len(answer.OptionLabels) > 0 {
 				m, cmd := m.answerStep(index, answer)
 				return m, cmd, true
 			}
@@ -354,7 +354,7 @@ func (m Model) handleQuestionKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 			m.renderCards()
 			return m, nil, true
 		default:
-			m, cmd := m.answerStep(index, models.ToolQuestionAnswer{QuestionID: current.ID, OptionLabel: current.Options[card.selected].Label})
+			m, cmd := m.answerStep(index, models.ToolQuestionAnswer{QuestionID: current.ID, OptionLabels: []string{current.Options[card.selected].Label}})
 			return m, cmd, true
 		}
 	}

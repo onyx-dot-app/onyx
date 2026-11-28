@@ -148,7 +148,6 @@ test.describe("Default Agent MCP Integration", () => {
     await customize.openIntegration(serverName);
 
     const detail = new CustomizeIntegrationPage(page);
-    await detail.openTab("Configuration");
     await detail.expectStatus("Connected");
     await expect(detail.disconnectButton(serverName)).toHaveCount(0);
   });

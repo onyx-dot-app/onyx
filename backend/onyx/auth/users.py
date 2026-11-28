@@ -52,6 +52,7 @@ from fastapi_users.manager import UserManagerDependency
 from fastapi_users.openapi import OpenAPIResponseType
 from fastapi_users.router.common import ErrorCode, ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
 from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
@@ -73,6 +74,7 @@ from onyx.auth.email_utils import (
 from onyx.auth.invited_users import get_invited_users, remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
 from onyx.auth.login_claims_capture import capture_oauth_login_claims
+from onyx.auth.magic_link import MAGIC_LINK_USE_SSO_CODE
 from onyx.auth.mobile_sso.sso_completion import (
     apply_mobile_state,
     complete_mobile_sso,
@@ -193,6 +195,11 @@ from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
+from onyx.utils.fleet_telemetry import (
+    LoginFailure,
+    count_failure,
+    count_login_failures,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import (
     mt_cloud_identify_user,
@@ -1076,6 +1083,48 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
     @log_function_time()
+    async def _insert_web_user(self, email: str, *, is_verified: bool) -> User:
+        """Insert a standard web-login user with a random password nobody holds.
+
+        Takes the seat-limit lock on the session that does the insert. Stops
+        there: the caller links its identity first, then seeds the pinned
+        agents and calls ``on_after_register``.
+        """
+        await self.user_db.session.run_sync(
+            lambda s: enforce_seat_limit_locked(s, seats_needed=1)
+        )
+        password = self.password_helper.generate()
+        return await self.user_db.create(
+            {
+                "email": email,
+                "hashed_password": self.password_helper.hash(password),
+                "is_verified": is_verified,
+                "account_type": AccountType.STANDARD,
+            }
+        )
+
+    async def _promote_placeholder_to_web_login(
+        self, db_session: AsyncSession, user: User, *, is_verified: bool
+    ) -> User:
+        """Turn a placeholder row (EXT_PERM_USER, BOT) into the real account,
+        commit, and return the reloaded row."""
+        # Cache the id before the commit below expires `user`. Reading an
+        # attribute off an expired object triggers a sync lazy load, which
+        # raises MissingGreenlet in this async context.
+        user_id = user.id
+        seat_added = await db_session.run_sync(
+            partial(_upgrade_placeholder_to_web_login__no_commit, user_id, is_verified)
+        )
+        await db_session.commit()
+        if seat_added:
+            _invalidate_license_cache_after_seat_change()
+
+        self.user_db.session.expire(user)
+        reloaded = await self.user_db.get(user_id)
+        if reloaded is None:
+            raise RuntimeError("Could not reload the user after promoting it.")
+        return reloaded
+
     async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
         oauth_name: str,
@@ -1233,20 +1282,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         valid_email_domains=effective_valid_email_domains,
                     )
 
-                    # Lock + check on the same session that does the insert.
-                    await self.user_db.session.run_sync(
-                        lambda s: enforce_seat_limit_locked(s, seats_needed=1)
+                    user = await self._insert_web_user(
+                        account_email, is_verified=is_verified_by_default
                     )
-
-                    password = self.password_helper.generate()
-                    user_dict = {
-                        "email": account_email,
-                        "hashed_password": self.password_helper.hash(password),
-                        "is_verified": is_verified_by_default,
-                        "account_type": AccountType.STANDARD,
-                    }
-
-                    user = await self.user_db.create(user_dict)
                     await self._hold_sso_provider(sso_provider_id)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
                     await seed_pinned_personas_from_featured(
@@ -1324,31 +1362,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.account_type.is_web_login():
-                # Cache the id before the commit below expires `user`. Reading
-                # an attribute off an expired object here triggers a sync lazy
-                # load, which raises MissingGreenlet in this async context.
-                refreshed_user_id = user.id
-
                 # Runs on this session, which already holds the `"user"` row
                 # lock taken by reconcile_user_email__no_commit above. A second
                 # connection would wait on that lock for the whole callback.
-                seat_added = await db_session.run_sync(
-                    partial(
-                        _upgrade_placeholder_to_web_login__no_commit,
-                        refreshed_user_id,
-                        is_verified_by_default,
-                    )
+                # The reload lets downstream code (e.g. the oidc_expiry check)
+                # see the upgraded fields.
+                user = await self._promote_placeholder_to_web_login(
+                    db_session, user, is_verified=is_verified_by_default
                 )
-                await db_session.commit()
-                if seat_added:
-                    _invalidate_license_cache_after_seat_change()
-
-                # Reload so downstream code (e.g. the oidc_expiry check) sees
-                # the upgraded fields.
-                self.user_db.session.expire(user)
-                user = await self.user_db.get(refreshed_user_id)
-                if user is None:
-                    raise RuntimeError("OAuth callback could not reload the user.")
 
             # this is needed if an organization toggles track_external_idp_expiry from
             # true to false; otherwise the oidc expiry will always be old and the user
@@ -1358,6 +1379,110 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
             remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)
 
+            return user
+
+    async def magic_link_login(
+        self,
+        email: str,
+        request: Optional[Request] = None,
+        *,
+        start_new_team: bool = False,
+        referral_source: str | None = None,
+    ) -> User:
+        """Sign in the holder of ``email`` after they clicked the link we mailed.
+
+        The click proves the inbox, so a new user is created verified, with a
+        random password nobody holds. The tenant is resolved or created only
+        here, never when the link is requested, so a made-up address leaves
+        nothing behind. On the playground the provisioning step runs the
+        sign-up rules and refuses with a ``PLAYGROUND_*`` code that the web
+        turns into a page.
+
+        Shares the user creation and the placeholder promotion with
+        ``oauth_callback``. There is no OAuth account to link: the address is
+        the identity.
+        """
+        tenant_id = await fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.provisioning",
+            "get_or_provision_tenant",
+            async_return_default_schema,
+        )(
+            email=email,
+            referral_source=referral_source,
+            request=request,
+            start_new_team=start_new_team,
+        )
+        if not tenant_id:
+            raise RuntimeError("Tenant provisioning returned no tenant.")
+
+        async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
+            verify_email_in_whitelist(email, tenant_id)
+            try:
+                # Strict: the fallback defaults usually allow every domain,
+                # which would let a blocked domain in while the read fails.
+                security_settings = get_security_settings(allow_fallback=False)
+            except Exception as e:
+                logger.exception(
+                    "Could not read the security settings for %s", tenant_id
+                )
+                # The token is already used up, so the same link cannot work.
+                raise OnyxError(
+                    OnyxErrorCode.SERVICE_UNAVAILABLE,
+                    "Could not check the sign-in settings. "
+                    "Request a new link in a moment.",
+                ) from e
+            valid_email_domains = security_settings.valid_email_domains
+            verify_email_domain(email, valid_email_domains=valid_email_domains)
+
+            user = await self.user_db.get_by_email(email)
+            if user is None:
+                verify_email_domain(
+                    email,
+                    valid_email_domains=valid_email_domains,
+                    is_registration=True,
+                )
+                try:
+                    new_user = await self._insert_web_user(email, is_verified=True)
+                except IntegrityError as error:
+                    # Another request inserted a row for this address after the
+                    # lookup above, as in ``create``: a second link, a password
+                    # sign-up or a permission sync. It is an existing account
+                    # now, so it takes the checks below.
+                    await db_session.rollback()
+                    logger.warning(
+                        "IntegrityError on magic link sign-up, assuming duplicate: %s",
+                        error,
+                    )
+                    user = await self.user_db.get_by_email(email)
+                    if user is None:
+                        raise error
+                else:
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=new_user
+                    )
+                    await self.on_after_register(new_user, request)
+                    remove_user_from_invited_users_after_login(
+                        new_user.email, new_user.id, tenant_id
+                    )
+                    return new_user
+
+            # An existing account: found above, or inserted by another request.
+            if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
+                # The account's session follows its SSO provider, and that
+                # session has ended. A session from the link would be refused
+                # on the next request, so send the person to SSO now.
+                raise OnyxError(OnyxErrorCode.UNAUTHORIZED, MAGIC_LINK_USE_SSO_CODE)
+            if not user.account_type.is_web_login():
+                # A permission-sync placeholder for this address becomes the
+                # real account, the same way a first OAuth login claims it.
+                user = await self._promote_placeholder_to_web_login(
+                    db_session, user, is_verified=True
+                )
+            elif not user.is_verified:
+                # The click proved the inbox, which is all verification asks.
+                user = await self.user_db.update(user, {"is_verified": True})
+
+            remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)
             return user
 
     async def on_after_login(
@@ -1622,6 +1747,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         def _audit_login_failure(
             outcome: AuditOutcome = AuditOutcome.FAILURE,
         ) -> None:
+            count_failure(LoginFailure.PASSWORD)
             emit_audit_event(
                 AuditAction.LOGIN_FAILURE,
                 outcome,
@@ -2833,9 +2959,58 @@ async def current_user_from_websocket(
         CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
 
 
+def _cookie_strategy(db_session: AsyncSession) -> Strategy[User, uuid.UUID]:
+    """The cookie backend's strategy, with Postgres auth's token store on
+    `db_session`."""
+    if AUTH_BACKEND == AuthBackend.POSTGRES:
+        return get_database_strategy(
+            SQLAlchemyAccessTokenDatabase(db_session, AccessToken)
+        )
+    if AUTH_BACKEND == AuthBackend.REDIS:
+        return get_redis_strategy()
+    if AUTH_BACKEND == AuthBackend.JWT:
+        return get_jwt_strategy()
+    raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
+
+
+async def read_websocket_cookie_user(websocket: WebSocket) -> User | None:
+    """The active user with basic access whose session the websocket's
+    cookie holds, read again from the session store and the database; None
+    when the session or the user no longer qualifies. Call it in the
+    tenant's scope. A long-lived websocket calls it again to notice a
+    logout, a deactivation or a lost permission."""
+    token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if not token:
+        return None
+    # Build the user manager and the strategy inside the tenant scope, in a
+    # session that closes after the read. As route-level Depends they would
+    # open a DB session before the tenant is set and hold it for the
+    # websocket's life.
+    get_user_db_context = asynccontextmanager(get_user_db)
+    get_user_manager_context = asynccontextmanager(get_user_manager)
+    async with get_async_session_context_manager() as db_session:
+        async with get_user_db_context(db_session) as user_db:
+            async with get_user_manager_context(user_db) as user_manager:
+                user = await _cookie_strategy(db_session).read_token(
+                    token, user_manager
+                )
+
+    if user is None or not user.is_active:
+        return None
+
+    try:
+        user = await double_check_user(user)
+    except BasicAuthenticationError:
+        return None
+
+    if Permission.BASIC_ACCESS not in get_effective_permissions(user):
+        logger.warning("WS auth: user %s lacks basic access", user.email)
+        return None
+    return user
+
+
 async def current_user_from_websocket_cookie(
     websocket: WebSocket,
-    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
 ) -> AsyncGenerator[User, None]:
     """WebSocket authentication dependency using the session cookie.
 
@@ -2868,25 +3043,8 @@ async def current_user_from_websocket_cookie(
 
     tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
-        # Build the user manager inside the tenant scope. As a route-level
-        # Depends it would open its DB session before the tenant is set.
-        get_user_db_context = asynccontextmanager(get_user_db)
-        get_user_manager_context = asynccontextmanager(get_user_manager)
-        async with get_async_session_context_manager() as db_session:
-            async with get_user_db_context(db_session) as user_db:
-                async with get_user_manager_context(user_db) as user_manager:
-                    user = await strategy.read_token(token, user_manager)
-
-        if user is None or not user.is_active:
-            raise WebSocketException(code=1008)
-
-        try:
-            user = await double_check_user(user)
-        except BasicAuthenticationError as e:
-            raise WebSocketException(code=1008) from e
-
-        if Permission.BASIC_ACCESS not in get_effective_permissions(user):
-            logger.warning("WS auth: user %s lacks basic access", user.email)
+        user = await read_websocket_cookie_user(websocket)
+        if user is None:
             raise WebSocketException(code=1008)
 
         logger.debug("WS auth: authenticated %s", user.email)
@@ -3305,6 +3463,7 @@ def get_oauth_router(
             },
         },
     )
+    @count_login_failures(LoginFailure.OAUTH)
     async def callback(
         request: Request,
         access_token_state: Tuple[OAuth2Token, Optional[str]] | None = Depends(
@@ -3330,6 +3489,7 @@ def get_oauth_router(
                 )
 
         def build_error_response(exc: OnyxError) -> JSONResponse:
+            count_failure(LoginFailure.OAUTH)
             log_onyx_error(exc)
             error_response = onyx_error_to_json_response(exc)
             delete_pkce_cookie(error_response)

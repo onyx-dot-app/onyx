@@ -24,6 +24,8 @@ from onyx.integrations.service import (
     delete_integration_for_user__no_commit,
     get_manageable_integration,
     get_viewable_integration,
+    import_openapi_document,
+    introspect_graphql_endpoint,
     list_admin_integrations,
     organization_status,
     preset_views,
@@ -37,12 +39,16 @@ from onyx.server.features.integrations.models import (
     AdminIntegration,
     AdminIntegrationDetail,
     ConnectionFieldsRequest,
+    GraphQLConfigInput,
+    GraphQLIntrospectRequest,
     IntegrationActionsResponse,
     IntegrationActionsUpdate,
     IntegrationCreate,
     IntegrationGroupSettingsUpdate,
     IntegrationInstallationPolicy,
     IntegrationUpdate,
+    OpenApiConfigView,
+    OpenApiEndpointsRequest,
     PresetView,
 )
 
@@ -61,9 +67,25 @@ def list_integrations_admin(
 
 @router.get("/presets")
 def list_integration_presets(
-    user: User = Depends(_manager),
+    _: User = Depends(_manager),
 ) -> list[PresetView]:
-    return preset_views(user)
+    return preset_views()
+
+
+@router.post("/openapi-import")
+def import_openapi_spec(
+    request: OpenApiEndpointsRequest,
+    _: User = Depends(_manager),
+) -> OpenApiConfigView:
+    return import_openapi_document(request)
+
+
+@router.post("/graphql-introspect")
+def introspect_graphql(
+    request: GraphQLIntrospectRequest,
+    _: User = Depends(_manager),
+) -> GraphQLConfigInput:
+    return introspect_graphql_endpoint(request)
 
 
 @router.post("")

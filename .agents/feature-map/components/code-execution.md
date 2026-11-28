@@ -1,7 +1,7 @@
 # Code Execution
 
 > `run_python` sends Python code to an external Code Interpreter service.
-> Code mode's `execute_code` runs
+> Code mode's run tool (`execute_code`) runs
 > a Python program that calls the other chat tools in local Monty sandbox
 > workers, and the sandbox tools run commands, edit files and publish files
 > in the user's Firecracker VM.
@@ -17,19 +17,23 @@
   assistant writes Python, the user sees the code, then the output as it
   streams. Files that the code writes, such as a chart or a CSV, appear as
   downloads. Files that the user attached to the chat are available to the code.
-- **With code mode on** (`CODE_MODE_ENABLED=true`), the chat model gets the
-  `execute_code` and `wait_code` tools instead of the tools it can nest, when
-  it has any. Deep research does not use code mode. A
+- **With code mode on** (`CODE_MODE_ENABLED=true`), the chat model gets a
+  run tool and a wait tool instead of the tools it can nest, when it has
+  any. Every model gets the run tool `execute_code`; each tool family gets its
+  own wait tool and argument shape
+  (`backend/onyx/tools/tool_implementations/code_mode/shapes.py`): `wait` for
+  OpenAI and all other models, `poll` for Claude models. Deep research does not use code mode. A
   preferred Action that became a function is named as one in the reminder. One program can run
   several searches and MCP calls in parallel and print only what the answer
   needs. Each program runs in a cell. When the cell still runs after
-  `yield_time_ms` (default 30 s) or calls `yield_control()`, the call returns
-  the output so far and the cell keeps running. The model gets the rest with
-  `wait_code`, or stops the cell with `wait_code(terminate=true)`.
+  `yield_time_ms` (`timeout` for Claude models; default 30 s) or calls
+  `yield_control()`, the call returns the output so far and the cell keeps
+  running. The model gets the rest with the wait tool, or stops the cell with
+  `wait(terminate=true)` (`poll(terminate=true)`).
 - **The user sees the tool calls, not the code.** Each tool call that a
   program makes shows as its own timeline step, the same as a direct call:
   searches, MCP and custom tools, URL reads, images. The program, its output,
-  cells and `wait_code` calls stay hidden. A call that is still running when
+  cells and wait calls stay hidden. A call that is still running when
   its cell yields shows as running until it ends or the response stops it.
   While a program works between calls, the timeline header reads "Working".
   Images that a program generates show above the answer. Each program starts
@@ -42,7 +46,8 @@
   set to an empty value**, the model cannot call `run_python`. When code fails or
   times out, the user sees the error output and the turn continues.
 - **With harness sandboxes** (`SANDBOX_RUNTIME=firecracker` and
-  `SANDBOX_FC_TEMPLATE`), every chat agent gives the model `exec_command`,
+  `SANDBOX_FC_TEMPLATE`), every chat agent gives the model a shell tool
+  (`bash` for Claude models, `exec_command` for all other models),
   `write_stdin` and file tools: `edit` and `write` for Claude models (in
   the shapes of Claude Code's Edit and Write), `apply_patch` for all other
   models. This applies except in anonymous,
@@ -51,15 +56,36 @@
   per agent, and users cannot pick or force them. Commands run in the user's
   private VM, in the chat's session directory, whose files stay for later
   turns. The user sees each command and its output as it streams, and the
-  files that each patch, edit or write changed, on the same patch card. While
+  files that each patch, edit or write changed, on the same patch card: one
+  diff per file, with `+N -M` line counts in the step header. While
   the model writes a `write` or `edit` call, the card names the file; an
-  `apply_patch` card names the files and counts them. Every
-  model also gets `publish_files`, which gives files from the VM to the user
+  `apply_patch` card names the files and counts them. With
+  `library_create_library_file` the model gives files from the VM to the user
   as download cards; owners and viewers of a shared chat can download them,
-  and a hard chat delete deletes them. With `artifacts_list` and
-  `artifacts_download` the model finds the files that it published in the
-  user's own chats and copies one into the current chat's attachments
-  folder; they show as generic tool cards.
+  and a hard chat delete deletes them. With `library_list` and
+  `library_prepare_materialize` the model finds, sorts and filters the files
+  that it published in the user's own chats and copies them into the current
+  chat's working directory (generic tool cards), and with
+  `library_replace_library_file` it adds a version to one of them;
+  `library_manage_library` renames them, restores an older version, adds a
+  copy of any of their versions as a new version, or deletes them after the
+  user approves. With `library_read` and `library_find` it reads numbered
+  lines or pages of any version of them and finds lines in them, on the
+  server, without the VM, and with `library_search` it finds them by
+  content, name and title, with snippets. In code mode all of these are the
+  deferred group `library`. Claude models get the same operations as one
+  `artifact` tool instead (actions publish, list, read, rename, restore and
+  delete; list with a query searches; read shows text, finds text with
+  `query`, or copies with `out_dir`), in its own deferred group `artifact`,
+  for compatibility with how they work with artifacts. Every result links
+  each version as
+  `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
+  the output panel.
+  While the admin setting `browser_enabled` is on, the model also gets the
+  browser tools (`browser_open`, `browser_navigate`, `browser_snapshot`,
+  `browser_act`, `browser_wait_for`, `browser_evaluate`, `browser_status`,
+  `browser_dialog`), which drive the chat's own tabs in the VM's one Chrome;
+  the user can watch the tabs live and take control of one.
 
 ---
 
@@ -69,8 +95,11 @@ This component owns `PythonTool`, the Code Interpreter client, the settings
 table with its admin API and page, and code mode's sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
-`apply_patch`, `edit`, `write`, `publish_files`, `artifacts_list`,
-`artifacts_download`). Code mode's packets and replay belong to [[streaming-protocol]], and
+`apply_patch`, `edit`, `write`, `library_create_library_file`, `library_list`,
+`library_prepare_materialize`, `library_replace_library_file`, `library_manage_library`,
+`library_read`, `library_find`, `library_search`, `artifact`, and the browser tools) and the
+artifact operations that they share. The live view routes and the browser service in the VM
+belong to [[craft-sandboxes]]. Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
@@ -100,21 +129,72 @@ run_python (stateless, one call = one execution)
 ```
 
 ```
-execute_code / wait_code (code mode; a cell per program, a store per chat)
-  chat/execution.py:create_chat_agent   ChatAgent(code_mode=CODE_MODE_ENABLED); the flag is
-                                        saved in ChatFeatureState.code_mode, and restoration
-                                        uses the saved value, not the env flag
-  code_mode_tool.py:with_code_mode      ChatAgent only: by Tool.code_mode_exposure, DIRECT
+run / wait tools (code mode; a cell per program, a store per chat)
+  chat/execution.py:create_chat_agent   ChatFeature(code_mode=CODE_MODE_ENABLED); the agent
+                                        takes its shapes from llm.config.tool_family. The
+                                        flag is saved in ChatFeatureState.code_mode, and
+                                        restoration uses the saved value, not the env flag
+  llm/interfaces.py:LLMConfig.tool_family
+                                        ToolFamily.CLAUDE when model_capabilities.
+                                        is_claude_model(model_identity_names) holds, else
+                                        OPENAI: the one family decision; the family picks
+                                        each tool's shape (an X_SHAPES lookup)
+  code_mode/shapes.py:CODE_MODE_SHAPES  one CodeModeShape per family: run/wait tool names
+                                        and argument models (tools/models.py:ToolArguments
+                                        [RunRequest] / [WaitRequest] subclasses), and the
+                                        argument names that the prompt and host functions
+                                        use: run_yield_argument and the search function's
+                                        search_name and search_limit_argument, from which
+                                        the shape builds the search stub (search) and
+                                        code_mode/shapes.py:SearchHost builds its host
+                                        function; and the describe function,
+                                        if any.
+                                        with_code_mode builds CodeCells(shape); the run and
+                                        wait tools and the cells read the shape there. Every
+                                        shape's run tool is execute_code. OPENAI: run
+                                        (code, yield_time_ms, max_output_tokens) / wait
+                                        (cell_id, yield_time_ms, max_tokens, terminate),
+                                        tool_search(query, limit); token budgets convert to
+                                        characters through tool_implementations/utils.py:
+                                        output_chars_from_tokens. CLAUDE: run
+                                        (code, timeout) / poll (cell_id, timeout,
+                                        terminate), search_tools(query, max) and
+                                        describe_tool(name); DEFAULT_MAX_OUTPUT_CHARS. Each
+                                        argument model's request() gives the RunRequest /
+                                        WaitRequest that CodeCells serves, so the engine is
+                                        the same for every shape. Extra arguments are
+                                        ignored (non-strict definitions)
+  RUN_TOOL_NAMES / WAIT_TOOL_NAMES /    every shape's names; the renderer, spill limits
+  CODE_MODE_TOOL_NAMES                  and other name-keyed checks read these sets.
+                                        Calls under other names, such as exec or repl,
+                                        replay as generic tool cards
+  code_mode_tool.py:with_code_mode      ChatFeature only: by Tool.code_mode_exposure, DIRECT
                                         tools stay direct; IMMEDIATE and DEFERRED ->
-                                        CodeModeTool(inner, cells=CodeCells()) and
-                                        WaitCodeTool(cells); the definitions stay fixed for
-                                        every step, the final step included
+                                        CodeModeTool(inner, cells=CodeCells(shape), ...)
+                                        and WaitCodeTool(cells, programs), which read the
+                                        shape from the cells; the definitions stay
+                                        fixed for every step, the final step included. The
+                                        shape names the tools in every model-facing text
+                                        (descriptions, notes, rejections, restored results)
+  chat/restoration.py:restore_chat_agent
+                                        the active LLM's family, as restored children and
+                                        sandbox tools use (a parked run resumes only on its
+                                        own model). A call that started, then waited for
+                                        nested input or child runs or lost its owner, and whose
+                                        tool is gone gets agents/tool_execution.py:
+                                        STOPPED_CALL_MESSAGE (it may have had effects). A
+                                        direct call of another shape's tool or program
+                                        function, copied from history, gets a hint that
+                                        names this shape's (chat/agent.py: ChatFeature's
+                                        unknown_tool_hint; the search only with deferred
+                                        functions)
   CodeModeTool.operation_names          how the preference reminder names a preferred tool
                                         that became a function (prompt.py:
                                         program_function_operation)
   chat/prompt_utils.py:callable_tools   offered tools, then each tool's inner_tools; the
-                                        prompt reads both and adds CODE_MODE_GUIDANCE when
-                                        execute_code is offered; in both modes
+                                        prompt reads both and adds CODE_MODE_GUIDANCE (with
+                                        the shape's run name) when code mode applies; in
+                                        both modes
                                         SearchTool._run, not the prompt, caps queries at 3
   stubs.py:build_tool_stubs             function names `<namespace>__<name>` from
                                         Tool.code_mode_function_name (MCP: server), as
@@ -123,8 +203,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         `listed_text` (no DEFERRED ones, in the description);
                                         `program_text(code)` types one program: the listed
                                         functions, the DEFERRED ones whose names the code
-                                        uses, and the imported modules; tool_search()
-                                        (tool_search.py, BM25) only when some are DEFERRED,
+                                        uses, and the imported modules; the shape's search
+                                        function (tool_search.py, BM25) only when some are
+                                        DEFERRED, and its describe function, if any,
                                         scoring the name, namespace and description plus
                                         PARAMETER_WEIGHT times a separate score of the
                                         argument schema's property names and descriptions
@@ -134,7 +215,8 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         id in the branch; store snapshot = store.py:store_snapshot
     CodeCell                            a driver thread runs the program inside a
                                         code_mode_cell span (status, duration, call count,
-                                        tool names); the call returns at yield_time_ms, at
+                                        tool names); the call returns at its yield time
+                                        (yield_time_ms, or timeout for Claude), at
                                         yield_control(), or at the end
       execute_program                   sandbox.py: checkout a new Monty worker (the wait
                                         observes Stop), feed the imports of IMPORTABLE_MODULES
@@ -175,27 +257,30 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         hold its end (tools/tool_implementations/code_mode/prompt.py:closed_cell_text)
   each observation                      taken under the cell lock, formatted after it:
                                         prompt.py:format_content (model text, cut once
-                                        in the middle to max_output_chars, 40,000 by
-                                        default, at most 160,000) and
+                                        in the middle to the call's character budget:
+                                        max_output_tokens / max_tokens times
+                                        APPROX_CHARS_PER_TOKEN for OpenAI, 40,000
+                                        by default and for Claude, at most
+                                        160,000) and
                                         CodeModeExecutionResult (each part cut to the
                                         same budget): a CellWindow
                                         (stdout, calls, commit at the program's end,
                                         tool_call_count) with cell_id, observation and status
                                         (running while the cell runs)
-  chat/agent.py:_finished_cells (Agent.on_finish) -> CodeCells.finish
+  chat/agent.py:ChatFeature._finished_cells (RunHooks.on_finish) -> CodeCells.finish
                                         stop every open cell; a ToolResultAmendment with the
                                         result of each observation Stop interrupted, and one
                                         with a CellClosing for each cell whose last saved
                                         observation is running
-  chat/agent.py:_prepare_step (a run's first step) -> CodeCells.reopen
+  chat/agent.py:ChatFeature._prepare_step (a run's first step) -> CodeCells.reopen
                                         empty cells for the next run of the same agent (a
                                         message or results to an idle child) after finish
-  chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
+  chat/agent.py:ChatFeature._suspended_cells (RunHooks.on_suspend) -> CodeCells.suspend
                                         the same when the run suspends (see
                                         ToolInvocation.run_work), with reason="suspended";
                                         later calls can start cells. A cell whose program
                                         waits for input stays parked
-  ChatAgent.capture_state / restore_state  CodeCells.saved / restore: a parked cell is a
+  ChatFeature.capture_state / restore_state  CodeCells.saved / restore: a parked cell is a
                                         SavedCodeCell in ChatFeatureState.code_cells; its
                                         dump goes to the file store at handoff, under a
                                         unique ID (chat/restoration.py:persist_checkpoint_files)
@@ -213,7 +298,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch | edit + write / publish_files / artifacts_list + artifacts_download (no tool row; Tool.id is None)
+exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_read + library_find + library_replace_library_file + library_manage_library + library_search | edit + write + artifact (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
@@ -223,26 +308,79 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         Slack or Discord bot turns (MessageOrigin
                                         SLACKBOT / DISCORDBOT; the chat route sets
                                         DISCORDBOT from the bot's service API key)
-  chat/execution.py:create_chat_agent   builds the tools with one SandboxTurn for every
+  chat/execution.py:construct_chat_tools builds the tools with one SandboxTurn for every
                                         agent, as it adds the skill tools; a durable resume
                                         prepares the turn again and builds them the same way.
-                                        sandbox_tools_for_model(model names) owns the set and
-                                        its order: EditTool and WriteTool when any of the turn
-                                        LLM's names (model_identity_names) contains "claude"
-                                        (model_capabilities.is_claude_model, the one rule that
-                                        LLM requests and prompt caching use too), else
-                                        ApplyPatchTool; never both; PublishFilesTool,
-                                        ArtifactsListTool and ArtifactsDownloadTool for every
-                                        model. The reserved-token prompt
-                                        (calculate_reserved_tokens) names the same set
-  prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
-                                        (sandbox_tools.py:sandbox_guidance): one use per
-                                        SandboxTool that the turn offers, in order, named
-                                        as the model calls it (CodeModeTool.called_name in
-                                        code mode), except tools whose USE is None
-                                        (publish_files, the artifact tools); the tool
-                                        descriptions describe only the tools, and
-                                        publish_files's names the artifact tools
+                                        SANDBOX_TOOLS[family] (a SandboxToolset) gives the
+                                        family's ShellShape, which the turn carries
+                                        (SandboxTurn.shell; it names the shell tool, takes
+                                        its arguments, and names it in the other tools'
+                                        descriptions and results), and owns the set, by
+                                        rank (tools/ordering.py)
+                                        (LLMConfig.tool_family; the family picks each
+                                        tool's shape): for ToolFamily.CLAUDE, EditTool,
+                                        WriteTool and ArtifactTool, the tools Claude models
+                                        work with; else ApplyPatchTool,
+                                        LibraryCreateLibraryFileTool, LibraryListTool,
+                                        LibraryPrepareMaterializeTool, LibraryReadTool,
+                                        LibraryFindTool, LibraryReplaceLibraryFileTool and
+                                        LibraryManageLibraryTool. No turn
+                                        gets both sets; a model switch leaves calls of the other
+                                        set in the history, which still render. The
+                                        reserved-token prompt (calculate_reserved_tokens,
+                                        with the first model's tool_family) names
+                                        the same set and shell. LibraryManageLibraryTool and ArtifactTool
+                                        carry ARTIFACTS_DELETE_APPROVAL (no integration,
+                                        `onyx:artifacts.delete`, one key for both families, so
+                                        a chat grant survives a model switch); a turn whose
+                                        ApprovalMode is RUN_WITHOUT_ASKING (evals) builds
+                                        them with no scope, the browser tools included;
+                                        browser_tools.with_browser_tools appends
+                                        BROWSER_TOOLS (rank BROWSER, after the family's
+                                        sandbox tools) with ChatTurnSetup.browser_tools (the
+                                        browser_enabled setting, read once in
+                                        prepare_chat_turn, off when the settings
+                                        cannot be read); the token estimate counts
+                                        their descriptions too
+                                        (calculate_reserved_tokens browser_tools)
+  browser_tools.py (SEQUENTIAL, one     each call is one HarnessSandbox.browser_call (one Dial
+  group)                                to the VM's browser service, named by the chat); a
+                                        service refusal (for example human_control: a human
+                                        controls the tab) is a tool error with the service's
+                                        message. browser_open's description has the browser
+                                        usage (the user can watch and take control; on a
+                                        refusal, open a tab with new_tab or ask the user),
+                                        and its name must stay: the web panel opens itself
+                                        on its start packet. Reads (status, snapshot,
+                                        wait_for) RUNS_AGAIN; the others get an
+                                        interrupted result. Paths (upload, screenshot) are
+                                        session-relative
+  prompt_utils.py:build_system_prompt   the `# Environment` section ends the prompt with
+                                        the VM's facts (prompts/sandbox_tools.py:
+                                        ENVIRONMENT_SECTION): the working directory
+                                        (SandboxTurn.workdir), the shell, what a save
+                                        keeps, what an idle stop loses, the chat files'
+                                        layout in attachments/ and that long results go
+                                        to a file. It is the only text that names one
+                                        chat. `# Tools` has the file tools' line
+                                        (FILE_EDIT_GUIDANCE) and, with the shell, the
+                                        separator rule. Each tool's own usage, such as the shell's
+                                        stateless `bash -c` calls, is in its description
+                                        (SandboxTool.describe_in), which names no chat and
+                                        holds nothing of its files, so tool definitions
+                                        are the same in every chat. The
+                                        token estimate counts each family's sandbox tool
+                                        descriptions (and the browser tools') at their longest. In code mode
+                                        every artifact function is deferred, so only the
+                                        deferred-groups note names its group (`library`,
+                                        or `artifact` for Claude models), with the line
+                                        that _LibraryTool.CODE_MODE_NAMESPACE_DESCRIPTION
+                                        or, for `artifact`,
+                                        ArtifactTool.CODE_MODE_NAMESPACE_DESCRIPTION
+                                        gives (what the group does, no tool names);
+                                        immediate text
+                                        (skills included) names the operation, such as
+                                        publishing a file, never a function
   SandboxTurn.start_call                first call: the user's Sandbox row
                                         (build/db/sandbox.py:get_or_create_sandbox); before
                                         each call: HarnessSandbox.begin_turn (an error is
@@ -255,16 +393,25 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         HarnessSandbox.install_skill then sends them as one tar
                                         to the daemon's InstallSkill and waits (guest-daemon
                                         README "Skills").
-  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (each
-                                        command gets AGENT_BROWSER_SESSION=<chat session>, so
-                                        chats in one VM keep separate browsers); each
+  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (the
+                                        browser is not a command: the browser_* tools call
+                                        the VM's browser service, see browser_tools.py; each
+                                        command gets a command ID in its proxy URL user; the
+                                        call's sandbox/command_approvals.py:CommandApprovals
+                                        shows the egress proxy's held Ask requests of the
+                                        command as approval cards and keeps the call open
+                                        while one waits, [[craft-external-apps#source-ip-is-identity]]); each
                                         ExecOutputDelta -> ToolProgress, which the tool
-                                        stops at max_output_chars; the result is the exec
+                                        stops at the call's character budget (the request
+                                        of the shape's arguments: max_output_tokens x 4, or
+                                        the default for bash; bash's timeout is the wait,
+                                        run_in_background the shortest wait, and its
+                                        description is ignored); the result is the exec
                                         header text (wall time, exit code or ending,
                                         session ID while it runs, character count) and the
                                         output that the harness kept (head, tail and the
                                         count between them), cut in the middle to
-                                        max_output_chars (40,000 by default, at most
+                                        the budget (40,000 characters by default, at most
                                         160,000) by tool_implementations/utils.py:cut_middle
                                         with one marker (truncation_marker) that
                                         counts every omitted character; SandboxExecResult
@@ -311,10 +458,18 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         Claude Code's texts. write creates or overwrites
                                         (parents created); no read-first rule, as reads are
                                         not tracked. Both save ApplyPatchResult.
-                                        The file tools and publish_files share one
+                                        The file tools and the publishing tools share one
                                         sequence_group: their calls of one step run one at
                                         a time, so a publish sees the step's earlier edits
-  PublishFilesTool (SEQUENTIAL)         at most PUBLISH_FILES_MAX_FILES (20) files a call;
+  LibraryCreateLibraryFileTool (SEQUENTIAL)  library_create_library_file, DEFERRED
+                                        library.create_library_file; `file` with an
+                                        optional `title`, or `files` (exactly one), and
+                                        the card's `description`; returns
+                                        ArtifactPublished to the model, and its call is
+                                        not run again after a lost server.
+                                        artifact_operations.publish (the artifact tool's
+                                        publish and replace_file run it too): at most
+                                        PUBLISH_FILES_MAX_FILES (25) files a call;
                                         for each file in order: HarnessSandbox.read_file
                                         (a working-directory path, or an absolute path
                                         under ONYX_VM_FILES_ROOT; other paths are refused
@@ -322,14 +477,18 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         directory; a regular file of at most
                                         PUBLISH_FILES_MAX_BYTES, 100 MiB); for a .pdf,
                                         .pptx or .docx of at most 20 MiB,
-                                        HarnessSandbox.render_first_page (typed argv
-                                        execs, no shell: soffice to a PDF for Office
-                                        files, then pdftoppm to a 640 px JPEG, in a
-                                        scratch directory under ONYX_VM_FILES_ROOT; all
-                                        renders of the call share one 30 s budget from
-                                        when the call has its sandbox (after
-                                        SandboxTurn.start_call), and files after it get
-                                        none; None on failure); then
+                                        HarnessSandbox.render_preview with the first
+                                        page (typed argv execs, no shell: soffice to a
+                                        PDF for Office files, then pdftoppm to a 640 px
+                                        JPEG, in a scratch directory under
+                                        ONYX_VM_FILES_ROOT; the JPEG and an Office
+                                        file's PDF come back, each None when it fails
+                                        or is too large; all renders of the call share
+                                        one 30 s budget from the call's first read,
+                                        which wakes the VM, and files after it get
+                                        none; a file that the converter rejects, whose
+                                        render runs out of budget or raises, publishes
+                                        without them; a Stop stops the publish); then
                                         db/chat.save_chat_artifact: a CHAT_ARTIFACT file
                                         record and the next version of the chat_artifact
                                         of its VM path in the SandboxTurn's chat session
@@ -343,64 +502,425 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         publish is a new file and version.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
-  ArtifactsListTool / ArtifactsDownloadTool  sandbox_tools._ArtifactTool: code mode
-                                        DEFERRED in the group `artifacts`
-                                        (tools.artifacts__list / __download, found
-                                        with tool_search), JSON_OBJECT results
-                                        (ArtifactList, DownloadedArtifact), no saved
+  LibraryListTool / LibraryPrepareMaterializeTool  sandbox_tools._LibraryTool: each
+                                        library tool's arguments are the operation's
+                                        typed input (models.py:LibraryRequest), which
+                                        artifact_operations.run_operation runs (list_artifacts,
+                                        materialize, ...) for both families: code mode
+                                        DEFERRED in the group `library`
+                                        (tools.library__list / __prepare_materialize, found
+                                        with the shape's search), JSON_OBJECT results
+                                        (ArtifactList, MaterializedItems), no saved
                                         details (the generic card shows the JSON),
                                         PARALLEL, and run again after a lost server
                                         (interrupted_result None). Errors
-                                        (_artifact_errors): a HarnessSandboxError's
+                                        (errors.py:artifact_errors, which every
+                                        artifact operation uses, publish included): a
+                                        tool error as it is, a HarnessSandboxError's
                                         message, "timed out" for a TimeoutError, else
                                         a fixed "failed; try again"; details only in
                                         the log. Scope: the user's own root chats
                                         that are not deleted, this chat and
                                         scheduled-task chats included
                                         (db/chat.py:_listable_chat; never a public
-                                        chat of another user). artifacts_list reads
-                                        only the database (SandboxTurn.user_id, no
+                                        chat of another user). library_list (not
+                                        strict: `filters` is a nested model) reads only
+                                        the database (SandboxTurn.user_id, no
                                         start_call): db/chat.py:get_user_published_files,
                                         the newest available version of each artifact,
-                                        newest ChatArtifact.updated_at first (an upsert
-                                        never moves it back), by the index (user_id,
-                                        updated_at DESC) so a page stops at its limit;
-                                        a query (at most 200 characters) matches the
-                                        file name, the version's title or the chat's
-                                        title (icontains, autoescape); limit clamped
-                                        to 1-50 (default 25); each row comes with its
-                                        ArtifactCursor (updated_at, artifact ID), whose
-                                        base64url JSON is next_cursor. Entries give
-                                        published_display_path; names and paths are
-                                        cut, and a page drops its last entries to stay
-                                        within ARTIFACTS_LIST_MAX_CHARS, below the
-                                        spill limit of one result (the step's budget
-                                        can still spill it).
-                                        artifacts_download: get_user_published_file
-                                        (any version's file ID, a CHAT_ARTIFACT record
-                                        whose object is not missing) and the 100 MiB
-                                        cap come before start_call, so a refused ID
-                                        never wakes the VM, and every refusal has one
-                                        message. Then HarnessSandbox.session_files and
-                                        one listing of attachments/artifacts/ (a
-                                        missing directory lists empty): a regular file
-                                        of the record's size at
-                                        attachments/artifacts/<chat_file_name> is a
-                                        cache hit and writes nothing; else the file
-                                        store read and SessionFiles.write (atomic,
-                                        file_copies' COPY_BASE_SECONDS + size /
-                                        COPY_MIN_BYTES_PER_SECOND) run as one task in
-                                        the pod's FileCopyPool write slots (at most
-                                        VM_COPY_WRITES per VM, with the chat file
-                                        copies). The wait for the slot has no timeout
-                                        (a Stop ends it, and pod shutdown fails it);
-                                        from the slot, llm/cancellation.py:wait_for_future
-                                        (shared with the spill) waits twice the write
-                                        timeout: a Stop raises AgentCancelled and the
-                                        write lands on its own. The copy cleanup never deletes
-                                        these files, and session saves skip
-                                        attachments/
-  Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose
+                                        by `sort` (modified_at = ChatArtifact.updated_at,
+                                        the default, which an upsert never moves back;
+                                        created_at; name and size of the newest
+                                        version) and sort_order (default desc), the
+                                        artifact ID breaking ties. Only modified_at
+                                        reads the index (user_id, updated_at DESC) and
+                                        stops at the limit; the other sorts read and
+                                        sort all the user's matching artifacts.
+                                        filters: created/modified after (inclusive) and
+                                        before (exclusive), naive times in UTC;
+                                        include/exclude_file_types and category by the
+                                        newest name's text after its last dot
+                                        (models.py:ARTIFACT_TYPE_EXTENSIONS, which also
+                                        gives each entry's artifact_type). The list
+                                        has no query: library_search finds files by
+                                        text. limit clamped to 1-50 (default 25).
+                                        db/chat.py:_user_published_files is the one
+                                        scope, newest-version and filter builder of
+                                        the list, the search candidates and the
+                                        search's lookup by ID. Each row comes with its ArtifactCursor
+                                        (sort, sort_order, sort key, artifact ID; a
+                                        union by sort, so a name stays a string), whose
+                                        base64url JSON is next_cursor; a cursor of
+                                        another sort or order is a tool error. Entries
+                                        (ArtifactList.files) carry library_file_id
+                                        (the artifact ID), file_id, version_number, file_name, title,
+                                        artifact_type, mime_type, file_size_bytes,
+                                        created_at, modified_at, chat_id, chat_title,
+                                        path (the published display path) and url
+                                        (models.py:artifact_url); names and
+                                        paths are cut, and a page drops its last
+                                        entries to stay within ARTIFACT_RESULT_MAX_CHARS,
+                                        below the spill limit of one result. The spill
+                                        exempts library_list, so the step's budget
+                                        does not spill a page either.
+                                        library_prepare_materialize (not strict: nested
+                                        items): at most 20 items, each a file_id (that
+                                        version) or a library_file_id (the newest
+                                        available version), with file_name and
+                                        relative_directory; destination.directory
+                                        (default attachments/artifacts) and
+                                        conflict_policy (dedupe, the default:
+                                        "<stem> (N)<ext>", with the stem cut so
+                                        that the name fits the 255-byte limit
+                                        (harness_base.safe_file_name), by one listing of the
+                                        directory and the names the call wrote;
+                                        overwrite; error). artifact_operations._copy_directory:
+                                        relative or absolute, normalized by
+                                        harness_base.session_relative_path (inside the
+                                        working directory; relative_directory joins
+                                        destination.directory first, so `..` is
+                                        allowed while the normalized path stays in
+                                        the working directory), then outside attachments/
+                                        or in attachments/artifacts/; no link check,
+                                        as the daemon writes inside the session's
+                                        os.Root. get_user_published_file (the
+                                        _newest_available_version lateral: a
+                                        CHAT_ARTIFACT record whose object is not
+                                        missing, in a listable chat) and the
+                                        directories of every item come before
+                                        start_call, so a call whose items are all
+                                        refused never wakes the VM. Items then run in
+                                        order, each with its result (written, cached
+                                        or error); the call fails only when every item
+                                        fails. In attachments/artifacts without a
+                                        file_name the copy is named chat_file_name
+                                        (<8hex>-<name>), which only that file has: a
+                                        file there that is in place
+                                        (file_copies.in_place) is cached under every
+                                        policy, any other file there is written over.
+                                        Other copies take harness_base.safe_file_name
+                                        of file_name or the artifact's effective
+                                        name, which rename sets (the rule
+                                        chat_file_name uses, without the prefix); the
+                                        listing (file_copies.MAX_LISTED, hidden
+                                        entries included) decides a conflict, and a
+                                        cut listing counts as one. Under error and
+                                        dedupe the write has no overwrite (FILE_EXISTS
+                                        is file_copies.EXISTS): a name taken after the
+                                        listing fails an error item, and dedupe tries
+                                        the next free name, at most
+                                        _MATERIALIZE_NAME_TRIES writes. Each write is a
+                                        file_copies.FileWrites of one file, as the chat
+                                        file copies write: the file store read and
+                                        SessionFiles.write in the pod's FileCopyPool
+                                        write slots (at most VM_COPY_WRITES per VM),
+                                        COPY_TRIES tries, and a listing or write past
+                                        its timeout or a gone VM
+                                        (file_copies.no_response) fails the remaining
+                                        items. Its
+                                        on_end completes a Future; the wait has no
+                                        timeout: a Stop raises AgentCancelled (later
+                                        items do not run, and a started write lands on
+                                        its own), and pod shutdown fails the item. The
+                                        copy cleanup never deletes attachments/artifacts,
+                                        and session saves skip attachments/ but keep
+                                        copies elsewhere, except in the folders that
+                                        they skip, such as node_modules, virtual
+                                        environments and caches
+                                        (firecracker/session_saves.py)
+  LibraryReadTool / LibraryFindTool    library_read and library_find: _LibraryTool (PARALLEL,
+                                        run again after a lost server), DEFERRED
+                                        library.read / library.find, JSON_OBJECT results
+                                        (ArtifactsRead, ArtifactsFound), generic card; thin
+                                        translators over artifact_operations.read / find,
+                                        which the artifact tool's read without out_dir runs
+                                        too. They read only the database and the file store
+                                        (SandboxTurn.user_id, never start_call). At most 5
+                                        items, each the shared file reference
+                                        (models.py:ArtifactFileReference: file_id, or
+                                        library_file_id with an optional version_number).
+                                        _published_texts looks every item up first
+                                        (_published_file, whose ListedArtifact has the
+                                        artifact's latest_version_number; a missing version
+                                        names the newest), then loads each text through
+                                        file_store/utils.py:get_or_extract_artifact_text (the
+                                        artifact_text_<file_id> cache that
+                                        [[file-store-and-user-files]] owns; later calls
+                                        reuse the cached text). A refused reference, a file over 50 MiB or a
+                                        file without text fails the whole call with every
+                                        reason. artifact_text.artifact_lines splits the text
+                                        into lines (CR, CRLF, LF) and page starts. read: mode
+                                        lines (start_line, max_lines 400 by default, at most
+                                        2,000) or pages (start_page..end_page; a file without
+                                        pages is a tool error); read_lines numbers lines as
+                                        cat -n, with "--- page N ---" before the first line and
+                                        each page start, and cuts a line over 1,000 characters.
+                                        find: per line like grep, literal (regex.escape) or
+                                        regex, case-insensitive unless case_sensitive, in a
+                                        line and page range (a reversed range, here or in a
+                                        read, is a validation error), with up to 5 context lines on each
+                                        side, max_matches (20, at most 100) and match_offset;
+                                        find_lines runs `regex` with concurrent=True and the
+                                        remaining part of FIND_TIMEOUT_SECONDS (1 s) for each
+                                        line, and a timeout returns the matches so far with
+                                        timed_out and reached_line (library_find pages the unshown
+                                        matches with next_match_offset first, then continues from
+                                        start_line=reached_line, match_offset 0); a shown line is at most 400
+                                        characters around its match. Both reserve every item's
+                                        frame first, its file cut as a list page cuts it
+                                        (models.py:shown_artifact), then split one item's lines
+                                        at a time and share ARTIFACT_RESULT_MAX_CHARS
+                                        (40,000) in item order: a cut read gives
+                                        next_start_line (a pages read gives it only
+                                        inside its pages and refuses a start_line
+                                        outside them), a cut find
+                                        next_match_offset.
+                                        library_read, library_find, library_search and artifact
+                                        are in spill._OWN_LIMITS
+  LibraryReplaceLibraryFileTool (SEQUENTIAL)  library_replace_library_file, DEFERRED
+                                        library.replace_library_file; _LibraryTool and
+                                        _FileTool, with the default interrupted result
+                                        (not idempotent): artifact_operations.replace_file
+                                        looks the artifact up first
+                                        (_published_file by library_file_id, the shared
+                                        lookup over get_user_published_file: a listable
+                                        chat of the user, any chat, the newest available
+                                        version) and refuses a file whose
+                                        extension, in any case, is not the artifact's
+                                        (check_same_type, for every new version), so a
+                                        refused one never wakes the VM; then publish
+                                        reads the VM file with the create rules and
+                                        saves it into that artifact
+                                        (db/chat.save_chat_artifact with
+                                        ArtifactById: an UPDATE locks the row and bumps
+                                        updated_at, and an artifact whose chat is deleted
+                                        raises ArtifactNotFound, the not-found tool error;
+                                        expected_version is checked against
+                                        the newest available version, the one the model
+                                        sees, under that lock, and a mismatch raises
+                                        ArtifactVersionConflict with that number inside the
+                                        commit hook, so the record and its upload roll
+                                        back; the new version is the highest number plus
+                                        one). The version keeps the artifact's name and
+                                        path and, without a title, the newest version's
+                                        title. Returns PublishedFiles (the publish card:
+                                        renderer publish_card_files maps `file` and
+                                        `title`; the version joins this chat's message
+                                        files and access) and, to the model,
+                                        ArtifactPublished, the publish result model of the
+                                        artifact tool. errors.py:artifact_errors lets the
+                                        conflict through, and each family words it
+  LibraryManageLibraryTool (SEQUENTIAL)      library_manage_library, DEFERRED library.manage_library, the
+                                        generic card; _LibraryTool and _FileTool, with the
+                                        default interrupted result. `operations` (1-20) is a
+                                        list of a union on `operation` (delete, rename,
+                                        restore_version, update).
+                                        artifact_operations.manage runs them in order, each
+                                        in its own transaction, from the database and the
+                                        file store only (never the VM), one ManageResult
+                                        each ({operation, ok, error?, library_file_id,
+                                        file_id, version_number, file_name, url,
+                                        version_reason, deleted_versions}); the call fails
+                                        only when none succeeds. It checks the Stop before
+                                        each operation, as materialize does: a Stop ends
+                                        the call, and the next operation does not start.
+                                        Every target and source resolves with
+                                        artifact_operations._published_file, the one lookup
+                                        of a file reference (get_user_published_file: a
+                                        listable chat of the user, from any chat; a missing
+                                        version is a tool error that names the newest).
+                                        delete and rename take target {kind: "file",
+                                        library_file_id | file_id of any version,
+                                        version_number?}. delete
+                                        (artifact_operations._deleted_file): a
+                                        version_number, or the artifact tool's /v<N>, must
+                                        be the newest version, else the delete is refused,
+                                        because it removes every version. Then
+                                        db/chat.delete_chat_artifact holds the artifact's
+                                        row lock while it removes the whole
+                                        artifact, every version, also one published after the
+                                        approval, oldest version first; a failed file delete
+                                        stops it, so the newest version stays and a later
+                                        publish never reuses a deleted number. A publish
+                                        during the delete waits and then makes a new
+                                        artifact. A delete that stops after its last file
+                                        leaves a row without a version: a publish at its
+                                        path replaces the row with a new artifact and
+                                        removes the row's search document, and a save by
+                                        its ID is not found
+                                        (db/chat.save_chat_artifact). Every new name passes
+                                        _checked_name: a name that safe_file_name keeps (the
+                                        VM name rule), with the artifact's current
+                                        extension, any case, by the list's last-dot rule
+                                        (models.py:artifact_extension), after a non-empty
+                                        name. rename:
+                                        db/chat.rename_chat_artifact sets ChatArtifact.name
+                                        and bumps updated_at as a publish does (an
+                                        artifact whose chat is deleted raises
+                                        ArtifactNotFound, the not-found tool error); the result is
+                                        the artifact's newest version, whichever version the
+                                        target names. restore_version (library_file_id,
+                                        version_number) and update (library_file_id,
+                                        file_uri.file_id: a version of any of the user's
+                                        artifacts, by file ID or url
+                                        (models.py:parse_file_reference), never an upload;
+                                        its name, size and type are not used): the copy must
+                                        have the artifact's type (check_same_type, as for
+                                        replace_file); db/chat.append_copied_artifact_version
+                                        reads the file and its thumbnail and saves copies
+                                        under new IDs through save_chat_artifact by
+                                        artifact_id (row lock, expected_current_version
+                                        check in the commit hook, clean-up on failure). A
+                                        conflict is a tool error that each tool words (the
+                                        conflict_message that it passes to manage; one message per family,
+                                        _LibraryTool.conflict_message or
+                                        ArtifactTool.conflict_message, as for replace). The name
+                                        stays unless the operation's file_name renames it
+                                        (save_chat_artifact rename); the title is the
+                                        restored version's, or for update the newest
+                                        version's. version_reason (also on replace_file) is
+                                        cut to VERSION_REASON_MAX_CHARS and stored on
+                                        chat_artifact_version. Approval: approval_details
+                                        (both families call
+                                        artifact_operations.delete_approval_details) parses
+                                        the arguments with parse_tool_arguments and returns
+                                        None, with no database work, for a call without a
+                                        delete or with arguments that the call refuses;
+                                        otherwise it resolves the delete targets as the
+                                        delete does: headline "Delete <path>" or "Delete N
+                                        published files", payload {"Delete": ["<path> (N
+                                        versions) from chat “<title>”"], "Also in this
+                                        call": a line per other operation that names the
+                                        file it changes (the lookup's "<path> from chat
+                                        “<title>”", else the target ID) and the new name
+                                        of a restore or update with file_name}, where <path> is the display path's
+                                        folder with the file's name, N from the lookup's
+                                        latest_version_number. A delete target that the
+                                        delete refuses or finds nothing for still asks: an
+                                        older version shows "<path> version N (not its
+                                        newest version, M; the delete refuses it while it is not the newest)", a
+                                        version newer than the newest "<path> (version N
+                                        not published yet; the delete removes the file and
+                                        every version)", and any other target shows as
+                                        given ("<id> (not found yet)"), as another chat can
+                                        still publish it. An earlier restore or update of
+                                        the call can also make the newer version. One
+                                        request covers the whole call, other operations
+                                        included
+  LibrarySearchTool (`library_search`)  _LibraryTool over
+                                        artifact_operations.search_artifacts, DEFERRED
+                                        library.search (tools.library__search),
+                                        reading only the database and the search index
+                                        (never start_call). Arguments: search_query (1-3
+                                        {q, search_title_only}), the list's filters
+                                        (LibraryListFilters), scope.file_refs (the
+                                        shared ArtifactFileReference; a version that is
+                                        not its latest_version_number is a tool error
+                                        pointing at a find in that version), chat_id, result_format (snippets
+                                        or metadata_only), sort (relevance or a list
+                                        sort) and sort_order, top_k (1-25, default 10),
+                                        cursor. db/chat.py:get_user_artifact_search_candidates
+                                        gives the newest 10,000 artifacts in scope (more:
+                                        complete false), each with whether every word of
+                                        each query, without stopwords (strip_stopwords)
+                                        and punctuation, is in its name, title or chat
+                                        title (icontains, autoescape). Each content query
+                                        runs context/search/retrieval/search_runner.py:
+                                        search_chunks in parallel (100 chunks, no
+                                        federated sources) with source_type
+                                        CHAT_ARTIFACT and attached_document_ids = the
+                                        candidates, and no ACL: the SQL scope is the
+                                        access check, so an email change never hides a
+                                        file. Relevance runs hybrid search; the other
+                                        sorts run keyword only (hybrid_alpha 0, no
+                                        EmbeddingModel), because vector search always
+                                        returns the nearest chunks. A file keeps at most
+                                        3 chunks of a query. Another retrieval, over the
+                                        files that no retrieval found, runs only when the
+                                        cap dropped chunks of a full retrieval, up to 3
+                                        retrievals, so a matching file can stay out of
+                                        the content ranking.
+                                        Each query gives two rankings: its content
+                                        matches by their best chunk, and its name matches
+                                        by latest change, a publish or rename (files
+                                        not indexed yet). A
+                                        title-only query, and every query with
+                                        DISABLE_VECTOR_DB (content_search "unavailable"),
+                                        gives the name ranking only. search_utils.py:
+                                        weighted_reciprocal_rank_fusion_with_scores fuses
+                                        the rankings (RRF_K_VALUE) into a window of 100
+                                        files, which get_user_published_files_by_id maps
+                                        back with the same scope (content_indexed =
+                                        index_status INDEXED). Other sorts reorder only
+                                        the window.
+                                        Snippets (search_snippet, at most 3 of 300
+                                        characters) are a chunk's match highlight, or its
+                                        text from just before the first query word when
+                                        highlights are off (OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED,
+                                        the default). The cursor is base64url JSON of
+                                        {offset} into the window, and a page keeps to
+                                        ARTIFACT_RESULT_MAX_CHARS
+  ArtifactTool (`artifact`, SEQUENTIAL)  one tool with an action per artifact operation,
+                                        for Claude models, in the shape of their trained
+                                        Artifact tool where Onyx has the operation (its
+                                        other arguments are ignored; publish accepts a
+                                        description that it does not show, and up to
+                                        PUBLISH_FILES_MAX_FILES (25) file_paths; read keeps
+                                        its lower limits). One flat ArtifactArguments
+                                        model; each action takes only its own arguments
+                                        (shapes.py:ARTIFACT_ACTION_ARGUMENTS, whose publish
+                                        paths, ARTIFACT_PUBLISH_PATHS, the renderer reads
+                                        too), and delete and rename need url (rename also
+                                        name): a model validator, so the approval hook and
+                                        the call refuse the same calls. Its pure
+                                        ArtifactArguments.request() gives the library
+                                        tools' arguments of its operation, which
+                                        run_operation runs, and approval_details reads
+                                        the same request: publish (default;
+                                        file_path with title, or file_paths, all or none)
+                                        -> publish, and with url and file_path ->
+                                        replace_file (the url's /v<N> is
+                                        expected_current_version; a url without /v<N> is
+                                        refused unless force, which drops the check; label
+                                        is the version_reason); both give
+                                        PublishedFiles details, so the same publish card,
+                                        message files and access; list (scope "mine", type
+                                        = category, limit, after = cursor; newest first)
+                                        -> list_artifacts, or with a query (q, type =
+                                        category, limit = top_k, after = cursor) ->
+                                        search_artifacts; read (url, or path and
+                                        paths, each a url or a file ID; a url's /v<N> as the
+                                        item's version_number) -> read (offset = start_line,
+                                        limit = max_lines), with query -> find (literal;
+                                        offset = match_offset, limit = max_matches; offset
+                                        refused for more than one file), with
+                                        out_dir -> materialize (query, offset and limit
+                                        refused); delete (url of the newest version, or
+                                        without /v<N>) ->
+                                        manage's delete, behind the same approval; rename
+                                        (url, name) -> manage's rename; restore (url ending
+                                        in /v<N>, label) -> restore_version, with no version
+                                        check; publish with url and path (a file ID or url) ->
+                                        update, with the url's version rule and the generic
+                                        card (renderer publish_card_files gives None). Empty
+                                        and too-long lists are
+                                        refused before the VM wakes. It inherits _LibraryTool and
+                                        _FileTool: execution settings are per tool, so the
+                                        whole tool takes turns in sandbox_file_changes and
+                                        keeps the interrupted result, as publish needs.
+                                        Code mode: DEFERRED function artifact.artifact
+                                        (tools.artifact__artifact) in its own group, a
+                                        JSON_OBJECT result typed Any with a returns note
+                                        per action. Results add url:
+                                        models.py:artifact_url
+                                        ({WEB_DOMAIN}/app/artifacts/<id>/v<N>), which
+                                        parse_artifact_url reads back from the path of any
+                                        link (also without /v<N>; the query and fragment
+                                        are dropped; the web's parseArtifactLink takes the
+                                        same paths); the library tools' results
+                                        (ListedArtifact, MaterializedItem,
+                                        ArtifactPublished) carry it too
+  RunHooks.prepare_tool_result         sandbox/spill.py:spill_large_result, in a chat whose
                                         configured tools hold a SandboxTool. A result
                                         with ToolResult.full_value always spills: the tool
                                         sets it only when its cut leaves something out.
@@ -410,8 +930,10 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         than SPILL_MIN_DROPPED_CHARS (PREVIEW_HEAD_CHARS +
                                         PREVIEW_TAIL_CHARS). Exempt
                                         from those two limits (_OWN_LIMITS): the cells,
-                                        exec_command, write_stdin, read_file, skills_read
-                                        and CITEABLE_TOOLS_NAMES. A cell's closing record
+                                        the shell tools, write_stdin, read_file, the skill read tools,
+                                        library_list, library_manage_library, library_read,
+                                        library_find, library_search, artifact and
+                                        CITEABLE_TOOLS_NAMES. A cell's closing record
                                         sets the recorded result and its own output uncut
                                         as the full value. Where:
                                         the full value or the content, at most
@@ -449,7 +971,7 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         AgentCancelled. Calls inside a program skip the
                                         hook; the program gets the full value
                                         (stubs.py:program_value)
-  ChatAgent._prepare_sandbox_result     Wraps the spill. After it, the root agent's
+  ChatFeature._prepare_sandbox_result     Wraps the spill. After it, the root agent's
                                         successful sandbox and code mode results end
                                         with the turn's TurnFileCopies.status.line() when
                                         it changed; failed results, amendments,
@@ -496,16 +1018,16 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         research has no sandbox. The module docstring
                                         has the rules; its FileCopyPool holds the pod's
                                         threads, shared by the chats of each VM, and
-                                        main.py stops it at API shutdown. In a chat
-                                        with chat files, the exec_command description
-                                        gives the layout (CHAT_FILES_LAYOUT), in
-                                        agent-host turns too; edits to
+                                        main.py stops it at API shutdown. The
+                                        `# Environment` section gives the layout
+                                        (CHAT_FILES_LAYOUT), in agent-host turns
+                                        too; edits to
                                         attachments/ get ATTACHMENTS_NOT_SAVED_NOTE
                                         (sandbox_tools.py), and session saves skip it
   TurnSearchFiles (sandbox/file_copies) SandboxTurn.search_files: the turn's copies
                                         of search result files into the chat's
                                         attachments/search/, shared by the root and
-                                        its subagents. ChatAgent passes its offer
+                                        its subagents. ChatFeature passes its offer
                                         as ToolContext.sandbox_search_files, so
                                         direct, program and subagent searches use
                                         it. SearchTool._build_search_result offers
@@ -542,9 +1064,9 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         search again in a later turn.
                                         No [files] line names them; a chat purge
                                         deletes them with the working directory
-  Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
-                                        root chat agent only (bind_run_store: also to a
-                                        restored root), not to subagents or deep research
+  Agent.on_drained (root chat agent)    SandboxTurn.end: create_chat_agent passes it to a
+                                        new root chat agent and bind_run_store to a
+                                        restored root, not to subagents or deep research
                                         (which gets no sandbox tools). end_turn after each
                                         finish or suspension of the root run, once its work
                                         (tool threads, program calls, foreground children)
@@ -569,7 +1091,7 @@ as lazy chat files, but only the types in
 PowerPoint) and code files by extension
 (`server/query_and_chat/chat_utils.py:is_code_interpreter_staged_file`,
 `OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`). Other project and agent files reach the model only as prompt
-text or through search. `chat/agent.py:ChatAgent._finalize_tool` attaches the
+text or through search. `chat/agent.py:ChatFeature._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
 (`chat/files.py:build_python_chat_files_from_search_docs`), only when the chat
 offers the Python tool and has no sandbox
@@ -579,8 +1101,8 @@ file record query; the result's text uses the same names), so staging reads
 no file records and names no file itself; `PythonTool` applies the staging
 caps. A sandbox chat copies the files into the VM instead
 (`TurnSearchFiles`). Files already in
-`ChatAgent.chat_files` from an earlier step are not loaded again. Search documents
-and citations are retained without Python. `chat/agent.py:ChatAgent._update_tool_context` merges them into
+`ChatFeature.chat_files` from an earlier step are not loaded again. Search documents
+and citations are retained without Python. `chat/agent.py:ChatFeature._update_tool_context` merges them into
 `chat_files` after the step and skips a filename already present, so the code in
 a later step can open a spreadsheet that search found. A code mode cell stages
 the files of its nested searches the same way, when its context's
@@ -749,8 +1271,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     it (`Tool.code_mode_exposure`, abstract): `DIRECT` (its own tool),
     `IMMEDIATE` (a function whose stub the description lists: the built-in
     tools) or `DEFERRED` (a callable function that the description omits; the
-    model finds it with `tool_search(query)`: MCP and OpenAPI tools, and the
-    sandbox artifact tools in the group `artifacts`). A tool
+    model finds it with `tool_search(query)` (`search_tools` for Claude models): MCP and OpenAPI tools, and the
+    sandbox library tools in the group `library`). A tool
     that waits for a child run (`Tool.result_from_children`) must be `DIRECT`.
     `tools/tool_implementations/code_mode/code_mode_tool.py:with_code_mode`
     raises otherwise. The code mode tools are `DIRECT` too. MCP functions are
@@ -759,10 +1281,13 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     that stays unique among the turn's functions. The description lists each
     namespace of deferred functions on one line with the first line of its
     description (`CodeModeFunctionName.namespace_description`, set by the
-    group's owner: a fixed line for a built-in group such as `artifacts`, the
+    group's owner: a fixed line for a built-in group such as `library`, the
     integration's description for an MCP server), cut to 250 characters.
-    Built-in namespaces come first, then those of integrations (tools with
-    `integration_action`), each sorted by name. The lines fit 4 KiB: names
+    Namespaces follow the tool order (`tools/ordering.py:tool_order`): by
+    the rank of their tools, then by namespace name, so built-in namespaces
+    come before those of integrations (rank `INTEGRATION`). The listed
+    functions follow the same order; the name order only gives repeated
+    names their suffixes. The lines fit 4 KiB: names
     take the budget first, then descriptions in that order, so an MCP
     server's description is cut before a built-in one. When the names alone
     do not fit, the list keeps the first ones and counts the rest in a last
@@ -775,16 +1300,19 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     the program's stubs declare as `class tools`, so the type checker checks
     each call. Bare names stay free for the program's own functions, and a
     model does not read the functions as tools that it can call directly.
-    `store`, `load`, `yield_control` and `tool_search` stay globals; a
+    `store`, `load`, `yield_control`, the `ToolMatch` type and the shape's
+    search and describe functions (`tool_search` in the OpenAI shape;
+    `search_tools` and `describe_tool` in the Claude shape) stay globals; a
     function can take one of their names, and only the result types that the
-    stubs declare avoid them. An explicit `import tools` or
+    stubs declare avoid them (`tools/tool_implementations/code_mode/shapes.py:PROGRAM_SEARCH_NAMES`, every shape's). An explicit `import tools` or
     `from tools import f` stops the program before it runs
     (`TOOLS_IMPORT_MESSAGE`). The system prompt's tool sections name each
     tool as the model calls it (`CodeModeTool.called_name`). A
     direct call of a function name, or of its tool's name, also after
     `tools.` or `tools_`, as a tool of its own returns how to call it from a
     program
-    (`Tool.inner_call_hint`, `agents/tool_execution.py`).
+    (`CodeModeTool.inner_call_hint`, through the chat agent's
+    `unknown_tool_hint`).
     `CodeModeResultSpec.usage` adds a code-mode-only
     docstring note; `internal_search` uses it to ask for all queries of one
     need in one call, since each call runs its own retrieval pipeline. Image
@@ -795,14 +1323,14 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     a later message can edit it. Action preferences are advisory:
     `build_chat_prompt` asks each offered tool for `Tool.operation_names`, and
     `CodeModeTool` answers with its functions, so the reminder names a nested
-    tool as a function of `execute_code` programs.
+    tool as a function of the run tool (`execute_code`).
     Nested calls get the run's `before_tool_call` hook and approval gate as
     direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
     `tools/tool_implementations/code_mode/cells.py:CodeCell._call`): a
     `ToolResult` decision becomes the call's result, so a denial raises in the
     program as a tool error does. The cell keeps one gate (`CodeCell._gate`):
     each of its requests belongs to the call that started it, or that rebuilt
-    it in this process, also while `wait_code` observes it, so the run offers
+    it in this process, also while a wait tool call observes it, so the run offers
     their answers together; `before_tool_call` sees that call's step, or for
     a cell rebuilt from a saved run, the step in which it continued. A request decision shows the request at once,
     also for a cell that runs in the background, and the call waits without a
@@ -876,14 +1404,14 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     source, and the result formatter builds those types; `tools/tool_implementations/code_mode/stubs.py` imports no other tool
     implementation. An error result raises
     `RuntimeError` with the error text. Each `CodeModeCall` keeps its tool call id
-    (`<execute_code call id>:<index>`, the same in traces, saved history and the
+    (`<run call id>:<index>`, the same in traces, saved history and the
     UI), the tool row id (for reconnect cards) and a bounded copy of the text
     (`MAX_SAVED_CALL_CHARS`, `MAX_SAVED_EXECUTION_CHARS`). `chat/tool_results.py`
     owns two fields with phases: `metadata` (search planning) is set while the
     turn runs and cleared on save, and `displayed_document_ids` is set on save
     and used on restore to rebuild `details.displayed_docs`.
     `chat/tool_results.py:tool_result_parts` expands a result into its nested
-    calls, so `ChatAgent` folds their search context, stages their files
+    calls, so `ChatFeature` folds their search context, stages their files
     (`ChatCodeModeResult`, only when the Python tool is offered) and reads their
     artifacts as for direct calls.
 15. `code-mode-citation-blocks` **Only citing calls take citation numbers.**
@@ -893,7 +1421,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     code mode result's documents and citations from its calls' search details,
     in every window; [[citations]] reads them through that accessor.
 16. `code-mode-store` **Only `store()` values outlive a program, and the
-    conversation holds them.** Each `execute_code` call runs in a fresh
+    conversation holds them.** Each run call (`execute_code`) runs in a fresh
     interpreter, so variables, functions and imports do not carry over. A
     program keeps JSON values with `store(key, value)` and reads them with
     `load(key)` (None when missing); both are plain functions, declared in
@@ -967,9 +1495,9 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     The call's status is `error`. `CodeModeTool` sets it to
     `tools/tool_implementations/code_mode/code_mode_tool.py:INTERRUPTED_PROGRAM_RESULT`
     (an error without details). `WaitCodeTool` sets it to
-    `tools/tool_implementations/code_mode/code_mode_tool.py:INTERRUPTED_WAIT_RESULT`,
-    an error without details: the cell's last saved observation stays
-    `running`. At the end of every run, `Agent.on_finish`
+    an error without details that names the shape's wait tool
+    (`tools/tool_implementations/code_mode/code_mode_tool.py:RESTORED_WAIT_MESSAGE`): the cell's last saved observation stays
+    `running`. At the end of every run, `RunHooks.on_finish`
     (`chat/agent.py:_finished_cells`) calls `CodeCells.finish`. It stops each
     open cell (`terminated`, or `cancelled` when Stop stopped it first), waits
     up to `STOP_GRACE_SECONDS` from the first stop request, and returns a
@@ -977,11 +1505,11 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     each cell whose last saved observation is `running`. The amendment adds a `CellClosing` (`reason="response_ended"`)
     with the calls, output, result and store commit after that observation;
     its text is formatted like an observation (`format_content`). When the
-    run suspends (see `ToolInvocation.run_work`), `Agent.on_suspend`
+    run suspends (see `ToolInvocation.run_work`), `RunHooks.on_suspend`
     (`chat/agent.py:_suspended_cells`) calls `CodeCells.suspend`, which does
     the same with `reason="suspended"` before the run captures its state. A
-    cell that ended keeps its end in that closing record; a later `wait_code`
-    of the cell says so (`tools/tool_implementations/code_mode/prompt.py:closed_cell_text`). A cell whose program
+    cell that ended keeps its end in that closing record; a later wait tool
+    call on the cell says so (`tools/tool_implementations/code_mode/prompt.py:closed_cell_text`). A cell whose program
     waits for input, with or without an observation, is saved instead
     (`CodeCells.saved`); its requests stay open. For a
     restored run, `tools/tool_implementations/code_mode/cells.py:_interrupted_amendments` closes such observations
@@ -989,7 +1517,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     after them is not known; a cell that stays saved gets none. A cell that a
     restored run rebuilds takes its last running observation from the
     recorded results, so it gets its closing record as a live cell does, also
-    when it ends in the background with no `wait_code`. The run applies the amendments before it saves
+    when it ends in the background with no wait tool call. The run applies the amendments before it saves
     and publishes `ToolResultAmendedEvent` for each, before `AgentEndEvent`.
     Their calls, also the unfinished ones, may have had effects. The final
     `code_mode_delta` has `status="cancelled"` live and on replay. A tool whose
@@ -1021,8 +1549,9 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   Onyx and the model's tool stubs.
 - **A code mode program can outlive its step, as a Codex cell does.** A
   program that waits on slow tools or sleeps would otherwise hold the model
-  step until it ends. `execute_code` returns at `yield_time_ms` and the cell
-  keeps running; the model works on and gets the rest with `wait_code`. A cell
+  step until it ends. The run tool returns at its yield time (`yield_time_ms`,
+  or `timeout` for Claude models) and the cell keeps running; the model
+  works on and gets the rest with `wait` or `poll`. A cell
   never outlives its response: `CodeCells.finish` stops it, and a closing
   record saves what it did after its last observation, so the saved history
   and the next turn see its side effects. Its driver and tool call threads join
@@ -1133,7 +1662,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   `web/src/lib/timeline/chat/hooks/packetProcessor.test.ts`
   (cells and closing records, live and replay order).
   Playwright: `web/tests/e2e/chat/code_mode.spec.ts` (a call that outlives a yield reads
-  as one direct call, with `wait_code` or at response end) and
+  as one direct call, with a wait tool call or at response end) and
   `web/tests/e2e/chat/tool_history.spec.ts` (a custom tool call, direct or from
   a program, after a reload). Mobile:
   `mobile/src/chat/timeline/__tests__/grouping.test.ts` and

@@ -23,6 +23,7 @@ from onyx.file_store.utils import (
     save_chat_output_file,
 )
 from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.prompts.tool_prompts import PYTHON_TOOL_DESCRIPTION
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
@@ -39,6 +40,7 @@ from onyx.tools.models import (
     PythonExecutionFile,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
     FileInput,
@@ -239,12 +241,14 @@ class PythonTool(Tool):
     It supports uploading files from the chat session and downloading generated files.
     """
 
+    rank = ToolRank.PYTHON
+
     # OpenAI reserves the function name "python" for its own harness and
     # rejects requests that define a tool with that name (400 invalid_request_error,
     # enforced server-side since 2026-07-21) — never rename this back to "python".
     NAME = "run_python"
     DISPLAY_NAME = "Code Interpreter"
-    DESCRIPTION = "Execute Python code in an isolated sandbox environment."
+    DESCRIPTION = PYTHON_TOOL_DESCRIPTION
 
     def __init__(self, tool_id: int, chat_session_id: UUID) -> None:
         self._id = tool_id

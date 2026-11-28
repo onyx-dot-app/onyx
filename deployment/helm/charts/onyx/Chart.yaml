@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.59
+version: 0.9.61
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,8 +21,9 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: The light Celery worker also consumes the
-        suggested_questions queue (used only by the Playground).
+      description: configMap value MAGIC_LINK_ENABLED turns on sign-in with a
+        link sent by email. Empty keeps it off. Sign-in links are not copied to
+        EMAIL_ARCHIVE_BCC_ADDRESSES.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

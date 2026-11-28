@@ -1219,6 +1219,48 @@ describe("with stubbed server checks", () => {
     }
   );
 
+  test.each([
+    ["library_manage_library", false, 1],
+    ["artifact", false, 1],
+    ["run_search", false, 0],
+    ["library_manage_library", true, 1],
+  ])(
+    "after a finished %s call (history reload: %s), settlement loads the published files %i time(s)",
+    async (toolName, refreshHistory, loads) => {
+      const store = useChatSessionStore.getState();
+      const controller = store.sessions.get("session")!.abortController;
+      const answer: Message = {
+        ...message(-2, "assistant", "Done"),
+        messageId: 42,
+        packets: [
+          {
+            placement: { turn_index: 1, tab_index: 0 },
+            obj: {
+              type: "custom_tool_delta",
+              tool_name: toolName,
+              response_type: "text",
+              data: "{}",
+            },
+          },
+          { placement: { turn_index: 2, tab_index: 0 }, obj: { type: "stop" } },
+        ],
+      };
+      store.updateSessionData("session", {
+        sendAcknowledged: Promise.resolve(stream(7, [42])),
+      });
+      store.updateSessionMessageTree("session", new Map([[-2, answer]]));
+
+      await settleChatSession({
+        sessionId: "session",
+        controller,
+        errorMessage,
+        refreshHistory,
+      });
+
+      expect(fetchSettledChatSession).toHaveBeenCalledTimes(loads);
+    }
+  );
+
   test("an old reader finishing cannot release another request", async () => {
     const reader = Promise.withResolvers<void>();
     const store = useChatSessionStore.getState();
@@ -1269,6 +1311,7 @@ describe("with stubbed server checks", () => {
       artifact_id: "artifact-notes",
       version: 1,
       thumbnail_file_id: null,
+      chat_id: null,
     };
     jest.mocked(fetchSettledChatSession).mockResolvedValue({
       ...savedSession([], null),
@@ -1767,6 +1810,66 @@ describe("with a scripted fetch", () => {
       resolved,
       answerText,
     ]);
+  });
+
+  test("a live browser_open start on a followed stream shows the Browser tab; a replayed one does not", async () => {
+    const raw = [
+      { ...savedMessage(631, "user", "Question"), latest_child_message: 632 },
+      savedMessage(632, "assistant", ""),
+    ];
+    const tree = processRawChatHistory(raw, [[]]);
+    useChatSessionStore.setState({ currentSessionId: "session" });
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: tree,
+    });
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(() => new Promise<Response>(() => {}));
+    const browserOpen: Packet = {
+      placement: { turn_index: 0 },
+      obj: {
+        type: "custom_tool_start",
+        tool_name: "browser_open",
+        display_name: "Open browser",
+      },
+    };
+    let goLive: () => void = () => undefined;
+    const live = new Promise<void>((resolve) => {
+      goLive = resolve;
+    });
+    jest.mocked(resumeStream).mockImplementation(async function* () {
+      yield { stream_id: 632, next_cursor: 0, replay_complete: false };
+      yield browserOpen;
+      yield { stream_id: 632, next_cursor: 1, replay_complete: true };
+      await live;
+      yield browserOpen;
+      yield { stream_id: 632, next_cursor: 2, replay_complete: true };
+      await new Promise<never>(() => {});
+    });
+    const browserShown = () =>
+      useChatSessionStore.getState().sessions.get("session")!.rightPanel
+        .browserOpen;
+
+    void followChatSession({
+      sessionId: "session",
+      controller: useChatSessionStore.getState().sessions.get("session")!
+        .abortController,
+      errorMessage,
+      stream: stream(632),
+      messageMap: tree,
+    });
+    const answer = () =>
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.get(632);
+    await waitFor(() => expect(answer()?.replay?.cursor).toBe(1));
+    expect(browserShown()).toBe(false);
+
+    goLive();
+    await waitFor(() => expect(answer()?.replay?.cursor).toBe(2));
+    expect(browserShown()).toBe(true);
   });
 
   test("a resume stream the server cannot find is not retried", async () => {

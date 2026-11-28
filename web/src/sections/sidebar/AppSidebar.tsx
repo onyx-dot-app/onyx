@@ -15,6 +15,7 @@ import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import ChatButton from "@/sections/sidebar/ChatButton";
+import { useTrackChatRuns } from "@/lib/chat/hooks";
 import { AgentButton } from "@/lib/agents/components";
 import { DragEndEvent } from "@dnd-kit/core";
 import {
@@ -86,7 +87,8 @@ import {
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import UnseenMarker from "@/refresh-components/UnseenMarker";
+import type { IconProps } from "@opal/types";
 import {
   useUnviewedChatScheduledTaskCount,
   useUnviewedScheduledTaskCount,
@@ -98,12 +100,32 @@ import { NotificationType } from "@/lib/notifications/types";
 import { dismissNotification } from "@/lib/notifications/api";
 import { AccountPopover } from "@/lib/app/components";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
-import { useQueryController } from "@/providers/QueryControllerProvider";
+import ChatShortcuts, {
+  useChatJumpHint,
+} from "@/sections/sidebar/ChatShortcuts";
+import { JUMP_TO_CHAT_SHORTCUTS } from "@/lib/shortcuts/constants";
+import { formatHotkey } from "@/lib/shortcuts/utils";
+import { useChatShortcutActions } from "@/lib/shortcuts/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
+/** The Scheduled Tasks icon with the unread marker, for the folded sidebar,
+ * which hides the tab's right side. */
+function ScheduledTasksUnseenIcon(props: IconProps) {
+  const t = useTranslations("scheduledTasks");
+  return (
+    <span className="relative inline-block">
+      <SvgClock {...props} />
+      <UnseenMarker
+        label={t("unviewedResults")}
+        className="absolute -top-0.5 -end-0.5"
+      />
+    </span>
+  );
+}
+
 function buildVisibleAgents(
   pinnedAgents: MinimalAgent[],
   activeAgent: MinimalAgent | undefined
@@ -138,6 +160,12 @@ function RecentsSection({
   onLoadMore,
 }: RecentsSectionProps) {
   const t = useTranslations("sidebar");
+  const { modifier: jumpHintModifier, isMac } = useChatJumpHint();
+  const keyNames = {
+    ctrl: t("chatSearch.keys.ctrl"),
+    alt: t("chatSearch.keys.alt"),
+    shift: t("chatSearch.keys.shift"),
+  };
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
@@ -193,11 +221,23 @@ function RecentsSection({
           </div>
         ) : (
           <>
-            {chatSessions.map((chatSession) => (
+            {chatSessions.map((chatSession, index) => (
               <ChatButton
                 key={chatSession.id}
                 chatSession={chatSession}
                 draggable
+                jumpShortcut={
+                  jumpHintModifier && index < JUMP_TO_CHAT_SHORTCUTS.length
+                    ? {
+                        label: formatHotkey(
+                          `${jumpHintModifier}+${index + 1}`,
+                          isMac,
+                          keyNames
+                        ),
+                        width: isMac ? "2.5rem" : "4.5rem",
+                      }
+                    : undefined
+                }
               />
             ))}
             {hasMore && (
@@ -228,7 +268,8 @@ export default function AppSidebar() {
   const navigation = useNavigation();
   const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
-  const { setAppMode, reset } = useQueryController();
+  const { resetNewSession } = useChatShortcutActions();
+  useTrackChatRuns();
 
   // Use SWR hooks for data fetching
   const {
@@ -511,13 +552,10 @@ export default function AppSidebar() {
     ]
   );
 
-  const { hasAdminAccess, adminCapabilities, user, isAdmin } = useUser();
+  const { hasAdminAccess, adminCapabilities, isAdmin } = useUser();
   const activeSidebarTab = useAppPosition();
   const craftLink = navigation.linkTo(CRAFT_PATH, { scroll: false });
   const createProjectModal = useCreateModal();
-  const defaultAppMode =
-    (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
-    "chat";
 
   const moreAgentsButton = (
     <div data-testid="AppSidebar/more-agents">
@@ -557,6 +595,7 @@ export default function AppSidebar() {
 
   return (
     <>
+      <ChatShortcuts />
       <createProjectModal.Provider>
         <CreateProjectModal />
       </createProjectModal.Provider>
@@ -625,13 +664,9 @@ export default function AppSidebar() {
               href={activeSidebarTab.linkToNewSession().href}
               selected={activeSidebarTab.isNewSession()}
               onClick={(event) => {
-                // Already on a new session: start it over instead.
-                if (activeSidebarTab.isNewSession()) {
-                  setAppMode(defaultAppMode);
-                  reset();
-                  return;
-                }
+                const handledBefore = event.defaultPrevented;
                 activeSidebarTab.linkToNewSession().onClick(event);
+                if (!handledBefore && event.defaultPrevented) resetNewSession();
               }}
             >
               {t("appSidebar.newSession.label")}
@@ -691,7 +726,11 @@ export default function AppSidebar() {
           )}
           <div data-testid="AppSidebar/scheduled-tasks">
             <SidebarTab
-              icon={SvgClock}
+              icon={
+                folded && unviewedChatTaskCount > 0
+                  ? ScheduledTasksUnseenIcon
+                  : SvgClock
+              }
               {...navigation.linkTo(SCHEDULED_TASKS_PATH, { scroll: false })}
               selected={activeSidebarTab.isScheduledTasks()}
               rightChildren={

@@ -5,6 +5,7 @@ import threading
 import zipfile
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from unittest.mock import patch
 from uuid import UUID
 
@@ -28,13 +29,18 @@ from onyx.db.plugin import (
     PluginAccessChange,
     PluginUserGrant,
     apply_plugin_access_change__no_commit,
+    set_plugin_preferences__no_commit,
 )
 from onyx.db.skill import list_chat_skills, list_runtime_skills_for_user
 from onyx.db.users import delete_user_from_db__no_commit
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.integrations import plugin_needs
 from onyx.integrations.models import PluginNeedState
 from onyx.integrations.service import list_member_integrations
+from onyx.llm.model_capabilities import ToolFamily
+from onyx.server.features.integrations.models import MemberIntegration
 from onyx.server.features.skill import api
 from onyx.server.features.skill.models import (
     SkillBulkActionRequest,
@@ -48,6 +54,7 @@ from onyx.skills.push import (
     build_user_skills_payload,
 )
 from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_READ_SHAPES,
     SkillsListTool,
     skills_catalog_message,
 )
@@ -148,12 +155,18 @@ def no_craft_reload() -> Iterator[None]:
 
 
 def _save(
-    user: User, upload: UploadFile, db_session: Session, *, save_as_new: bool = False
+    user: User,
+    upload: UploadFile,
+    db_session: Session,
+    *,
+    save_as_new: bool = False,
+    name: str | None = None,
 ) -> api.PluginUploadResponse:
     return api.save_plugin_upload(
         bundle=upload,
         save_as_new=save_as_new,
         auto_enable=True,
+        name=name,
         user=user,
         db_session=db_session,
     )
@@ -274,6 +287,7 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
         "plugin_id": plugin_id,
         "plugin_name": "same-kit",
         "version_number": 2,
+        "name_taken": False,
     }
     second = _save(author, _plugin_zip("same-kit", ["one", "two"]), db_session)
 
@@ -287,8 +301,40 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
     }
     assert second.plugin.enabled is True
 
-    copy = _save(author, _plugin_zip("same-kit", ["one"]), db_session, save_as_new=True)
-    assert (copy.target.kind, copy.plugin.name) == ("new_plugin", "same-kit-2")
+    copy_preview = api.inspect_plugin_upload(
+        bundle=_plugin_zip("same-kit", ["one"]),
+        save_as_new=True,
+        user=author,
+        db_session=db_session,
+    )
+    assert (copy_preview.target.plugin_name, copy_preview.target.name_taken) == (
+        "same-kit",
+        True,
+    )
+    with pytest.raises(OnyxError) as taken:
+        _save(author, _plugin_zip("same-kit", ["one"]), db_session, save_as_new=True)
+    assert taken.value.error_code is OnyxErrorCode.CONFLICT
+    assert taken.value.extra == {"taken_name": "same-kit"}
+    assert "same-kit" in taken.value.detail
+    db_session.rollback()
+    with pytest.raises(OnyxError) as reserved:
+        _save(
+            author,
+            _plugin_zip("same-kit", ["one"]),
+            db_session,
+            save_as_new=True,
+            name="pptx",
+        )
+    assert reserved.value.error_code is OnyxErrorCode.INVALID_INPUT
+    db_session.rollback()
+    copy = _save(
+        author,
+        _plugin_zip("same-kit", ["one"]),
+        db_session,
+        save_as_new=True,
+        name="same-kit-copy",
+    )
+    assert (copy.target.kind, copy.plugin.name) == ("new_plugin", "same-kit-copy")
 
     apply_plugin_access_change__no_commit(
         [plugin_id], PluginAccessChange(publish=True), None, db_session
@@ -473,7 +519,12 @@ def test_chat_names_the_integrations_a_loaded_plugin_cannot_use(
     )
 
     message = skills_catalog_message(
-        [SkillsListTool(author, with_sandbox=False)], 200_000
+        [
+            SkillsListTool(
+                author, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            )
+        ],
+        200_000,
     )
 
     assert message is not None
@@ -694,6 +745,145 @@ def test_bulk_enable_turns_on_the_integrations_of_a_plugin(
     reload.assert_called_once_with({author.id}, db_session)
 
 
+def test_bulk_enable_turns_on_the_needs_of_all_plugins_in_one_pass(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    integration_ids: list[int],
+) -> None:
+    author, _, _ = users
+    other_url = "https://other.plugin-upload.test/mcp"
+    shared, _ = make_mcp_integration(db_session, server_url=MCP_URL)
+    other, _ = make_mcp_integration(db_session, server_url=other_url)
+    give_access(db_session, [shared, other])
+    integration_ids.extend([shared.id, other.id])
+    expected_on = {shared.id, other.id}
+    bundles: list[tuple[str, dict[str, object] | None]] = [
+        ("bulk-one", {"main": _http()}),
+        ("bulk-two", {"main": _http(), "other": _http(other_url)}),
+        ("bulk-three", None),
+    ]
+    plugin_ids = [
+        _save(
+            author, _plugin_zip(name, [f"{name}-skill"], servers=servers), db_session
+        ).plugin.id
+        for name, servers in bundles
+    ]
+    api.bulk_update_skills(
+        SkillBulkActionRequest(skill_ids=plugin_ids, action="disable"),
+        author,
+        db_session,
+    )
+    db_session.execute(
+        delete(UserIntegrationPreference).where(
+            UserIntegrationPreference.user_id == author.id
+        )
+    )
+    db_session.commit()
+
+    with (
+        patch("onyx.server.features.skill.api.reload_craft_sessions") as reload,
+        patch(
+            "onyx.integrations.plugin_needs.integrations_for_needs",
+            wraps=plugin_needs.integrations_for_needs,
+        ) as load_integrations,
+        patch(
+            "onyx.server.features.skill.api.get_versions_needs",
+            wraps=api.get_versions_needs,
+        ) as load_needs,
+    ):
+        result = api.bulk_update_skills(
+            SkillBulkActionRequest(skill_ids=plugin_ids, action="enable"),
+            author,
+            db_session,
+        )
+
+    assert (sorted(result.succeeded), result.failed) == (sorted(plugin_ids), [])
+    assert load_needs.call_count == 1
+    assert load_integrations.call_count == 1
+    reload.assert_called_once_with({author.id}, db_session)
+    assert (
+        set(
+            db_session.scalars(
+                select(UserIntegrationPreference.integration_id).where(
+                    UserIntegrationPreference.user_id == author.id,
+                    UserIntegrationPreference.enabled.is_(True),
+                )
+            )
+        )
+        == expected_on
+    )
+    for plugin_id in plugin_ids[:2]:
+        on = api.fetch_skill_for_current_user(plugin_id, author, db_session)
+        assert on.enabled is True
+        assert on.available_count == on.needed_count
+
+
+def test_bulk_enable_skips_an_integration_the_user_lost_mid_request(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    integration_ids: list[int],
+) -> None:
+    author, _, _ = users
+    lost_url = "https://lost.plugin-upload.test/mcp"
+    kept, _ = make_mcp_integration(db_session, server_url=MCP_URL)
+    lost, _ = make_mcp_integration(db_session, server_url=lost_url)
+    give_access(db_session, [kept, lost])
+    integration_ids.extend([kept.id, lost.id])
+    bundles: list[tuple[str, dict[str, object] | None]] = [
+        ("lost-one", {"main": _http()}),
+        ("lost-two", {"main": _http(lost_url)}),
+    ]
+    plugin_ids = [
+        _save(
+            author, _plugin_zip(name, [f"{name}-skill"], servers=servers), db_session
+        ).plugin.id
+        for name, servers in bundles
+    ]
+    api.bulk_update_skills(
+        SkillBulkActionRequest(skill_ids=plugin_ids, action="disable"),
+        author,
+        db_session,
+    )
+    db_session.execute(
+        delete(UserIntegrationPreference).where(
+            UserIntegrationPreference.user_id == author.id
+        )
+    )
+    db_session.commit()
+
+    load = plugin_needs.integrations_for_needs
+
+    def load_then_revoke(user: User, session: Session) -> list[MemberIntegration]:
+        loaded = load(user, session)
+        give_access(session, [lost], published=False)
+        return loaded
+
+    with (
+        patch("onyx.server.features.skill.api.reload_craft_sessions"),
+        patch(
+            "onyx.integrations.plugin_needs.integrations_for_needs",
+            side_effect=load_then_revoke,
+        ),
+    ):
+        result = api.bulk_update_skills(
+            SkillBulkActionRequest(skill_ids=plugin_ids, action="enable"),
+            author,
+            db_session,
+        )
+
+    assert (sorted(result.succeeded), result.failed) == (sorted(plugin_ids), [])
+    assert set(
+        db_session.scalars(
+            select(UserIntegrationPreference.integration_id).where(
+                UserIntegrationPreference.user_id == author.id,
+                UserIntegrationPreference.enabled.is_(True),
+            )
+        )
+    ) == {kept.id}
+
+
 def test_a_group_limited_integration_is_no_access_without_its_url(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -907,6 +1097,28 @@ def test_a_skill_name_clash_is_shown_before_and_after_the_save(
     assert (saved.enabled, saved.name_conflicts) == (False, ["first-kit"])
 
 
+def test_a_new_version_that_adds_a_clashing_name_reports_the_clash(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, _ = users
+    _save(author, _plugin_zip("first-kit", ["clash"]), db_session)
+    _save(author, _plugin_zip("second-kit", ["other"]), db_session)
+
+    preview = api.inspect_plugin_upload(
+        bundle=_plugin_zip("second-kit", ["clash", "other"]),
+        save_as_new=False,
+        user=author,
+        db_session=db_session,
+    )
+    saved = _save(author, _plugin_zip("second-kit", ["clash", "other"]), db_session)
+
+    assert preview.target.kind == "new_version"
+    assert preview.name_conflicts == ["first-kit"]
+    assert saved.name_conflicts == ["first-kit"]
+
+
 def test_a_plugin_that_loses_its_skill_name_says_which_plugin_holds_it(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -934,6 +1146,44 @@ def test_a_plugin_that_loses_its_skill_name_says_which_plugin_holds_it(
     assert own.enabled is True
     assert listed[own.plugin.id] == (False, ["company-kit"])
     assert listed[company.plugin.id] == (True, [])
+
+
+def test_a_holder_that_loses_another_name_still_holds_its_name(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    """first-kit takes "x" from second-kit, which still takes "y" from
+    third-kit, so third-kit names second-kit as its holder."""
+    member, _, _ = users
+    saved = [
+        _save(member, _plugin_zip(name, skills), db_session).plugin.id
+        for name, skills in (
+            ("first-kit", ["x"]),
+            ("second-kit", ["x", "y"]),
+            ("third-kit", ["y"]),
+        )
+    ]
+    plugins = {
+        plugin.id: plugin
+        for plugin in db_session.scalars(select(Plugin).where(Plugin.id.in_(saved)))
+    }
+    for offset, plugin_id in enumerate(saved):
+        plugins[plugin_id].created_at = plugins[saved[0]].created_at + timedelta(
+            seconds=offset
+        )
+    set_plugin_preferences__no_commit(member.id, saved, True, db_session)
+    db_session.commit()
+
+    listed = {
+        skill.id: (skill.enabled, skill.name_held_by)
+        for skill in api.list_skills_for_current_user(member, db_session).customs
+    }
+
+    first, second, third = saved
+    assert listed[first] == (True, [])
+    assert listed[second] == (False, ["first-kit"])
+    assert listed[third] == (False, ["second-kit"])
 
 
 def test_a_new_version_of_an_enabled_plugin_turns_on_its_new_integrations(

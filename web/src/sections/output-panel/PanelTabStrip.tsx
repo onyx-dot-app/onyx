@@ -56,8 +56,6 @@ export interface PanelTabItem {
   // Shown in place of `label` when parts of it need their own direction
   content?: RichNodes;
   icon: IconFunctionComponent;
-  // Shows a close button in place of the icon on hover
-  closable: boolean;
   // Moves by drag or Alt+arrow, only to the place of another movable tab
   movable: boolean;
 }
@@ -122,7 +120,7 @@ function SortableTab({
         className={cn(
           // The height of the URL bar's md controls under the strip (28px);
           // the icon sits 6px in, as in an md button
-          "group relative h-7 w-full max-w-[180px] touch-pan-x select-none rounded-08 px-1",
+          "group relative h-7 max-w-[180px] touch-pan-x select-none rounded-08 px-1",
           active ? "bg-background-neutral-02" : "bg-background-neutral-01",
           isDragging && "z-10 shadow-md"
         )}
@@ -212,6 +210,8 @@ export function PanelTabStrip({
     const observer = new ResizeObserver(updateEdges);
     observer.observe(element);
     if (element.firstElementChild) observer.observe(element.firstElementChild);
+    // An RTL row starts at the scroller's right end
+    if (direction === "rtl") element.scrollLeft = element.scrollWidth;
     updateEdges();
     return () => observer.disconnect();
   }, [direction]);
@@ -291,14 +291,17 @@ export function PanelTabStrip({
               }
             }}
           >
-            {/* Tabs shrink to a minimum before the strip scrolls */}
+            {/* Tabs fit their labels; the strip scrolls when they overflow.
+                The row grows with its tabs: a full-width row would overflow
+                at its left in RTL, which the LTR scroller cannot reach. */}
             <Section
               dir={direction}
               flexDirection="row"
               justifyContent="start"
+              width="fit"
               height="auto"
               gap={1}
-              className="min-w-full [&>*]:min-w-28 [&>*]:shrink"
+              className="min-w-full [&>*]:shrink-0"
             >
               <SortableContext
                 items={sortableIds}
@@ -337,31 +340,27 @@ export function PanelTabStrip({
                           close button's focus ring */}
                       <div className="size-5 shrink-0">
                         <Section gap={0}>
-                          {tab.closable ? (
-                            <Hoverable.Item
-                              group="resource-tab"
-                              variant="replace-on-hover"
-                              resting={iconTile}
-                            >
-                              <Button
-                                data-tab-close
-                                disabled={disabled}
-                                icon={SvgX}
-                                size="2xs"
-                                prominence="tertiary"
-                                aria-label={t("close.label", {
-                                  name: tab.label,
-                                })}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  closedTab.current = id;
-                                  onClose(id);
-                                }}
-                              />
-                            </Hoverable.Item>
-                          ) : (
-                            iconTile
-                          )}
+                          <Hoverable.Item
+                            group="resource-tab"
+                            variant="replace-on-hover"
+                            resting={iconTile}
+                          >
+                            <Button
+                              data-tab-close
+                              disabled={disabled}
+                              icon={SvgX}
+                              size="2xs"
+                              prominence="tertiary"
+                              aria-label={t("close.label", {
+                                name: tab.label,
+                              })}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                closedTab.current = id;
+                                onClose(id);
+                              }}
+                            />
+                          </Hoverable.Item>
                         </Section>
                       </div>
                       <div className="min-w-0 overflow-hidden pe-2 [&_p]:truncate">

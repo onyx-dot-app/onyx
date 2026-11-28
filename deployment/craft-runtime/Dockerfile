@@ -32,6 +32,18 @@ RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
     cp -a /tmp/icons/node_modules/@tabler/icons/LICENSE /opt/onyx/assets/icons/tabler/ && \
     rm -rf /tmp/icons /root/.npm
 
+FROM node_source AS browser_service
+WORKDIR /opt/onyx/browser-service
+COPY deployment/craft-runtime/browser-service/package.json \
+     deployment/craft-runtime/browser-service/package-lock.json ./
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; fi && \
+    npm ci --omit=dev --ignore-scripts && \
+    npm cache clean --force && rm -rf /root/.npm
+COPY deployment/craft-runtime/browser-service/main.ts \
+     deployment/craft-runtime/browser-service/LICENSE-T3 ./
+COPY deployment/craft-runtime/browser-service/src ./src
+
 FROM node_source AS github_cli
 ARG GH_CLI_VERSION
 ARG TARGETARCH
@@ -75,6 +87,7 @@ LABEL org.opencontainers.image.title="Craft Runtime"
 COPY --from=javascript /usr/local/bin/node /usr/local/bin/node
 COPY --from=javascript /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=javascript /opt/onyx/assets /opt/onyx/assets
+COPY --from=browser_service /opt/onyx/browser-service /opt/onyx/browser-service
 COPY --from=github_cli /usr/local/bin/gh /usr/local/bin/gh
 COPY --from=uv_source /uv /uvx /usr/local/bin/
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \

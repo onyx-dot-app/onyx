@@ -12,6 +12,7 @@ import { SvgArrowRight } from "@opal/icons";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import type { MinimalOnyxDocument } from "@/lib/search/types";
 import {
+  belongsToChat,
   filesSharingALabel,
   publishedFileLabel,
   publishedFilePath,
@@ -25,8 +26,11 @@ import { useFormatBytes } from "@/hooks/useFormatBytes";
 import { getFileIcon } from "@/lib/utils";
 
 export interface PublishedFilesPanel {
-  // Opens a file's preview in the panel
-  openFile: (file: PublishedFile) => void;
+  // The chat whose files the panel's Files list shows
+  chatId: string | null;
+  // Opens a file's preview in the panel, pinned to its version when
+  // `pinVersion` is set, else following the newest version
+  openFile: (file: PublishedFile, pinVersion?: boolean) => void;
   // Shows the panel's Files list
   showFiles: () => void;
 }
@@ -58,8 +62,9 @@ function fileTypeLabel(fileName: string): string {
 /**
  * A download card for each file the model published. A click opens the
  * file's preview: in the Files panel when the page has one, else in a modal.
- * With the panel, the first five files show as cards, and a button shows the
- * panel's Files list.
+ * With the panel, the first five files of the panel's chat show as cards,
+ * and a button shows the panel's Files list. Another chat's file always shows
+ * as a card, as that list leaves it out.
  */
 export function PublishedFileCards({ files }: PublishedFileCardsProps) {
   const t = useTranslations("chat.publishedFiles");
@@ -83,6 +88,12 @@ export function PublishedFileCards({ files }: PublishedFileCardsProps) {
   );
 
   const sharingALabel = useMemo(() => filesSharingALabel(files), [files]);
+  const chatFiles = panel
+    ? files.filter((file) => belongsToChat(file, panel.chatId))
+    : [];
+  const listedOnly = new Set(
+    chatFiles.slice(MAX_CARDS).map((file) => file.file_id)
+  );
 
   return (
     <Section gap={0.5} alignItems="start" height="fit">
@@ -94,48 +105,50 @@ export function PublishedFileCards({ files }: PublishedFileCardsProps) {
           />
         )}
       </previewModal.Provider>
-      {(panel ? files.slice(0, MAX_CARDS) : files).map((file) => (
-        <div key={file.file_id} className="w-full max-w-md">
-          <Card padding={0} border="solid">
-            <AttachmentItemButton
-              icon={getFileIcon(file.name)}
-              // A flex item: stripped, not isolated
-              title={publishedFileLabel(file)}
-              // The path tells cards of one shown name apart. Its code span
-              // is an LTR isolate, so it cannot reorder the type and size.
-              description={markdown(
-                [
-                  sharingALabel.has(file.file_id)
-                    ? codeSpan(publishedFilePath(file))
-                    : "",
-                  fileTypeLabel(file.name),
-                  formatBytes(file.size),
-                ]
-                  .filter(Boolean)
-                  .join(" · ")
-              )}
-              aria-label={t("card.preview.ariaLabel", {
-                name: stripBidiControls(file.name),
-              })}
-              onClick={() => open(file)}
-              rightChildren={
-                <DownloadButton
-                  fileUrl={buildImgUrl(file.file_id)}
-                  fileName={file.name}
-                />
-              }
-            />
-          </Card>
-        </div>
-      ))}
-      {panel && files.length > MAX_CARDS && (
+      {files
+        .filter((file) => !listedOnly.has(file.file_id))
+        .map((file) => (
+          <div key={file.file_id} className="w-full max-w-md">
+            <Card padding={0} border="solid">
+              <AttachmentItemButton
+                icon={getFileIcon(file.name)}
+                // A flex item: stripped, not isolated
+                title={publishedFileLabel(file)}
+                // The path tells cards of one shown name apart. Its code span
+                // is an LTR isolate, so it cannot reorder the type and size.
+                description={markdown(
+                  [
+                    sharingALabel.has(file.file_id)
+                      ? codeSpan(publishedFilePath(file))
+                      : "",
+                    fileTypeLabel(file.name),
+                    formatBytes(file.size),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                )}
+                aria-label={t("card.preview.ariaLabel", {
+                  name: stripBidiControls(file.name),
+                })}
+                onClick={() => open(file)}
+                rightChildren={
+                  <DownloadButton
+                    fileUrl={buildImgUrl(file.file_id)}
+                    fileName={file.name}
+                  />
+                }
+              />
+            </Card>
+          </div>
+        ))}
+      {panel && chatFiles.length > MAX_CARDS && (
         <Button
           prominence="tertiary"
           size="sm"
           rightIcon={SvgArrowRight}
           onClick={panel.showFiles}
         >
-          {t("viewAllButton.label", { count: files.length })}
+          {t("viewAllButton.label", { count: chatFiles.length })}
         </Button>
       )}
     </Section>

@@ -401,7 +401,7 @@ func TestAsk_ApproveFlagAnswersAndFollowsTheContinuation(t *testing.T) {
 	}{
 		{"reject", "a1:reject", "Not approved: Create issue"},
 		{"once", "a1:approve_once", "Approved: Create issue"},
-		{"session", "a1:approve_session", "Approved for this session: Create issue"},
+		{"session", "a1:approve_session", "Approved for this chat: Create issue"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.flag, func(t *testing.T) {
@@ -818,7 +818,7 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-const askPrompt = "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject"
+const askPrompt = "[y] approve once / [a] approve for this chat / [d] show all arguments / [N] reject"
 
 // waitForPrompts waits until stderr shows n approval prompts.
 func waitForPrompts(t *testing.T, errOut *syncBuffer, n int) {

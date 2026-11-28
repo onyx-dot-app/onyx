@@ -3,13 +3,14 @@ the Codex exec contract with durable exec sessions, files, artifacts and the
 busy signals."""
 
 import io
+import json
 import os
 import threading
 import time
 from collections.abc import Callable, Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import grpc
 import pytest
@@ -39,6 +40,7 @@ from onyx.microvm.models import (
 )
 from onyx.microvm.models import ExecEvent as DaemonExecEvent
 from onyx.microvm.registry import get_sandbox_placement
+from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.sandbox import harness_base, harness_factory
 from onyx.server.features.build.sandbox.exec_output import (
     ExecOutputBuffer,
@@ -154,6 +156,23 @@ def _output(result: ExecCommandResult) -> str:
 def _session_ref(ref: HarnessSandboxRef) -> HarnessSandboxRef:
     """Another chat session of the same sandbox."""
     return ref.model_copy(update={"session_id": uuid4()})
+
+
+class _Hold:
+    """A `CommandHold` that records the command and holds `holds` times."""
+
+    def __init__(self, holds: int = 0) -> None:
+        self.begun: list[UUID] = []
+        self._holds = holds
+
+    def begin(self, command_id: UUID) -> None:
+        self.begun.append(command_id)
+
+    def holds(self) -> bool:
+        if self._holds <= 0:
+            return False
+        self._holds -= 1
+        return True
 
 
 # Lifecycle
@@ -321,7 +340,8 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     new_ref: NewRef,
 ) -> None:
     ref = new_ref()
-    deltas, result = _run(sandbox.exec_command(ref, "echo hi there"))
+    hold = _Hold()
+    deltas, result = _run(sandbox.exec_command(ref, "echo hi there", hold=hold))
 
     assert result.exit_code == 0
     assert result.completion == "exited"
@@ -335,7 +355,17 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     # The daemon makes the session directory and uses it as the default cwd.
     assert command.session_id == str(ref.session_id)
     assert command.cwd == ""
-    assert command.env == {"AGENT_BROWSER_SESSION": str(ref.session_id)}
+    # The proxy URL of the command carries the chat session, so the egress
+    # proxy applies the app policies of that chat, and the command, which the
+    # call began before the start.
+    assert len(hold.begun) == 1
+    proxy_url = f"http://{ref.session_id}.{hold.begun[0].hex}:x@127.0.0.1:3128"
+    assert command.env == {
+        "HTTP_PROXY": proxy_url,
+        "HTTPS_PROXY": proxy_url,
+        "http_proxy": proxy_url,
+        "https_proxy": proxy_url,
+    }
 
 
 def test_exec_command_reports_a_failed_command_and_relative_workdir(
@@ -418,6 +448,110 @@ def test_an_empty_write_polls_until_the_command_ends(
     assert ended.exit_code == 0 and _output(ended) == "bye"
     assert ended.session_id is None
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
+
+
+def test_the_app_grants_of_a_command_end_when_its_exit_is_seen(
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    """A grant covers the command while it runs. Once a call sees it exit, a
+    process that it left running gets no grant."""
+    ref = new_ref()
+    hold, other = _Hold(), uuid4()
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250, hold=hold))
+    session = result.session_id
+    assert session is not None
+    command = hold.begun[0]
+    approval_cache.grant_command_actions(
+        command, ref.session_id, 7, ["issues.create"], tenant_cache
+    )
+    approval_cache.grant_command_actions(
+        other, ref.session_id, 7, ["issues.create"], tenant_cache
+    )
+    try:
+        _run(sandbox.write_stdin(ref, session))
+        assert approval_cache.command_grants_cover(
+            command, ref.session_id, 7, ["issues.create"], tenant_cache
+        )
+
+        execution_id = next(
+            e.execution_id
+            for e in node.agent.executions[str(ref.sandbox_id)].values()
+            if e.argv[-1:] == ["cat"]
+        )
+        sandbox_daemon(client_factory, sandbox._place(ref)).interact(
+            execution_id, data=b"", close_stdin=True
+        )
+        _, ended = _run(sandbox.write_stdin(ref, session, yield_time_ms=10_000))
+
+        assert ended.exit_code == 0
+        assert not approval_cache.command_grants_cover(
+            command, ref.session_id, 7, ["issues.create"], tenant_cache
+        )
+        assert approval_cache.command_grants_cover(
+            other, ref.session_id, 7, ["issues.create"], tenant_cache
+        )
+    finally:
+        approval_cache.drop_command_grants(command, tenant_cache)
+        approval_cache.drop_command_grants(other, tenant_cache)
+
+
+def test_a_held_command_waits_past_its_window_and_keeps_its_command_id(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,  # noqa: ARG001
+    new_ref: NewRef,
+) -> None:
+    """A request of the command that waits for approval keeps the call open,
+    and a later poll of the command reports the same command ID."""
+    monkeypatch.setattr(harness_sandbox, "_HOLD_WINDOW_SECONDS", 0.2)
+    ref = new_ref()
+    hold = _Hold(holds=2)
+
+    started = time.monotonic()
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250, hold=hold))
+
+    assert time.monotonic() - started >= 0.25 + 2 * 0.2
+    session = result.session_id
+    assert session is not None and result.completion is None
+    poll = _Hold()
+    _run(sandbox.write_stdin(ref, session, "x", hold=poll))
+    assert poll.begun == hold.begun
+
+
+def test_an_exec_session_record_cached_before_command_ids_still_works(
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,  # noqa: ARG001
+    new_ref: NewRef,
+) -> None:
+    """A record cached before the upgrade has no command ID. Its command and
+    the other commands of the VM still take input, and its end drops no
+    grants."""
+    ref = new_ref()
+    _, old = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    _, new = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    assert old.session_id is not None and new.session_id is not None
+    key = harness_state.EXEC_SESSIONS_PREFIX + str(ref.sandbox_id)
+    table = json.loads(tenant_cache.get(key) or b"{}")
+    execution_id = table["sessions"][old.session_id]["execution_id"]
+    del table["sessions"][old.session_id]["command_id"]
+    tenant_cache.set(key, json.dumps(table))
+
+    assert _output(_run(sandbox.write_stdin(ref, new.session_id, "y"))[1]) == "y"
+    hold = _Hold()
+    _, wrote = _run(sandbox.write_stdin(ref, old.session_id, "x", hold=hold))
+    assert _output(wrote) == "x" and hold.begun == []
+
+    sandbox_daemon(client_factory, sandbox._place(ref)).interact(
+        execution_id, data=b"", close_stdin=True
+    )
+    _, ended = _run(sandbox.write_stdin(ref, old.session_id, yield_time_ms=10_000))
+    assert ended.exit_code == 0
 
 
 def test_a_stream_reset_at_the_agent_deadline_ends_the_yield_cleanly(
@@ -630,6 +764,35 @@ def test_a_call_stopped_before_its_side_effect_does_nothing(
     assert [bytes(e.stdin_data) for e in executions] == [b""]
 
 
+def test_a_stop_during_the_hold_begin_does_nothing(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
+) -> None:
+    """A Stop while `hold.begin` waits (on the last call's cleanup) starts
+    no command and writes nothing."""
+    ref = new_ref()
+    _, started = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    session = started.session_id
+    assert session is not None
+    signal = CancellationSignal()
+
+    class _StoppedInBegin(_Hold):
+        def begin(self, command_id: UUID) -> None:
+            super().begin(command_id)
+            signal.cancel()
+
+    with cancellation_scope(signal):
+        with pytest.raises(AgentCancelled):
+            _run(sandbox.exec_command(ref, "say never", hold=_StoppedInBegin()))
+    signal = CancellationSignal()
+    with cancellation_scope(signal):
+        with pytest.raises(AgentCancelled):
+            _run(sandbox.write_stdin(ref, session, "never", hold=_StoppedInBegin()))
+
+    executions = node.agent.executions[str(ref.sandbox_id)].values()
+    assert [e.argv[-1] for e in executions] == ["cat"]
+    assert [bytes(e.stdin_data) for e in executions] == [b""]
+
+
 def test_ctrl_c_sends_sigint_to_the_command(
     tenant_cache: CacheBackend,
     sandbox: FirecrackerHarnessSandbox,
@@ -774,6 +937,23 @@ def test_files_round_trip_in_the_session_directory(
         sandbox.write_file(ref, "notes/locked.txt", b"x", mode=0)
 
 
+@pytest.mark.usefixtures("node")
+def test_a_streamed_file_checks_its_size_before_its_first_chunk(
+    sandbox: FirecrackerHarnessSandbox,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    sandbox.write_file(ref, "downloads/a.bin", b"alpha")
+
+    assert b"".join(sandbox.stream_file(ref, "downloads/a.bin", max_bytes=5)) == (
+        b"alpha"
+    )
+    with pytest.raises(SandboxFileTooLargeError):
+        sandbox.stream_file(ref, "downloads/a.bin", max_bytes=4)
+    with pytest.raises(SandboxFileNotFoundError):
+        sandbox.stream_file(ref, "downloads/gone.bin", max_bytes=5)
+
+
 def test_stat_files_maps_the_daemon_facts_of_each_path(
     sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
 ) -> None:
@@ -833,7 +1013,7 @@ def test_stat_files_maps_the_daemon_facts_of_each_path(
 def test_file_paths_outside_the_session_directory_are_refused(path: str) -> None:
     ref = HarnessSandboxRef(tenant_id=TENANT_ID, sandbox_id=uuid4(), session_id=uuid4())
     with pytest.raises(SandboxPathError):
-        session_relative_path(ref, path)
+        session_relative_path(ref.session_id, path)
 
 
 @pytest.mark.usefixtures("node")

@@ -83,9 +83,10 @@ def test_bulk_failure_does_not_undo_other_skills(
 
 def test_bulk_failure_after_write_rolls_back_only_that_skill(
     admin_user: DATestUser,
+    basic_user: DATestUser,
 ) -> None:
     name = f"dup-{uuid4().hex[:8]}"
-    taken = SkillManager.create_custom(admin_user, name=name)
+    taken = SkillManager.create_custom(basic_user, name=name)
     conflicting = SkillManager.create_custom(admin_user, name=name, auto_enable=False)
     clean = SkillManager.create_custom(admin_user)
 
@@ -105,8 +106,18 @@ def test_bulk_failure_after_write_rolls_back_only_that_skill(
         response.raise_for_status()
         return SkillBulkResponse.model_validate(response.json())
 
-    assert share([str(taken.id)]).failed == []
-    # public_permission is written before the policy's unique index rejects the name
+    taken_share = client.post(
+        f"{API_SERVER_URL}/skills/bulk",
+        headers=basic_user.headers,
+        json={
+            "skill_ids": [str(taken.id)],
+            "action": "share",
+            "sharing": {"public_permission": "VIEWER"},
+        },
+    )
+    taken_share.raise_for_status()
+    assert SkillBulkResponse.model_validate(taken_share.json()).failed == []
+    # public_permission is written before the move to the library rejects the name
     result = share([str(conflicting.id), str(clean.id)])
     assert result.succeeded == [clean.id]
     assert [failure.skill_id for failure in result.failed] == [conflicting.id]

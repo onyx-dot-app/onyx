@@ -51,7 +51,7 @@ CODE_MODE_CALL_DETAIL_TYPES: tuple[type[BaseModel], ...] = get_args(
 
 # How a program ended.
 SandboxStatus = Literal["completed", "failed", "timed_out", "cancelled"]
-# How a cell ended: `terminated` cells were stopped by wait_code or by the end of
+# How a cell ended: `terminated` cells were stopped by a wait call or by the end of
 # the response.
 ClosedStatus = Literal[SandboxStatus, "terminated"]
 # The state of a cell at the end of an observation: `running` cells continue.
@@ -66,7 +66,7 @@ class CodeModeCall(BaseModel):
     """One tool call made by the program, with the result the program received."""
 
     index: int
-    # Tool call id: the id of the `execute_code` call that started the cell, then
+    # Tool call id: the id of the run call that started the cell, then
     # `:<index>`. Traces, saved history and the UI all use it.
     id: str
     tool_name: str
@@ -238,7 +238,7 @@ class CellClosing(CellWindow):
 
 
 class CodeModeExecutionResult(CellWindow):
-    """Saved result of one observation of a cell (an `execute_code` or `wait_code`
+    """Saved result of one observation of a cell (a run or wait
     call); replay renders everything from it.
 
     Its window covers this observation; `closing` covers the cell after it.
@@ -246,7 +246,7 @@ class CodeModeExecutionResult(CellWindow):
 
     type: Literal["code_mode_execution"] = "code_mode_execution"
     cell_id: int
-    # 0 for the `execute_code` call that started the cell, then 1, 2, ...
+    # 0 for the run call that started the cell, then 1, 2, ...
     observation: int = 0
     # Set on observation 0 only.
     code: str = ""
@@ -559,7 +559,7 @@ class SchemaType(BaseModel):
 
 
 class SearchableFunction(BaseModel):
-    """A deferred function as tool_search() matches and returns it."""
+    """A deferred function as the program search matches and returns it."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -636,7 +636,7 @@ class SavedCodeCell(BaseModel):
     suspended run (`CodeCells.saved`)."""
 
     cell_id: int
-    # The execute_code call that started the cell; nested call ids use it.
+    # The run call that started the cell; nested call ids use it.
     call_id: str
     code: str
     limits: SandboxLimits

@@ -283,13 +283,13 @@ def test_document_group_cycles_are_resolved_once(mock_get_group: MagicMock) -> N
 def test_azuread_groups_wrap_shared_expansion(mock_expand: MagicMock) -> None:
     """Shared Entra results come back as SharePoint principals for the cache."""
     mock_expand.return_value = (
-        {ResolvedEntraGroup(id="g2", name="Nested_g2")},
+        {ResolvedEntraGroup(id="g2")},
         {"alice@contoso.com"},
     )
 
     groups, user_emails = _get_azuread_groups(MagicMock(), "g1")
 
-    assert groups == {_make_ad_group("Nested_g2", login_name="g2")}
+    assert groups == {_make_ad_group("g2", login_name="g2")}
     assert user_emails == {"alice@contoso.com"}
 
 
@@ -304,7 +304,7 @@ def test_document_readers_list_nested_groups_without_members() -> None:
 
     groups = _get_nested_azuread_groups(reader, group_id)
 
-    assert groups == {_make_ad_group(f"Nested_{nested_id}", login_name=nested_id)}
+    assert groups == {_make_ad_group(nested_id, login_name=nested_id)}
     assert "list_entra_group_members" not in reader.operations()
 
 
@@ -620,3 +620,36 @@ def test_document_access_collects_users_and_prefixed_groups() -> None:
 
     assert result.external_user_emails == {"ada@contoso.com"}
     assert result.external_user_group_ids == {f"{SITE_URL}::members".lower()}
+
+
+def _entra_assignment(login_name: str, title: str) -> SharepointRoleAssignment:
+    return SharepointRoleAssignment(
+        member=SharepointPrincipal(
+            principal_type=SharepointPrincipalType.ENTRA_GROUP,
+            login_name=login_name,
+            title=title,
+        ),
+        role_type_kinds=[2],
+    )
+
+
+def test_entra_group_grant_is_stored_as_its_bare_id() -> None:
+    """OneDrive and Azure Data Lake store the same id for one Entra group."""
+    site_url = "https://contoso.sharepoint.com/sites/eng"
+    group_id = "11111111-1111-1111-1111-111111111111"
+    reader = FakeSharepointReader(
+        role_assignments={
+            site_url: [
+                _entra_assignment(f"c:0t.c|tenant|{group_id}", "Engineering"),
+                _entra_assignment("Deleted Group", "Deleted Group"),
+            ]
+        },
+        entra_group_ids={"Deleted Group": None},
+    )
+
+    access = get_hierarchy_node_external_access_from_sharepoint(
+        reader, site_url, HierarchyNodeType.SITE, None, None
+    )
+
+    assert access.external_user_group_ids == {group_id}
+    assert not access.is_public

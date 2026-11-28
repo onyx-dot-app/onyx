@@ -632,7 +632,7 @@ test("a skill synced from GitHub offers no content changes, and says why", async
   ).not.toBeInTheDocument();
 });
 
-test("an uploaded plugin opens its plugin page without skill-only requests", async () => {
+test("an uploaded plugin opens its admin plugin page without skill-only requests", async () => {
   window.history.replaceState(null, "", "/admin/skills/custom-1");
   const plugin = customFixture({
     id: "custom-1",
@@ -645,11 +645,45 @@ test("an uploaded plugin opens its plugin page without skill-only requests", asy
   });
   render(<CustomizeSkillPage skillId="custom-1" from="admin" />);
   await waitFor(() =>
-    expect(window.location.pathname).toBe("/app/customize/plugins/custom-1")
+    expect(window.location.pathname).toBe("/admin/plugins/custom-1")
   );
   expect(
     fetchMock.mock.calls
       .map(([input]) => String(input))
       .filter((url) => url.startsWith("/api/skills/"))
   ).toEqual([]);
+});
+
+test("a failed delete with an empty error message shows the fallback toast", async () => {
+  const fetchMock = open(
+    detail({
+      user_permission: "OWNER",
+      owner: { id: "user-me", email: "me@example.com" },
+      can_delete: true,
+    })
+  );
+  const error = jest.spyOn(toast, "error");
+  const user = setupUser();
+
+  await user.click(await screen.findByRole("button", { name: copy.menu }));
+  await user.click(await screen.findByRole("menuitem", { name: copy.remove }));
+  const route = fetchMock.getMockImplementation();
+  fetchMock.mockImplementation(async (input, init) => {
+    if (init?.method === "DELETE")
+      return new Response(JSON.stringify({ detail: "" }), { status: 500 });
+    if (!route) throw new Error("No fetch mock");
+    return route(input, init);
+  });
+  await user.click(
+    await screen.findByRole("button", {
+      name: messages.skills.editor.deleteModal.label,
+    })
+  );
+
+  await waitFor(() =>
+    expect(error).toHaveBeenCalledWith(
+      messages.skills.editor.toasts.deleteFailed
+    )
+  );
+  expect(window.location.pathname).toBe("/app/customize/skills/custom-1");
 });

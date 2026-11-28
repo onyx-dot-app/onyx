@@ -23,7 +23,11 @@ from onyx.llm.cancellation import (
     current_cancellation,
 )
 from onyx.llm.models import ToolResult
-from onyx.tools.constants import PYTHON_TOOL_NAME
+from onyx.tools.constants import (
+    DEFAULT_MAX_OUTPUT_CHARS,
+    MAX_OUTPUT_CHARS,
+    PYTHON_TOOL_NAME,
+)
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL
 from onyx.tools.models import (
     CapabilityEntry,
@@ -33,6 +37,7 @@ from onyx.tools.models import (
     ToolContext,
     ToolExecutionError,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations import utils as tool_utils
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.code_mode.cells import (
@@ -58,6 +63,17 @@ from onyx.tools.tool_implementations.code_mode.models import (
     json_text,
 )
 from onyx.tools.tool_implementations.code_mode.prompt import format_content
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CLAUDE_CODE_MODE,
+    OPENAI_CODE_MODE,
+    ClaudeRunArguments,
+    CodeModeShape,
+    OpenAIRunArguments,
+    PollArguments,
+    RunRequest,
+    WaitArguments,
+    WaitRequest,
+)
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 from onyx.tracing.framework import set_trace_processors
 from onyx.tracing.framework.create import trace
@@ -99,7 +115,7 @@ def _broken(_invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
 def _make_tool(*tools: FakeTool | FakeWebSearchTool | FakeMCPTool) -> CodeModeTool:
     return CodeModeTool(
         [FakeWebSearchTool(_web_search), FakeTool("echo", echo), *tools],
-        cells=CodeCells(),
+        cells=CodeCells(OPENAI_CODE_MODE),
         limits=LIMITS,
     )
 
@@ -261,7 +277,9 @@ def test_a_tool_that_waits_for_child_runs_fails_inside_the_program() -> None:
         return ChildRunWait(run_ids=["run"])
 
     tool = CodeModeTool(
-        [FakeTool("waits", wait_for_children)], cells=CodeCells(), limits=LIMITS
+        [FakeTool("waits", wait_for_children)],
+        cells=CodeCells(OPENAI_CODE_MODE),
+        limits=LIMITS,
     )
     _, details, _ = _run(
         tool,
@@ -298,7 +316,7 @@ def test_only_sequential_tools_do_not_overlap(
 
     tool = CodeModeTool(
         [FakeTool("add_memory", remember, execution_mode=mode)],
-        cells=CodeCells(),
+        cells=CodeCells(OPENAI_CODE_MODE),
         limits=LIMITS,
     )
     _, details, _ = _run(
@@ -324,7 +342,9 @@ def test_cancellation_stops_calls_and_raises() -> None:
         finally:
             stopped.release()
 
-    tool = CodeModeTool([FakeTool("slow", slow)], cells=CodeCells(), limits=LIMITS)
+    tool = CodeModeTool(
+        [FakeTool("slow", slow)], cells=CodeCells(OPENAI_CODE_MODE), limits=LIMITS
+    )
     invocation = Invocation(
         "import asyncio\nawait asyncio.gather(tools.slow(value='a'), tools.slow(value='b'))\n"
     )
@@ -360,7 +380,7 @@ def test_cancellation_stops_calls_and_raises() -> None:
 
 def test_output_is_cut_to_the_character_budget_in_the_middle() -> None:
     invocation = Invocation("for i in range(500):\n    print('line', i)\n")
-    invocation.invocation.arguments["max_output_chars"] = 800
+    invocation.invocation.arguments["max_output_tokens"] = 200
     result = _make_tool().run(invocation.invocation, ToolContext())
     assert isinstance(result, ToolResult)
     content = result.content
@@ -370,6 +390,10 @@ def test_output_is_cut_to_the_character_budget_in_the_middle() -> None:
     assert "Execution completed" in content
     assert content.rstrip().endswith("line 499")
     assert len(content) < 1_000
+    assert (
+        "Output over the limit is cut in the middle, and the result gives the "
+        "original character count."
+    ) in _make_tool().tool_definition().description
 
 
 def test_a_requested_budget_over_the_maximum_is_capped(
@@ -377,7 +401,7 @@ def test_a_requested_budget_over_the_maximum_is_capped(
 ) -> None:
     monkeypatch.setattr(tool_utils, "MAX_OUTPUT_CHARS", 800)
     invocation = Invocation("for i in range(500):\n    print('line', i)\n")
-    invocation.invocation.arguments["max_output_chars"] = 1_000_000
+    invocation.invocation.arguments["max_output_tokens"] = 250_000
     result = _make_tool().run(invocation.invocation, ToolContext())
     assert isinstance(result, ToolResult)
     assert result.content.startswith("Warning: truncated output")
@@ -388,7 +412,7 @@ def test_output_and_result_over_the_budget_are_cut_once_with_the_true_count() ->
     invocation = Invocation(
         "for i in range(150):\n    print('line', i)\n' '.join(['word'] * 300)\n"
     )
-    invocation.invocation.arguments["max_output_chars"] = 800
+    invocation.invocation.arguments["max_output_tokens"] = 200
     result = _make_tool().run(invocation.invocation, ToolContext())
     assert isinstance(result, ToolResult)
     content = result.content
@@ -410,6 +434,7 @@ def _window_content(
         heading="Cell 1 heading",
         status=status,
         cell_id=1,
+        wait_name="wait",
         cell_calls=[],
         max_chars=max_chars,
         end=None,
@@ -503,13 +528,41 @@ def test_description_lists_stubs() -> None:
     assert "[n]" in first.description
 
 
+def test_each_shape_s_arguments_become_the_same_requests() -> None:
+    """Token budgets convert to the characters that the cells count, capped
+    as character budgets are; the Claude shape has the default budget."""
+    assert OpenAIRunArguments(code="x", max_output_tokens=200).request() == RunRequest(
+        code="x", yield_seconds=30, max_chars=800
+    )
+    assert OpenAIRunArguments(
+        code="x", max_output_tokens=10**9
+    ).request().max_chars == (MAX_OUTPUT_CHARS)
+    assert WaitArguments(cell_id=2, max_tokens=50, terminate=True).request() == (
+        WaitRequest(cell_id=2, yield_seconds=15, max_chars=200, terminate=True)
+    )
+    assert ClaudeRunArguments(code="x", timeout=500_000).request() == RunRequest(
+        code="x", yield_seconds=120, max_chars=DEFAULT_MAX_OUTPUT_CHARS
+    )
+    assert PollArguments(cell_id=2, timeout=10).request() == WaitRequest(
+        cell_id=2, yield_seconds=1, max_chars=DEFAULT_MAX_OUTPUT_CHARS, terminate=False
+    )
+
+
+@pytest.mark.parametrize("shape", [OPENAI_CODE_MODE, CLAUDE_CODE_MODE])
+def test_an_interrupted_wait_names_the_shape_s_wait_tool(shape: CodeModeShape) -> None:
+    tool = WaitCodeTool(CodeCells(shape), _make_tool().program)
+    assert tool.interrupted_result is not None
+    assert tool.interrupted_result.content.startswith(
+        f"{shape.wait_name} was interrupted when the server stopped"
+    )
+
+
 def test_parameters_come_from_arguments() -> None:
-    max_output_chars: JsonValue = {
+    max_output_tokens: JsonValue = {
         "type": "integer",
-        "default": 40000,
-        "description": "Character budget for the output this call returns; longer "
-        "output is cut in the middle. Defaults to 40000 characters, at most "
-        "160000.",
+        "default": 10000,
+        "description": "Token budget for the output this call returns; longer "
+        "output is cut in the middle. Defaults to 10000 tokens, at most 40000.",
     }
     assert _make_tool().tool_definition().parameters == {
         "type": "object",
@@ -522,12 +575,12 @@ def test_parameters_come_from_arguments() -> None:
                 "its output so far while it keeps running. Defaults to 30000 ms, at "
                 "most 120000 ms.",
             },
-            "max_output_chars": max_output_chars,
+            "max_output_tokens": max_output_tokens,
         },
         "required": ["code"],
     }
     assert WaitCodeTool(
-        CodeCells(), _make_tool().program
+        CodeCells(OPENAI_CODE_MODE), _make_tool().program
     ).tool_definition().parameters == {
         "type": "object",
         "properties": {
@@ -541,7 +594,7 @@ def test_parameters_come_from_arguments() -> None:
                 "description": "How long to wait for more output before returning. "
                 "Defaults to 15000 ms, at most 300000 ms.",
             },
-            "max_output_chars": max_output_chars,
+            "max_tokens": max_output_tokens,
             "terminate": {
                 "type": "boolean",
                 "default": False,
@@ -574,7 +627,7 @@ def test_mcp_like_stub_runs_and_type_checks_its_arguments() -> None:
                 },
             )
         ],
-        cells=CodeCells(),
+        cells=CodeCells(OPENAI_CODE_MODE),
         limits=LIMITS,
     )
     _, details, _ = _run(
@@ -613,7 +666,7 @@ _TICKET_PARAMETERS: dict[str, JsonValue] = {
 def test_preferences_name_a_tool_as_its_program_function() -> None:
     tool = CodeModeTool(
         [FakeTool("list-issues", echo, exposure=CodeModeExposure.DEFERRED)],
-        cells=CodeCells(),
+        cells=CodeCells(OPENAI_CODE_MODE),
         limits=LIMITS,
     )
     assert tool.operation_names(CapabilityEntry(tool_id=7)) == [
@@ -641,10 +694,20 @@ def _block_bytes(lines: list[str]) -> int:
     return sum(len(f"{line}\n".encode()) for line in lines) + 1
 
 
+class _PublishedFilesTool(FakeTool):
+    """A deferred built-in tool, as the library tools are."""
+
+    rank = ToolRank.PUBLISHED_FILES
+
+
 def _deferred(
-    name: str, namespace: str | None, namespace_description: str | None = None
+    name: str,
+    namespace: str | None,
+    namespace_description: str | None = None,
+    *,
+    built_in: bool = False,
 ) -> FakeTool:
-    return FakeTool(
+    return (_PublishedFilesTool if built_in else FakeTool)(
         name,
         echo,
         exposure=CodeModeExposure.DEFERRED,
@@ -694,9 +757,9 @@ def test_deferred_namespace_names_take_the_budget_before_descriptions() -> None:
 def test_built_in_namespaces_come_first_and_keep_their_descriptions() -> None:
     lines = _deferred_lines(
         FakeMCPTool("hello", echo, {"type": "object"}, server_description="m" * 200),
-        _deferred("f", "zeta", "z" * 200),
+        _deferred("f", "zeta", "z" * 200, built_in=True),
         # Bare names that leave room for about one description.
-        *(_deferred("f", f"group_{n:03}_{'n' * 4}") for n in range(197)),
+        *(_deferred("f", f"group_{n:03}_{'n' * 4}", built_in=True) for n in range(197)),
     )
     assert lines[1] == "  - group_000_nnnn"
     # The built-in namespace keeps its description; the MCP one loses it.
@@ -771,7 +834,9 @@ def test_calls_record_tool_ids_and_search_planning() -> None:
         assert isinstance(result, ToolResult)
         return result.model_copy(update={"metadata": planning})
 
-    tool = CodeModeTool([FakeWebSearchTool(search)], cells=CodeCells(), limits=LIMITS)
+    tool = CodeModeTool(
+        [FakeWebSearchTool(search)], cells=CodeCells(OPENAI_CODE_MODE), limits=LIMITS
+    )
     _, details, events = _run(tool, "await tools.web_search(queries=['x'])\n")
     [call] = details.calls
     assert (call.tool_id, call.metadata) == (3, planning)
@@ -867,7 +932,7 @@ def test_timeout_stops_nested_work_and_marks_it_unfinished() -> None:
 
     tool = CodeModeTool(
         [FakeTool("echo", echo), FakeTool("waits", waits)],
-        cells=CodeCells(),
+        cells=CodeCells(OPENAI_CODE_MODE),
         limits=SHORT_LIMITS,
     )
     started = time.monotonic()
@@ -892,7 +957,9 @@ def test_a_call_that_outlives_its_cell_keeps_the_run_busy() -> None:
         return ToolResult(content="late")
 
     tool = CodeModeTool(
-        [FakeTool("slow", slow)], cells=CodeCells(), limits=SHORT_LIMITS
+        [FakeTool("slow", slow)],
+        cells=CodeCells(OPENAI_CODE_MODE),
+        limits=SHORT_LIMITS,
     )
     invocation = Invocation("await tools.slow(value='a')\n")
     work = ExecutionWork()
@@ -921,7 +988,7 @@ def test_unawaited_calls_are_cancelled_and_reported() -> None:
 
     tool = CodeModeTool(
         [FakeTool("echo", echo), FakeTool("waits", waits)],
-        cells=CodeCells(),
+        cells=CodeCells(OPENAI_CODE_MODE),
         limits=LIMITS,
     )
     started = time.monotonic()
@@ -955,7 +1022,9 @@ def test_arguments_that_are_not_json_fail_before_the_tool_runs() -> None:
         received.append(invocation.arguments)
         return ToolResult(content="{}")
 
-    tool = CodeModeTool([FakeTool("echo", record)], cells=CodeCells(), limits=LIMITS)
+    tool = CodeModeTool(
+        [FakeTool("echo", record)], cells=CodeCells(OPENAI_CODE_MODE), limits=LIMITS
+    )
     # An untyped helper keeps the type checker from rejecting the call first.
     result, details, _ = _run(
         tool,
@@ -975,7 +1044,9 @@ def test_the_tool_gets_whole_arguments_and_the_saved_call_a_bounded_copy() -> No
         received.append(invocation.arguments["value"])
         return ToolResult(content="{}")
 
-    tool = CodeModeTool([FakeTool("echo", record)], cells=CodeCells(), limits=LIMITS)
+    tool = CodeModeTool(
+        [FakeTool("echo", record)], cells=CodeCells(OPENAI_CODE_MODE), limits=LIMITS
+    )
     _, details, _ = _run(
         tool,
         "big = 'x' * 100_000\n"
@@ -1035,7 +1106,7 @@ def test_files_that_a_search_finds_reach_a_later_python_call(
     monkeypatch.setattr(cells, "build_python_chat_files_from_search_docs", read_files)
     tool = CodeModeTool(
         [FakeWebSearchTool(search_with_files), FakeTool(PYTHON_TOOL_NAME, python)],
-        cells=CodeCells(),
+        cells=CodeCells(OPENAI_CODE_MODE),
         limits=LIMITS,
     )
     _, details, _ = _run(

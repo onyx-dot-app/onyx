@@ -17,6 +17,8 @@ import { isFinalAnswerComplete } from "@/app/app/services/packetUtils";
 import {
   stripPartialCitations,
   ScrollableTable,
+  MarkdownImage,
+  MarkdownLinkContent,
 } from "@/lib/timeline/chat/message/messageComponents/markdownUtils";
 import { BlinkingBar } from "../../BlinkingBar";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
@@ -30,8 +32,10 @@ import { extractChatImageFileId } from "@/app/app/components/files/images/utils"
 import { useInResponse } from "@/lib/timeline/components/Response";
 import { ResponseCursorAnchor } from "@/lib/timeline/components/ResponseCursor";
 import { AnswerMarkdown } from "@/lib/answerText/components";
+import { prefersReducedMotion } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { chatFindTextKey } from "@/lib/chatFind/match";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -249,7 +253,8 @@ export const MessageTextRenderer: MessageRenderer<
     animate &&
     !shouldUseAutoPlaybackSync &&
     stopReason !== StopReason.USER_CANCELLED &&
-    smoothStreamingEnabled;
+    smoothStreamingEnabled &&
+    !prefersReducedMotion();
 
   const isStreamFinished = isFinalAnswerComplete(packets);
 
@@ -257,7 +262,8 @@ export const MessageTextRenderer: MessageRenderer<
     content,
     isStreamingAnimationEnabled,
     isStreamFinished,
-    restoredTextLength
+    restoredTextLength,
+    prefersReducedMotion
   );
 
   // One-way signal: stream done AND typewriter caught up. Do NOT derive
@@ -294,16 +300,21 @@ export const MessageTextRenderer: MessageRenderer<
     [displayedContent]
   );
 
-  // Stable-identity components for ReactMarkdown. Dynamic data (`state`)
-  // flows through a ref so the callback identities never change —
-  // otherwise every typewriter tick would invalidate React reconciliation
-  // on the markdown subtree.
+  // Components for ReactMarkdown. Their identities change only with `docs`
+  // and `citations`, so memoized blocks re-render on a citation update. The
+  // other `state` fields flow through a ref, so a typewriter tick does not
+  // invalidate reconciliation of the markdown subtree.
   const stateRef = useRef(state);
   // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
   stateRef.current = state;
+  // Finished answer blocks are memoized and re-render only when these
+  // components change, so new citation data must change their identity.
+  const docs = state?.docs;
+  const citations = state?.citations;
 
   const markdownComponents = useMemo<Components>(
     () => ({
+      img: MarkdownImage,
       a: ({ href, children }) => {
         const s = stateRef.current;
         const imageFileId = extractChatImageFileId(
@@ -319,15 +330,17 @@ export const MessageTextRenderer: MessageRenderer<
           );
         }
         return (
-          <MemoizedAnchor
-            updatePresentingDocument={s?.setPresentingDocument || (() => {})}
-            docs={s?.docs || []}
-            userFiles={s?.userFiles || []}
-            citations={s?.citations}
-            href={href}
-          >
-            {children}
-          </MemoizedAnchor>
+          <MarkdownLinkContent>
+            <MemoizedAnchor
+              updatePresentingDocument={s?.setPresentingDocument || (() => {})}
+              docs={docs || []}
+              userFiles={s?.userFiles || []}
+              citations={citations}
+              href={href}
+            >
+              {children}
+            </MemoizedAnchor>
+          </MarkdownLinkContent>
         );
       },
       b: ({ className, children }) => (
@@ -343,11 +356,6 @@ export const MessageTextRenderer: MessageRenderer<
           {children}
         </ol>
       ),
-      li: ({ className, children, ...rest }) => (
-        <li className={className} {...rest}>
-          {children}
-        </li>
-      ),
       table: ({ node, className, children, ...rest }) => (
         <ScrollableTable
           className={className}
@@ -356,10 +364,7 @@ export const MessageTextRenderer: MessageRenderer<
               ? () =>
                   tableToCopyContent(
                     node,
-                    createCitationResolver(
-                      stateRef.current?.docs,
-                      stateRef.current?.citations
-                    )
+                    createCitationResolver(docs, citations)
                   )
               : undefined
           }
@@ -369,7 +374,7 @@ export const MessageTextRenderer: MessageRenderer<
         </ScrollableTable>
       ),
     }),
-    []
+    [docs, citations]
   );
 
   const shouldShowThinkingPlaceholder =
@@ -407,12 +412,20 @@ export const MessageTextRenderer: MessageRenderer<
             </Text>
           </div>
         ) : displayedContent.length > 0 ? (
-          <AnswerMarkdown
-            content={processedContent}
-            streaming={!streamFullyDisplayed}
-            cursor={shouldShowCursor}
-            components={markdownComponents}
-          />
+          <div
+            data-chat-find-text={
+              messageNodeId === undefined
+                ? undefined
+                : chatFindTextKey("answer", messageNodeId)
+            }
+          >
+            <AnswerMarkdown
+              content={processedContent}
+              streaming={!streamFullyDisplayed}
+              cursor={shouldShowCursor}
+              components={markdownComponents}
+            />
+          </div>
         ) : inResponse ? (
           <ResponseCursorAnchor addMargin />
         ) : (

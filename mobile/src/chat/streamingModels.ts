@@ -364,17 +364,29 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
+  // False when the action asks each time: the card offers no "Approve for this chat".
+  can_approve_for_chat?: boolean;
   // The subagent that asks; null or absent for the root agent's own request.
   agent_name?: string | null;
+  // True for a VM command's request: the wider approval covers the rest of the command.
+  can_approve_for_command?: boolean;
+  app_name?: string | null;
+  expires_at?: string | null;
 }
 
 export interface ToolApprovalResolved extends BaseObj {
   type: "tool_approval_resolved";
   approval_id: string;
   // "approved_for_chat": approved by a grant for the chat's later calls of the tool.
+  // "approved_for_command": a VM command's app request, approved by a grant for the command.
   // "disabled": an approval found the tool disabled, so the call did not run.
   outcome:
-    "approved" | "approved_for_chat" | "rejected" | "disabled" | "cancelled";
+    | "approved"
+    | "approved_for_chat"
+    | "approved_for_command"
+    | "rejected"
+    | "disabled"
+    | "cancelled";
 }
 
 export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
@@ -391,12 +403,14 @@ export interface ToolQuestionItem {
   header: string;
   question: string;
   options: ToolQuestionOption[];
+  // The user can choose several options; otherwise at most one.
+  multi_select: boolean;
 }
 
 export interface ToolQuestionAnswer {
   question_id: string;
-  // A listed option, a note, or both.
-  option_label?: string | null;
+  // The chosen options in the question's order, a note, or both.
+  option_labels: string[];
   user_note?: string | null;
 }
 

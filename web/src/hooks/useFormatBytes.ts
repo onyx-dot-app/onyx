@@ -30,7 +30,8 @@ export function byteSizeFormat(bytes: number): ByteSizeFormat {
     options: {
       style: "unit",
       unit: BYTE_UNITS[unit],
-      unitDisplay: "short",
+      // The short form of "byte" has no plural in English ("45 byte").
+      unitDisplay: unit === 0 ? "long" : "short",
       maximumFractionDigits: 1,
     },
   };

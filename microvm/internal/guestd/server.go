@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
@@ -53,6 +54,12 @@ type Config struct {
 	BaseEnv map[string]string
 	// Managed configures ManagedStatus and MountManaged. Nil: they fail.
 	Managed *ManagedConfig
+	// Browser serves BrowserStart and BrowserStop. Nil: they return
+	// UNIMPLEMENTED.
+	Browser *browser.Browser
+	// BrowserRelay is true when vsock port browser.RelayPort relays to the
+	// browser service.
+	BrowserRelay bool
 	// Reclaimer drops the guest page cache when the VM is idle. Nil: off.
 	Reclaimer *Reclaimer
 	// Files serves the file calls and session saves. Nil means a store
@@ -290,16 +297,7 @@ func (s *Server) spec(c *pb.Command) (execs.Spec, error) {
 	if err := validateEnv(c.GetEnv()); err != nil {
 		return execs.Spec{}, apiError(pb.ErrorReason_INVALID_ARGUMENT, "%v", err)
 	}
-	env := maps.Clone(s.cfg.BaseEnv)
-	maps.Copy(env, CommandEnvDefaults)
-	s.mu.Lock()
-	maps.Copy(env, s.state.Env)
-	s.mu.Unlock()
-	maps.Copy(env, c.GetEnv())
-	list := make([]string, 0, len(env))
-	for _, k := range slices.Sorted(maps.Keys(env)) {
-		list = append(list, k+"="+env[k])
-	}
+	list := s.commandEnv(c.GetEnv())
 	var deadline time.Duration
 	if d := c.GetDeadline(); d != nil {
 		if err := d.CheckValid(); err != nil {
@@ -315,6 +313,22 @@ func (s *Server) spec(c *pb.Command) (execs.Spec, error) {
 		Argv: c.GetArgv(), Dir: dir, Env: list, Stdin: c.GetStdin(),
 		Deadline: deadline, Labels: c.GetLabels(),
 	}, nil
+}
+
+// commandEnv is the env of a command: BaseEnv, the command defaults, the
+// Init env, then extra.
+func (s *Server) commandEnv(extra map[string]string) []string {
+	env := maps.Clone(s.cfg.BaseEnv)
+	maps.Copy(env, CommandEnvDefaults)
+	s.mu.Lock()
+	maps.Copy(env, s.state.Env)
+	s.mu.Unlock()
+	maps.Copy(env, extra)
+	list := make([]string, 0, len(env))
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		list = append(list, k+"="+env[k])
+	}
+	return list
 }
 
 // commandDir is the working directory of a command. With a session, the

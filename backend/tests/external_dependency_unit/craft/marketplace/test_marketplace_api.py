@@ -6,6 +6,7 @@ from uuid import UUID
 
 import pytest
 from fastapi import BackgroundTasks
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
@@ -31,6 +32,7 @@ from tests.external_dependency_unit.craft.marketplace.helpers import (
     Connections,
     existing_files,
     http_request,
+    make_marketplace,
     plugin_files,
     synced_plugins,
 )
@@ -321,6 +323,101 @@ def test_scope_and_owner_rules(
         db_session,
     )
     assert changed.default_installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
+
+
+def test_a_default_branch_url_is_the_same_source(
+    db_session: Session,
+    users: tuple[User, User, User],
+    manager: User,
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    enqueued: list[UUID],  # noqa: ARG001
+) -> None:
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    _create(db_session, manager, MarketplaceScope.COMPANY)
+    tree_url = f"https://github.com/{OWNER}/{REPO}/tree/main"
+
+    preview = api.preview_marketplace(
+        MarketplaceSourceRequest(repository=tree_url),
+        _fresh(db_session, users[0]),
+        db_session,
+    )
+    assert (preview.ref, preview.added_company) == (None, True)
+    for user, scope, detail in (
+        (manager, MarketplaceScope.COMPANY, "This marketplace is already added."),
+        (
+            users[0],
+            MarketplaceScope.PERSONAL,
+            "Your organization already gets this marketplace.",
+        ),
+    ):
+        with pytest.raises(OnyxError) as exc:
+            api.create_marketplace(
+                http_request(),
+                MarketplaceCreateRequest(repository=tree_url, scope=scope),
+                BackgroundTasks(),
+                _fresh(db_session, user),
+                db_session,
+            )
+        assert exc.value.detail == detail
+        db_session.rollback()
+
+
+def test_a_marketplace_saved_with_the_default_branch_is_the_same_source(
+    db_session: Session,
+    users: tuple[User, User, User],
+    manager: User,
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    enqueued: list[UUID],  # noqa: ARG001
+    marketplace_ids: list[UUID],
+) -> None:
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    make_marketplace(db_session, marketplace_ids, login=manager, owner=None, ref="main")
+
+    preview = api.preview_marketplace(
+        MarketplaceSourceRequest(repository=f"{OWNER}/{REPO}"),
+        _fresh(db_session, users[0]),
+        db_session,
+    )
+    assert preview.added_company
+    with pytest.raises(OnyxError) as exc:
+        _create(db_session, manager, MarketplaceScope.COMPANY)
+    assert exc.value.detail == "This marketplace is already added."
+
+
+def test_a_tree_url_is_refused_when_github_gives_no_default_branch(
+    db_session: Session,
+    manager: User,
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    enqueued: list[UUID],  # noqa: ARG001
+) -> None:
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    _create(db_session, manager, MarketplaceScope.COMPANY)
+
+    fake_github.rate_limit_reset = 1_800_000_000
+    with pytest.raises(OnyxError) as exc:
+        api.create_marketplace(
+            http_request(),
+            MarketplaceCreateRequest(
+                repository=f"https://github.com/{OWNER}/{REPO}/tree/main",
+                scope=MarketplaceScope.COMPANY,
+            ),
+            BackgroundTasks(),
+            _fresh(db_session, manager),
+            db_session,
+        )
+    assert exc.value.error_code == OnyxErrorCode.RATE_LIMITED
+    db_session.rollback()
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(Marketplace)
+            .where(Marketplace.repository == f"{OWNER}/{REPO}")
+        )
+        == 1
+    )
 
 
 def test_sync_replace_login_and_delete(

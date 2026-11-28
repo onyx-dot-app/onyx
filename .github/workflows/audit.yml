@@ -1,7 +1,7 @@
 name: Dependency Audit
 
 concurrency:
-  group: audit-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: audit-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 on:
@@ -37,6 +37,14 @@ on:
 permissions: {}
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   audit:
     name: audit
     runs-on: ubuntu-latest

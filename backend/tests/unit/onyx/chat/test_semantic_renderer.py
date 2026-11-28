@@ -2,6 +2,7 @@
 
 import threading
 from collections.abc import Mapping
+from datetime import datetime, timezone
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -33,12 +34,19 @@ from onyx.chat.models import (
     MessageRendering,
     PresentationMode,
     ResponseRecord,
+    RunDocuments,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
-from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
+from onyx.chat.renderer import (
+    CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
+    MessageRenderer,
+    ResponseLayout,
+    ToolRenderer,
+)
 from onyx.chat.response import response_record
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
+from onyx.db.models import StoredToolResult
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.llm.cancellation import CancellationSignal
@@ -87,6 +95,8 @@ from onyx.server.query_and_chat.streaming_models import (
     ReasoningDelta,
     SearchToolStart,
     SectionEnd,
+    ToolApprovalRequest,
+    ToolApprovalResolved,
     ToolCallArgumentDelta,
 )
 from onyx.tools.models import (
@@ -95,6 +105,10 @@ from onyx.tools.models import (
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.sandbox.models import (
+    CommandApprovalRequest,
+    CommandApprovalResolved,
+)
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
@@ -190,7 +204,7 @@ def test_citation_display_keeps_raw_transcript(
     accumulator = MessageAccumulator()
     renderer = MessageRenderer(
         MessageRendering(citation_mode=CitationMode.REMOVE),
-        {},
+        RunDocuments(),
         ResponseLayout(),
     )
     packets: list[Packet] = []
@@ -288,11 +302,11 @@ def test_formatting_failure_keeps_accepted_response(
 def test_interrupted_text_is_not_duplicated_and_matches_reload() -> None:
     message = AssistantMessage(content=[TextContent(text="See [1")])
     settings = MessageRendering(citation_mode=CitationMode.HYPERLINK)
-    live = MessageRenderer(settings, {}, ResponseLayout())
+    live = MessageRenderer(settings, RunDocuments(), ResponseLayout())
     output = live.consume(TextDeltaEvent(content_index=0, text="See [1"))
     output += live.complete(message)
     output += live.finish()
-    saved = MessageRenderer(settings, {}, ResponseLayout())
+    saved = MessageRenderer(settings, RunDocuments(), ResponseLayout())
     restored = saved.complete(message)
     assert live.answer == saved.answer == "See [1"
     assert (
@@ -323,7 +337,9 @@ def test_interleaved_answer_sections_preserve_content_order(
         ]
     )
     renderer = MessageRenderer(
-        MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, ResponseLayout()
+        MessageRendering(citation_mode=CitationMode.HYPERLINK),
+        RunDocuments(),
+        ResponseLayout(),
     )
     events = [
         TextDeltaEvent(content_index=0, text="Before ["),
@@ -387,7 +403,7 @@ def test_tool_tabs_do_not_cross_interleaved_content(
             content_index=4, tool_call_id="3", tool_name="internal_search"
         ),
     ]
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    renderer = MessageRenderer(MessageRendering(), RunDocuments(), ResponseLayout())
     output = [
         packet
         for event in events[:streamed_blocks]
@@ -434,10 +450,14 @@ def test_report_sources_include_only_observed_citations(
         document_ids=["1", "2"],
     )
     message = AssistantMessage(content=[TextContent(text=text)])
-    live = MessageRenderer(settings, documents, ResponseLayout())
+    live = MessageRenderer(
+        settings, RunDocuments().add_steps([(settings, documents)]), ResponseLayout()
+    )
     output = live.consume(TextDeltaEvent(content_index=0, text=text))
     output.extend(live.complete(message))
-    saved = MessageRenderer(settings, documents, ResponseLayout()).complete(message)
+    saved = MessageRenderer(
+        settings, RunDocuments().add_steps([(settings, documents)]), ResponseLayout()
+    ).complete(message)
     for packets in (output, saved):
         assert [
             doc.document_id
@@ -510,7 +530,9 @@ def test_parallel_child_packets_stay_in_parent_tabs() -> None:
 def test_citation_recovery_waits_for_completion_and_does_not_duplicate() -> None:
     raw = "[1234567890123456789]"
     renderer = MessageRenderer(
-        MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, ResponseLayout()
+        MessageRendering(citation_mode=CitationMode.HYPERLINK),
+        RunDocuments(),
+        ResponseLayout(),
     )
     early = renderer.consume(TextDeltaEvent(content_index=0, text=raw))
     assert not any(
@@ -588,12 +610,11 @@ def test_leading_citation_keeps_metadata(live: bool) -> None:
         metadata={},
         match_highlights=[],
     )
+    settings = MessageRendering(
+        citation_mode=CitationMode.HYPERLINK, citation_documents={1: "doc"}
+    )
     renderer = MessageRenderer(
-        MessageRendering(
-            citation_mode=CitationMode.HYPERLINK, citation_documents={1: "doc"}
-        ),
-        {"doc": doc},
-        ResponseLayout(),
+        settings, RunDocuments().add_steps([(settings, {"doc": doc})]), ResponseLayout()
     )
     packets = (
         renderer.consume(TextDeltaEvent(content_index=0, text="[1] Answer"))
@@ -850,6 +871,116 @@ def test_tool_errors_only_display_explicit_public_details(
 
 
 @pytest.mark.parametrize("live", [False, True])
+@pytest.mark.parametrize("is_error", [False, True])
+def test_generic_card_marks_a_failed_call_without_details(
+    live: bool, is_error: bool
+) -> None:
+    """A call that raised ToolCallException has no error details. Its card
+    still says that it failed, without the text the model got and without an
+    error packet."""
+    call = ToolCall(id="call", name="skills_read", arguments={"name": "missing"})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="No skill is named 'missing'.",
+        is_error=is_error,
+    )
+    if live:
+        renderer = ToolRenderer(call, Placement(turn_index=0))
+        output = renderer.start() + renderer.complete(result)
+    else:
+        output = replay_response(
+            ResponseRecord(
+                run_id="r",
+                status=RunStatus.COMPLETE,
+                steps=[
+                    StepRecord(
+                        message=AssistantMessage(id="m", content=[call]),
+                        generation_status=ExecutionStatus.COMPLETE,
+                        tools={
+                            call.id: ToolExecutionRecord(
+                                status=ExecutionStatus.COMPLETE, result=result
+                            )
+                        },
+                    )
+                ],
+            ),
+            {},
+            {},
+            {},
+        )
+    failures = [
+        packet.obj
+        for packet in output
+        if isinstance(packet.obj, CustomToolDelta)
+        and packet.obj.response_type == CUSTOM_TOOL_ERROR_RESPONSE_TYPE
+    ]
+    assert len(failures) == int(is_error)
+    assert all(failure.data is None for failure in failures)
+    assert not any(isinstance(packet.obj, PacketException) for packet in output)
+    assert all(
+        "No skill is named" not in packet.model_dump_json()
+        for packet in output
+        if is_error
+    )
+    assert any(isinstance(packet.obj, SectionEnd) for packet in output)
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_app_tool_auth_error_names_its_integration(live: bool) -> None:
+    """An app tool has no tool row, so the chat opens the sign-in from the
+    delta's integration ID."""
+    call = ToolCall(id="call", name="app_7_list_issues", arguments={})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="HTTP 401",
+        is_error=True,
+        details=CustomToolCallSummary(
+            tool_name=call.name,
+            integration_id=7,
+            response_type="text",
+            tool_result="",
+            error=CustomToolErrorInfo(
+                status_code=401, message="auth failed", is_auth_error=True
+            ),
+        ),
+    )
+    if live:
+        renderer = ToolRenderer(call, Placement(turn_index=0))
+        output = renderer.start() + renderer.complete(result)
+    else:
+        record = ResponseRecord(
+            run_id="r",
+            status=RunStatus.COMPLETE,
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(id="m", content=[call]),
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={
+                        call.id: ToolExecutionRecord(
+                            status=ExecutionStatus.COMPLETE,
+                            result=StoredToolResult.model_validate_json(
+                                result.model_dump_json()
+                            ),
+                        )
+                    },
+                )
+            ],
+        )
+        output = replay_response(record, {}, {}, {})
+    deltas = [
+        (packet.obj.tool_id, packet.obj.integration_id, packet.obj.error)
+        for packet in output
+        if isinstance(packet.obj, CustomToolDelta)
+    ]
+    assert len(deltas) == 1
+    tool_id, integration_id, error = deltas[0]
+    assert (tool_id, integration_id) == (None, 7)
+    assert error is not None and error.is_auth_error
+
+
+@pytest.mark.parametrize("live", [False, True])
 def test_completion_batches_content(live: bool) -> None:
     tool = ToolCall(id="lookup", name="lookup", arguments={})
     message = AssistantMessage(
@@ -860,7 +991,7 @@ def test_completion_batches_content(live: bool) -> None:
             *[TextContent(text="b") for _ in range(128)],
         ]
     )
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    renderer = MessageRenderer(MessageRendering(), RunDocuments(), ResponseLayout())
     output: list[Packet] = []
     if live:
         output.extend(
@@ -1195,3 +1326,55 @@ def test_stop_reason_is_the_same_live_and_on_replay(
     for packets in (output, replay):
         stops = [p.obj for p in packets if isinstance(p.obj, OverallStop)]
         assert [stop.stop_reason for stop in stops] == [reason]
+
+
+def test_a_command_approval_card_carries_its_deadline() -> None:
+    """The card shows when the proxy stops waiting on the request."""
+    renderer = ToolRenderer(
+        ToolCall(id="call", name="exec_command", arguments={"cmd": "x"}),
+        Placement(turn_index=0),
+    )
+    expires_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    output = renderer.update(
+        CommandApprovalRequest(
+            approval_id="a1",
+            app_name="Tracker",
+            action_type="issues.create",
+            display_name="Create an issue",
+            arguments={},
+            can_approve_for_command=True,
+            expires_at=expires_at,
+        )
+    )
+
+    requests = [p.obj for p in output if isinstance(p.obj, ToolApprovalRequest)]
+    assert [r.expires_at for r in requests] == [expires_at]
+
+
+def test_a_completed_call_closes_its_open_command_approval_cards() -> None:
+    """A stopped call reports no resolution of its own, so its open cards
+    close when the call completes."""
+    renderer = ToolRenderer(
+        ToolCall(id="call", name="exec_command", arguments={"cmd": "x"}),
+        Placement(turn_index=0),
+    )
+    for approval_id in ("open", "resolved"):
+        renderer.update(
+            CommandApprovalRequest(
+                approval_id=approval_id,
+                app_name="Tracker",
+                action_type="issues.create",
+                display_name="Create an issue",
+                arguments={},
+                can_approve_for_command=True,
+                expires_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            )
+        )
+    renderer.update(CommandApprovalResolved(approval_id="resolved", outcome="approved"))
+
+    output = renderer.complete(None)
+
+    resolved = [p.obj for p in output if isinstance(p.obj, ToolApprovalResolved)]
+    assert [(r.approval_id, r.outcome) for r in resolved] == [("open", "cancelled")]
+    assert isinstance(output[-1].obj, SectionEnd)

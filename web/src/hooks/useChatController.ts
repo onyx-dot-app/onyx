@@ -16,6 +16,7 @@ import {
 import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
+import { getNewSessionNavigation } from "@/lib/navigation/hooks";
 import {
   getLatestMessageChain,
   MessageTreeState,
@@ -45,7 +46,7 @@ import {
   UserKnowledgeFilePacket,
 } from "@/app/app/types";
 import { StreamStopReason } from "@/lib/search/types";
-import { createChatSession } from "@/app/app/services/lib";
+import { createChatSession, endIncognitoSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
   modelSupportsImageInput,
@@ -67,18 +68,20 @@ import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
-  SessionError,
+  openBrowserInChat,
   useChatSessionStore,
   useCurrentMessageTree,
   useCurrentMessageHistory,
+  type SessionError,
 } from "@/app/app/stores/useChatSessionStore";
+import { isBrowserOpenStart } from "@/lib/chat/browser/stream";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { effectiveChatPreference } from "@/lib/tools/chat";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
+import { projectsFileToFileDescriptor } from "@/lib/projects/utils";
 import {
   claimStreamReader,
   releaseStreamReader,
@@ -158,7 +161,8 @@ export default function useChatController({
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
-  const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
+  const { incognitoEnabledRef, incognitoSessionId, incognitoSessionIdRef } =
+    useIncognito();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -243,7 +247,8 @@ export default function useChatController({
 
   const updateStatesWithNewSessionId = (
     newSessionId: string,
-    incognito = false
+    incognito = false,
+    select = true
   ) => {
     // Create new session in store if it doesn't exist
     const existingSession = sessions.get(newSessionId);
@@ -254,7 +259,7 @@ export default function useChatController({
     }
 
     // Set as current session
-    setCurrentSession(newSessionId);
+    if (select) setCurrentSession(newSessionId);
   };
 
   const handleNewSessionNavigation = (chatSessionId: string) => {
@@ -374,6 +379,9 @@ export default function useChatController({
           "input") !== "input"
       )
         return;
+      const newSessionAtSubmit = getNewSessionNavigation();
+      const stillOnComposer = () =>
+        getNewSessionNavigation() === newSessionAtSubmit;
       const controller = new AbortController();
       const submissionSessionId = getCurrentSessionId();
       if (submissionSessionId) {
@@ -381,20 +389,22 @@ export default function useChatController({
       }
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
+      const restoreSubmittedInput = () => {
+        if ((incognitoEnabledRef.current ?? false) !== incognito) return;
+        const unsent: UnsentMessage = {
+          message,
+          mentions,
+          files: currentMessageFiles,
+        };
+        // A rejected edit comes back as the same edit.
+        if (messageIdToResend !== undefined && !regenerationRequest)
+          unsent.messageIdToResend = messageIdToResend;
+        restoreInputBar(unsent);
+      };
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
       const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-      const paramsWithoutProject = new URLSearchParams(searchParams.toString());
-      paramsWithoutProject.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
       const startUrl = locationKey(pathname, searchParams.toString());
-      const urlWithoutProject = locationKey(pathname, paramsWithoutProject);
-      if (searchParams.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
-        // SAFETY: built from the current pathname, which is a route of this app.
-        navigation.go(urlWithoutProject as Route, {
-          replace: true,
-          scroll: false,
-        });
-      }
 
       updateSubmittedMessage(getCurrentSessionId(), message);
 
@@ -452,26 +462,32 @@ export default function useChatController({
           // The user moved to a different page while the request was pending.
           // Do not take them back or put the message into that page.
           if (
-            !isStillOnLocation([startUrl, urlWithoutProject], window.location)
+            !stillOnComposer() ||
+            !isStillOnLocation([startUrl], window.location)
           ) {
             return;
           }
-          // Put the project back in the URL so a retry stays in the project.
-          if (projectId) {
-            // SAFETY: built from the current pathname, which is a route of this app.
-            navigation.go(startUrl as Route, {
-              replace: true,
-              scroll: false,
-            });
-          }
-          restoreInputBar({
-            message,
-            mentions,
-            files: currentMessageFiles,
-          });
+          restoreSubmittedInput();
           return;
         }
 
+        if (
+          incognito &&
+          (controller.signal.aborted ||
+            !stillOnComposer() ||
+            !incognitoEnabledRef.current ||
+            // Back/forward restore or a new private session replaced the one
+            // this send created its chat for.
+            incognitoSessionIdRef.current !== incognitoSessionId ||
+            !isStillOnLocation([startUrl], window.location))
+        ) {
+          try {
+            await endIncognitoSession(currChatSessionId);
+          } catch (error) {
+            console.error("Failed to end abandoned incognito session:", error);
+          }
+          return;
+        }
         if (controller.signal.aborted) return;
 
         // This send is what created the chat, so the configuration chosen for
@@ -521,10 +537,14 @@ export default function useChatController({
       );
 
       // mark the session as the current session
-      updateStatesWithNewSessionId(currChatSessionId, incognito);
+      updateStatesWithNewSessionId(
+        currChatSessionId,
+        incognito,
+        stillOnComposer()
+      );
 
       // Navigate immediately for new sessions (before streaming starts)
-      if (isNewSession) {
+      if (isNewSession && stillOnComposer()) {
         handleNewSessionNavigation(currChatSessionId);
       }
 
@@ -572,13 +592,18 @@ export default function useChatController({
         ? messageToResend?.message || message
         : message;
 
-      // When editing a message that had files attached, preserve the original files.
-      // Skip for regeneration — the regeneration path reuses the existing user node
-      // (and its files), so merging here would send duplicates.
-      const effectiveFileDescriptors = [
-        ...projectFilesToFileDescriptors(currentMessageFiles),
-        ...(!regenerationRequest ? (messageToResend?.files ?? []) : []),
-      ];
+      // A resent message sends the files the caller passes. A file kept from
+      // the original keeps its original descriptor.
+      const originalFiles = new Map(
+        (messageToResend?.files ?? []).map((file) => [
+          file.user_file_id ?? file.id,
+          file,
+        ])
+      );
+      const effectiveFileDescriptors = currentMessageFiles.map(
+        (file) =>
+          originalFiles.get(file.id) ?? projectsFileToFileDescriptor(file)
+      );
 
       updateChatStateAction(frozenSessionId, "loading");
 
@@ -734,7 +759,7 @@ export default function useChatController({
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
-      resetInputBar();
+      if (stillOnComposer() && !messageToResend) resetInputBar();
       // The server saved nothing for this turn: drop its nodes, restore the
       // links of the node they hung from, and give the text back for a retry.
       // Other live changes, such as a preference pick, stay.
@@ -765,14 +790,11 @@ export default function useChatController({
         currentMessageTreeLocal = restored;
         store.updateSessionMessageTree(frozenSessionId, restored);
         if (
+          stillOnComposer() &&
           store.currentSessionId === frozenSessionId &&
           !regenerationRequest
         ) {
-          restoreInputBar({
-            message,
-            mentions,
-            files: currentMessageFiles,
-          });
+          restoreSubmittedInput();
         }
       };
       const discardUnsentTurn = () => {
@@ -1025,9 +1047,9 @@ export default function useChatController({
       let streamSucceeded = false;
       let saveFailed = false;
       let stack: CurrentMessageFIFO | null = null;
-      let rejectedSendError: SessionError | null = null;
-      let resolveReaderFinished: () => void = () => {};
-      const readerFinished = new Promise<void>((resolve) => {
+      let rejectedSendError: SessionError | undefined;
+      let resolveReaderFinished: (error?: SessionError) => void = () => {};
+      const readerFinished = new Promise<SessionError | void>((resolve) => {
         resolveReaderFinished = resolve;
       });
       // The send reads its own stream, so a decision that names it as the
@@ -1318,7 +1340,7 @@ export default function useChatController({
                 isRetryable = streamingError.is_retryable ?? true;
                 errorDetails = streamingError.details || null;
 
-                updateSubmittedMessage(getCurrentSessionId(), "");
+                updateSubmittedMessage(frozenSessionId, "");
 
                 throw new Error(streamingError.error);
               }
@@ -1332,6 +1354,10 @@ export default function useChatController({
             } else if (Object.hasOwn(packet, "obj")) {
               const typedPacket = packet as Packet;
               const packetObj = typedPacket.obj;
+
+              // The agent opens a page: the live chat shows its Browser tab
+              if (isBrowserOpenStart(packetObj))
+                openBrowserInChat(frozenSessionId);
 
               if (isMultiModel) {
                 // Multi-model: route packet by placement.model_index.
@@ -1545,7 +1571,7 @@ export default function useChatController({
           controller.signal.removeEventListener("abort", discardUnsentTurn);
           readerDone = true;
           if (claimedStream !== null) releaseStreamReader(claimedStream);
-          resolveReaderFinished();
+          resolveReaderFinished(rejectedSendError);
         }
       }
 
@@ -1557,18 +1583,8 @@ export default function useChatController({
         controller,
         errorMessage: tReadiness("checkFailed"),
         refreshHistory: !streamSucceeded || saveFailed || wasCancelling,
+        preparationError: stack === null ? rejectedSendError : undefined,
       });
-      // Set after settlement, which clears session errors once history loads.
-      const settled = useChatSessionStore
-        .getState()
-        .sessions.get(frozenSessionId);
-      if (
-        rejectedSendError &&
-        settled?.abortController === controller &&
-        !settled.uncaughtError
-      ) {
-        setUncaughtError(frozenSessionId, rejectedSendError);
-      }
 
       // The server names a new chat while it answers. If its name did not
       // arrive on the stream, ask for it; the server returns a saved name
@@ -1588,6 +1604,7 @@ export default function useChatController({
       activeAgent,
       availableAgents,
       existingChatSessionId,
+      incognitoSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
@@ -1647,7 +1664,7 @@ export default function useChatController({
         updateChatStateAction(uploadSessionId, "input");
       }
     },
-    [activeAgent, llmManager, toolConfiguration]
+    [activeAgent, beginUpload, llmManager, toolConfiguration]
   );
 
   useEffect(() => {

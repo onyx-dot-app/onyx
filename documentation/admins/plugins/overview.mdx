@@ -11,6 +11,10 @@ Admins manage plugins and integrations in the **Agents & Plugins** section of th
 
 - **Admin Panel → Integrations** (`/admin/integrations`) lists each MCP server and app. Add, configure and approve
   actions, and set the install setting of each integration here.
+- **Admin Panel → Plugins** (`/admin/plugins`) lists each uploaded or synced plugin. It does not list the plugins
+  of another user's personal GitHub marketplace. Only that user sees them.
+  Upload plugins and add marketplaces with **Add**. Manage marketplaces in the **Marketplaces** section below the list.
+  See [Uploaded plugins](/admins/managing_features/craft_skills#uploaded-plugins).
 
 Each integration has its own access: an owner, an install setting, and the people it is shared with.
 A plugin holds skills only. It does not hold an integration and gives no access to one.
@@ -26,12 +30,11 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 | Type | What it connects | Where agents can use it | Use it when |
 | --- | --- | --- | --- |
 | [MCP](/admins/plugins/mcp) | A server that uses the [Model Context Protocol](https://modelcontextprotocol.io/) | Chat, custom agents, and Craft | The vendor publishes an MCP server, or you run your own. |
-| [OpenAPI](/admins/plugins/openapi) | A REST API that you describe with an OpenAPI schema | Chat and custom agents | You have an internal or third-party REST API and no MCP server. |
-| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Craft only | Craft must act as each user in a supported application, with action-level approvals. Requires Craft, which is available on the **Business** and **Enterprise** plans. |
+| [OpenAPI](/admins/plugins/openapi) | A REST API that you describe with an OpenAPI schema | Chat, custom agents, and Craft | You have an internal or third-party REST API and no MCP server. |
+| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Chat, custom agents, and Craft | An agent must act as each user in a supported application, with action-level approvals. |
 
 <Tip>
-  You can add the same service more than once. For example,
-  add the Slack Craft App for Craft and the Slack MCP server for Chat.
+  You can add the same service more than once. For example, add the Slack Craft App and the Slack MCP server.
 </Tip>
 
 ### Plugins compared to connectors
@@ -47,30 +50,27 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 ## Add an integration
 
 <Steps>
-  <Step title="Open the add page">
-    Go to **Admin Panel → Integrations** and click **Add**.
+  <Step title="Select what to add">
+    Go to **Admin Panel → Integrations** and click **Add**. Select one of these:
+
+    - **MCP server**: a remote MCP server.
+    - **Custom API**: any REST or GraphQL API. See [OpenAPI](/admins/plugins/openapi).
+    - **From catalog**: a built-in App, such as GitHub, or a suggested MCP server, such as Linear.
+    The catalog does not show a built-in App that you already added.
   </Step>
 
-  <Step title="Select the type">
-    Under **Type**, select **MCP Server**, **OpenAPI App**, or **App**.
-    **App** shows only when Craft is available on your plan.
+  <Step title="Enter a name and a URL">
+    Enter a **Name** and the URL, then click **Continue**. Onyx checks the URL and finds the type of server or API.
+    For an MCP server, it also finds how users sign in. A catalog item skips this step.
   </Step>
 
-  <Step title="Fill in the details">
-    Fill in the details of that type. For an MCP server, pick a suggested server or enter its URL.
-    Onyx checks the server URL and suggests the sign-in settings. For an App,
-    select a preset under **Start From** to fill in the name and sign-in,
-    or keep **Custom app** to set up any HTTP service.
-  </Step>
-
-  <Step title="Set the sign-in">
-    Select the sign-in mode: **No sign-in**, **One account for the organization**, or **Each user signs in**.
-    Then select the method, such as **OAuth** or **API key**.
-  </Step>
-
-  <Step title="Select the owner and add">
+  <Step title="Set the sign-in and add">
+    Onyx shows what it found. Select a **Sign-in Mode**: **No sign-in**, **One account for the organization**,
+    or **Each user signs in**. A custom API starts at **No sign-in**. Change it if your API requires sign-in.
+    Open **Advanced** to change the sign-in method, such as **OAuth** or **API key**, and to select the owner.
     **For me** makes a private integration. Only you can use it until you share it.
     **For the organization** makes an integration with the install setting **Available**. Click **Add**.
+    Onyx opens the integration. Add a description and set the actions there.
   </Step>
 </Steps>
 
@@ -91,7 +91,7 @@ An integration that needs setup comes first and shows **Needs setup**. Point to 
 for example a missing organization connection or OAuth client.
 
 Deleting an integration removes it from each agent and scheduled task, and deletes its connections and action settings.
-To keep an integration but stop all use of it, turn off **Enabled** on its **Overview** tab instead.
+To keep an integration but stop all use of it, turn off the switch in its page header instead.
 
 ## Access and install setting
 
@@ -160,8 +160,8 @@ Click an integration to open its detail page.
 
 | Tab | Settings |
 | --- | --- |
-| **Overview** | Name, description, type, sign-in, owner, **Install Setting**, **Group Access**, **Enabled**, and **Delete** |
-| **Configuration** | Server URL, OpenAPI schema, or URL patterns, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
+| **Overview** | Name, description, type, sign-in, owner, **Install Setting**, and **Group Access**. The page header holds the on/off switch and, under **More actions**, **Edit details** and **Delete** |
+| **Configuration** | Server URL, **Import a Spec** with the base URL and endpoints, or GraphQL endpoint and schema, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
 | **Actions** | **Default for New Actions**, then the read-only actions and the write actions, each with **Allow**, **Ask**, or **Blocked** |
 
 If you change the sign-in method, the OAuth client, the URLs, or the scopes, each user must connect again.
@@ -175,12 +175,20 @@ Click **Refresh** on the **Actions** tab to load them again.
 
 Onyx can ask a user to approve an action before it runs.
 Admins set the policy for each action on the **Actions** tab of an integration. MCP tool policies apply in Chat,
-in custom agents, and in Craft. Craft App policies apply in Craft.
+in custom agents, and in Craft. Craft App policies apply in Chat, in custom agents, and in Craft,
+also to the requests of commands that the agent runs. In Chat, while the answer waits on a command,
+a command request with the **Ask** policy shows an approval card on the command. The card shows the method, origin,
+path, and body of the request, or only the size of a large body or a body that is not JSON. The user can approve once,
+approve for the rest of the command, or reject. A command that runs in the background, or a chat without a live answer,
+gets no card. Onyx refuses the request, and the agent calls the tool of the action instead.
+The tool shows the approval card. If the user approved the action for the rest of the command,
+the request runs without a card. A [URL-pattern App](/admins/plugins/craft_apps#url-pattern-apps) has no tools in Chat,
+so a refused request of a URL-pattern App cannot run.
 
 | Policy | Effect |
 | --- | --- |
 | **Allow** | The action runs without a prompt. |
-| **Ask** | Onyx shows an approval card. The user can approve once, approve for the chat or Craft session, or reject. |
+| **Ask** | Onyx shows an approval card. The user can approve once, approve for the chat or Craft session (for a command in Chat, for the rest of the command), or reject. |
 | **Blocked** | The action never runs. Users and scheduled tasks cannot override it. |
 
 The first row, **Default for New Actions**, applies to each action with no setting of its own,

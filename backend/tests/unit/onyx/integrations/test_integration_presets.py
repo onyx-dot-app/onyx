@@ -28,3 +28,13 @@ def test_presets_match_their_providers() -> None:
         assert preset.app_type is app_type
         assert preset.provider is PROVIDERS[app_type]
         assert preset.name == preset.provider.spec.app_name
+
+
+def test_setup_steps_are_short() -> None:
+    for preset in PRESETS.values():
+        steps = preset.provider.spec.descriptor.setup_steps
+        assert steps, preset.name
+        for step in steps:
+            assert len(step.split()) <= 15, step
+            # The setup panel shows the callback URL on its own.
+            assert "/oauth/callback" not in step, step

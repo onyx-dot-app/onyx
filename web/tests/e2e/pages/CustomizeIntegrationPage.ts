@@ -1,9 +1,10 @@
 import { type Locator, type Page, expect } from "@playwright/test";
+import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { IntegrationCredentialsDialog } from "@tests/e2e/pages/IntegrationCredentialsDialog";
 
-export type IntegrationPageTab = "Overview" | "Configuration" | "Actions";
-// An expired connection shows its reason in the row, not a label: pass the
-// reason text to expectStatus.
+export type IntegrationPageTab = "Overview" | "Actions";
+// The header shows the connection state; an expired connection also shows its
+// reason on Overview: pass the reason text to expectStatus.
 export type IntegrationStatusLabel =
   | "Connected"
   | "Not connected"
@@ -12,13 +13,17 @@ export type IntegrationStatusLabel =
 /** One integration of a member at /app/customize/integrations/[id]. */
 export class CustomizeIntegrationPage {
   readonly page: Page;
-  private readonly configuration: Locator;
   readonly credentials: IntegrationCredentialsDialog;
 
   constructor(page: Page) {
     this.page = page;
-    this.configuration = page.getByRole("tabpanel", { name: "Configuration" });
     this.credentials = new IntegrationCredentialsDialog(page);
+  }
+
+  /** Open the app once so a new user finishes onboarding. */
+  async openApp(): Promise<void> {
+    await this.page.goto("/app");
+    await ensureOnboardingComplete(this.page);
   }
 
   async goto(integrationId: number, tab?: IntegrationPageTab): Promise<void> {
@@ -26,8 +31,13 @@ export class CustomizeIntegrationPage {
     await this.page.goto(
       `/app/customize/integrations/${integrationId}${query}`
     );
+    await this.expectLoaded(tab);
+  }
+
+  /** Waits for the integration to load: the header and tabs render together. */
+  async expectLoaded(tab: IntegrationPageTab = "Overview"): Promise<void> {
     await expect(
-      this.page.getByRole("tab", { name: tab ?? "Overview", exact: true })
+      this.page.getByRole("tab", { name: tab, exact: true })
     ).toHaveAttribute("aria-selected", "true");
   }
 
@@ -54,36 +64,42 @@ export class CustomizeIntegrationPage {
   }
 
   connectButton(integration: string): Locator {
-    return this.configuration.getByRole("button", {
+    return this.page.getByRole("button", {
       name: `Connect ${integration}`,
       exact: true,
     });
   }
 
   reconnectButton(integration: string): Locator {
-    return this.configuration.getByRole("button", {
+    return this.page.getByRole("button", {
       name: `Reconnect ${integration}`,
       exact: true,
     });
   }
 
   disconnectButton(integration: string): Locator {
-    return this.configuration.getByRole("button", {
+    return this.page.getByRole("button", {
       name: `Disconnect ${integration}`,
       exact: true,
     });
   }
 
-  /** Clicks Connect on the row of an integration. */
+  /** Clicks Connect in the page header. */
   async startConnect(integration: string): Promise<void> {
     await this.connectButton(integration).click();
   }
 
-  /** Waits for the status text of an integration row. */
+  /** Clicks Connect on an OAuth integration and returns the provider's
+   * sign-in tab that Onyx opens. */
+  async startOAuthConnect(integration: string): Promise<Page> {
+    const tab = this.page.context().waitForEvent("page");
+    await this.startConnect(integration);
+    return tab;
+  }
+
+  /** Waits for the connection state in the header, or a reason on Overview. */
   async expectStatus(status: IntegrationStatusLabel | string): Promise<void> {
-    await expect(
-      this.configuration.getByText(status, { exact: true })
-    ).toBeVisible();
+    await expect(this.page.getByText(status, { exact: true })).toBeVisible();
   }
 
   /** Opens the API key form, fills each field by label and connects. */
@@ -110,12 +126,12 @@ export class CustomizeIntegrationPage {
 
   alwaysAllowSwitch(action: string): Locator {
     return this.page.getByRole("switch", {
-      name: `Always allow ${action}`,
+      name: `Don't ask me for ${action}`,
       exact: true,
     });
   }
 
-  /** Saves the user's Always allow choice of one action on the Actions tab. */
+  /** Saves the user's "Don't ask me" choice of one action on the Actions tab. */
   async setAlwaysAllow(action: string, allow: boolean): Promise<void> {
     const toggle = this.alwaysAllowSwitch(action);
     await expect(toggle).toBeEnabled();

@@ -14,6 +14,7 @@ import { useReportWebVitals } from "next/web-vitals";
 import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { initPostHog } from "@/app/providers";
+import { redactUrl } from "@/lib/analytics/redact";
 
 // ─── PostHogRuntimeInitializer ──────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ function PostHogPageTrackerInner(): null {
         url = url + `?${searchParams.toString()}`;
       }
       posthog.capture("$pageview", {
-        $current_url: url,
+        $current_url: redactUrl(url),
       });
     }
   }, [pathname, searchParams, posthog]);

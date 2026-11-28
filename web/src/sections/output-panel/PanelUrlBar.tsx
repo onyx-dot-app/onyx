@@ -14,6 +14,12 @@ interface PanelUrlBarProps {
   searchValue?: string;
   onSearchChange?: (value: string) => void;
   placeholder?: string;
+  // Makes the field a location field: Enter submits its value
+  onSubmit?: () => void;
+  // The field's name for assistive technology; the placeholder by default
+  inputLabel?: string;
+  // Actions before the reload button, such as back and forward
+  leading?: ReactNode;
   // The reload button; without it, the bar has none
   refresh?: {
     label: string;
@@ -31,12 +37,16 @@ export function PanelUrlBar({
   searchValue,
   onSearchChange,
   placeholder,
+  onSubmit,
+  inputLabel,
+  leading,
   refresh,
   children,
 }: PanelUrlBarProps) {
   return (
     <div className="h-9 shrink-0 px-3 pb-2">
       <Section flexDirection="row" justifyContent="start" gap={1}>
+        {leading}
         {refresh && (
           <Button
             icon={refresh.isUserRefreshing ? IconLoader : SvgRevert}
@@ -67,11 +77,22 @@ export function PanelUrlBar({
             {onSearchChange ? (
               <InputTypeIn
                 variant="internal"
-                type="search"
+                type={onSubmit ? "url" : "search"}
+                // A URL reads left to right; other text keeps the input's "auto"
+                dir={onSubmit ? "ltr" : "auto"}
                 value={searchValue ?? ""}
                 onChange={(event) => onSearchChange(event.target.value)}
+                onKeyDown={
+                  onSubmit &&
+                  ((event) => {
+                    if (event.key !== "Enter" || event.nativeEvent.isComposing)
+                      return;
+                    event.preventDefault();
+                    onSubmit();
+                  })
+                }
                 placeholder={placeholder}
-                aria-label={placeholder}
+                aria-label={inputLabel ?? placeholder}
               />
             ) : (
               displayUrl !== undefined && (

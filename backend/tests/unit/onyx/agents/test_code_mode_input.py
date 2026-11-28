@@ -13,6 +13,7 @@ import pydantic_monty
 import pytest
 from pydantic import BaseModel, JsonValue
 
+from onyx.agents.concurrency import WorkTracker
 from onyx.agents.events import (
     AgentEvent,
     AgentSuspendedEvent,
@@ -23,13 +24,14 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    RunHooks,
     RunState,
     RunStatus,
     ToolCallContext,
     ToolResultAmendment,
     ToolResultContext,
 )
-from onyx.agents.runtime import Agent, RestorableFeature, Run
+from onyx.agents.runtime import Agent, AgentFeature, Run
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
 from onyx.agents.tools import (
     HumanToolAnswer,
@@ -63,6 +65,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolApprovalRequest,
     ToolApprovalResolved,
 )
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME, WAIT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
@@ -82,6 +85,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeExecutionResult,
     SavedCodeCell,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeTool, until
@@ -121,11 +125,28 @@ class SavedCells(BaseModel):
     cells: list[SavedCodeCell]
 
 
-class CellsFeature(RestorableFeature):
-    """Saves and restores the cells of one agent, as chat's feature does."""
+class CellsFeature(AgentFeature):
+    """Saves and restores the cells of one agent and ends them with its runs,
+    as chat's feature does."""
 
-    def __init__(self, cells: CodeCells) -> None:
+    def __init__(
+        self,
+        cells: CodeCells,
+        before_tool_call: Callable[[ToolCallContext], PendingToolInput | None],
+        prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = None,
+    ) -> None:
         self.cells = cells
+        self.before_tool_call = before_tool_call
+        self.prepare_tool_result = prepare_tool_result
+
+    def bind(self) -> RunHooks:
+        return RunHooks(
+            before_tool_call=self.before_tool_call,
+            prepare_tool_result=self.prepare_tool_result,
+            on_suspend=self.cells.suspend,
+            on_finish=self.cells.finish,
+            capture_state=self.capture_state,
+        )
 
     def capture_state(self) -> SavedCells:
         return SavedCells(cells=self.cells.saved())
@@ -215,7 +236,7 @@ class Agents:
         return ToolResult(content=json.dumps({"stuck": invocation.arguments["value"]}))
 
     def agent(self, state: AgentState | None = None) -> Agent:
-        cells = CodeCells()
+        cells = CodeCells(OPENAI_CODE_MODE)
         tools: list[Tool] = [
             *(
                 []
@@ -235,18 +256,16 @@ class Agents:
                 execute.bind(ToolContext),
                 WaitCodeTool(cells, execute.program).bind(ToolContext),
             ],
-            before_tool_call=_ask_for_send,
-            on_suspend=cells.suspend,
-            on_finish=cells.finish,
-            restoration=CellsFeature(cells),
-            prepare_tool_result=self.prepare,
+            feature=CellsFeature(
+                cells, before_tool_call=_ask_for_send, prepare_tool_result=self.prepare
+            ),
         )
 
 
 def _execute(call_id: str, code: str, yield_ms: int = 10_000) -> ToolCall:
     return ToolCall(
         id=call_id,
-        name=CodeModeTool.NAME,
+        name=EXECUTE_CODE_TOOL_NAME,
         arguments={"code": code, "yield_time_ms": yield_ms},
     )
 
@@ -344,7 +363,7 @@ def test_parking_waits_for_a_running_call_of_the_program() -> None:
 def test_a_background_cell_shows_its_request_before_the_model_waits() -> None:
     agents = Agents(
         _execute("program", f"yield_control()\n{PROGRAM}", yield_ms=1_000),
-        ToolCall(id="wait", name=WaitCodeTool.NAME, arguments={"cell_id": 1}),
+        ToolCall(id="wait", name=WAIT_TOOL_NAME, arguments={"cell_id": 1}),
     )
     events: list[AgentEvent] = []
 
@@ -361,7 +380,7 @@ def test_a_background_cell_shows_its_request_before_the_model_waits() -> None:
     assert saved.progress is not None
     assert isinstance(saved.progress.pending_tool_calls["wait"], NestedInputWait)
     shown = [event for event in events if isinstance(event, InputRequiredEvent)]
-    # Shown once, at the cell's execute_code call, before wait_code saved it.
+    # Shown once, at the cell's execute_code call, before wait saved it.
     assert [event.tool_call.id for event in shown] == ["program"]
 
     run.submit(_answer(InputDecision.APPROVE))
@@ -388,7 +407,7 @@ def _one_call_per_step(*steps: ToolCall) -> Reply:
 def _read_cell(cell_id: int) -> ToolCall:
     return ToolCall(
         id="read",
-        name=WaitCodeTool.NAME,
+        name=WAIT_TOOL_NAME,
         arguments={"cell_id": cell_id, "yield_time_ms": 10_000},
     )
 
@@ -461,7 +480,7 @@ def test_a_cell_that_ends_while_a_request_waits_keeps_its_result() -> None:
     assert run.wait_for_idle(10)
 
     assert agents.sent == ["x"]
-    # wait_code points to that record.
+    # wait points to that record.
     assert output == (
         "Cell 1 completed before the run paused; its output and result are in "
         "its earlier result."
@@ -677,7 +696,7 @@ def test_a_background_cell_takes_the_answers_of_requests_from_each_observation(
     restored: bool,
 ) -> None:
     """The first request opens after the cell's first observation ends, the
-    second while a wait_code call observes it, and the program parks after that
+    second while a wait call observes it, and the program parks after that
     observation ends. Both requests belong to the call that started the cell,
     so their answers continue the program together."""
     agents = Agents(
@@ -685,7 +704,7 @@ def test_a_background_cell_takes_the_answers_of_requests_from_each_observation(
             _execute("background", SPLIT_REQUESTS),
             ToolCall(
                 id="read",
-                name=WaitCodeTool.NAME,
+                name=WAIT_TOOL_NAME,
                 arguments={"cell_id": 1, "yield_time_ms": 1_000},
             ),
             _execute("program", PROGRAM),
@@ -695,7 +714,7 @@ def test_a_background_cell_takes_the_answers_of_requests_from_each_observation(
     agents.gates = {"first": first, "last": last}
 
     def on_event(event: AgentEvent) -> None:
-        # The wait_code call attached: it gets the cell's running calls.
+        # The wait call attached: it gets the cell's running calls.
         if isinstance(event, ToolUpdateEvent) and event.tool_call.id == "read":
             first.set()
 
@@ -791,7 +810,7 @@ def test_a_program_that_parks_while_a_call_runs_takes_its_answer(
 
 def test_a_restored_background_cell_that_ends_unobserved_keeps_its_output() -> None:
     """The background cell continues in another process and ends there with no
-    wait_code call: its closing record saves its output and store commit."""
+    wait call: its closing record saves its output and store commit."""
     agents = Agents(
         reply=_one_call_per_step(
             _execute(
@@ -862,13 +881,16 @@ def test_a_program_that_parks_right_after_its_offer_takes_the_answer(
     runs: list[Run] = []
     if late_wake:
         suspending = threading.Event()
-        notify = Run.notify_tool_activity
+        finished = WorkTracker.finished
         suspend = CodeCells.suspend
 
-        def late_notify(self: Run) -> None:
-            if threading.current_thread().name == "code-mode-cell-1":
+        def late_wake_after_end(self: WorkTracker) -> None:
+            finished(self)
+            if (
+                threading.current_thread().name == "code-mode-cell-1"
+                and self is runs[0].work.held
+            ):
                 suspending.wait(2)
-            notify(self)
 
         def marked_suspend(
             self: CodeCells, results: Sequence[ToolResultMessage]
@@ -876,7 +898,7 @@ def test_a_program_that_parks_right_after_its_offer_takes_the_answer(
             suspending.set()
             return suspend(self, results)
 
-        monkeypatch.setattr(Run, "notify_tool_activity", late_notify)
+        monkeypatch.setattr(WorkTracker, "finished", late_wake_after_end)
         monkeypatch.setattr(CodeCells, "suspend", marked_suspend)
     agents = Agents(
         reply=_one_call_per_step(
@@ -927,7 +949,7 @@ def test_saved_cells_count_against_the_open_cell_limit() -> None:
     run.cancel()
     assert run.wait_for_idle(10)
 
-    cells = CodeCells()
+    cells = CodeCells(OPENAI_CODE_MODE)
     cells.restore(
         [
             saved.model_copy(update={"cell_id": cell_id, "observer": None})
@@ -951,7 +973,7 @@ def test_saved_cells_count_against_the_open_cell_limit() -> None:
 def test_a_stopped_program_reports_its_request_end_once_the_run_ends(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """wait_code stops a background program whose call waits for approval.
+    """wait stops a background program whose call waits for approval.
     The program's driver ends the request while the run ends; the run still
     reports that end. The approval gate's withdrawal holds the driver until
     the run ends, and the run's last step waits for the withdrawal to start."""
@@ -974,7 +996,7 @@ def test_a_stopped_program_reports_its_request_end_once_the_run_ends(
         ),
         ToolCall(
             id="stop",
-            name=WaitCodeTool.NAME,
+            name=WAIT_TOOL_NAME,
             arguments={"cell_id": 1, "terminate": True},
         ),
     )
@@ -1160,8 +1182,8 @@ def test_a_restored_cell_gives_the_hook_the_output_that_its_cut_leaves_out() -> 
     agents = Agents(
         ToolCall(
             id="program",
-            name=CodeModeTool.NAME,
-            arguments={"code": program, "max_output_chars": 300},
+            name=EXECUTE_CODE_TOOL_NAME,
+            arguments={"code": program, "max_output_tokens": 75},
         )
     )
     prepared: list[ToolResultContext] = []
@@ -1195,8 +1217,8 @@ def test_an_unresumed_cell_gives_the_hook_the_output_that_its_cut_leaves_out() -
     agents = Agents(
         ToolCall(
             id="program",
-            name=CodeModeTool.NAME,
-            arguments={"code": program, "max_output_chars": 300},
+            name=EXECUTE_CODE_TOOL_NAME,
+            arguments={"code": program, "max_output_tokens": 75},
         )
     )
     prepared: list[ToolResultContext] = []
@@ -1237,9 +1259,11 @@ def test_a_restored_call_whose_function_now_names_another_tool_does_not_run() ->
         return FakeTool(name, run)
 
     def agent(names: list[str], state: AgentState | None = None) -> Agent:
-        cells = CodeCells()
+        cells = CodeCells(OPENAI_CODE_MODE)
         execute = CodeModeTool(
-            [sender(name) for name in names], cells=cells, limits=PARKING_LIMITS
+            [sender(name) for name in names],
+            cells=cells,
+            limits=PARKING_LIMITS,
         )
         return Agent(
             FakeModelClient(
@@ -1255,16 +1279,16 @@ def test_a_restored_call_whose_function_now_names_another_tool_does_not_run() ->
                 execute.bind(ToolContext),
                 WaitCodeTool(cells, execute.program).bind(ToolContext),
             ],
-            before_tool_call=lambda context: (
-                PendingToolInput(
-                    request_id=REQUEST_ID, prompt="Send?", mode=InputMode.EXECUTE
-                )
-                if context.call.name == "send-mail"
-                else None
+            feature=CellsFeature(
+                cells,
+                before_tool_call=lambda context: (
+                    PendingToolInput(
+                        request_id=REQUEST_ID, prompt="Send?", mode=InputMode.EXECUTE
+                    )
+                    if context.call.name == "send-mail"
+                    else None
+                ),
             ),
-            on_suspend=cells.suspend,
-            on_finish=cells.finish,
-            restoration=CellsFeature(cells),
         )
 
     run = agent(["send-mail", "send_mail"]).start(
@@ -1420,7 +1444,7 @@ def test_a_restored_call_keeps_arguments_whose_names_collide() -> None:
         return ToolResult(content=json.dumps({"sent": True}))
 
     def agent(state: AgentState | None = None) -> Agent:
-        cells = CodeCells()
+        cells = CodeCells(OPENAI_CODE_MODE)
         tool = FakeTool(
             "send",
             send,
@@ -1453,10 +1477,7 @@ def test_a_restored_call_keeps_arguments_whose_names_collide() -> None:
                 execute.bind(ToolContext),
                 WaitCodeTool(cells, execute.program).bind(ToolContext),
             ],
-            before_tool_call=_ask_for_send,
-            on_suspend=cells.suspend,
-            on_finish=cells.finish,
-            restoration=CellsFeature(cells),
+            feature=CellsFeature(cells, before_tool_call=_ask_for_send),
         )
 
     run = agent().start(max_steps=3, messages=[UserMessage(content="Send")])

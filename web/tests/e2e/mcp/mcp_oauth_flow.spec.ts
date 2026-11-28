@@ -155,7 +155,7 @@ test.describe("MCP OAuth flows", () => {
 
     // MCP actions load after a connection, so the admin connects first.
     const member = new CustomizeIntegrationPage(page);
-    await member.goto(integrationId, "Configuration");
+    await member.goto(integrationId);
     await member.expectStatus("Not connected");
     await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
       member.startConnect(serverName)
@@ -188,7 +188,7 @@ test.describe("MCP OAuth flows", () => {
     await customize.search(serverName);
     await customize.openIntegration(serverName);
     const detail = new CustomizeIntegrationPage(page);
-    await detail.openTab("Configuration");
+    await detail.expectLoaded();
     if (await detail.connectButton(serverName).isVisible()) {
       await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
         detail.startConnect(serverName)

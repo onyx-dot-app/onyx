@@ -1,0 +1,242 @@
+package browser
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser/browsertest"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
+)
+
+func TestMain(m *testing.M) {
+	browsertest.Main()
+	os.Exit(m.Run())
+}
+
+// newFake returns a Browser of fake Chromes, their env and a profile dir.
+func newFake(t *testing.T, mode string) (*Browser, []string, string) {
+	t.Helper()
+	b := New(Config{
+		Binary:       browsertest.Binary(t),
+		Isolator:     execs.ProcessGroups{},
+		StartTimeout: 10 * time.Second,
+	})
+	t.Cleanup(func() { _, _ = b.Stop() })
+	return b, []string{browsertest.EnvMode + "=" + mode}, filepath.Join(t.TempDir(), "chrome")
+}
+
+func answers(port int) bool {
+	c := &http.Client{Timeout: time.Second}
+	resp, err := c.Get("http://127.0.0.1:" + strconv.Itoa(port) + "/json/version")
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+func runningPID(b *Browser) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.run == nil || b.run.exited() {
+		return 0
+	}
+	return b.run.pid
+}
+
+func TestStartReusesAndRelaunches(t *testing.T) {
+	b, env, profile := newFake(t, browsertest.ModeServe)
+	ctx := context.Background()
+
+	port, started, err := b.Start(ctx, profile, env)
+	if err != nil || !started || port == 0 {
+		t.Fatalf("first start: port %d started %v err %v", port, started, err)
+	}
+	if !answers(port) {
+		t.Fatal("the DevTools endpoint does not answer after Start")
+	}
+	pid := runningPID(b)
+
+	port2, started, err := b.Start(ctx, profile, env)
+	if err != nil || started || port2 != port || runningPID(b) != pid {
+		t.Fatalf("second start: port %d started %v err %v pid %d, want pid %d", port2, started, err, runningPID(b), pid)
+	}
+
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	port, started, err = b.Start(ctx, profile, env)
+	if err != nil || !started {
+		t.Fatalf("start after a crash: started %v err %v", started, err)
+	}
+	if newPID := runningPID(b); newPID == 0 || newPID == pid {
+		t.Fatalf("relaunch pid %d, old pid %d", newPID, pid)
+	}
+	if !answers(port) {
+		t.Fatal("the relaunched browser does not answer")
+	}
+}
+
+func TestStop(t *testing.T) {
+	b, env, profile := newFake(t, browsertest.ModeServe)
+	if stopped, err := b.Stop(); err != nil || stopped {
+		t.Fatalf("stop with no browser: %v %v", stopped, err)
+	}
+	port, _, err := b.Start(context.Background(), profile, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopped, err := b.Stop(); err != nil || !stopped {
+		t.Fatalf("stop: %v %v", stopped, err)
+	}
+	if answers(port) {
+		t.Fatal("the port still answers after Stop")
+	}
+	if _, err := os.Stat(filepath.Join(profile, browsertest.FlushedFile)); err != nil {
+		t.Fatalf("Stop did not let chrome exit cleanly and flush its profile: %v", err)
+	}
+	if stopped, err := b.Stop(); err != nil || stopped {
+		t.Fatalf("second stop: %v %v", stopped, err)
+	}
+}
+
+func TestStartFailureHasStderr(t *testing.T) {
+	b, env, profile := newFake(t, browsertest.ModeFail)
+	_, _, err := b.Start(context.Background(), profile, env)
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("start of a failing chrome: %v", err)
+	}
+	if stopped, _ := b.Stop(); stopped {
+		t.Fatal("a failed start left a browser")
+	}
+}
+
+func TestStartIgnoresAnotherDevToolsServer(t *testing.T) {
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"Browser":"OtherChrome/1.0"}`))
+	}))
+	defer other.Close()
+	otherPort := other.Listener.Addr().(*net.TCPAddr).Port
+	b, env, profile := newFake(t, browsertest.ModeFail)
+	stale := filepath.Join(profile, "DevToolsActivePort")
+	if err := os.MkdirAll(profile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte(strconv.Itoa(otherPort)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if port, _, err := b.Start(context.Background(), profile, env); err == nil {
+		t.Fatalf("start reported the other server on port %d as its browser", port)
+	}
+}
+
+func TestCanceledStartKeepsTheBrowser(t *testing.T) {
+	b, env, profile := newFake(t, browsertest.ModeServe)
+	port, _, err := b.Start(context.Background(), profile, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := runningPID(b)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := b.Start(ctx, profile, env); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled start: %v", err)
+	}
+	if runningPID(b) != pid || !answers(port) {
+		t.Fatal("a canceled start stopped the running browser")
+	}
+}
+
+func TestActivePortIgnoresAFIFO(t *testing.T) {
+	profile := t.TempDir()
+	start := time.Now().Add(-time.Hour)
+	if err := syscall.Mkfifo(filepath.Join(profile, "DevToolsActivePort"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan int, 1)
+	go func() { got <- activePort(profile, start) }()
+	select {
+	case port := <-got:
+		if port != 0 {
+			t.Fatalf("port from a FIFO: %d", port)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("activePort blocked on a FIFO")
+	}
+}
+
+type stuckIsolator struct{ made map[string]bool }
+
+func (s *stuckIsolator) NewGroup(id string) (execs.Group, error) {
+	if s.made[id] {
+		return nil, fmt.Errorf("group %s exists", id)
+	}
+	s.made[id] = true
+	g, _ := execs.ProcessGroups{}.NewGroup(id)
+	return stuckGroup{g}, nil
+}
+
+type stuckGroup struct{ execs.Group }
+
+func (stuckGroup) Close() error { return errors.New("device or resource busy") }
+
+func TestStartAfterAGroupThatDidNotClose(t *testing.T) {
+	b, env, profile := newFake(t, browsertest.ModeServe)
+	b.cfg.Isolator = &stuckIsolator{made: map[string]bool{}}
+	if _, _, err := b.Start(context.Background(), profile, env); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Stop(); err == nil {
+		t.Fatal("stop: want the close error")
+	}
+	if _, started, err := b.Start(context.Background(), profile, env); err != nil || !started {
+		t.Fatalf("start after a group that did not close: started %v err %v", started, err)
+	}
+}
+
+func TestChromeArgsProxy(t *testing.T) {
+	profile := "/home/onyx/workspaces/sbx-1/chrome"
+	with := chromeArgs(profile, []string{"PATH=/bin", "HTTPS_PROXY=http://127.0.0.1:3128"})
+	if !slices.Contains(with, "--proxy-server=http://127.0.0.1:3128") {
+		t.Fatalf("HTTPS_PROXY set: %v", with)
+	}
+	for _, want := range []string{"--remote-debugging-port=0", "--user-data-dir=/home/onyx/workspaces/sbx-1/chrome", "--remote-debugging-address=127.0.0.1"} {
+		if !slices.Contains(with, want) {
+			t.Errorf("missing %s in %v", want, with)
+		}
+	}
+	if with[len(with)-1] != "about:blank" {
+		t.Errorf("last arg %q", with[len(with)-1])
+	}
+	if fallback := chromeArgs(profile, []string{"HTTP_PROXY=http://127.0.0.1:3128"}); !slices.Contains(fallback, "--proxy-server=http://127.0.0.1:3128") {
+		t.Errorf("HTTP_PROXY fallback: %v", fallback)
+	}
+	for _, a := range chromeArgs(profile, []string{"PATH=/bin"}) {
+		if strings.HasPrefix(a, "--proxy-server") {
+			t.Fatalf("no proxy env, got %s", a)
+		}
+	}
+}
+
+func TestNewDefaultsNodeNotServiceScript(t *testing.T) {
+	b := New(Config{})
+	if b.cfg.Node != DefaultNode || b.cfg.ServiceScript != "" {
+		t.Fatalf("node %q service script %q", b.cfg.Node, b.cfg.ServiceScript)
+	}
+}

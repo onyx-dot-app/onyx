@@ -647,7 +647,7 @@ def agent_result_states(
 def agent_waits(
     session: Session, chat_session_id: UUID, branch: ChatBranch
 ) -> list[AgentWait]:
-    """The root's `wait_agents` calls on the branch that can hold unread results.
+    """The root's wait calls on the branch that can hold unread results.
 
     Calls before the oldest unread result's root response hold nothing, so
     they are skipped.
@@ -719,30 +719,39 @@ def agent_waits(
 
 
 def active_agent_response_ids(
-    session: Session, branch_ids: Collection[int]
+    session: Session,
+    branch_ids: Collection[int],
+    agent_ids: Collection[UUID] | None = None,
 ) -> list[int]:
-    """The branch's active background agents, as `AgentResultState.is_active` defines them."""
+    """The branch's active background agents, as `AgentResultState.is_active`
+    defines them, of `agent_ids` when given."""
     return [
         result.response_id
         for result in agent_result_states(session, branch_ids)
-        if result.is_active
+        if result.is_active and (agent_ids is None or result.agent_id in agent_ids)
     ]
 
 
-def drop_agent_work__no_commit(session: Session, branch: ChatBranch) -> None:
-    """Delete the branch's pending work for agents below the root.
+def drop_agent_work__no_commit(
+    session: Session,
+    branch: ChatBranch,
+    agent_ids: Collection[UUID] | None = None,
+) -> None:
+    """Delete the branch's pending work for agents below the root, or for
+    `agent_ids` when given.
 
     Their queued messages and unread child results would start runs after a
-    Stop. Results for the root stay; the root reads them at its next step.
-    Caller holds the chat lock.
+    Stop. Results for the root, or for an agent outside `agent_ids`, stay; it
+    reads them at its next step. Caller holds the chat lock.
     """
-    session.execute(
-        delete(ChatInput).where(
-            ChatInput.root_response_id.in_(branch.message_ids),
-            ChatInput.recipient_session_id != branch.chat_session_id,
-            ChatInput.source.in_((InputSource.AGENT, InputSource.AGENT_RESULT)),
-        )
+    query = delete(ChatInput).where(
+        ChatInput.root_response_id.in_(branch.message_ids),
+        ChatInput.recipient_session_id != branch.chat_session_id,
+        ChatInput.source.in_((InputSource.AGENT, InputSource.AGENT_RESULT)),
     )
+    if agent_ids is not None:
+        query = query.where(ChatInput.recipient_session_id.in_(agent_ids))
+    session.execute(query)
 
 
 def withdraw_agent_result__no_commit(session: Session, response_id: int) -> None:

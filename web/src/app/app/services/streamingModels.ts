@@ -145,6 +145,9 @@ export enum StopReason {
    * or answers to questions. The response continues in a new stream after
    * them. */
   AWAITING_USER = "awaiting_user",
+  /** The system ended the response while its approval requests waited, as
+   * when a scheduled run is not approved in time. */
+  APPROVAL_EXPIRED = "approval_expired",
 }
 
 export interface Stop extends BaseObj {
@@ -266,10 +269,60 @@ export interface CustomToolDelta extends BaseObj {
   type: "custom_tool_delta";
   tool_name: string;
   tool_id?: number | null;
+  /** Set for a tool with no tool row: the integration of the action. */
+  integration_id?: number | null;
   response_type: string;
   data?: any;
   file_ids?: string[] | null;
   error?: CustomToolErrorInfo | null;
+}
+
+// A call that failed without public error details (backend
+// CUSTOM_TOOL_ERROR_RESPONSE_TYPE): the model got the reason, the user does not.
+export const CUSTOM_TOOL_ERROR_RESPONSE_TYPE = "error";
+
+/** Whether a custom tool result says that the call failed. */
+export function isFailedCustomToolDelta(delta: CustomToolDelta): boolean {
+  return (
+    Boolean(delta.error) ||
+    delta.response_type === CUSTOM_TOOL_ERROR_RESPONSE_TYPE
+  );
+}
+
+/** One custom tool call, read from its packets. */
+export interface CustomToolCallState {
+  /** The latest arguments, or null before any arrive. */
+  args: Record<string, unknown> | null;
+  failed: boolean;
+  /** The call ended, by its section end or by an error. */
+  isComplete: boolean;
+}
+
+/** Reads one custom tool call's state from the packets of that call. */
+export function readCustomToolCall(
+  packets: readonly Packet[]
+): CustomToolCallState {
+  const call: CustomToolCallState = {
+    args: null,
+    failed: false,
+    isComplete: false,
+  };
+  for (const { obj } of packets) {
+    if (obj.type === PacketType.CUSTOM_TOOL_ARGS) {
+      call.args = obj.tool_args;
+    } else if (
+      obj.type === PacketType.CUSTOM_TOOL_DELTA &&
+      isFailedCustomToolDelta(obj)
+    ) {
+      call.failed = true;
+    } else if (obj.type === PacketType.ERROR) {
+      call.failed = true;
+      call.isComplete = true;
+    } else if (obj.type === PacketType.SECTION_END) {
+      call.isComplete = true;
+    }
+  }
+  return call;
 }
 
 // File Reader Packets
@@ -482,7 +535,7 @@ export interface ApplyPatchEnd extends BaseObj {
   error: string | null;
 }
 
-// A file that a publish_files call asks for, as the model wrote it
+// A file that a publishing call asks for, as the model wrote it
 export interface PublishFileArgument {
   path: string;
   title: string | null;
@@ -495,7 +548,7 @@ export interface PublishFilesStart extends BaseObj {
   description: string | null;
 }
 
-// A file that publish_files copied from the sandbox; it downloads from
+// A file that a publish copied from the sandbox; it downloads from
 // /api/chat/file/{file_id}
 export interface PublishedFile {
   file_id: string;
@@ -514,6 +567,10 @@ export interface PublishedFile {
   artifact_id: string | null;
   // The publish's number in its artifact, from 1. Null with artifact_id.
   version: number | null;
+  // The root chat that owns the artifact, which can be another chat than the
+  // one that published this version. Null or absent in details saved without
+  // it: such a file is the publishing chat's own.
+  chat_id?: string | null;
   // A JPEG of the first page of a PDF, PowerPoint or Word file that rendered
   // when it was published, from /api/chat/file/{thumbnail_file_id}
   thumbnail_file_id: string | null;
@@ -539,9 +596,9 @@ export interface CodeModeStart extends BaseObj {
   type: "code_mode_start";
   // Empty on later observations of a cell
   code: string;
-  // From the call arguments: null for execute_code, whose cell gets its id when it runs
+  // From the call arguments: null for a run call, whose cell gets its id when it runs
   cell_id?: number | null;
-  // 0 starts a cell (execute_code); 1 continues one (wait_code)
+  // 0 starts a cell (a run call); 1 continues one (a wait call)
   observation?: number;
 }
 
@@ -713,20 +770,32 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
+  /** False when the card must not offer "approve for this chat". */
+  can_approve_for_chat?: boolean;
   /** The background subagent that made the request; null for the reply's own
    * calls. Such a request waits on its own: no stop of the reply closes it. */
   agent_name: string | null;
+  /** An app request of a command that the call waits on: the card offers
+   * "approve for this command" in place of "approve for this chat". */
+  can_approve_for_command?: boolean;
+  /** The integration of a chat tool call's request, or the app of a command's. */
+  app_name?: string | null;
+  /** When a command's request expires. */
+  expires_at?: string | null;
 }
 
 export interface ToolApprovalResolved extends BaseObj {
   type: "tool_approval_resolved";
   approval_id: string;
   // "approved_for_chat": approved by a grant for the chat's later calls of the
-  // tool. "disabled": an approval found the tool disabled, so the call did not
-  // run. "cancelled": the call stopped waiting because its run or cell stopped.
+  // tool. "approved_for_command": approved by a grant for the command's later
+  // requests of the action. "disabled": an approval found the tool disabled,
+  // so the call did not run. "cancelled": the call stopped waiting because its
+  // run or cell stopped.
   outcome:
     | "approved"
     | "approved_for_chat"
+    | "approved_for_command"
     | "rejected"
     | "disabled"
     | "cancelled";
@@ -747,12 +816,17 @@ export interface ToolQuestion {
   question: string;
   /** In the model's order; a recommended option comes first. */
   options: ToolQuestionOption[];
+  /** The user can choose several options; otherwise at most one. */
+  multi_select: boolean;
 }
 
-/** The user's answer to one question: a listed option, a note, or both. */
+/**
+ * The user's answer to one question: its chosen options, in the question's
+ * order, a note, or both.
+ */
 export interface ToolQuestionAnswer {
   question_id: string;
-  option_label?: string | null;
+  option_labels: string[];
   user_note?: string | null;
 }
 

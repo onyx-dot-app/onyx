@@ -10,6 +10,7 @@ The table shows each custom Skill with its **Source** (the owner, or **Organizat
 its **Version** (the newest version and the version that the organization uses),
 its **Audience** (the install setting or who has access), and its on/off switch. Select a row to open the Skill page,
 with **Overview**, **Contents**, and **Versions**. The row menu has **Share** and **Delete**.
+Plugins are not in this table. They are on **Admin Panel → Plugins**. See [Uploaded plugins](#uploaded-plugins).
 Open **Customize → Skills** in the sidebar to manage your own skills.
 
 <Note>
@@ -46,10 +47,10 @@ Configure the missing dependency rather than uploading a custom Skill with the s
 
 ## Prepare a custom Skill
 
-You can write a Skill in Onyx, upload a Skill, or add a GitHub marketplace. See [Marketplaces](#marketplaces).
-Upload `SKILL.md` directly when the Skill does not need supporting files. For a Skill with scripts, examples,
-or other supporting files, create a folder with `SKILL.md` at its top level. Drag the folder into Onyx,
-or upload it as a ZIP.
+You can write a Skill in Onyx or upload a Skill. To get Skills from GitHub, add a marketplace.
+See [Marketplaces](#marketplaces). Upload `SKILL.md` directly when the Skill does not need supporting files.
+For a Skill with scripts, examples, or other supporting files, create a folder with `SKILL.md` at its top level.
+Drag the folder into Onyx, or upload it as a ZIP.
 
 <Info>
   For a standalone `SKILL.md`, Onyx creates the slug from the frontmatter `name`. For a folder,
@@ -132,6 +133,12 @@ or a slug reserved by a built-in Skill or App.
 ### Uploaded plugins
 
 Users can upload a Claude Code or Codex plugin on **Customize → Plugins** with **Add → Upload plugin**.
+Admins can also open **Admin Panel → Plugins** (`/admin/plugins`) and click **Add → Upload plugin**.
+That page lists uploaded and synced plugins, including private uploads from other members, with an on/off switch,
+**Share** in the row menu, and a status filter. Only the member who added a personal marketplace sees its plugins,
+and those plugins have no **Share** in the row menu. Select a plugin to open its page. For an uploaded plugin,
+the **...** menu shows **Upload New Version** if you can edit it and **Delete Plugin** if you can delete it.
+To update a synced plugin, change it in GitHub and sync its marketplace.
 The plugin ZIP uses the same limits as a Skill bundle. Onyx uses only two parts of a plugin:
 
 - the Skills in `skills/<name>/SKILL.md`,
@@ -142,8 +149,9 @@ A plugin with no Skill and no MCP server is refused, with the reason in the uplo
 
 A plugin keeps the name in its `plugin.json`.
 When a user uploads a plugin with the name of a plugin that they own or can edit, the upload becomes its next version.
-The user can select **Save as a New Plugin** to keep the old plugin and get a new one with the next free name.
-You publish, share and set the installation policy of an uploaded plugin as of any other Skill.
+The user can select **Save as a New Plugin** to keep the old plugin and get a new one. If the name is already in use,
+Onyx asks the user for a different name. You publish,
+share and set the installation policy of an uploaded plugin as of any other Skill.
 
 A plugin never gives access to an integration. Onyx matches each MCP server of the plugin to an integration by its URL,
 and each user sees their own state of that integration. The row of the plugin shows **N of M integrations available**.
@@ -159,9 +167,9 @@ See [Upload a plugin](/overview/core_features/plugins#upload-a-plugin).
 
 A marketplace is a GitHub repository with a `.claude-plugin/marketplace.json` file. Each entry becomes one plugin.
 Users add one on **Customize → Plugins** with **Add → Add marketplace**.
-Admins can also open **Admin Panel → Skills** and click **Create skill → Add marketplace**,
-or click **Add marketplace** in the **Marketplaces** section of that page.
-The section lists the personal marketplaces that you added and each company marketplace, with **Sync now**,
+Admins can also open **Admin Panel → Plugins** and click **Add → Add marketplace**. After you add the first marketplace,
+a **Marketplaces** section shows below the plugins. To add another marketplace, use **Add → Add marketplace** again.
+The section shows the personal marketplaces that you added and each company marketplace, with **Sync now**,
 **Default Access**, **Replace login** and **Remove** in the row menu. Members see each company marketplace read-only,
 with no row menu.
 
@@ -339,6 +347,7 @@ A published Skill shows **Organization** in the sharing dialog. It has no option
 
 If another published Skill has the same name, Onyx refuses the publish.
 Transferring a private Skill to a person who has a Skill with the same name is also refused.
+The **Share** dialog then asks for a different name for the Skill of the new owner.
 A transfer of all private Skills during a user delete is not refused.
 It gives the moved Skill the next free plugin name.
 

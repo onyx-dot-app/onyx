@@ -24,7 +24,7 @@
 name: Terraform Provider Tests
 
 concurrency:
-  group: Terraform-Provider-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: Terraform-Provider-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 on:
@@ -52,6 +52,14 @@ env:
   S3_ENDPOINT_URL: "http://object-store:8333"
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   changes:
     # Decides whether the heavy acceptance job runs. On pull_request
     # we use paths-filter; on schedule / push (tags) /
@@ -90,6 +98,8 @@ jobs:
               - 'deployment/docker_compose/docker-compose.yml'
               - 'deployment/docker_compose/docker-compose.dev.yml'
               - 'deployment/docker_compose/env.template'
+              - 'deployment/docker_compose/docker-compose.mcp-api-key-test.yml'
+              - 'backend/tests/integration/mock_services/mcp_test_server/**'
               - '.github/workflows/pr-terraform-provider-tests.yml'
               - '.github/actions/login-ecr-pullthrough-cache/**'
               - '.github/actions/setup-test-license/**'
@@ -292,19 +302,23 @@ jobs:
           USER_AUTH_SECRET=tf-provider-ci-only-dummy-secret
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
           EOF
 
       # api_server and background are named; depends_on pulls in db / cache /
       # opensearch / model servers / object store. web_server + nginx are omitted.
+      # The onyx_integration tests load actions from the mock MCP server, which
+      # Onyx reaches on the compose network through the private-network opt-in.
       - name: Bring up the stack
         working-directory: deployment/docker_compose
         run: |
           docker compose \
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
+            -f docker-compose.mcp-api-key-test.yml \
             --env-file env.template \
             up -d --wait --wait-timeout 600 \
-            api_server background
+            api_server background mcp_api_key_server
 
       - name: Seed dev license
         run: |
@@ -353,6 +367,9 @@ jobs:
           AUTH_MODE: ${{ matrix.auth }}
           TF_ACC: "1"
           ONYX_TF_ACC_SERVER_URL: http://localhost:8080
+          ONYX_TF_ACC_MCP_SERVER_URL: http://mcp_api_key_server:8005/mcp
+          # The mock server's default key, not a secret.
+          ONYX_TF_ACC_MCP_API_KEY: test-api-key-12345
           # mint_api_key.sh requires these rather than defaulting them, so that
           # it cannot quietly create a known-password admin on a real
           # deployment. Here they match the harness's own defaults, against a
@@ -386,7 +403,7 @@ jobs:
         run: |
           mkdir -p "${GITHUB_WORKSPACE}/compose-logs"
           docker compose -f docker-compose.yml -f docker-compose.dev.yml \
-            --env-file env.template \
+            -f docker-compose.mcp-api-key-test.yml --env-file env.template \
             logs --no-color > "${GITHUB_WORKSPACE}/compose-logs/compose.log" || true
 
       - name: Upload logs
@@ -402,7 +419,7 @@ jobs:
         working-directory: deployment/docker_compose
         run: |
           docker compose -f docker-compose.yml -f docker-compose.dev.yml \
-            --env-file env.template down -v || true
+            -f docker-compose.mcp-api-key-test.yml --env-file env.template down -v || true
 
   terraform-provider-required:
     # Single required status check for this suite. Always runs so branch

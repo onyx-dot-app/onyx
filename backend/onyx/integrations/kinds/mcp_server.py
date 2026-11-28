@@ -21,6 +21,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.call_credentials import (
+    mark_credential_rejected,
     mcp_oauth_provider,
     mcp_oauth_server,
     resolve_call_credentials,
@@ -51,7 +52,9 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
 from onyx.server.features.mcp.client import (
     discover_mcp_tools,
     has_auth_rejection_response,
+    has_unauthorized_response,
 )
+from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.utils.logger import setup_logger
@@ -118,7 +121,17 @@ def fetch_mcp_actions(
             ),
         )
     except Exception as error:
-        if has_auth_rejection_response(error):
+        reauthentication = isinstance(error, MCPReauthenticationRequired)
+        rejected_token_fingerprint = (
+            error.rejected_token_fingerprint
+            if isinstance(error, MCPReauthenticationRequired)
+            else None
+        )
+        if rejected_token_fingerprint is not None or has_unauthorized_response(error):
+            mark_credential_rejected(
+                credentials, rejected_token_fingerprint=rejected_token_fingerprint
+            )
+        if reauthentication or has_auth_rejection_response(error):
             raise OnyxError(
                 OnyxErrorCode.CREDENTIAL_INVALID,
                 f"{integration.name} refused the credential. Reconnect it and try again.",
@@ -176,7 +189,10 @@ def mcp_action_specs(tools: Sequence[MCPLibTool]) -> list[IntegrationActionSpec]
     specs: dict[str, IntegrationActionSpec] = {}
     for tool in tools:
         if tool.name and tool.name not in specs:
-            specs[tool.name] = mcp_tool_action_spec(tool)
+            try:
+                specs[tool.name] = mcp_tool_action_spec(tool)
+            except ValueError as e:
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
     return list(specs.values())
 
 

@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, InputSwitch, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { useScreenSize } from "@opal/hooks";
 import {
   SvgClock,
   SvgEdit,
@@ -13,7 +14,7 @@ import {
 } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import TaskActionPoliciesSummary from "@/app/craft/v1/tasks/components/TaskActionPoliciesSummary";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import {
   TASK_REFRESH_INTERVAL_MS,
   useScheduledTaskFormat,
@@ -46,6 +47,7 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
   const t = useTranslations("scheduledTasks.detail");
   const tActions = useTranslations("scheduledTasks.actions");
   const navigation = useNavigation();
+  const { isMobile } = useScreenSize();
   const searchParams = useSearchParams();
   const timeFormat = useScheduledTaskFormat();
   const {
@@ -58,6 +60,10 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
     // Runs end and next runs move in the background.
     { refreshInterval: TASK_REFRESH_INTERVAL_MS }
   );
+  // A task deleted elsewhere is gone even while its old data is cached.
+  const notFound =
+    error instanceof FetchError &&
+    (error.status === 404 || error.status === 422);
   const actions = useScheduledTaskActions(task, () =>
     navigation.go(SCHEDULED_TASKS_PATH, { replace: true })
   );
@@ -81,8 +87,7 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
           label: t("tabs.overview"),
           content: (
             <DetailOverview
-              descriptionLabel={t("overview.prompt")}
-              description={task.prompt}
+              description={{ label: t("overview.prompt"), text: task.prompt }}
               facts={[
                 { label: t("overview.schedule"), value: schedule ?? "" },
                 {
@@ -118,7 +123,9 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
       title={task?.name ?? t("title")}
       description={schedule}
       loading={isLoading}
-      error={error ? t("loadFailed") : false}
+      error={
+        notFound ? t("notFound") : error && !task ? t("loadFailed") : false
+      }
       tabs={tabs}
       tab={parseTab(searchParams.get("tab"))}
       onTabChange={(next) =>
@@ -137,16 +144,20 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
                 disabled={actions.busy}
                 onClick={actions.runNow}
                 data-testid="run-scheduled-task-now"
+                aria-label={isMobile ? tActions("runNow") : undefined}
+                tooltip={isMobile ? tActions("runNow") : undefined}
               >
-                {tActions("runNow")}
+                {isMobile ? undefined : tActions("runNow")}
               </Button>,
               <Button
                 key="edit"
                 icon={SvgEdit}
                 prominence="secondary"
+                aria-label={isMobile ? tActions("edit") : undefined}
+                tooltip={isMobile ? tActions("edit") : undefined}
                 {...navigation.linkTo(editScheduledTaskHref(task.id))}
               >
-                {tActions("edit")}
+                {isMobile ? undefined : tActions("edit")}
               </Button>,
               <Dropdown key="menu" align="end">
                 <Dropdown.Trigger asChild>
@@ -180,9 +191,11 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
                 gap={1}
                 padding={1}
               >
-                <Text font="main-ui-body" color="text-03">
-                  {t("switch.title")}
-                </Text>
+                {!isMobile && (
+                  <Text font="main-ui-body" color="text-03">
+                    {t("switch.title")}
+                  </Text>
+                )}
                 <InputSwitch
                   aria-label={t("switch.label", { name: task.name })}
                   checked={task.status === "ACTIVE"}

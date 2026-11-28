@@ -1,7 +1,9 @@
 # Web Search
 
 > Search of the public internet and fetch of web pages: the `web_search` and
-> `open_url` tools, the admin page that picks the active providers, and the
+> `open_url` tools (`open_url` is `web_fetch` for Claude models,
+> `tools/tool_implementations/open_url/open_url_tool.py:OPEN_URL_SHAPES`; its tool row keeps
+> `open_url`), the admin page that picks the active providers, and the
 > `/web-search` API for callers outside the chat loop.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
@@ -135,14 +137,14 @@ sees of it. A code mode program gets the full value, and a chat with a sandbox
 always spills it by page ([[code-execution]]). `open_url` reuses the number
 that a URL already has in the chat session (history and the current turn),
 from `ToolContext.citation_mapping`.
-`chat/agent.py:ChatAgent` seeds that map from every history message, so it
+`chat/agent.py:ChatFeature` seeds that map from every history message, so it
 holds every numbered document, not only the cited ones. New numbers start
 after the session's highest number. Repeated calls merge: `web_search` merges
 its queries, and `open_url` merges its URLs. One `open_url` call reads at most
 `MAX_URLS_PER_CALL` (10) URLs and drops the rest with only a log warning.
 After a `web_search` step with results, the model is told to open the URLs:
 `chat/prompt_utils.py:build_chat_reminder` sends `OPEN_URL_REMINDER`, and
-`deep_research/research_agent.py:ResearchAgent._prepare_step` sends
+`deep_research/research_agent.py:ResearchFeature._prepare_step` sends
 `OPEN_URL_REMINDER_RESEARCH_AGENT`. Both do this only when the agent has
 `open_url` and steps remain, and the chat reminder does not replace an
 image-generation reminder.

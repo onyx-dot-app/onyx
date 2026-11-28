@@ -1481,6 +1481,7 @@ def test_temporary_filenames_survive_compaction_without_restoring_old_availabili
         token_counter=len,
         all_injected_file_metadata=restored.all_injected_file_metadata,
         available_tool_names={"run_python"},
+        search_passage_cache={},
     )
     notice = prompt[-1].text
     assert "report.txt" in notice and "unknown" not in notice

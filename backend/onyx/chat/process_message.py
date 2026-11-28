@@ -68,6 +68,7 @@ from onyx.chat.run_store import (
     RETRYABLE_START_ERRORS,
     fail_suspended_response,
     interrupt_ownerless_responses,
+    resume_failure,
 )
 from onyx.chat.stream_buffer import ChatStream
 from onyx.configs.chat_configs import CHAT_RESPONSE_WAIT_TIMEOUT_S
@@ -123,7 +124,6 @@ from onyx.llm.factory import (
     get_llm_token_counter,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.model_capabilities import model_identity_names
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.override_models import LLMOverride
 from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
@@ -152,6 +152,7 @@ from onyx.server.query_and_chat.token_limit import (
     check_model_spend_limits,
     check_token_rate_limits,
 )
+from onyx.server.settings.store import load_browser_enabled
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.skills.chat import accept_picked_skills, render_skills_catalog
 from onyx.tools.constants import (
@@ -159,9 +160,7 @@ from onyx.tools.constants import (
     SEARCH_TOOL_ID,
 )
 from onyx.tools.models import CapabilityEntry, SearchToolUsage
-from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
-    sandbox_tools_for_model,
-)
+from onyx.tools.tool_implementations.skills.skill_tools import SKILL_READ_SHAPES
 from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
@@ -348,6 +347,14 @@ def prepare_chat_turn(
     try:
         with get_session_with_current_tenant() as db_session:
             chat_session = _load_session(new_msg_req, user, db_session)
+            # A run that cannot wait for a decision is not offered an Ask
+            # action: an anonymous user cannot decide, and a usage-only
+            # incognito turn has no run store to wait in.
+            if approval_mode is ApprovalMode.INTERACTIVE and (
+                user.is_anonymous
+                or not record_mode_persists_content(chat_session.incognito_record_mode)
+            ):
+                approval_mode = ApprovalMode.NO_APPROVER
             # Reserve the session before model setup or changes to its message tree.
             if handed_admission is None:
                 admission.claim(chat_session.id)
@@ -558,6 +565,7 @@ def prepare_chat_turn(
                 and len(selected_models) == 1
                 and not new_msg_req.deep_research
             )
+            browser_tools = sandbox_tools and load_browser_enabled()
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn
             # that is not deep research. Its run parks while it waits. An
@@ -566,8 +574,6 @@ def prepare_chat_turn(
             question_tool = (
                 approval_mode == ApprovalMode.INTERACTIVE
                 and not agent_host
-                and not user.is_anonymous
-                and record_mode_persists_content(chat_session.incognito_record_mode)
                 and len(selected_models) == 1
                 and not new_msg_req.deep_research
             )
@@ -733,6 +739,8 @@ def prepare_chat_turn(
             else:
                 custom_prompt = agent_instructions or project_instructions or None
             base_system_prompt = get_default_base_system_prompt(db_session)
+            # The estimate names the tools of the first model's shapes.
+            tool_family = selected_models[0][0].config.tool_family
             # Reserve against the placeholder-substituted text sent to the model,
             # so long directory values cannot invalidate the reservation.
             reserved_tokens = calculate_reserved_tokens(
@@ -751,20 +759,17 @@ def prepare_chat_turn(
                                 llm.config.max_input_tokens
                                 for llm, _ in selected_models
                             ),
+                            read_tool_name=SKILL_READ_SHAPES[tool_family].name,
+                            called_name=str,
                         )
                         or ""
                     ),
                     memory.user_info.placeholder_values,
                 ),
                 token_counter=token_counter,
-                sandbox_tools=sandbox_tools_for_model(
-                    model_identity_names(
-                        selected_models[0][0].config.model_name,
-                        selected_models[0][0].config.deployment_name,
-                    )
-                )
-                if sandbox_tools
-                else (),
+                tool_family=tool_family,
+                sandbox_tools=sandbox_tools,
+                browser_tools=browser_tools,
                 files=new_msg_req.file_descriptors,
                 user_memory_context=memory
                 if preferences.use_memories
@@ -959,6 +964,7 @@ def prepare_chat_turn(
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
             sandbox_tools=sandbox_tools,
+            browser_tools=browser_tools,
             vm_chat_files=[] if placed_chat_files is None else placed_chat_files.files,
             copy_vm_chat_files=placed_chat_files is not None,
             question_tool=question_tool,
@@ -1201,7 +1207,10 @@ def dispatch_pending_chat_messages(
                             in (OnyxErrorCode.CONFLICT, OnyxErrorCode.RATE_LIMITED)
                         ):
                             fail_suspended_response(
-                                cache, get_current_tenant_id(), resumable
+                                cache,
+                                get_current_tenant_id(),
+                                resumable,
+                                resume_failure(error),
                             )
                         raise
                     start_chat_turn(
@@ -1274,7 +1283,10 @@ def dispatch_pending_chat_messages(
                                 hosted_agents[0].tool_options,
                             ):
                                 fail_suspended_response(
-                                    cache, get_current_tenant_id(), run.response_id
+                                    cache,
+                                    get_current_tenant_id(),
+                                    run.response_id,
+                                    resume_failure(error),
                                 )
                         raise
                     host_agent_work(host_setup, user, dispatch)
@@ -1650,11 +1662,14 @@ def run_chat_turn(
     """Run one chat turn for in-process, non-streaming callers, to completion
     or until tool calls wait for the user.
 
-    These callers read one response, so the turn offers no agent tools.
+    These callers read one response, so the turn offers no agent tools, and
+    a VM command's app request that asks is refused, not held for a card.
     """
     response_future = Future[ChatResponseOutcome]()
     packets = handle_stream_message_objects(
-        new_msg_req=new_msg_req.model_copy(update={"accepts_follow_ups": False}),
+        new_msg_req=new_msg_req.model_copy(
+            update={"accepts_follow_ups": False, "stream": False}
+        ),
         user=user,
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,

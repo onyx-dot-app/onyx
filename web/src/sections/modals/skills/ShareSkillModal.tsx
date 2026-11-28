@@ -1,12 +1,13 @@
 "use client";
 
 import { getUserInitials } from "@/lib/users/svc";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, isNotFoundError } from "@/lib/fetcher";
+import { refreshSkillLists } from "@/lib/skills/cache";
 import useShareableGroups, {
   type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
@@ -35,7 +36,12 @@ import {
   StaticPermissionLabel,
   TransferTrailingButton,
 } from "@/sections/modals/ShareModalPermissionControls";
-import { updateSkillShares, transferSkillOwnership } from "@/lib/skills/api";
+import {
+  updateSkillShares,
+  takenPluginName,
+  transferSkillOwnership,
+} from "@/lib/skills/api";
+import TakenNameField, { canUseName } from "@/sections/skills/TakenNameField";
 import type {
   CustomSkill,
   SkillSharePermission,
@@ -102,6 +108,7 @@ type ShareSkillModalProps = {
 export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { open, onClose } = props;
   const skillId = props.mode === "edit" ? props.skillId : null;
+  const { mutate } = useSWRConfig();
   const {
     data: loadedSkill,
     error: loadError,
@@ -109,7 +116,13 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     mutate: refreshSkill,
   } = useSWR<CustomSkill>(
     open && skillId ? SWR_KEYS.skillSharing(skillId) : null,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {
+      // Deleted elsewhere: the refreshed list drops it.
+      onError: (error) => {
+        if (isNotFoundError(error)) void refreshSkillLists(mutate);
+      },
+    }
   );
   const skill = props.mode === "create" ? props.draft : loadedSkill;
   const t = useTranslations("skills.modals");
@@ -127,7 +140,16 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { data: transferableUsersData } = useShareableUsers({
     includeApiKeys: false,
   });
-  const { data: shareableGroupsData } = useShareableGroups();
+  // A group share change needs the skill-manager permission for the group.
+  const {
+    data: shareableGroupsData,
+    error: groupsError,
+    refreshShareableGroups,
+  } = useShareableGroups(true, Permission.MANAGE_PLUGINS);
+  const manageableGroupIds = useMemo(
+    () => new Set((shareableGroupsData ?? []).map((group) => group.id)),
+    [shareableGroupsData]
+  );
   const { isAdmin, user: currentUser } = useUser();
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
@@ -156,6 +178,14 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     useState<SkillSharePermission>("VIEWER");
   const [transferTarget, setTransferTarget] =
     useState<TransferOwnershipTarget>(null);
+  // Names the new owner already holds. Set from a refused transfer.
+  const [transferTakenNames, setTransferTakenNames] = useState<string[]>([]);
+  const [transferName, setTransferName] = useState("");
+  // The selected recipient, read after an await to drop a stale refusal.
+  const selectedTransferTarget = useRef<TransferOwnershipTarget>(null);
+  useEffect(() => {
+    selectedTransferTarget.current = transferTarget;
+  }, [transferTarget]);
   const [view, setView] = useState<ShareModalView>("share");
   const [installationPolicy, setInstallationPolicy] =
     useState<SkillInstallationPolicy | null>(null);
@@ -168,6 +198,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const [showIndividualAccess, setShowIndividualAccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  // The skill as the dialog was filled, so a save sends only the fields the
+  // user changed even after a background refresh.
+  const [baseline, setBaseline] = useState<SkillSharingDraft | null>(null);
 
   // Hydrate once per open session: a background SWR refresh of `skill` must
   // not wipe in-progress staged edits.
@@ -203,6 +236,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     setInitialGroupSettings(nextGroupSettings);
     setDraftState(nextState);
     setInitialState(nextState);
+    setBaseline(skill);
     setStagedUsers([]);
     setStagedGroups([]);
     setStagedPermission("VIEWER");
@@ -223,6 +257,13 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
 
   const canEditShares =
     skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
+  // A group share change is checked against every current group share, so a
+  // scoped manager cannot change any while one is outside their scope.
+  const groupSharesLocked =
+    !isOrganizationManager &&
+    (initialState?.groupShares ?? []).some(
+      (share) => !manageableGroupIds.has(share.group_id)
+    );
   const canEditOrgVisibility =
     !!skill && canChangeOrganizationAccess(skill, isOrganizationManager);
   // Publishing is one-way: a saved published skill shows no private option.
@@ -405,7 +446,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         closeModal();
         return;
       }
-      const payload = serializeSkillSharing(nextDraft, isOrganizationManager);
+      const payload = serializeSkillSharing(
+        nextDraft,
+        isOrganizationManager,
+        baseline ?? undefined
+      );
       if (canSetGroupSettings && groupChanges.length > 0) {
         payload.group_settings = groupChanges;
       }
@@ -441,15 +486,27 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     )
       return;
 
+    const submittedTarget = transferTarget;
     setSaving(true);
     try {
-      await transferSkillOwnership(props.skillId, {
+      const request: { new_owner_user_id: string; name?: string } = {
         new_owner_user_id: transferTarget.value.replace("user-", ""),
-      });
+      };
+      if (transferTakenNames.length > 0) request.name = transferName;
+      await transferSkillOwnership(props.skillId, request);
       toast.success(t("share.transferredToast.message"));
       props.onSaved();
       closeModal();
     } catch (err) {
+      const taken = takenPluginName(err);
+      if (taken !== null) {
+        // The name is taken for the recipient of this request only.
+        if (selectedTransferTarget.current?.value !== submittedTarget.value)
+          return;
+        setTransferTakenNames((names) => [...names, taken]);
+        setTransferName(taken);
+        return;
+      }
       console.error("Failed to transfer skill ownership", err);
       toast.error(
         err instanceof Error
@@ -617,7 +674,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 disabled={!sharingAllowed}
                 existingGroupIds={existingGroupIds}
                 existingUserIds={existingUserIds}
-                groups={shareableGroupsData ?? []}
+                groups={groupSharesLocked ? [] : (shareableGroupsData ?? [])}
                 onAddGroup={(group) => {
                   setStagedGroups((currentGroups) => [...currentGroups, group]);
                 }}
@@ -676,6 +733,33 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                   );
                 })}
 
+                {groupsError && effectiveState.groupShares.length > 0 ? (
+                  <Section
+                    flexDirection="row"
+                    justifyContent="between"
+                    gap={2}
+                    height="auto"
+                  >
+                    <Text
+                      as="p"
+                      font="secondary-body"
+                      color="text-03"
+                      role="alert"
+                    >
+                      {t("share.groupsLoadFailed")}
+                    </Text>
+                    <Button
+                      prominence="secondary"
+                      onClick={() => void refreshShareableGroups()}
+                    >
+                      {t("share.groupsRetry")}
+                    </Button>
+                  </Section>
+                ) : canEditShares && groupSharesLocked ? (
+                  <Text as="p" font="secondary-body" color="text-03">
+                    {t("share.groupSharesLocked")}
+                  </Text>
+                ) : null}
                 {effectiveState.groupShares.map((share) => (
                   <ShareAccessRow
                     avatarIcon={SvgUsers}
@@ -686,7 +770,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                         ariaLabel={t("share.permissionMenu.ariaLabel", {
                           name: share.group_name,
                         })}
-                        disabled={!canEditShares}
+                        disabled={
+                          !canEditShares ||
+                          groupSharesLocked ||
+                          !manageableGroupIds.has(share.group_id)
+                        }
                         onChange={(permission) =>
                           updateGroupSharePermission(share.group_id, permission)
                         }
@@ -790,13 +878,26 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           ) : !skill || !draftState ? (
             <Text>{t("share.loading.message")}</Text>
           ) : view === "transfer" ? (
-            <TransferOwnershipView
-              agent={{ owner: skill.owner, owner_group: null }}
-              groups={[]}
-              onSelectedTargetChange={setTransferTarget}
-              selectedTarget={transferTarget}
-              users={transferableUsersData ?? []}
-            />
+            <>
+              <TransferOwnershipView
+                agent={{ owner: skill.owner, owner_group: null }}
+                groups={[]}
+                onSelectedTargetChange={(target) => {
+                  setTransferTarget(target);
+                  setTransferTakenNames([]);
+                }}
+                selectedTarget={transferTarget}
+                users={transferableUsersData ?? []}
+              />
+              {transferTakenNames.length > 0 && (
+                <TakenNameField
+                  value={transferName}
+                  takenNames={transferTakenNames}
+                  disabled={saving}
+                  onChange={setTransferName}
+                />
+              )}
+            </>
           ) : (
             renderSharingContent()
           )}
@@ -808,6 +909,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               icon={SvgArrowLeft}
               onClick={() => {
                 setTransferTarget(null);
+                setTransferTakenNames([]);
                 setView("share");
               }}
               prominence="secondary"
@@ -831,7 +933,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             {view === "transfer" ? (
               <Button
                 disabled={
-                  !transferTarget || transferTarget.type !== "user" || saving
+                  !transferTarget ||
+                  transferTarget.type !== "user" ||
+                  saving ||
+                  (transferTakenNames.length > 0 &&
+                    !canUseName(transferName, transferTakenNames))
                 }
                 onClick={handleTransfer}
               >

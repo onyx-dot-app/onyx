@@ -1,4 +1,4 @@
-import type { ChatStream, Message } from "@/app/app/types";
+import type { ChatStream, FileDescriptor, Message } from "@/app/app/types";
 import type { LLMOverride } from "@/app/app/services/lib";
 import type { ToolQuestionAnswer } from "@/app/app/services/streamingModels";
 import type { ProjectFile } from "@/lib/projects/types";
@@ -48,6 +48,14 @@ export interface ComposedMessage {
 /** A question that did not reach the server, to put back in the composer. */
 export interface UnsentMessage extends ComposedMessage {
   files: ProjectFile[];
+  /** The sent question that an unsent edit replaces. */
+  messageIdToResend?: number;
+}
+
+/** A sent question that the user edits in the composer. */
+export interface MessageEdit extends ComposedMessage {
+  messageId: number;
+  files: FileDescriptor[];
 }
 
 /** Composer choices that a queued or interrupting message's turn starts with. */
@@ -102,6 +110,27 @@ export interface ChatSubagent {
   /** Null before its first run starts. */
   status: RunStatus | null;
   stopped_by_user: boolean;
+  /** When its current or latest run started, as an ISO date. */
+  started_at: string | null;
+  /** Its current or latest run; another branch's run has another id. */
+  latest_run_id: number | null;
+  /** The live stream of its running response, while it runs. */
+  stream_id: number | null;
+  /** The tool that its running response last called. */
+  activity_tool: string | null;
+  /** The model of its current or latest run. */
+  model: string | null;
+  /** How long its latest run worked, once saved. */
+  duration_seconds: number | null;
+}
+
+/** The chat's background agents, as `useChatSubagents` gives them. */
+export interface ChatSubagents {
+  agents: ChatSubagent[];
+  /** A list has been read from the server, not only from the cache. */
+  loaded: boolean;
+  /** Stops the agent and the agents below it. */
+  stopAgent: (agentId: string) => Promise<void>;
 }
 
 export interface ChatSessionQueue {
@@ -111,7 +140,6 @@ export interface ChatSessionQueue {
   error: string | null;
   /** A pending-message request is in flight. */
   busy: boolean;
-  hasActiveSubagents: boolean;
   needsResponseSelection: boolean;
   /**
    * A queued or interrupting message's turn starts as Deep Research when
@@ -126,8 +154,6 @@ export interface ChatSessionQueue {
   ) => Promise<boolean>;
   withdraw: (id: string) => Promise<PendingChatMessage | null>;
   interrupt: (id: string) => Promise<void>;
-  /** Interrupts every running subagent on the selected branch. */
-  stopSubagents: () => Promise<void>;
 }
 
 /** The card's answers to a question request's questions, or text that the
@@ -147,7 +173,8 @@ export interface ApprovalDecisionResponse {
   approval_id: string;
   decision: "APPROVED" | "REJECTED";
   // "POLICY": the action policy disabled the tool, so the approval rejected it.
-  decided_via: "USER" | "SESSION_GRANT" | "POLICY";
+  // "COMMAND_GRANT": approved for the rest of a VM command.
+  decided_via: "USER" | "SESSION_GRANT" | "POLICY" | "COMMAND_GRANT";
   /** The stream that continues the suspended response, when it runs. */
   continuation: ChatStream | null;
 }

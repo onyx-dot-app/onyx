@@ -1,4 +1,4 @@
-"""Code mode contracts: the mock's execute_code plans and the parser's code
+"""Code mode contracts: the mock's exec plans and the parser's code
 mode packets (backend/onyx/chat/renderer.py and streaming_models.py)."""
 
 from __future__ import annotations
@@ -16,12 +16,12 @@ from mock_llm.profiles import turn_profile
 from mock_llm.response_plan import Knobs, prepare_response
 from onyx_client.stream_parser import ChatStreamAnalyzer
 
-from .fixtures import EXECUTE_CODE_TOOL, INTERNAL_SEARCH_TOOL, WAIT_CODE_TOOL
+from .fixtures import INTERNAL_SEARCH_TOOL, RUN_TOOL, WAIT_TOOL
 
 client = TestClient(app)
 MODEL = "mock-profile-search-v1-ttft0-itl0"
 BATCHED = "mock-profile-search-v1-codebatched-ttft0-itl0"
-CODE_TOOLS = [EXECUTE_CODE_TOOL, WAIT_CODE_TOOL]
+CODE_TOOLS = [RUN_TOOL, WAIT_TOOL]
 
 
 def question_for(rounds: int, seed: int = 0) -> str:
@@ -42,7 +42,7 @@ def observation(cell: int, documents: list[int], status: str = "completed") -> s
 
 
 def searches(code: str) -> list[list[str]]:
-    """Queries of each internal_search call; also checks the program parses."""
+    """Queries of each tools.internal_search call; also checks the program parses."""
     tree = compile(
         code,
         "<program>",
@@ -53,8 +53,10 @@ def searches(code: str) -> list[list[str]]:
         ast.literal_eval(node.keywords[0].value)
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "internal_search"
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "tools"
+        and node.func.attr == "internal_search"
     ]
 
 
@@ -160,8 +162,8 @@ def test_code_mode_searches_match_direct_mode_for_each_seed(
 
 RUNNING = (
     "Execution running in cell 3 after 30.0s with 1 tool call so far.\n\n"
-    "Cell 3 continues. Call wait_code(cell_id=3) for more output, or "
-    "wait_code(cell_id=3, terminate=true) to stop it."
+    "Cell 3 continues. Call wait(cell_id=3) for more output, or "
+    "wait(cell_id=3, terminate=true) to stop it."
 )
 MULTI_TOOL = "mock-tools3-ttft0-itl0-len5"
 
@@ -186,15 +188,15 @@ def reply(
 
 
 def test_search_profile_runs_no_program_without_internal_search() -> None:
-    description = EXECUTE_CODE_TOOL["function"]["description"]
+    description = RUN_TOOL["function"]["description"]
     web_only = {
-        **EXECUTE_CODE_TOOL,
+        **RUN_TOOL,
         "function": {
-            **EXECUTE_CODE_TOOL["function"],
+            **RUN_TOOL["function"],
             "description": description.replace("internal_search", "other_search"),
         },
     }
-    steps, _ = run_turn(MODEL, [web_only, WAIT_CODE_TOOL], question_for(2))
+    steps, _ = run_turn(MODEL, [web_only, WAIT_TOOL], question_for(2))
     programs = [
         json.loads(call["function"]["arguments"])["code"]
         for calls in steps
@@ -204,12 +206,12 @@ def test_search_profile_runs_no_program_without_internal_search() -> None:
     assert programs == []
 
 
-def test_running_cell_gets_wait_code_then_the_plan_continues() -> None:
+def test_running_cell_gets_wait_then_the_plan_continues() -> None:
     question = question_for(2)
     messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
     reply(messages, next_calls(MODEL, messages), RUNNING)
     wait = next_calls(MODEL, messages)
-    assert wait[0]["function"]["name"] == "wait_code"
+    assert wait[0]["function"]["name"] == "wait"
     assert json.loads(wait[0]["function"]["arguments"]) == {"cell_id": 3}
     reply(messages, wait, observation(3, [4]))
     second = next_calls(MODEL, messages)
@@ -223,14 +225,15 @@ def test_code_mode_multi_tool_runs_retrieval_functions_in_one_program() -> None:
     steps, _ = run_turn(MULTI_TOOL, CODE_TOOLS, "Find the policy")
     assert len(steps) == 1
     code = json.loads(steps[0][0]["function"]["arguments"])["code"]
-    assert "internal_search(queries=" in code and "web_search(queries=" in code
+    assert "tools.internal_search(queries=" in code
+    assert "tools.web_search(queries=" in code
 
 
 def test_multi_tool_program_waits_for_its_running_cell_then_answers() -> None:
     messages: list[dict[str, Any]] = [{"role": "user", "content": "Find the policy"}]
     reply(messages, next_calls(MULTI_TOOL, messages), RUNNING)
     wait = next_calls(MULTI_TOOL, messages)
-    assert [call["function"]["name"] for call in wait] == ["wait_code"]
+    assert [call["function"]["name"] for call in wait] == ["wait"]
     reply(messages, wait, observation(3, [4]))
     assert next_calls(MULTI_TOOL, messages) == []
 
@@ -370,7 +373,7 @@ def test_completed_programs_count_programs_and_nested_searches() -> None:
     assert summary.code_failures == 0
 
 
-def test_running_program_finished_by_wait_code_succeeds() -> None:
+def test_running_program_finished_by_wait_succeeds() -> None:
     wait = [
         packet({"type": "code_mode_start", "code": "", "cell_id": 1, "observation": 1}),
         packet(code_delta("completed", observation=1)),

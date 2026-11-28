@@ -7,7 +7,7 @@ from concurrent.futures import Future
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
@@ -20,10 +20,15 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
 )
-from onyx.agents.runtime import Run
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
-from onyx.chat.agent import ChatAgent, build_chat_agent, chat_subagent_factory
+from onyx.chat.agent import (
+    ChatFeature,
+    build_chat_agent,
+    chat_max_steps,
+    chat_subagent_factory,
+)
 from onyx.chat.chat_processing_checker import (
     PROCESSING_REFRESH_INTERVAL_S,
     ChatTurnAdmission,
@@ -44,16 +49,17 @@ from onyx.chat.presentation import ResponsePresenter, overall_stop
 from onyx.chat.prompt_utils import build_language_section
 from onyx.chat.restoration import restore_chat_agent, restore_subagent
 from onyx.chat.run_store import (
-    RESUME_FAILED_MESSAGE,
     RETRYABLE_START_ERRORS,
     ChatRunStore,
     fail_suspended_response,
+    resume_failure,
 )
 from onyx.chat.session_naming import name_new_chat_session
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.configs.chat_configs import (
     CHAT_EXECUTION_TIMEOUT_S,
+    CODE_MODE_ENABLED,
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
@@ -64,15 +70,15 @@ from onyx.db.chat_subagents import load_chat_branch
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.agent import DeepResearchFeature
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ExtractedContextFiles
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter, get_search_selection_llm
 from onyx.llm.interfaces import LLM
-from onyx.llm.model_capabilities import is_claude_model, model_identity_names
 from onyx.server.query_and_chat.models import (
     ModelResponseSlot,
     response_id_info,
@@ -87,10 +93,6 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolQuestionResolved,
 )
 from onyx.server.settings.store import load_settings
-from onyx.tools.constants import (
-    ASK_USER_QUESTION_TOOL_NAME,
-    REQUEST_USER_INPUT_TOOL_NAME,
-)
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolOptions
 from onyx.tools.tool_constructor import (
@@ -100,16 +102,25 @@ from onyx.tools.tool_constructor import (
     construct_tools,
 )
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.sandbox.browser_tools import with_browser_tools
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SANDBOX_TOOLS,
     LoadSkillTool,
-    sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_READ_SHAPES,
     SkillsListTool,
     SkillsReadTool,
 )
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    document_id_fields,
+    emit_audit_event,
+)
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import (
@@ -302,6 +313,8 @@ class ChatTurnExecution:
     ) -> None:
         self.setup = setup
         self.user = user
+        # Built here, in the request, so it carries the request's credential.
+        self._audit_actor = actor_from_user(user)
         self.delivery = ChatDelivery(stream_buffer, query_observation=query_observation)
         self._query_observation = query_observation
         self._dispatch_pending_messages = dispatch_pending_messages
@@ -369,9 +382,7 @@ class ChatTurnExecution:
                     self._stopped_models.add(packet.placement.model_index or 0)
 
     def run(self, *, startup_error: BaseException | None = None) -> None:
-        research = (
-            len(self.setup.responses) == 1 and self.setup.new_msg_req.deep_research
-        )
+        research = self.setup.is_deep_research
         # The trace stays open while background agents still own work.
         with trace(
             "run_deep_research" if research else "chat",
@@ -525,12 +536,78 @@ class ChatTurnExecution:
                 if not worker_done:
                     continue
             if persistence.outcome.done() and persistence.outcome.exception() is None:
-                snapshot = persistence.outcome.result().response.response
+                outcome = persistence.outcome.result()
+                snapshot = outcome.response.response
                 if snapshot is not None:
                     self._response_stops[persistence.model_index] = overall_stop(
                         snapshot.status, snapshot.failure
                     )
+                # A parked run writes its event when it resumes and ends.
+                if snapshot is None or snapshot.status != RunStatus.SUSPENDED:
+                    self._emit_message_audit(persistence, outcome)
+            elif persistence.outcome.done() and not (
+                self._resume_deferred
+                and self.setup.resumed_response_id is not None
+                and isinstance(persistence.outcome.exception(), RETRYABLE_START_ERRORS)
+            ):
+                # A failed worker has no response, but the message was sent. A
+                # deferred resume stays parked and writes its event on retry.
+                self._emit_message_audit(persistence, None)
             del self._response_workers[worker]
+
+    def _emit_message_audit(
+        self,
+        persistence: ChatResponsePersistence,
+        outcome: ChatResponseOutcome | None,
+    ) -> None:
+        """One ``chat.message_send`` event per finished response. ``None`` is a
+        response whose worker failed: the event has no response details. A
+        response that failed to save counts as an error too."""
+        response = outcome.response if outcome is not None else None
+        extra: dict[str, Any] = {
+            "chat_session_id": str(self.setup.chat_session_id),
+            "user_message_id": self.setup.user_message_id,
+            "assistant_message_id": persistence.message_id,
+            "model_index": persistence.model_index,
+            "persona_id": self.setup.persona_id,
+            "model_provider": persistence.llm.config.model_provider,
+            "model_name": persistence.llm.config.model_name,
+            "origin": self.setup.new_msg_req.origin,
+            "resumed": self.setup.resumed_response_id is not None,
+            "error": outcome is None or outcome.error is not None,
+        }
+        if response is not None:
+            extra["tool_names"] = sorted(
+                {call.tool_name for call in response.tool_calls}
+            )
+            extra["cancelled"] = response.cancelled
+        query_text: str | None = None
+        # An incognito chat that keeps no content shows no content here either.
+        if not record_mode_persists_content(self.setup.incognito_record_mode):
+            extra["incognito"] = True
+        elif response is not None:
+            extra.update(
+                document_id_fields(
+                    "retrieved_document_ids", response.all_search_docs.keys()
+                )
+            )
+            extra.update(
+                document_id_fields(
+                    "cited_document_ids",
+                    (citation.document_id for citation in response.citation_info),
+                )
+            )
+            # A resumed run carries an empty request; its prompt was sent earlier.
+            query_text = self.setup.new_msg_req.message or None
+        emit_audit_event(
+            AuditAction.CHAT_MESSAGE_SEND,
+            AuditOutcome.FAILURE if extra["error"] else AuditOutcome.SUCCESS,
+            actor=self._audit_actor,
+            resource_type="chat_session",
+            resource_id=str(self.setup.chat_session_id),
+            extra=extra,
+            query_text=query_text,
+        )
 
     def _root_parked(self, persistence: ChatResponsePersistence, run: Run) -> None:
         """End a response whose run handed off to wait for people: the turn
@@ -625,29 +702,57 @@ class ChatTurnExecution:
                 and self.setup.new_msg_req.accepts_follow_ups
                 and len(self.setup.responses) == 1
             )
-            chat_agent = create_chat_agent(
-                self.setup,
-                self.user,
-                index,
-                cancellation,
-                self._auto_filters,
-                with_subagents=with_subagents,
-            )
-            tool_ids = {tool.name: tool.id for tool in chat_agent.application_tools}
-            persistence.tool_ids = dict(tool_ids)
-            # Restored and child agents build their own tools from these.
-            if isinstance(chat_agent, DeepResearchAgent):
-                # Deep research offers its tools unchanged.
-                configured_tools = chat_agent.application_tools
-                if self.setup.research_tool_id is None:
-                    raise ValueError("Deep research tool configuration is missing")
-                persistence.tool_ids[RESEARCH_AGENT_TOOL_NAME] = (
-                    self.setup.research_tool_id
+
+            def adopt_root(feature: ChatFeature | DeepResearchFeature) -> None:
+                # Persistence saves only the calls of the tools the root offers.
+                persistence.tool_ids = {
+                    tool.name: tool.id for tool in feature.application_tools
+                }
+                if isinstance(feature, DeepResearchFeature):
+                    if self.setup.research_tool_id is None:
+                        raise ValueError("Deep research tool configuration is missing")
+                    persistence.tool_ids[RESEARCH_AGENT_TOOL_NAME] = (
+                        self.setup.research_tool_id
+                    )
+                else:
+                    persistence.initial_citations = dict(feature.initial_citations)
+
+            new_root = (
+                create_chat_agent(
+                    self.setup,
+                    self.user,
+                    index,
+                    cancellation,
+                    self._auto_filters,
+                    with_subagents=with_subagents,
                 )
+                if resumed_id is None
+                else None
+            )
+            if new_root is not None:
+                _, feature = new_root
+                adopt_root(feature)
+                # Restored and child agents build their own tools from these.
+                # Deep research offers its tools unchanged.
+                tools = (
+                    feature.application_tools
+                    if isinstance(feature, DeepResearchFeature)
+                    else feature.configured_tools
+                )
+                # A new root ends its sandbox turn itself, and the run store
+                # restores no root of this turn.
+                on_root_drained = None
             else:
-                configured_tools = chat_agent.configured_tools
-                persistence.initial_citations = dict(chat_agent.initial_citations)
-            presenter = ResponsePresenter(emitter, tool_ids=tool_ids)
+                # The run store restores the root from its checkpoint.
+                tools, sandbox = construct_chat_tools(
+                    self.setup, self.user, index, cancellation, self._auto_filters
+                )
+                on_root_drained = sandbox.end if sandbox is not None else None
+            # The presenter and the run store use the configured tools for
+            # display ids only.
+            presenter = ResponsePresenter(
+                emitter, tool_ids={tool.name: tool.id for tool in tools}
+            )
             store: ChatRunStore | None = None
             if record_mode_persists_content(self.setup.incognito_record_mode):
                 store, coordinator = bind_run_store(
@@ -655,12 +760,13 @@ class ChatTurnExecution:
                     self.user,
                     response_id=persistence.message_id,
                     llm=persistence.llm,
-                    tools=configured_tools,
+                    tools=tools,
                     coordinator=persistence.coordinator,
-                    follow_up_steps=chat_agent.max_steps,
+                    follow_up_steps=chat_max_steps(tools, CODE_MODE_ENABLED),
                     root_response=persistence,
                     on_child_released=self._dispatch_after_release,
-                    on_root_drained=chat_agent.on_drained,
+                    on_root_drained=on_root_drained,
+                    on_root_restored=adopt_root,
                     on_root_parked=partial(self._root_parked, persistence),
                 )
                 with self._lock:
@@ -669,7 +775,8 @@ class ChatTurnExecution:
                 # Incognito chats have no child agents to find, restore, or own,
                 # and no approvals.
                 coordinator = persistence.coordinator.view(store=persistence)
-            if resumed_id is None:
+            if new_root is not None:
+                chat_agent, feature = new_root
                 coordinator.register(
                     AgentInfo(
                         id=chat_agent.id,
@@ -684,16 +791,14 @@ class ChatTurnExecution:
                 run = chat_agent.start(
                     background=False,
                     messages=self.setup.input_messages,
-                    max_steps=chat_agent.max_steps,
+                    max_steps=feature.max_steps,
                     cancellation=cancellation,
                     deadline_at=self._deadline_at,
                     coordinator=coordinator,
                     event_dispatcher=self.delivery.events,
                     on_event=presenter.consume,
                 )
-            elif store is None:
-                raise ValueError("Only a saved chat response can continue")
-            else:
+            elif resumed_id is not None and store is not None:
                 # The saved output first, then the run with the saved decisions.
                 with get_session_with_current_tenant() as db_session:
                     execution, replay = read_suspended_response_replay(
@@ -719,6 +824,8 @@ class ChatTurnExecution:
                         lambda: resumed.cancel(cancellation.reason or "requested")
                     )
                 )
+            else:
+                raise ValueError("Only a saved chat response can continue")
 
             def response_saved(completion: Future[RunState]) -> None:
                 try:
@@ -745,17 +852,18 @@ class ChatTurnExecution:
                         # The response stays suspended, and this turn's
                         # release dispatches it again after a backoff.
                         self._resume_deferred = True
+                        persistence.report_worker_failure(failure)
                     else:
                         # The response ends as failed, so no later dispatch
-                        # tries it again.
+                        # tries it again. The stream shows the saved failure.
+                        ended = resume_failure(failure)
                         fail_suspended_response(
-                            self.setup.cache, get_current_tenant_id(), resumed_id
+                            self.setup.cache,
+                            get_current_tenant_id(),
+                            resumed_id,
+                            ended,
                         )
-                    persistence.report_worker_failure(
-                        failure
-                        if isinstance(failure, Exception)
-                        else RuntimeError(RESUME_FAILED_MESSAGE)
-                    )
+                        persistence.report_worker_failure(RunFailed(ended))
                 else:
                     persistence.save_failure(failure, cancellation.reason)
             except Exception:
@@ -848,11 +956,13 @@ def bind_run_store(
     root_response: RunStore | None,
     on_child_released: Callable[[], None] | None,
     on_root_drained: Callable[[], None] | None,
+    on_root_restored: Callable[[ChatFeature | DeepResearchFeature], None] | None = None,
     on_root_parked: Callable[[Run], None] | None = None,
 ) -> tuple[ChatRunStore, AgentCoordinator]:
     """Bind the run store of a response's branch and register the visible
     agents. A restored root gets `on_root_drained` as its on_drained hook, and
-    the question tool when its saved step declared it."""
+    the question tool when its saved step declared it; `on_root_restored`
+    receives its feature."""
     tenant_id = get_current_tenant_id()
     branch = load_chat_branch(response_id)
     if branch.chat_session_id != setup.chat_session_id:
@@ -892,11 +1002,12 @@ def bind_run_store(
             tools=tools,
             user_identity=setup.user_identity,
             on_root_drained=on_root_drained,
-            question_tool=lambda name, restored_id: QuestionTool(
-                name,
+            on_root_restored=on_root_restored,
+            question_tool=lambda response_id, shape: QuestionTool(
+                shape,
                 tenant_id=tenant_id,
                 chat_session_id=setup.chat_session_id,
-                response_id=restored_id,
+                response_id=response_id,
             ),
             subagent_factory=lambda depth: chat_subagent_factory(
                 setup=setup,
@@ -935,27 +1046,28 @@ def host_agent_work(
     ):
         try:
             response = setup.responses[0]
-            chat_agent = create_chat_agent(
+            if setup.is_deep_research:
+                raise ValueError("Agent work requires a chat agent")
+            # The host restores only child agents, so no root ends the
+            # sandbox turn.
+            tools, _ = construct_chat_tools(
                 setup,
                 user,
                 0,
                 CancellationSignal(),
                 load_settings().auto_detect_search_filters is not False,
-                with_subagents=True,
             )
-            if not isinstance(chat_agent, ChatAgent):
-                raise ValueError("Agent work requires a chat agent")
             store, _ = bind_run_store(
                 setup,
                 user,
                 response_id=response.message_id,
                 llm=response.llm,
-                tools=chat_agent.configured_tools,
+                tools=tools,
                 coordinator=AgentCoordinator(),
-                follow_up_steps=chat_agent.max_steps,
+                follow_up_steps=chat_max_steps(tools, CODE_MODE_ENABLED),
                 root_response=None,
                 on_child_released=dispatch_pending_messages,
-                on_root_drained=chat_agent.on_drained,
+                on_root_drained=None,
             )
             store.poll_control()
         except BaseException:
@@ -978,15 +1090,16 @@ def host_agent_work(
                 logger.exception("Agent host control failed; will retry")
 
 
-def create_chat_agent(
+def construct_chat_tools(
     setup: ChatTurnSetup,
     user: User,
     response_index: int,
     cancellation: CancellationSignal,
     auto_detect_search_filters: bool,
-    *,
-    with_subagents: bool,
-) -> ChatAgent | DeepResearchAgent:
+) -> tuple[list[Tool], SandboxTurn | None]:
+    """The configured tools of one response, and the sandbox turn that its
+    root agent's runs end (its on_drained hook) when the turn offers the
+    sandbox tools. Restored and child agents receive the same tools."""
     llm = setup.responses[response_index].llm
     with cancellation_scope(cancellation):
         cancellation.check()
@@ -1033,105 +1146,127 @@ def create_chat_agent(
         )
         # Every user with a chat skill when the turn starts gets the skill
         # tools, whatever the agent's tool selection; each call reads the
-        # user's current skills. Restored and child agents receive them with
-        # the other configured tools.
+        # user's current skills.
         if setup.has_chat_skills:
             tools += [
-                SkillsListTool(user, with_sandbox=setup.sandbox_tools),
-                SkillsReadTool(user, with_sandbox=setup.sandbox_tools),
+                SkillsListTool(
+                    user,
+                    SKILL_READ_SHAPES[llm.config.tool_family],
+                    with_sandbox=setup.sandbox_tools,
+                ),
+                SkillsReadTool(
+                    user,
+                    SKILL_READ_SHAPES[llm.config.tool_family],
+                    with_sandbox=setup.sandbox_tools,
+                ),
             ]
-
-        preferred_tool = setup.preferred_tool
-        if preferred_tool is not None and not any(
-            tool.matches(preferred_tool) for tool in tools
-        ):
-            if not setup.preferred_tool_saved:
-                raise OnyxError(
-                    OnyxErrorCode.BAD_REQUEST,
-                    f"Preferred {preferred_tool} not found in tools",
-                )
-            preferred_tool = None
-
-        agent_id = str(setup.chat_session_id)
-
-        if len(setup.responses) == 1 and setup.new_msg_req.deep_research:
-            return DeepResearchAgent(
-                agent_id=agent_id,
-                messages=list(setup.messages),
-                allowed_tools=tools,
-                additional_context=setup.additional_context,
-                context_files=ExtractedContextFiles(
-                    file_texts=[],
-                    image_files=setup.extracted_context_files.image_files,
-                    use_as_search_filter=False,
-                    total_token_count=sum(
-                        image.token_count
-                        for image in setup.extracted_context_files.image_files
-                    ),
-                    file_metadata=[],
-                    uncapped_token_count=None,
-                ),
-                llm=llm,
-                token_counter=get_llm_token_counter(llm),
-                user_identity=setup.user_identity,
-                language_section=build_language_section(
-                    setup.user_memory_context.user_info.language
-                ),
-                reasoning_effort=setup.reasoning_effort,
-                all_injected_file_metadata=setup.all_injected_file_metadata,
-                skip_clarification=SKIP_DEEP_RESEARCH_CLARIFICATION
-                or setup.skip_clarification,
-                checkpoint=setup.checkpoint,
-                previous_run_id=setup.previous_run_id,
-            )
-        # The chat agent and its subagents get the sandbox tools when the turn
-        # offers them. They share one sandbox turn, which the root's runs end.
-        turn = (
-            SandboxTurn(
-                tenant_id=get_current_tenant_id(),
-                user_id=user.id,
-                chat_session_id=setup.chat_session_id,
-                vm_chat_files=setup.vm_chat_files,
-                copy_vm_chat_files=setup.copy_vm_chat_files,
-            )
-            if setup.sandbox_tools
-            else None
+        # The chat agent and its subagents share one sandbox turn. Deep
+        # research turns never offer the sandbox tools.
+        if not setup.sandbox_tools:
+            return tools, None
+        sandbox = SANDBOX_TOOLS[llm.config.tool_family]
+        turn = SandboxTurn(
+            tenant_id=get_current_tenant_id(),
+            user_id=user.id,
+            chat_session_id=setup.chat_session_id,
+            vm_chat_files=setup.vm_chat_files,
+            copy_vm_chat_files=setup.copy_vm_chat_files,
+            shell=sandbox.shell,
         )
-        if turn is not None:
-            tools += [
-                tool(turn)
-                for tool in sandbox_tools_for_model(
-                    model_identity_names(
-                        llm.config.model_name, llm.config.deployment_name
-                    )
-                )
-            ]
-            if setup.has_chat_skills:
-                tools.append(LoadSkillTool(turn))
-        return build_chat_agent(
-            AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
-            agent_id,
-            setup.previous_run_id,
-            setup=setup,
-            llm=llm,
-            tools=tools,
-            on_drained=turn.end if turn is not None else None,
-            inject_memories=setup.use_memories,
-            with_subagents=with_subagents,
+        sandbox_tools = [
+            tool(turn)
+            for tool in with_browser_tools(sandbox.tools, browser=setup.browser_tools)
+        ]
+        # A turn that runs without asking (evals) gates no built-in action,
+        # as integration policies allow its Ask actions.
+        if setup.approval_mode is ApprovalMode.RUN_WITHOUT_ASKING:
+            for tool in sandbox_tools:
+                tool.approval = None
+        tools += sandbox_tools
+        if setup.has_chat_skills:
+            tools.append(LoadSkillTool(turn))
+        return tools, turn
+
+
+def create_chat_agent(
+    setup: ChatTurnSetup,
+    user: User,
+    response_index: int,
+    cancellation: CancellationSignal,
+    auto_detect_search_filters: bool,
+    *,
+    with_subagents: bool,
+) -> tuple[Agent, ChatFeature | DeepResearchFeature]:
+    """The root agent of a new response, and its feature."""
+    tools, turn = construct_chat_tools(
+        setup, user, response_index, cancellation, auto_detect_search_filters
+    )
+    llm = setup.responses[response_index].llm
+    preferred_tool = setup.preferred_tool
+    if preferred_tool is not None and not any(
+        tool.matches(preferred_tool) for tool in tools
+    ):
+        if not setup.preferred_tool_saved:
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"Preferred {preferred_tool} not found in tools",
+            )
+        preferred_tool = None
+
+    agent_id = str(setup.chat_session_id)
+
+    if setup.is_deep_research:
+        feature = DeepResearchFeature(
+            allowed_tools=tools,
             additional_context=setup.additional_context,
-            question_tool=QuestionTool(
-                ASK_USER_QUESTION_TOOL_NAME
-                if is_claude_model(
-                    model_identity_names(
-                        llm.config.model_name, llm.config.deployment_name
-                    )
-                )
-                else REQUEST_USER_INPUT_TOOL_NAME,
-                tenant_id=get_current_tenant_id(),
-                chat_session_id=setup.chat_session_id,
-                response_id=setup.responses[response_index].message_id,
-            )
-            if setup.question_tool
-            else None,
-            preferred_tool=preferred_tool,
+            context_files=ExtractedContextFiles(
+                file_texts=[],
+                image_files=setup.extracted_context_files.image_files,
+                use_as_search_filter=False,
+                total_token_count=sum(
+                    image.token_count
+                    for image in setup.extracted_context_files.image_files
+                ),
+                file_metadata=[],
+                uncapped_token_count=None,
+            ),
+            llm=llm,
+            token_counter=get_llm_token_counter(llm),
+            user_identity=setup.user_identity,
+            language_section=build_language_section(
+                setup.user_memory_context.user_info.language
+            ),
+            reasoning_effort=setup.reasoning_effort,
+            all_injected_file_metadata=setup.all_injected_file_metadata,
+            skip_clarification=SKIP_DEEP_RESEARCH_CLARIFICATION
+            or setup.skip_clarification,
         )
+        return (
+            feature.agent(
+                AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
+                agent_id=agent_id,
+                previous_run_id=setup.previous_run_id,
+            ),
+            feature,
+        )
+    return build_chat_agent(
+        AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
+        agent_id,
+        setup.previous_run_id,
+        setup=setup,
+        llm=llm,
+        tools=tools,
+        on_drained=turn.end if turn is not None else None,
+        inject_memories=setup.use_memories,
+        with_subagents=with_subagents,
+        additional_context=setup.additional_context,
+        question_tool=partial(
+            QuestionTool,
+            tenant_id=get_current_tenant_id(),
+            chat_session_id=setup.chat_session_id,
+            response_id=setup.responses[response_index].message_id,
+        )
+        if setup.question_tool
+        else None,
+        preferred_tool=preferred_tool,
+    )

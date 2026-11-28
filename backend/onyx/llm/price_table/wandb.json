@@ -8,7 +8,7 @@
         "input": 0.23,
         "output": 0.96
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -151,7 +151,7 @@
         "input": 1.31,
         "output": 3.96
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-pro",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -177,7 +177,7 @@
       "cost": {
         "cache_read": 0.002,
         "input": 0.13,
-        "output": 0.65
+        "output": 0.59
       },
       "family": "deepseek-flash",
       "limit": {
@@ -379,7 +379,7 @@
         "input": 0.65,
         "output": 3.41
       },
-      "family": "kimi-k2",
+      "family": "kimi",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -408,7 +408,7 @@
         "input": 0.6,
         "output": 3
       },
-      "family": "kimi-k2",
+      "family": "kimi-code",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -437,7 +437,7 @@
         "input": 0.5,
         "output": 2.15
       },
-      "family": "nemotron",
+      "family": "nemotron-ultra",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -465,7 +465,7 @@
         "input": 0.07,
         "output": 0.2
       },
-      "family": "nemotron",
+      "family": "nemotron-lightning",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -491,9 +491,9 @@
       "cost": {
         "cache_read": 0.02,
         "input": 0.15,
-        "output": 0.5
+        "output": 0.47
       },
-      "family": "nemotron",
+      "family": "nemotron-super",
       "limit": {
         "context": 1048576,
         "output": 1048576

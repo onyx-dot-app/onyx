@@ -14,6 +14,7 @@ from onyx.auth.sso_web_error import redirect_sso_errors_to_web
 from onyx.auth.users import get_pkce_cookie_name
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.fleet_telemetry import LoginFailure
 
 
 def _request(
@@ -39,7 +40,7 @@ def _request_with_pkce_cookie(accept: str, state: str) -> Request:
     )
 
 
-@redirect_sso_errors_to_web
+@redirect_sso_errors_to_web(LoginFailure.OIDC)
 async def _handler(*, request: Request, raise_error: bool) -> RedirectResponse:  # noqa: ARG001
     if raise_error:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "invite only")
@@ -69,7 +70,7 @@ async def test_non_browser_gets_standard_json_error() -> None:
 
 @pytest.mark.asyncio
 async def test_no_request_kwarg_reraises() -> None:
-    @redirect_sso_errors_to_web
+    @redirect_sso_errors_to_web(LoginFailure.OIDC)
     async def _no_request_handler(**_: Any) -> RedirectResponse:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "nope")
 
@@ -88,7 +89,7 @@ async def test_enum_detail_uses_value_in_url() -> None:
     class _Code(str, enum.Enum):
         SAMPLE = "SAMPLE_CODE"
 
-    @redirect_sso_errors_to_web
+    @redirect_sso_errors_to_web(LoginFailure.OIDC)
     async def _enum_handler(*, request: Request) -> RedirectResponse:  # noqa: ARG001
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, _Code.SAMPLE)
 

@@ -2,6 +2,7 @@
 for all integrations, so their query count does not grow with the number of
 integrations."""
 
+import json
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -84,7 +85,9 @@ def _add_integrations(
                 auth_mode=IntegrationAuthMode.SHARED,
                 auth_method=IntegrationAuthMethod.API_KEY,
                 header_template={"X-Api-Key": "{api_key}"},
-                config=OpenApiConfigInput(openapi_spec=_openapi_spec(name)),
+                config=OpenApiConfigInput(
+                    openapi_document=json.dumps(_openapi_spec(name))
+                ),
             ),
             admin,
             db_session,
@@ -211,9 +214,12 @@ def test_persona_detail_batches_openapi_snapshots(
                     )
                 )
                 db_session.flush()
-                expected[tool.id] = tool_api.openapi_tool_snapshot(
-                    tool, integration, db_session
-                ).model_dump()
+                # An agent response carries no header values.
+                expected[tool.id] = (
+                    tool_api.openapi_tool_snapshot(tool, integration, db_session)
+                    .model_copy(update={"custom_headers": None})
+                    .model_dump()
+                )
             db_session.commit()
 
             def read(expected_size: int = size) -> None:

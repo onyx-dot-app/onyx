@@ -177,7 +177,7 @@ test("an integration with no access shows the reason and the owner", async () =>
 
 // ── Connection ───────────────────────────────────────────────────────────────
 
-test("Disconnect is a new button after the API key form connects", async () => {
+test("the header offers Disconnect after the API key form connects", async () => {
   const integration = makeMemberIntegration({
     id: 2,
     name: "Reports API",
@@ -185,24 +185,24 @@ test("Disconnect is a new button after the API key form connects", async () => {
     credential_fields: [{ key: "token", label: "API Token", secret: true }],
   });
   let state: MemberIntegration["status"]["state"] = "not_connected";
-  open(
-    integration,
-    {
-      "/api/integrations": () => [
-        { ...integration, status: { state, reason: null } },
-      ],
-      "PUT /api/integrations/2/connection": () => {
-        state = "connected";
-        return { state, reason: null };
-      },
+  open(integration, {
+    "/api/integrations": () => [
+      { ...integration, status: { state, reason: null } },
+    ],
+    "PUT /api/integrations/2/connection": () => {
+      state = "connected";
+      return { state, reason: null };
     },
-    "configuration"
-  );
+  });
   const u = user();
-  const [connect] = await screen.findAllByRole("button", {
+  const connect = await screen.findByRole("button", {
     name: "Connect Reports API",
   });
-  if (!connect) throw new Error("No Connect button");
+  // The connection lives in the header; there is no Configuration tab.
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+    copy.tabs.overview,
+    copy.tabs.actions,
+  ]);
   await u.click(connect);
   const dialog = await screen.findByRole("dialog");
   await u.type(within(dialog).getByLabelText("API Token"), "secret-1");
@@ -213,6 +213,71 @@ test("Disconnect is a new button after the API key form connects", async () => {
   );
   expect(
     await screen.findByRole("button", { name: "Disconnect Reports API" })
+  ).toBeVisible();
+});
+
+test.each(["connected", "needs_reconnect"] as const)(
+  "a turned off integration keeps Disconnect for a %s connection",
+  async (state) => {
+    const fetchMock = open(
+      makeMemberIntegration({
+        status: { state, reason: null },
+        access: makeAccess({ state: "turned_off" }),
+      }),
+      { "DELETE /api/integrations/1/connection": { state: "not_connected" } }
+    );
+    expect(await screen.findByText("Turned off by an admin.")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Reconnect Linear" })
+    ).not.toBeInTheDocument();
+    await user().click(
+      screen.getByRole("button", { name: "Disconnect Linear" })
+    );
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith("/api/integrations/1/connection") &&
+            init?.method === "DELETE"
+        )
+      ).toBe(true)
+    );
+  }
+);
+
+test("the overview shows why the user must reconnect and offers Disconnect", async () => {
+  open(
+    makeMemberIntegration({
+      status: { state: "needs_reconnect", reason: "The token expired." },
+    })
+  );
+  expect(await screen.findByText("The token expired.")).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Reconnect Linear" })
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Disconnect Linear" })
+  ).toBeVisible();
+});
+
+test("a broken Onyx login asks the member to sign in again, not the admin", async () => {
+  open(
+    makeMemberIntegration({
+      auth_method: "onyx_login",
+      status: {
+        state: "needs_reconnect",
+        reason: "Sign in to Onyx again to use Linear.",
+      },
+    })
+  );
+  expect(
+    await screen.findByText("Sign in to Onyx again to use Linear.")
+  ).toBeVisible();
+  expect(
+    screen.queryByText(messages.plugins.member.connection.askAdmin)
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Disconnect Linear" })
   ).toBeVisible();
 });
 
@@ -231,9 +296,9 @@ test("OAuth continues in this tab when the browser blocks the new tab", async ()
   );
 });
 
-// ── Always allow ─────────────────────────────────────────────────────────────
+// ── Don't ask me ──────────────────────────────────────────────────────────────
 
-test("an action that asks offers Always allow", async () => {
+test("an action that asks offers Don't ask me", async () => {
   const policies = {
     users_can_save_always_allow: true,
     actions: [
@@ -264,11 +329,15 @@ test("an action that asks offers Always allow", async () => {
     "actions"
   );
   const toggle = await screen.findByRole("switch", {
-    name: "Always allow Create issue",
+    name: "Don't ask me for Create issue",
   });
   expect(
-    screen.queryByRole("switch", { name: "Always allow List issues" })
+    screen.queryByRole("switch", { name: "Don't ask me for List issues" })
   ).not.toBeInTheDocument();
+  // The policy is a badge; only the action that asks gets the labelled switch.
+  expect(screen.getByText("Ask")).toBeVisible();
+  expect(screen.getByText("Allow")).toBeVisible();
+  expect(screen.getAllByText("Don't ask me")).toHaveLength(1);
   await user().click(toggle);
   await waitFor(() =>
     expect(
@@ -357,7 +426,9 @@ test("an integration of everyone has no share menu", async () => {
 test("an organization-wide action manager publishes after the confirmation", async () => {
   mockGlobalHolder = true;
   const fetchMock = open(ownPrivate, {
-    "POST /api/integrations/1/publish": { installation_policy: "AVAILABLE" },
+    "PUT /api/admin/integrations/1/installation-policy": {
+      installation_policy: "AVAILABLE",
+    },
   });
   const success = jest.spyOn(toast, "success");
   const u = user();
@@ -371,12 +442,12 @@ test("an organization-wide action manager publishes after the confirmation", asy
   );
   await waitFor(() =>
     expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          String(input) === "/api/integrations/1/publish" &&
-          init?.method === "POST"
+      requestBody(
+        fetchMock,
+        "PUT",
+        "/api/admin/integrations/1/installation-policy"
       )
-    ).toBe(true)
+    ).toEqual({ installation_policy: "AVAILABLE" })
   );
   await waitFor(() =>
     expect(success).toHaveBeenCalledWith(

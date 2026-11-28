@@ -141,44 +141,6 @@
         "tooltip": "{description}\nPrefer this tool for this chat. The agent may answer without using it."
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "Cancel"
-      },
-      "copyButton": {
-        "tooltip": "Copy definition"
-      },
-      "definition": {
-        "invalidJson": "Invalid JSON format",
-        "placeholder": "Enter your OpenAPI schema here",
-        "required": "OpenAPI schema definition is required",
-        "subDescription": "Specify an OpenAPI schema that defines the APIs you want to make available as part of this plugin. You can use the placeholders `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, and `USER_EMAIL` anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the current request's values at call time. Learn more about [OpenAPI plugins]({docsUrl}).",
-        "title": "OpenAPI Schema Definition"
-      },
-      "empty": {
-        "description": "Provide OpenAPI schema to preview actions here.",
-        "title": "No Actions Found"
-      },
-      "formatButton": {
-        "tooltip": "Format definition"
-      },
-      "method": {
-        "noSummary": "No summary provided"
-      },
-      "toasts": {
-        "actionCreated": "OpenAPI plugin created successfully",
-        "invalidJson": "Invalid JSON format in OpenAPI schema definition"
-      },
-      "humanDescription": {
-        "title": "Description for Humans",
-        "hint": "Displayed on the plugin card and in plugin details."
-      },
-      "agentDescription": {
-        "title": "Description for Agents",
-        "hint": "Edits info.description in the OpenAPI schema.",
-        "disabled": "Enter a valid schema to edit this field."
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "(Disconnected)"
@@ -360,10 +322,8 @@
       "detectedTransport": "Transport: {transport}",
       "authenticationUndetected": "Choose the authentication method on the next page.",
       "details": "Details",
-      "checking": "Checking server…",
       "serverDetails": "Server details",
       "authentication": "Authentication",
-      "continue": "Continue",
       "back": "Back"
     },
     "policyEditor": {
@@ -509,6 +469,9 @@
         },
         "userFile": {
           "description": "Files uploaded in chat"
+        },
+        "chatArtifact": {
+          "description": "Files published in chat"
         },
         "googleSites": {
           "description": "Google-hosted pages"
@@ -1518,6 +1481,10 @@
           "description": "Search the web for real-time information and up-to-date results.",
           "title": "Web Search"
         }
+      },
+      "browser": {
+        "title": "Browser",
+        "description": "Let the agent use a web browser in its sandbox. Users can watch it and take control in the chat panel."
       }
     },
     "codeInterpreter": {
@@ -7909,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "Audit Logs and SIEM",
+          "description": "Onyx writes audit events as JSON lines to its logs. Your log shipper sends them to your SIEM. [Set up SIEM forwarding]({url})."
+        },
+        "status": {
+          "title": "Audit Stream Status",
+          "description": "The events Onyx wrote. Onyx cannot see your log shipper or your SIEM, so confirm that the events arrive there.",
+          "loadFailed": {
+            "title": "Could not load the audit stream status",
+            "description": "Reload the page to try again."
+          },
+          "notEnabled": {
+            "title": "Onyx does not write audit events",
+            "description": "The audit stream needs an Enterprise license."
+          },
+          "logFormat": {
+            "title": "Use JSON logs",
+            "description": "The log format is {logFormat}. Set LOG_FORMAT=json so that your log shipper can parse every log record."
+          },
+          "noEvents": "No events yet",
+          "eventSummary": "{count, plural, one {# event} other {# events}} in the last 24 hours. Last event {lastEvent}.",
+          "eventCount": "{count, plural, one {# event} other {# events}} in the last 24 hours.",
+          "classes": {
+            "authentication": "Authentication",
+            "account_change": "Account Changes",
+            "user_access_management": "User Access Management",
+            "group_management": "Group Management",
+            "api_activity": "API Activity",
+            "credential_access": "Credential Access"
+          }
+        },
+        "auditEvents": {
+          "title": "Audit Events",
+          "description": "Security and administration changes. These are on by default."
+        },
+        "userActivity": {
+          "title": "User Activity",
+          "description": "What each user did, for incident investigation. These are off by default and can add many events."
+        },
+        "categories": {
+          "authentication": {
+            "title": "Authentication",
+            "description": "Sign-ins, failed sign-ins, sign-outs, and password resets."
+          },
+          "user_and_group_management": {
+            "title": "User and Group Management",
+            "description": "User, role, and group changes, and MCP client approvals."
+          },
+          "configuration": {
+            "title": "Configuration Changes",
+            "description": "Changes to settings, connectors, credentials, agents, document sets, API keys, and access tokens."
+          },
+          "credential_access": {
+            "title": "Credential Access",
+            "description": "Decryptions of stored credentials. Onyx can leave out a repeat for the same credential and user within 10 minutes."
+          },
+          "data_export": {
+            "title": "Data Exports",
+            "description": "Downloads of query history, usage reports, and log exports."
+          },
+          "chat": {
+            "title": "Chat Messages",
+            "description": "Each chat answer, with the agent, the model, the tools, and the documents the user saw."
+          },
+          "search": {
+            "title": "Searches",
+            "description": "Each search from the search page, the API, or an MCP client, with the documents it found."
+          },
+          "llm_gateway": {
+            "title": "LLM Gateway Requests",
+            "description": "Each call through the LLM gateway, with the model and the token counts."
+          },
+          "file_download": {
+            "title": "File Downloads",
+            "description": "Each chat file that a user downloads."
+          }
+        },
+        "queryText": {
+          "title": "Include Query Text",
+          "description": "Add what the user typed to chat and search events. Onyx adds it only when query history is normal."
+        }
       }
     },
     "serviceAccounts": {
@@ -10389,51 +10439,22 @@
     },
     "integrations": {
       "title": "Integrations",
-      "description": "Connect MCP servers and apps. Each integration has an owner, an install setting and its own shares.",
+      "description": "Connect MCP servers and apps.",
       "search": "Search integrations",
       "open": "Open {name}",
       "loadFailed": "Could not load the integrations.",
       "add": {
         "label": "Add",
-        "title": "Add an Integration",
-        "description": "Connect a service so people can use it in chat and Craft.",
         "created": "Added {name}.",
         "createFailed": "Could not add the integration.",
-        "openapi": {
-          "title": "Add an OpenAPI App",
-          "schema": {
-            "title": "Schema",
-            "description": "Add the OpenAPI schema that defines the actions.",
-            "added": "{count, plural, one {The schema has # path.} other {The schema has # paths.}}",
-            "required": "Add a schema.",
-            "add": "Add schema",
-            "edit": "Edit schema"
-          }
-        },
         "preset": {
-          "title": "Start From",
           "loadFailed": "Could not load the presets.",
-          "instructions": "Setup instructions",
-          "credentialRequired": "Add this value.",
-          "description": "A preset fills in the name and sign-in of a built-in app. Choose Custom app to set up any HTTP service.",
-          "custom": "Custom app"
+          "credentialRequired": "Add this value."
         },
         "name": {
           "title": "Name",
           "placeholder": "Add a name",
           "required": "Add a name."
-        },
-        "descriptionField": {
-          "title": "Description",
-          "placeholder": "Add a description"
-        },
-        "custom": {
-          "patterns": {
-            "title": "URL Patterns",
-            "description": "Put one URL pattern on each line, for example https://api.example.com/*.",
-            "placeholder": "https://api.example.com/*",
-            "required": "Add at least one URL pattern."
-          }
         },
         "mcp": {
           "url": {
@@ -10442,7 +10463,6 @@
             "error": "Enter a valid server URL."
           },
           "probe": {
-            "checking": "Checking the server…",
             "public": "Found {count, plural, one {# tool} other {# tools}}. The server needs no sign-in.",
             "oauth": "The server uses OAuth sign-in.",
             "authUnknown": "The server needs sign-in. Add an API key header or OAuth.",
@@ -10453,8 +10473,7 @@
             "title": "Transport",
             "streamableHttp": "Streamable HTTP",
             "sse": "Server-sent events (SSE)"
-          },
-          "suggested": "Suggested Servers"
+          }
         },
         "owner": {
           "title": "Owner",
@@ -10466,31 +10485,118 @@
         "submit": "Add",
         "adding": "Adding…",
         "cancel": "Cancel",
-        "type": {
-          "title": "Type",
-          "description": "Choose how Onyx connects to the service.",
-          "mcp_server": {
-            "title": "MCP Server",
-            "description": "Connect a remote MCP server by its URL."
+        "rest": {
+          "import": {
+            "title": "Import a Spec",
+            "description": "Upload or paste an OpenAPI spec in JSON or YAML, or import it from a URL. Onyx fills in the base URL and one endpoint for each operation.",
+            "upload": "Upload or paste a spec",
+            "url": "Spec URL",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "Import",
+            "done": "{count, plural, one {Imported # endpoint.} other {Imported # endpoints.}}",
+            "failed": "Could not import the spec.",
+            "noActions": "Onyx skipped every operation in the spec, so the current endpoints stay. Use another spec."
           },
-          "openapi": {
-            "title": "OpenAPI App",
-            "description": "Make actions from an OpenAPI schema."
+          "baseUrl": {
+            "title": "Base URL",
+            "placeholder": "https://api.example.com",
+            "required": "Add a base URL."
           },
-          "app": {
-            "title": "App",
-            "description": "Start from a preset, such as GitHub, or a custom app."
+          "endpoints": {
+            "title": "Endpoints",
+            "description": "Put one endpoint on each line: the method, the path, optional query parameters and a name. Each endpoint becomes an action.",
+            "placeholder": "GET /tickets?status&limit List tickets",
+            "required": "Add at least one endpoint.",
+            "lineError": "Line {line} ({text}): {message}"
           }
         },
-        "details": {
-          "title": "Details"
+        "graphql": {
+          "endpointUrl": {
+            "title": "Endpoint URL",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "Add an endpoint URL."
+          },
+          "schema": {
+            "title": "Schema",
+            "description": "Paste the schema in GraphQL SDL, upload a .graphql file, or load it from the endpoint. Each query and mutation becomes an action.",
+            "upload": "Upload a .graphql file",
+            "required": "Add a schema."
+          },
+          "introspect": {
+            "submit": "Load from Endpoint",
+            "done": "Loaded the schema.",
+            "failed": "Could not load the schema."
+          }
         },
-        "signIn": {
-          "title": "Sign-In"
+        "menu": {
+          "mcpServer": "MCP server",
+          "customApi": "Custom API",
+          "fromCatalog": "From catalog"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "Add MCP Server",
+            "description": "Connect a remote MCP server by its URL."
+          },
+          "api": {
+            "title": "Add Custom API",
+            "description": "Connect a REST or GraphQL API. Onyx finds the endpoints from the URL or a spec."
+          },
+          "catalog": {
+            "title": "Add from Catalog",
+            "description": "Pick an app or an MCP server to set up."
+          },
+          "namedTitle": "Add {name}"
+        },
+        "catalog": {
+          "title": "Browse the Catalog",
+          "description": "Apps and hosted MCP servers that Onyx already knows how to connect.",
+          "browse": "Browse"
+        },
+        "api": {
+          "url": {
+            "title": "URL",
+            "description": "An OpenAPI spec URL, a GraphQL endpoint or a base URL",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "Enter a valid URL, or upload a spec.",
+            "needed": "Add the URL of the API. The spec does not give one."
+          },
+          "upload": {
+            "label": "Upload a spec file",
+            "chosen": "Spec: {file}",
+            "remove": "Remove the spec"
+          },
+          "failed": "Could not read the spec.",
+          "specError": "The spec cannot be added: {detail}",
+          "tooLarge": "The file is larger than 5 MB.",
+          "checkFailed": "Onyx could not check the URL. Try again.",
+          "noActions": "Onyx skipped every operation in the spec, so it gives no actions. Use another spec, or remove the spec and enter the API base URL to add the endpoints by hand."
+        },
+        "detected": {
+          "openapi": "REST API, {count, plural, one {# endpoint} other {# endpoints}}",
+          "openapiSkipped": "REST API, {count, plural, one {# endpoint} other {# endpoints}}. {skipped} skipped.",
+          "skippedTitle": "Skipped endpoints",
+          "rest": "REST API with no spec. Add the endpoints below.",
+          "restUnreachable": "Onyx cannot reach the URL: {detail} You can still add it as a REST API with no spec. Add the endpoints below.",
+          "restTooLarge": "Onyx cannot check the URL for a spec: {detail} You can still add it as a REST API with no spec, or upload a smaller spec file. Add the endpoints below.",
+          "graphql": "GraphQL API, {queries, plural, one {# query} other {# queries}} and {mutations, plural, one {# mutation} other {# mutations}}",
+          "preset": "Built-in app. Onyx calls its API."
+        },
+        "continue": "Continue",
+        "back": "Back",
+        "detecting": "Checking the URL…",
+        "advanced": "Advanced",
+        "setup": {
+          "title": "Set Up {name}",
+          "callbackUrl": "Callback URL",
+          "copyCallbackUrl": "Copy the callback URL",
+          "scopes": "Scopes",
+          "open": "Open {name}"
         }
       },
       "filters": {
         "label": "Integration type",
+        "selected": "Integration type: {type}",
         "all": "All types",
         "mcp": "MCP servers",
         "api": "Apps"
@@ -10510,9 +10616,10 @@
       },
       "shape": {
         "mcp_server": "MCP server",
-        "openapi": "OpenAPI app",
+        "openapi": "REST app",
         "preset": "App",
-        "custom": "Custom app"
+        "custom": "URL-pattern app",
+        "graphql": "GraphQL app"
       },
       "signInSummary": "{mode, select, none {No sign-in} shared {{method, select, oauth2 {Organization account (OAuth)} api_key {Organization API key} onyx_login {Onyx login} managed {Managed by Onyx} other {Organization account}}} individual {{method, select, oauth2 {Each user (OAuth)} api_key {Each user (API key)} onyx_login {Onyx login} managed {Managed by Onyx} other {Each user}}} other {Unknown}}",
       "status": {
@@ -10589,7 +10696,6 @@
         "overview": {
           "readOnly": "You can see this integration. You cannot change it.",
           "noDescription": "No description",
-          "type": "Type",
           "signIn": "Sign-in",
           "createdBy": "Added by",
           "needsSetup": "Needs setup",
@@ -10620,19 +10726,18 @@
           },
           "description": "Description",
           "menu": "More actions",
-          "owner": "Owner"
+          "owner": "Owner",
+          "urlPatternApp": {
+            "title": "This app uses URL patterns",
+            "description": "Onyx no longer adds URL-pattern apps. To replace this app, add a custom REST app for each host that its URL patterns reach. Do the setup steps in the docs before you delete this app."
+          }
         },
         "configuration": {
           "readOnly": "You can see this integration. You cannot change it.",
           "connection": {
             "title": "Connection",
             "serverUrl": "Server URL",
-            "serverUrlError": "Enter a valid server URL.",
-            "urlPatterns": "URL Patterns",
-            "urlPatternsDescription": "Put one URL pattern on each line.",
-            "schema": "OpenAPI Schema",
-            "schemaDescription": "Onyx syncs the actions again when you save a changed schema.",
-            "schemaError": "Enter the schema as a JSON object."
+            "serverUrlError": "Enter a valid server URL."
           },
           "signIn": {
             "title": "Sign-in",
@@ -10680,11 +10785,11 @@
           },
           "usesDefault": "Uses default",
           "setByAdmin": "Set by admin",
-          "alwaysAsks": "Craft asks before each request that matches no other action. You cannot set Allow.",
+          "alwaysAsks": "Onyx asks before each request that matches no other action. You cannot set Allow.",
           "useDefaults": "Use defaults",
-          "readOnly": "Read-Only Actions ({count})",
-          "write": "Write Actions ({count})",
-          "other": "Other Actions ({count})",
+          "readOnly": "Read-Only Actions",
+          "write": "Write Actions",
+          "other": "Other Actions",
           "empty": "This integration has no actions.",
           "connectFirst": {
             "title": "Connect the server first",
@@ -10700,8 +10805,8 @@
         "saved": "{name} is now {policy}.",
         "saveFailed": "Could not save the install setting.",
         "title": "Install Setting",
-        "description": "Who gets this integration. Not available keeps it private: only its owner, the people it is shared with and the groups with their own setting use it. Remove those group settings to limit it to the owner and the shares.",
-        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it.",
+        "description": "Who in the organization gets this integration.",
+        "notAvailable": "Private. Only the owner and the people it is shared with use it.",
         "required": "Members who sign in with their own account must connect it before they can use chat and Craft."
       },
       "ownedBy": "Owned by {owner}",
@@ -10709,6 +10814,10 @@
         "saved": "Group settings of {name} saved.",
         "saveFailed": "Could not save the group setting."
       }
+    },
+    "plugins": {
+      "title": "Plugins",
+      "description": "Upload Claude Code and Codex plugins, and sync marketplaces from GitHub. A plugin is a set of skills, and it lists the integrations that those skills need."
     },
     "serviceStatus": {
       "page": {
@@ -11046,7 +11155,7 @@
         "loadFailed": "Could not load the integrations.",
         "lock": {
           "adminBlocked": "Allow is not available: an admin blocked this action.",
-          "alwaysAsks": "Allow is not available: Craft asks for approval for each of these requests.",
+          "alwaysAsks": "Allow is not available: Onyx asks for approval for each of these requests.",
           "adminFinal": "Allow is not available: the admin setting of this integration is final."
         },
         "noActions": "This integration has no actions yet.",
@@ -11400,6 +11509,8 @@
         "invalidScope": "The requested permissions are not available.",
         "loginBadCredentials": "This account can't sign in. It may be deactivated. Contact your workspace admin.",
         "loginRequired": "You need to log in with your identity provider first.",
+        "magicLinkInvalid": "This sign-in link has expired or was already used. Ask for a new one.",
+        "magicLinkWrongEmail": "This link was sent to a different email address. Ask for a new link.",
         "oauthUserAlreadyExists": "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
         "playgroundActiveTenant": "A team from your company is already trying Onyx. Join your team, or start a new team?",
         "playgroundAskAdmin": "Ask your admin to invite you.",
@@ -11423,6 +11534,9 @@
       },
       "joinTeamButton": {
         "label": "Join your team"
+      },
+      "newLinkButton": {
+        "label": "Get a new link"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11575,6 +11689,34 @@
       },
       "workEmailField": {
         "label": "Work Email"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "This link was opened in a different browser from the one that asked for it. Enter the email address it was sent to.",
+        "title": "Confirm your email"
+      },
+      "differentEmailButton": {
+        "label": "Use a different email"
+      },
+      "redeeming": {
+        "text": "Signing you in…"
+      },
+      "requestButton": {
+        "label": "Get a link by email"
+      },
+      "resendWait": {
+        "error": "A sign-in link was sent to this address a moment ago. Check your inbox, or wait a minute and ask again."
+      },
+      "sendFailed": {
+        "error": "Could not send the sign-in email. Try again in a moment."
+      },
+      "sent": {
+        "description": "We sent a sign-in link to {email}. It works once and expires in 15 minutes.",
+        "title": "Check your email"
+      },
+      "useSso": {
+        "error": "Sign in with your SSO provider. Email links are turned off for this workspace."
       }
     },
     "passwordRequirements": {
@@ -11792,7 +11934,12 @@
         "toast": "Authentication successful"
       },
       "scrollToBottomButton": {
-        "label": "Scroll to bottom"
+        "label": "Scroll to bottom",
+        "reason": {
+          "approval": "Approval needed",
+          "newAnswer": "New answer",
+          "question": "Question waiting"
+        }
       },
       "sessionAccessDenied": {
         "description": "You don't have permission to view this chat session.",
@@ -11945,7 +12092,10 @@
       "fullImageModal": {
         "image": {
           "alt": "Uploaded attachment"
-        }
+        },
+        "next": "Next image",
+        "position": "{current} / {total}",
+        "previous": "Previous image"
       },
       "inMessageImage": {
         "downloadButton": {
@@ -11969,7 +12119,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "Subagents working",
         "attachFilesButton": {
           "tooltip": "Attach Files"
         },
@@ -12022,9 +12171,6 @@
           "interruptLabel": "Interrupt",
           "waitHint": "Wait for the response to finish.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "Stop subagents"
         },
         "questionAttachmentsHint": "Answers to the agent's questions can't include files. Remove the files to answer."
       },
@@ -12172,8 +12318,7 @@
         "withdrawFailed": "Could not remove the pending message.",
         "loadFailed": "Could not load pending messages.",
         "alreadyAccepted": "This message was already accepted and is no longer pending.",
-        "interruptFailed": "Could not send this message now. It remains pending.",
-        "stopSubagentsFailed": "Could not stop the subagents."
+        "interruptFailed": "Could not send this message now. It remains pending."
       },
       "pendingToolApproval": {
         "toast": "Approve or reject the pending tool calls first."
@@ -12183,6 +12328,16 @@
       },
       "pendingUserInput": {
         "toast": "Answer the pending approval requests or questions first."
+      },
+      "fileDropOverlay": {
+        "label": "Drop files to attach"
+      },
+      "editMessageBanner": {
+        "label": "Editing in the composer",
+        "cancelButton": {
+          "label": "Cancel",
+          "ariaLabel": "Cancel editing message"
+        }
       }
     },
     "messages": {
@@ -12192,15 +12347,32 @@
         },
         "timedOut": {
           "text": "The response stopped because it reached its time limit."
+        },
+        "approvalExpired": {
+          "text": "The scheduled run stopped because nobody answered its approval request in time."
         }
       },
-      "agentResults": {
-        "received": "Subagent results received"
+      "callout": {
+        "note": {
+          "title": "Note"
+        },
+        "tip": {
+          "title": "Tip"
+        },
+        "important": {
+          "title": "Important"
+        },
+        "warning": {
+          "title": "Warning"
+        },
+        "caution": {
+          "title": "Caution"
+        }
       },
       "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "Copied!",
-          "label": "Copy"
+        "wrapButton": {
+          "unwrapLabel": "Unwrap",
+          "wrapLabel": "Wrap"
         }
       },
       "customTool": {
@@ -12245,6 +12417,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} could not reach its server"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} failed"
         }
       },
       "customToolAuth": {
@@ -12324,6 +12499,10 @@
       "humanMessage": {
         "editButton": {
           "tooltip": "Edit"
+        },
+        "foldButton": {
+          "collapseLabel": "Show less",
+          "expandLabel": "Show full message"
         }
       },
       "imageTool": {
@@ -12340,6 +12519,12 @@
           "text": "Image generation stopped"
         }
       },
+      "markdownImage": {
+        "unavailable": {
+          "text": "Image unavailable",
+          "withAlt": "{alt} · Image unavailable"
+        }
+      },
       "markdownTable": {
         "copyButton": {
           "label": "Copy table"
@@ -12348,14 +12533,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "Question"
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "Cancel"
         },
-        "submitButton": {
-          "label": "Submit"
+        "artifactError": {
+          "message": "This file is not available."
         }
       },
       "messageSwitcher": {
@@ -12368,6 +12548,9 @@
         "previousButton": {
           "tooltip": "Previous"
         }
+      },
+      "messageTime": {
+        "yesterdayLabel": "Yesterday at {time}"
       },
       "multiModelPanel": {
         "deselectButton": {
@@ -12505,8 +12688,17 @@
           "waitingForAnswer": {
             "label": "Waiting for your answer..."
           },
+          "waitingForOwnerApproval": {
+            "label": "Waiting for the owner's approval..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "Waiting for the owner's answer..."
+          },
           "runningCommand": {
             "label": "Running command..."
+          },
+          "runningProgram": {
+            "label": "Running {program}..."
           },
           "editingFiles": {
             "label": "Editing files..."
@@ -12516,48 +12708,6 @@
           },
           "browsing": {
             "label": "Browsing web pages..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "Doing some work...",
-              "done": "Did some work"
-            },
-            "crunchingDetails": {
-              "working": "Crunching the details...",
-              "done": "Crunched the details"
-            },
-            "connectingDots": {
-              "working": "Connecting the dots...",
-              "done": "Connected the dots"
-            },
-            "runningNumbers": {
-              "working": "Running the numbers...",
-              "done": "Ran the numbers"
-            },
-            "fillingGaps": {
-              "working": "Filling in the gaps...",
-              "done": "Filled in the gaps"
-            },
-            "sortingThingsOut": {
-              "working": "Sorting things out...",
-              "done": "Sorted things out"
-            },
-            "gatheringPieces": {
-              "working": "Gathering the pieces...",
-              "done": "Gathered the pieces"
-            },
-            "workingThroughIt": {
-              "working": "Working through it...",
-              "done": "Worked through it"
-            },
-            "ironingOutDetails": {
-              "working": "Ironing out the details...",
-              "done": "Ironed out the details"
-            },
-            "roundingThingsOut": {
-              "working": "Rounding things out...",
-              "done": "Rounded things out"
-            }
           }
         },
         "internalSearch": {
@@ -12584,9 +12734,6 @@
             "before": "before {date}",
             "between": "from {start} to {end}"
           }
-        },
-        "interruptedThinking": {
-          "label": "Interrupted Thinking"
         },
         "memory": {
           "default": {
@@ -12709,10 +12856,10 @@
           "label": "{count, plural, one {# step} other {# steps}}"
         },
         "thoughtDuration": {
-          "label": "Thought for {duration}"
+          "label": "Worked for {duration}"
         },
         "thoughtUnknownDuration": {
-          "label": "Thought for some time"
+          "label": "Worked"
         },
         "toggleRow": {
           "ariaLabel": "Toggle timeline"
@@ -12771,6 +12918,12 @@
               "patching": {
                 "status": "{count, plural, =0 {Patching files…} one {Patching # file…} other {Patching # files…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {Delete file} other {Empty file}}"
+            },
+            "movedFrom": {
+              "label": "Moved from {path}"
             }
           },
           "stopped": {
@@ -12783,7 +12936,110 @@
             "failed": {
               "status": "Publish failed"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {Opening {target}} failed {Could not open {target}} canceled {Canceled} other {Opened {target}}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Opening a new tab} failed {Could not open a new tab} canceled {Canceled} other {Opened a new tab}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Going to {target}} failed {Could not go to {target}} canceled {Canceled} other {Went to {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Reading the page} failed {Could not read the page} canceled {Canceled} other {Read the page}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Using the page} failed {Could not use the page} canceled {Canceled} other {Used the page}}",
+              "click": {
+                "status": "{phase, select, running {Clicking an element} failed {Could not click the element} canceled {Canceled} other {Clicked an element}}"
+              },
+              "type": {
+                "status": "{phase, select, running {Typing “{text}”} failed {Could not type “{text}”} canceled {Canceled} other {Typed “{text}”}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {Hovering over an element} failed {Could not hover over the element} canceled {Canceled} other {Hovered over an element}}"
+              },
+              "select": {
+                "status": "{phase, select, running {Selecting an option} failed {Could not select the option} canceled {Canceled} other {Selected an option}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {Dragging an element} failed {Could not drag the element} canceled {Canceled} other {Dragged an element}}"
+              },
+              "press": {
+                "status": "{phase, select, running {Pressing {key}} failed {Could not press {key}} canceled {Canceled} other {Pressed {key}}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {Scrolling the page} failed {Could not scroll the page} canceled {Canceled} other {Scrolled the page}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {Uploading files} failed {Could not upload the files} canceled {Canceled} other {Uploaded files}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Waiting for the page} failed {The page did not get ready} canceled {Canceled} other {Waited for the page}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Running a page script} failed {The page script failed} canceled {Canceled} other {Ran a page script}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Answering a page dialog} failed {Could not answer the page dialog} canceled {Canceled} other {Answered a page dialog}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Checking the browser} failed {Could not check the browser} canceled {Canceled} other {Checked the browser}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Going back} forward {Going forward} other {Reloading the page}}} failed {Could not change the page} canceled {Canceled} other {{history, select, back {Went back} forward {Went forward} other {Reloaded the page}}}}"
+            }
           }
+        },
+        "skill": {
+          "read": {
+            "running": "Reading skill {name}",
+            "done": "Read skill {name}",
+            "failed": "Could not read skill {name}",
+            "runningUnnamed": "Reading skill",
+            "doneUnnamed": "Read skill",
+            "failedUnnamed": "Could not read skill"
+          },
+          "load": {
+            "running": "Loading skill {name}",
+            "done": "Loaded skill {name}",
+            "failed": "Could not load skill {name}",
+            "runningUnnamed": "Loading skill",
+            "doneUnnamed": "Loaded skill",
+            "failedUnnamed": "Could not load skill"
+          }
+        },
+        "agentTool": {
+          "send": {
+            "running": "Sending message to {name}",
+            "done": "Sent message to {name}",
+            "failed": "Could not send message to {name}",
+            "runningUnnamed": "Sending message to subagent",
+            "doneUnnamed": "Sent message to subagent",
+            "failedUnnamed": "Could not send message to subagent"
+          },
+          "interrupt": {
+            "running": "Interrupting {name}",
+            "done": "Interrupted {name}",
+            "failed": "Could not interrupt {name}",
+            "runningUnnamed": "Interrupting subagent",
+            "doneUnnamed": "Interrupted subagent",
+            "failedUnnamed": "Could not interrupt subagent"
+          }
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {# subagent} other {# subagents}}",
+          "summary": {
+            "working": "{count, number} working",
+            "done": "{count, number} done",
+            "failed": "{count, number} failed",
+            "stopped": "{count, number} stopped"
+          },
+          "activity": "Using {tool}",
+          "open": "Open {name}"
         }
       },
       "toolApproval": {
@@ -12795,6 +13051,9 @@
           "placeholder": "Other: type your own answer",
           "ariaLabel": "Other answer to {header}"
         },
+        "multiSelect": {
+          "hint": "Choose all that apply."
+        },
         "submit": "Submit",
         "page": {
           "progress": "Question {current} of {total}",
@@ -12803,11 +13062,10 @@
         },
         "submitError": "Could not send your answers. Try again.",
         "record": {
-          "answered": "Answered",
+          "answeredCount": "{count, plural, one {Answered # question} other {Answered # questions}}",
           "answeredInChat": "Answered in the chat",
           "cancelled": "Not answered",
           "closed": "No longer waiting",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
@@ -13050,9 +13308,6 @@
       "lineCount": {
         "label": "{count, plural, one {# line} other {# lines}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# word} other {# words}}"
-      },
       "copyButton": {
         "tooltip": "Copy content"
       },
@@ -13076,6 +13331,13 @@
       "renderError": {
         "title": "Cannot preview this file",
         "description": "The file could not be shown here. Download the file to open it."
+      },
+      "unavailable": {
+        "title": "No preview for this file",
+        "description": "A preview of this file cannot be made. Download the file to open it."
+      },
+      "preparing": {
+        "status": "Preparing the preview. This can take a little while."
       },
       "unsupported": {
         "title": "Preview for this file type is not currently supported",
@@ -13124,30 +13386,6 @@
         },
         "error": {
           "description": "The PDF file could not be loaded."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Presentation controls"
-        },
-        "thumbnails": {
-          "toggle": "Toggle slide thumbnails",
-          "resize": "Resize slide thumbnails"
-        },
-        "slides": {
-          "label": "Slides"
-        },
-        "previous": {
-          "label": "Previous slide"
-        },
-        "next": {
-          "label": "Next slide"
-        },
-        "slide": {
-          "counter": "Slide {current} of {total}"
-        },
-        "empty": {
-          "label": "No slides in this presentation"
         }
       }
     },
@@ -13499,6 +13737,10 @@
       },
       "viewAllButton": {
         "label": "View all {count} files"
+      },
+      "unavailable": {
+        "title": "This file is not available",
+        "description": "It was deleted, or you do not have access to it."
       }
     },
     "rightPanel": {
@@ -13535,6 +13777,9 @@
       },
       "resizeHandle": {
         "label": "Resize panel"
+      },
+      "browserTab": {
+        "label": "Browser"
       }
     },
     "export": {
@@ -13568,22 +13813,153 @@
       },
       "agents": {
         "title": "Agents",
+        "titleRunning": "Agents · {count} running",
         "status": {
-          "starting": "Starting",
-          "running": "Running",
-          "suspended": "Waiting",
           "complete": "Done",
           "limit": "Hit step limit",
           "cancelled": "Cancelled",
           "stopped": "Stopped",
           "error": "Failed"
         },
-        "finished": "Previous agents"
+        "finished": "Previous agents",
+        "stop": "Stop {name}",
+        "stopTooltip": "Stop agent",
+        "stopFailed": "Could not stop the agent."
       },
       "files": {
         "title": "Files",
         "viewAll": "{count, plural, one {View # file} other {View all # files}}"
       }
+    },
+    "find": {
+      "capped": "Searched the last {count, plural, one {# message} other {# messages}}",
+      "close": "Close find",
+      "count": "{current} of {total}",
+      "label": "Find in session",
+      "loadingOlder": "Loading older messages…",
+      "next": "Next match",
+      "placeholder": "Find in session",
+      "previous": "Previous match"
+    },
+    "subagents": {
+      "status": {
+        "starting": "Starting",
+        "running": "Running",
+        "waiting": "Waiting",
+        "completed": "Completed",
+        "stopped": "Stopped",
+        "failed": "Failed",
+        "limit": "Hit step limit"
+      },
+      "timedStatus": {
+        "running": "Running {elapsed}",
+        "waiting": "Waiting {elapsed}",
+        "completed": "Completed in {elapsed}"
+      },
+      "view": {
+        "parent": "Subagent of",
+        "parentOf": "Subagent of · {title}",
+        "openParentChat": "Open parent chat",
+        "empty": "This agent has no messages yet.",
+        "failed": "Could not load this agent's conversation."
+      },
+      "bar": {
+        "runsOnItsOwn": "Runs on its own",
+        "openParent": "Open parent",
+        "announcement": "{model} subagent: {status}",
+        "announcementUnnamed": "Subagent: {status}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "Browser page",
+        "inputDescription": "Press Shift+Escape to leave the browser page."
+      },
+      "download": {
+        "action": "Download",
+        "saved": "The browser downloaded {fileName}"
+      },
+      "error": "The browser could not do that. Try again.",
+      "clearData": {
+        "action": "Clear browser data",
+        "title": "Clear Browser Data?",
+        "description": "This signs you out of every site in the browser and deletes its cookies, history and saved data, for all your chats.",
+        "confirm": "Clear data",
+        "done": "Browser data cleared",
+        "error": "Could not clear the browser data. Try again."
+      },
+      "urlBar": {
+        "back": "Back",
+        "forward": "Forward",
+        "reload": "Reload",
+        "label": "Address",
+        "placeholder": "Enter a URL"
+      },
+      "moreMenu": {
+        "label": "More browser actions"
+      },
+      "tabs": {
+        "new": "New tab"
+      },
+      "control": {
+        "you": "You control this tab",
+        "agent": "The agent controls this tab",
+        "anotherViewer": "Another window controls this tab",
+        "none": "No one controls this tab",
+        "take": "Take control",
+        "release": "Release control"
+      },
+      "status": {
+        "connecting": "Connecting to the browser",
+        "starting": "Starting the browser",
+        "blank": {
+          "title": "No page yet",
+          "description": "Type a URL above to open a page."
+        },
+        "noTabs": {
+          "title": "No page is open",
+          "description": "Pages the agent opens show here. You can also open a new tab."
+        },
+        "disconnected": {
+          "title": "The browser disconnected",
+          "description": "Trying to connect again."
+        },
+        "disabled": {
+          "title": "The browser is off",
+          "description": "An admin turned off the browser, or you cannot view this chat's browser."
+        },
+        "unreachable": {
+          "title": "Could not reach the browser",
+          "description": "Check that you are signed in and online, then try again."
+        },
+        "error": {
+          "title": "The browser is unavailable",
+          "description": "The chat's sandbox could not start. Try again later."
+        },
+        "retry": "Retry"
+      },
+      "dialog": {
+        "label": "Page dialog",
+        "from": "{origin} says",
+        "response": "Dialog response",
+        "responsePlaceholder": "Type a response",
+        "dismiss": "Dismiss",
+        "accept": "Accept",
+        "takeControl": "Take control to respond."
+      },
+      "fileChooser": {
+        "label": "Choose files for the page",
+        "askOne": "The page asks for a file.",
+        "askMany": "The page asks for files.",
+        "askOneFrom": "{origin} asks for a file.",
+        "askManyFrom": "{origin} asks for files.",
+        "cancel": "Cancel",
+        "chooseOne": "Choose file",
+        "chooseMany": "Choose files",
+        "inputLabel": "Files for the page",
+        "error": "Could not upload the files. Try again."
+      },
+      "answerError": "Could not answer the page. Try again."
     }
   },
   "common": {
@@ -14211,6 +14587,10 @@
         "button": "Approve for this chat",
         "tooltip": "Approve now and run this tool without asking again for the rest of this chat"
       },
+      "approveCommand": {
+        "button": "Approve for this command",
+        "tooltip": "Approve now and allow this action without asking again until the command ends"
+      },
       "approveOnce": {
         "ariaLabel": "Approve this action once",
         "button": "Approve once"
@@ -14221,7 +14601,8 @@
       },
       "deadline": "Approve by {time}",
       "header": {
-        "required": "Approval requested: {headline}"
+        "required": "Approval requested: {headline}",
+        "requiredBy": "Approval requested: {headline}. Approve by {time}"
       },
       "headline": {
         "multiAction": "{count, plural, one {# action} other {# actions}} in {app}",
@@ -14238,6 +14619,7 @@
         "expired": "Timed out: {headline}",
         "rejected": "Not approved: {headline}",
         "approvedForChat": "Approved for this chat: {headline}",
+        "approvedForCommand": "Approved for this command: {headline}",
         "approvedForSession": "Approved for this session: {headline}"
       },
       "submitError": "Could not submit your decision. Try again.",
@@ -14421,9 +14803,6 @@
       },
       "unsupported": {
         "description": "Download the file to view its contents."
-      },
-      "retry": {
-        "label": "Try again"
       },
       "download": {
         "label": "Download file"
@@ -15071,6 +15450,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, one {# addition} other {# additions}}, {removed, plural, one {# deletion} other {# deletions}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {# unchanged line} other {# unchanged lines}}"
         },
@@ -16557,6 +16939,9 @@
         "integrations": {
           "label": "Integrations"
         },
+        "plugins": {
+          "label": "Plugins"
+        },
         "slackBot": {
           "label": "Slack Bot"
         },
@@ -16667,6 +17052,12 @@
       "deleteError": {
         "message": "Failed to delete chat. Please try again."
       },
+      "markRead": {
+        "label": "Mark as read"
+      },
+      "markUnread": {
+        "label": "Mark as unread"
+      },
       "moveToProject": {
         "label": "Move to Project"
       },
@@ -16676,20 +17067,43 @@
       "projectSearchInput": {
         "placeholder": "Search Projects"
       },
+      "regenerateTitle": {
+        "label": "Regenerate title"
+      },
+      "regenerateTitleError": {
+        "message": "Failed to regenerate the title. Please try again."
+      },
       "removeFromProject": {
         "label": "Remove from {projectName}"
       },
       "rename": {
         "label": "Rename"
       },
+      "runStatus": {
+        "approval": {
+          "label": "Needs approval"
+        },
+        "done": {
+          "label": "Done"
+        },
+        "failed": {
+          "label": "Failed"
+        },
+        "question": {
+          "label": "Question waiting"
+        },
+        "working": {
+          "label": "Working"
+        }
+      },
       "share": {
         "label": "Share"
+      },
+      "updatedNow": {
+        "label": "now"
       }
     },
     "chatSearch": {
-      "createNamedProject": {
-        "label": "Create New Project \"<name>{projectName}</name>\""
-      },
       "footer": {
         "openAction": {
           "label": "Open"
@@ -16701,25 +17115,21 @@
           "label": "Show all"
         }
       },
+      "keys": {
+        "alt": "Alt",
+        "ctrl": "Ctrl",
+        "shift": "Shift"
+      },
       "list": {
         "empty": {
-          "text": "No chats or projects yet"
+          "text": "No chats yet"
         },
         "noResults": {
           "text": "No results found"
         }
       },
-      "newProject": {
-        "label": "New Project"
-      },
       "newSession": {
         "label": "New Session"
-      },
-      "noMoreResults": {
-        "text": "No more results"
-      },
-      "projectsFilter": {
-        "label": "Projects"
       },
       "recentFilter": {
         "label": "Recent"
@@ -16728,10 +17138,28 @@
         "label": "Recent Sessions"
       },
       "searchInput": {
-        "placeholder": "Search chat sessions, projects..."
+        "placeholder": "Search chat sessions..."
       },
       "sessionsFilter": {
         "label": "Sessions"
+      },
+      "shortcuts": {
+        "changeModel": {
+          "label": "Change Model"
+        },
+        "findInChat": {
+          "label": "Find in Session"
+        },
+        "nextChat": {
+          "label": "Next Session"
+        },
+        "previousChat": {
+          "label": "Previous Session"
+        },
+        "title": "Shortcuts",
+        "toggleSidebar": {
+          "label": "Toggle Sidebar"
+        }
       }
     },
     "notifications": {
@@ -17014,7 +17442,10 @@
           "publishOff": {
             "description": "An admin turned off publishing to the organization. Ask an admin to publish this plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx could not load your groups, so group shares cannot change.",
+        "groupsRetry": "Try again",
+        "groupSharesLocked": "This skill is shared with a group you do not manage, so you cannot change its group shares. Ask an organization-wide skill manager."
       },
       "tabs": {
         "details": "Details",
@@ -17077,15 +17508,11 @@
           "title": "Start from scratch"
         },
         "trigger": {
-          "label": "Create skill"
+          "label": "Create a skill"
         },
         "upload": {
           "description": "Import a SKILL.md file, ZIP file, or skill folder.",
           "title": "Upload a skill"
-        },
-        "marketplace": {
-          "title": "Add marketplace",
-          "description": "Add from a repository and sync its plugins."
         }
       },
       "empty": {
@@ -17127,7 +17554,8 @@
         "disableFailed": "Failed to disable {name}",
         "enableFailed": "Failed to enable {name}",
         "refreshFailed": "{name} was updated, but the skill list could not be refreshed.",
-        "listRefreshFailed": "The skill list could not be refreshed. Reload the page to see the change."
+        "listRefreshFailed": "The skill list could not be refreshed. Reload the page to see the change.",
+        "requiredHolder": "{name} cannot be turned on. A required skill already has this name."
       }
     },
     "sections": {
@@ -17170,7 +17598,8 @@
       "upload": {
         "error": {
           "readFailed": "Could not read the upload.",
-          "folderRoot": "{upload, select, plugin {The selected folder must contain SKILL.md or a plugin.json manifest at its top level.} other {The selected folder must contain SKILL.md at its top level.}}"
+          "folderRoot": "{upload, select, plugin {The selected folder must contain SKILL.md or a plugin.json manifest at its top level.} other {The selected folder must contain SKILL.md at its top level.}}",
+          "unsupportedFile": "{name} is not a ZIP or SKILL.md file. Upload a ZIP, a SKILL.md file, or a skill folder."
         }
       }
     },
@@ -17189,6 +17618,8 @@
       "updated": "{count, plural, one {# skill updated} other {# skills updated}}",
       "failed": "Could not update skills. Try again.",
       "partialFailure": "{count, plural, one {# skill could not be updated} other {# skills could not be updated}}",
+      "deleted": "{count, plural, one {# skill deleted} other {# skills deleted}}",
+      "deleteFailure": "{count, plural, one {# skill could not be deleted} other {# skills could not be deleted}}",
       "deleteTitle": "{count, plural, one {Delete # skill?} other {Delete # skills?}}",
       "deleteDescription": "{count, plural, one {This deletes the selected skill for everyone who has access. This cannot be undone.} other {This deletes all # selected skills for everyone who has access. This cannot be undone.}}",
       "shareTitle": "{count, plural, one {Update Access for # Skill} other {Update Access for # Skills}}",
@@ -17201,7 +17632,8 @@
       "publishWarning": {
         "title": "Publishing cannot be undone",
         "description": "After you apply, everyone in the organization can use the selected skills. Published skills cannot be made private again. Only an admin can delete them."
-      }
+      },
+      "skipped": "{count, plural, one {# skill cannot be turned on or off by you and was skipped} other {# skills cannot be turned on or off by you and were skipped}}"
     },
     "reviewRequests": {
       "title": "Publish Requests",
@@ -17293,6 +17725,12 @@
       "share": "Share",
       "delete": "Delete",
       "select": "Select {name}"
+    },
+    "takenName": {
+      "title": "Name",
+      "description": "Enter a name that is not in use yet.",
+      "taken": "{name} is already in use. Pick a different name.",
+      "invalid": "Use lowercase letters, numbers and single hyphens, at most {max} characters."
     }
   },
   "plugins": {
@@ -17314,17 +17752,13 @@
           "versions": "Versions"
         },
         "overview": {
-          "noDescription": "No description.",
           "location": "Location",
           "owner": "Owner",
-          "skills": "Skills",
-          "description": "Description",
           "version": "Version in plugin.json",
           "author": "Author",
           "homepage": "Homepage",
           "license": "License",
-          "notUsed": "Not used in Onyx",
-          "marketplace": "{name} marketplace, {scope, select, personal {personal} other {company}} ({repository})"
+          "notUsed": "Not used in Onyx"
         },
         "skills": {
           "off": "Off",
@@ -17338,11 +17772,7 @@
           "title": "Use this plugin",
           "label": "Use {name}",
           "required": "Your admin made this plugin required. You cannot turn it off.",
-          "unavailable": "You cannot turn this plugin on or off.",
-          "failed": "Could not change the plugin.",
-          "on": "On. The default agent can use this plugin.",
-          "off": "Off. Turn it on to let the default agent use this plugin.",
-          "nameHeld": "Off because {names} uses the same skill name. Turn this plugin on to use it instead."
+          "unavailable": "You cannot turn this plugin on or off."
         },
         "actions": {
           "share": "Share",
@@ -17358,7 +17788,6 @@
           "done": "Deleted {name}.",
           "failed": "Could not delete the plugin."
         },
-        "syncedFrom": "Synced from {repository}",
         "managed": {
           "title": "Managed by the {name} marketplace",
           "description": "Onyx syncs this plugin from {repository}. Change it in GitHub, then sync the marketplace.",
@@ -17398,18 +17827,17 @@
         }
       },
       "alwaysAllow": {
-        "title": "Always Allow",
-        "description": "Run an action that asks for approval with no prompt.",
+        "description": "Your admin sets how each action runs. Turn on Don't ask me to run an action that asks without a prompt.",
         "loadFailed": "Could not load the actions.",
         "saveFailed": "Could not save. Try again.",
-        "alwaysAsks": "Craft asks for approval for each of these requests.",
+        "alwaysAsks": "Onyx asks for approval for each of these requests.",
         "switch": {
-          "label": "Always allow {name}"
+          "label": "Don't ask me for {name}",
+          "visibleLabel": "Don't ask me"
         },
         "retry": {
           "label": "Try again"
         },
-        "readOnlyTitle": "Actions",
         "readOnlyDescription": "Your admin sets how each action runs."
       },
       "oauthCallback": {
@@ -17473,10 +17901,7 @@
         "not_supported": "Not supported"
       },
       "note": {
-        "askAdmin": "Ask an admin",
-        "turnedOff": "Turned off by your admin",
-        "moreThanOne": "More than one integration matches",
-        "notSupported": "Not supported in Onyx"
+        "askAdmin": "Ask an admin"
       },
       "localServer": "Local server",
       "noUrl": "No server URL",
@@ -17516,6 +17941,7 @@
         "newPlugin": "New plugin: {name}"
       },
       "willBeOff": "The plugin is saved off. {names} already has a skill with the same name.",
+      "willClash": "{names} already has a skill with the same name. Only one of them can be on.",
       "saveAsNew": {
         "label": "Save as a New Plugin",
         "description": "Keep the plugin that has this name as it is."
@@ -17547,7 +17973,8 @@
         "newPlugin": "Added {name}.",
         "newVersion": "Updated {name} to Onyx version {version}.",
         "unchanged": "No changes. {name} is already at Onyx version {version}.",
-        "off": "Added {name}. It is off because {names} already has a skill with the same name."
+        "off": "Added {name}. It is off because {names} already has a skill with the same name.",
+        "clash": "Updated {name} to Onyx version {version}. {names} already has a skill with the same name, so only one of them is on."
       }
     },
     "turnOn": {
@@ -17628,7 +18055,8 @@
         "duplicate": {
           "personal": "You already added this marketplace.",
           "company": "Your organization already gets this marketplace."
-        }
+        },
+        "advanced": "Advanced"
       },
       "sync": {
         "now": "Sync now",
@@ -17653,10 +18081,6 @@
       "open": "Open {name}",
       "menu": "Actions for {name}",
       "loadFailed": "Could not load the marketplaces.",
-      "empty": {
-        "title": "No marketplaces yet",
-        "description": "Add a GitHub repository to get its plugins."
-      },
       "page": {
         "title": "Marketplaces",
         "description": "The GitHub repositories that you get plugins from, with their source. Sync a marketplace to get the changes from GitHub."
@@ -17716,6 +18140,23 @@
         "rateLimited": "GitHub's API rate limit has been reached. Try again in a few minutes. Connect GitHub to raise the limit.",
         "rateLimitedUntil": "GitHub's API rate limit has been reached. It resets at {time}. Connect GitHub to raise the limit."
       }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {# plugin updated} other {# plugins updated}}",
+      "failed": "Could not update plugins. Try again.",
+      "partialFailure": "{count, plural, one {# plugin could not be updated} other {# plugins could not be updated}}",
+      "deleted": "{count, plural, one {# plugin deleted} other {# plugins deleted}}",
+      "deleteFailure": "{count, plural, one {# plugin could not be deleted} other {# plugins could not be deleted}}",
+      "deleteTitle": "{count, plural, one {Delete # plugin?} other {Delete # plugins?}}",
+      "deleteDescription": "{count, plural, one {This deletes the selected plugin for everyone who has access. This cannot be undone.} other {This deletes all # selected plugins for everyone who has access. This cannot be undone.}}",
+      "shareTitle": "{count, plural, one {Update Access for # Plugin} other {Update Access for # Plugins}}",
+      "shareDescription": "Apply these changes to every selected plugin. Settings left unchanged keep their current values.",
+      "addAccessDescription": "Add these people and groups to every selected plugin. People and groups you list get the chosen permission. Everyone else keeps their current access.",
+      "apply": "{count, plural, one {Apply to # plugin} other {Apply to # plugins}}",
+      "publishWarning": {
+        "description": "After you apply, everyone in the organization can use the selected plugins. Published plugins cannot be made private again. Only an admin can delete them."
+      },
+      "skipped": "{count, plural, one {# plugin cannot be turned on or off by you and was skipped} other {# plugins cannot be turned on or off by you and were skipped}}"
     }
   },
   "integrations": {
@@ -17805,18 +18246,12 @@
         "on": "Turned on",
         "off": "Turned off"
       },
-      "sort": {
-        "label": "Sort",
-        "updated": "Recently updated",
-        "name": "Name"
-      },
       "add": {
         "label": "Add",
         "upload": "Upload skill",
         "create": "Create a skill",
         "uploadPlugin": "Upload plugin",
-        "marketplace": "Add marketplace",
-        "manageMarketplaces": "Manage marketplaces"
+        "marketplace": "Add marketplace"
       },
       "groups": {
         "mine": "Created by you",
@@ -17837,7 +18272,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Disabled",
+        "off": "Off",
         "required": "Required",
         "pending": "Pending review",
         "invalid": "Not valid"
@@ -17872,15 +18307,11 @@
       "status": {
         "connected": "Connected"
       },
-      "add": {
-        "label": "Add",
-        "integration": "Add integration",
-        "manage": "Manage integrations"
-      },
       "open": "Open {name}",
       "empty": {
         "title": "No integrations yet",
-        "description": "Ask your admin to add an integration."
+        "description": "Ask your admin to add an integration.",
+        "descriptionCanAdd": "Add one, or browse the catalog."
       },
       "noMatches": {
         "title": "No matching integrations",
@@ -17894,14 +18325,13 @@
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Upload a plugin, add a marketplace from GitHub, or create a skill. Each skill is a plugin.",
-        "upload": "Upload Plugin"
+        "description": "Upload a plugin or add a marketplace from GitHub.",
+        "upload": "Upload plugin"
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. A plugin that holds only a SKILL.md at its root is on the Skills tab.",
       "integrations": "{available} of {needed} integrations available",
       "nameHeld": "Off: {names} uses the same skill name"
     },
@@ -17969,26 +18399,19 @@
       "loadFailed": "This integration is not available to you.",
       "tabs": {
         "overview": "Overview",
-        "configuration": "Configuration",
         "actions": "Actions"
       },
       "overview": {
-        "description": "Description",
-        "noDescription": "No description.",
         "type": "Type",
         "signIn": "Sign-in",
         "url": "Server URL",
         "owner": "Owner",
         "organization": "Organization",
-        "status": "Status",
         "switch": {
           "title": "Use This Integration",
           "description": "When this is on, you can use it in chats and in Craft.",
           "required": "Your admin made this integration required. You cannot turn it off."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {Your connection to this integration. Only you use it.} shared {The account of this integration. Everyone with access uses it.} other {This integration needs no sign-in.}}"
       }
     },
     "pluginPage": {
@@ -18059,7 +18482,7 @@
       },
       "confirmDelete": {
         "title": "Delete \"{name}\"?",
-        "description": "The task stops running and its run history goes away.",
+        "description": "The task stops running. Chats of its past runs are kept.",
         "submit": "Delete"
       }
     },
@@ -18072,7 +18495,8 @@
       "markAllViewed": "Mark all viewed",
       "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} agent_exception {Failed: the run hit an error.} stuck {Failed: the run did not start in time.} timeout {Failed: the run reached the one-hour limit.} other {Failed: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} agent_exception {Failed: the run hit an error.} stuck {Failed: the run did not start in time.} timeout {Failed: the run reached the one-hour limit.} chat_deleted {Cancelled: the chat of this run was deleted.} owner_cannot_chat {Failed: you can no longer chat, so the task is paused.} rate_limited {Failed: the usage limit was reached.} other {Failed: {errorClass}}}",
+      "errorDetail": "Failed: {detail}",
       "columns": {
         "started": "Started",
         "status": "Status",
@@ -18110,7 +18534,8 @@
         "title": "Run on schedule",
         "label": "Run {name} on schedule"
       },
-      "menu": "More actions"
+      "menu": "More actions",
+      "notFound": "This scheduled task was deleted, or it belongs to another user."
     },
     "editor": {
       "newTitle": "New Scheduled Task",
@@ -18122,7 +18547,8 @@
       "saveAndRun": "Save and run now",
       "errors": {
         "nameRequired": "Enter a name.",
-        "promptRequired": "Enter a prompt."
+        "promptRequired": "Enter a prompt.",
+        "tooLong": "Use {max, number} characters or fewer."
       },
       "toasts": {
         "created": "Scheduled task created.",

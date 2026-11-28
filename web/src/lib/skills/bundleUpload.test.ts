@@ -12,6 +12,7 @@ import {
   mergeSkillFilesUploads,
   prepareSkillBundleUpload,
   prepareSkillFilesUpload,
+  SkillUnsupportedFileError,
 } from "./bundleUpload";
 
 function fileAt(path: string, content: string): FileWithPath {
@@ -117,6 +118,12 @@ describe("skill bundle upload preparation", () => {
         allowPlugin: true,
       })
     ).rejects.toThrow("SKILL.md or a plugin.json manifest");
+  });
+
+  it("names a single file that is not a ZIP or SKILL.md", async () => {
+    await expect(
+      prepareSkillBundleUpload([fileAt("./helper.py", "print(1)")])
+    ).rejects.toThrow(new SkillUnsupportedFileError("helper.py"));
   });
 
   it("rejects files from multiple roots", async () => {

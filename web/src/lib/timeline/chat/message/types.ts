@@ -10,6 +10,7 @@ export interface MultiModelResponse {
   packetCount: number;
   nodeId: number;
   messageId?: number;
+  timeSent?: string;
 
   currentFeedback?: FeedbackType | null;
   isGenerating?: boolean;

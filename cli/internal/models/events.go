@@ -213,6 +213,16 @@ type ToolApprovalRequestEvent struct {
 	// AgentName names the background agent that asks; empty for the chat's
 	// own agent. An agent's request never blocks the chat.
 	AgentName string `json:"agent_name,omitempty"`
+	// CanApproveForChat is false when the action asks each time, so no chat
+	// grant is offered. Absent means true.
+	CanApproveForChat *bool `json:"can_approve_for_chat,omitempty"`
+	// CanApproveForCommand marks a VM command's request: the wider approval
+	// covers the rest of the command.
+	CanApproveForCommand bool `json:"can_approve_for_command,omitempty"`
+	// AppName is the app that a VM command's request calls.
+	AppName string `json:"app_name,omitempty"`
+	// ExpiresAt is when the request stops waiting, as an ISO 8601 time.
+	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
 func (e ToolApprovalRequestEvent) EventType() string { return EventToolApprovalRequest }
@@ -223,9 +233,12 @@ const (
 	// ApprovalOutcomeApprovedForChat: a grant for the session's later calls of
 	// the tool approved the request.
 	ApprovalOutcomeApprovedForChat = "approved_for_chat"
-	ApprovalOutcomeRejected        = "rejected"
-	ApprovalOutcomeDisabled        = "disabled"
-	ApprovalOutcomeCancelled       = "cancelled"
+	// ApprovalOutcomeApprovedForCommand: a grant for the rest of a VM
+	// command approved the command's app request.
+	ApprovalOutcomeApprovedForCommand = "approved_for_command"
+	ApprovalOutcomeRejected           = "rejected"
+	ApprovalOutcomeDisabled           = "disabled"
+	ApprovalOutcomeCancelled          = "cancelled"
 )
 
 // ToolApprovalResolvedEvent reports how an approval request ended.

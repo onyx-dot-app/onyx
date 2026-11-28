@@ -1,6 +1,6 @@
 name: Coding Agent Runner Tests
 concurrency:
-  group: Coding-Agent-Runner-Tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: Coding-Agent-Runner-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 on:
@@ -15,6 +15,14 @@ permissions:
   contents: read
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   coding-agent-runner-tests:
     name: Coding Agent Runner Tests
     runs-on: ubuntu-latest

@@ -13,20 +13,26 @@ export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 /** `stop_reason` of a stream that stops while the response waits for the user. */
 export const AWAITING_USER_STOP_REASON = "awaiting_user";
 
-export type ApprovalDecision = "approve_once" | "approve_session" | "reject";
+export type ApprovalDecision =
+  | "approve_once"
+  | "approve_session"
+  | "approve_command"
+  | "reject";
 
 export type ApprovalOutcome =
   | "approved"
   | "approved_for_chat"
+  | "approved_for_command"
   | "rejected"
   | "disabled"
   | "cancelled";
 
 /**
  * "approvedForSession": approved by a grant for the chat's later requests of
- * the same tool. "disabled": an approval found the tool disabled by a policy,
- * so the call did not run. "closed": nothing waits for a decision any more,
- * and the outcome is unknown.
+ * the same tool, or for the command's later requests of the same action.
+ * "disabled": an approval found the tool disabled by a policy, so the call
+ * did not run. "closed": nothing waits for a decision any more, and the
+ * outcome is unknown.
  */
 export type ApprovalStatus =
   | "pending"
@@ -35,6 +41,14 @@ export type ApprovalStatus =
   | "rejected"
   | "disabled"
   | "closed";
+
+/** What a grant beyond one request covers: the chat, or a VM command. */
+export type GrantScope = "chat" | "command";
+
+/** The scope of the request's wider approval and of its grant record. */
+export function grantScope(request: ToolApprovalRequest): GrantScope {
+  return request.can_approve_for_command ? "command" : "chat";
+}
 
 /**
  * This widget's short-lived state for a request: its decision is in flight,
@@ -51,6 +65,7 @@ export interface ApprovalEntry {
 const OUTCOMES: ReadonlySet<string> = new Set<ApprovalOutcome>([
   "approved",
   "approved_for_chat",
+  "approved_for_command",
   "rejected",
   "disabled",
   "cancelled",
@@ -78,6 +93,7 @@ export function approvalStatus(
         ? local
         : "pending";
     case "approved_for_chat":
+    case "approved_for_command":
       return "approvedForSession";
     case "cancelled":
       return "closed";
@@ -92,7 +108,8 @@ export function decidedStatus(
 ): ApprovalStatus {
   if (response.decided_via === "POLICY") return "disabled";
   if (response.decision === "REJECTED") return "rejected";
-  return response.decided_via === "SESSION_GRANT"
+  return response.decided_via === "SESSION_GRANT" ||
+    response.decided_via === "COMMAND_GRANT"
     ? "approvedForSession"
     : "approved";
 }
@@ -115,7 +132,8 @@ export function holdsChat(
 /** The one-line record of a decided request, or null while it waits. */
 export function approvalRecord(
   status: ApprovalStatus,
-  toolName: string
+  toolName: string,
+  scope: GrantScope = "chat"
 ): string | null {
   switch (status) {
     case "pending":
@@ -123,7 +141,9 @@ export function approvalRecord(
     case "approved":
       return `Approved: ${toolName}`;
     case "approvedForSession":
-      return `Approved for this chat: ${toolName}`;
+      return scope === "command"
+        ? `Approved for this command: ${toolName}`
+        : `Approved for this chat: ${toolName}`;
     case "rejected":
       return `Not approved: ${toolName}`;
     case "disabled":

@@ -205,14 +205,14 @@ test.describe("Auto-Resize", () => {
   });
 
   test("grows taller when multiple lines are pasted", async ({ chatPage }) => {
-    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.pastePlain(LARGE_TEXT);
     await chatPage.inputBar.expectHeightGreaterThan(44);
   });
 
   test("shrinks back to baseline when content is deleted", async ({
     chatPage,
   }) => {
-    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.pastePlain(LARGE_TEXT);
     await chatPage.inputBar.expectHeightGreaterThan(44);
     await chatPage.inputBar.clear();
     await chatPage.inputBar.expectHeightAtMost(50);
@@ -223,7 +223,7 @@ test.describe("Auto-Resize", () => {
       { length: 60 },
       (_, i) => `line ${i + 1}`
     ).join("\n");
-    await chatPage.inputBar.paste(manyLines);
+    await chatPage.inputBar.pastePlain(manyLines);
     await chatPage.inputBar.expectHeightAtMost(200);
   });
 
@@ -234,7 +234,7 @@ test.describe("Auto-Resize", () => {
       { length: 60 },
       (_, i) => `line ${i + 1}`
     ).join("\n");
-    await chatPage.inputBar.paste(manyLines);
+    await chatPage.inputBar.pastePlain(manyLines);
     await chatPage.inputBar.expectScrollable();
   });
 });
@@ -381,10 +381,6 @@ test.describe("Paste Tiles", () => {
       timeout: 10000,
     });
     await mockChatEndpoint(chatPage.page, buildMockStream("Mock response"));
-  });
-
-  test.afterEach(async ({ api }) => {
-    await api.setPasteTileSetting(false);
   });
 
   test("pasting large text creates a tile instead of inline text", async ({
@@ -695,24 +691,24 @@ test.describe("Paste Tiles: User Setting", () => {
   });
 
   test.afterEach(async ({ api }) => {
-    await api.setPasteTileSetting(false);
+    await api.setPasteTileSetting(true);
   });
 
-  test("paste tiles are disabled by default (paste_as_tile = false)", async ({
+  test("paste tiles are enabled by default (paste_as_tile = true)", async ({
     chatPage,
   }) => {
     await chatPage.goto();
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.expectTileCount(0);
-    await chatPage.inputBar.expectText("line 1");
+    await chatPage.inputBar.expectTileCount(1);
+    await chatPage.inputBar.expectTileData(LARGE_TEXT);
   });
 
-  test("paste tiles are created when user enables paste_as_tile", async ({
+  test("large pastes stay inline when user disables paste_as_tile", async ({
     chatPage,
     api,
   }) => {
     await chatPage.goto();
-    await api.setPasteTileSetting(true);
+    await api.setPasteTileSetting(false);
 
     await chatPage.page.reload();
     await chatPage.page.waitForLoadState("networkidle");
@@ -722,8 +718,8 @@ test.describe("Paste Tiles: User Setting", () => {
     });
 
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.expectTileCount(1);
-    await chatPage.inputBar.expectTileData(LARGE_TEXT);
+    await chatPage.inputBar.expectTileCount(0);
+    await chatPage.inputBar.expectText("line 1");
   });
 });
 

@@ -9,20 +9,16 @@ const ME = "user-me";
 
 const OPTIONS: SkillListOptions = {
   userId: ME,
-  craftEnabled: true,
+  chatBuiltInIds: new Set(["pptx"]),
   query: "",
   status: "all",
-  sort: "name",
   locale: "en",
 };
 
 const LIST: SkillsList = {
   builtins: [
     builtinFixture({ id: "pptx", name: "pptx" }),
-    {
-      ...builtinFixture({ id: "hidden", name: "browser" }),
-      is_available: null,
-    },
+    builtinFixture({ id: "browser", name: "browser" }),
   ],
   customs: [
     customFixture({
@@ -66,8 +62,11 @@ test("groups by owner first, then by publish state", () => {
   });
 });
 
-test("with Craft off, built-in skills are hidden as in chat", () => {
-  expect(ids({ craftEnabled: false }).builtin).toEqual([]);
+test("shows the built-ins that chat offers", () => {
+  expect(ids({ chatBuiltInIds: new Set() }).builtin).toEqual([]);
+  expect(ids({ chatBuiltInIds: new Set(["pptx", "browser"]) }).builtin).toEqual(
+    ["browser", "pptx"]
+  );
 });
 
 test("the status filter and the search narrow every group", () => {

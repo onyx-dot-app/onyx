@@ -53,10 +53,10 @@ search tool returns InferenceSections               [[internal-search]], [[web-s
   -> convert_inference_sections_to_llm_string       numbers each unique document_id from the
                                                     call's start number; returns the JSON
                                                     for the model + {number: document_id}
-  -> ChatAgent._update_tool_context                 registers the numbers after the step
+  -> ChatFeature._update_tool_context                 registers the numbers after the step
                                                     (chat/agent.py, via tool_result_sources;
                                                     history numbers via message_citation_sources)
-  -> ChatAgent._prepare_step                        copies all numbers into the next step's
+  -> ChatFeature._prepare_step                        copies all numbers into the next step's
                                                     ChatMessageMetadata.sources
   -> reminder message teaches "[1]" syntax          chat/prompt_utils.py:build_chat_reminder
   -> model emits "[1]", "[1, 3]", "[[4]]", "【1】"
@@ -74,7 +74,7 @@ search tool returns InferenceSections               [[internal-search]], [[web-s
 `backend/onyx/chat/README.md` gives the prompt-design reasons for the document
 format and the reminder placement.
 
-**Numbering.** `chat/agent.py:ChatAgent` owns the prompt's number space. It
+**Numbering.** `chat/agent.py:ChatFeature` owns the prompt's number space. It
 seeds its processor with the sources of every earlier message in history, so
 numbers stay unique across turns. Each step passes
 `ToolContext.next_citation_num`, and each citeable tool starts at
@@ -94,7 +94,7 @@ new files take unused numbers
 files are inline or searched, `chat/prompt_utils.py:build_chat_prompt` turns
 on citation guidance from the first step. `open_url` does not always take a
 new number: `OpenURLTool` reuses the number that a URL already has in
-`ToolContext.citation_mapping`. `ChatAgent._tool_context` is a snapshot from the
+`ToolContext.citation_mapping`. `ChatFeature._tool_context` is a snapshot from the
 end of the previous step, so this reuse works only across steps. Two tools in
 one step that return the same document give it two numbers.
 
@@ -106,11 +106,12 @@ which builds `citationMap`.
 `MemoizedAnchor`. `app/app/services/packetUtils.ts:getCitations` feeds only the
 documents sidebar.
 
-**Two processors, two mappings.** The `ChatAgent` processor holds every number
-the model could cite and copies it into each step's `ChatMessageMetadata.sources`
-before the step runs. `chat/presentation.py:ResponsePresenter` builds a new
-`chat/renderer.py:MessageRenderer` for each step from that metadata, so the
-display mapping is fixed for the step. The renderer records only the
+**Two processors, two mappings.** The `ChatFeature` processor holds every number
+the model could cite and puts the numbers that are new to the run into the
+next step's `ChatMessageMetadata.sources` before the step runs. `chat/presentation.py:ResponsePresenter` builds a new
+`chat/renderer.py:MessageRenderer` for each step from that metadata and the
+documents of the run's earlier steps ([[#step-documents-are-new-only]]), so
+the display mapping is fixed for the step. The renderer records only the
 `CitationInfo` it emitted. At save, `chat/presentation.py:project_response`
 rebuilds the full mapping and re-renders the snapshot to get the emitted set.
 The emitted set comes from the answer step only, or from the last rendered
@@ -207,7 +208,7 @@ of only markers stays empty.
    mapping wins.**
    `chat/citation_processor.py:DynamicCitationProcessor.update_citation_mapping`
    with `update_duplicate_keys=False` is the default for tool results in
-   `chat/agent.py:ChatAgent._update_tool_context`. History answers and project
+   `chat/agent.py:ChatFeature._update_tool_context`. History answers and project
    files pass `True`, so their saved numbers win. Do not change either without
    checking the call sites.
 8. `not-every-bracket-is-a-citation` **Not every bracketed number is a document
@@ -236,7 +237,7 @@ of only markers stays empty.
     `CitationInfo`. A change to fence tracking can turn code such as `a[1]`
     into a citation, or drop real citations after an unclosed fence.
 12. `history-owns-numbers` **Saved history must bring its citation numbers
-    back.** `chat/agent.py:ChatAgent` starts new numbers after the highest
+    back.** `chat/agent.py:ChatFeature` starts new numbers after the highest
     number in history. Tool results saved in the database keep
     `citation_mapping` but no documents;
     `chat/response.py:restore_response_sources` refills them, and the answer's
@@ -247,12 +248,11 @@ of only markers stays empty.
     and an old marker then points at a new document. Chat and deep research
     both read these saved sources, so a mode switch keeps the links.
 13. `restored-turn-keeps-numbers` **A resumed turn takes its numbers from the
-    checkpoint, not from history.** `chat/agent.py:ChatAgent.capture_state`
+    checkpoint, not from history.** `chat/agent.py:ChatFeature.capture_state`
     saves `citation_sources` and `citation_mapping` in
     `chat/models.py:ChatFeatureState`, and `restore_state` writes them back.
     The research agents do the same with their own feature state. Put new
-    citation state in that feature state, or a resumed turn reuses numbers. A
-    changed `include_citations` makes the restoration fail.
+    citation state in that feature state, or a resumed turn reuses numbers.
 14. `token-split-invariant` **The output must not depend on where tokens
     split.** `chat/citation_processor.py:DynamicCitationProcessor` holds a
     marker that later text can still change: a partial marker, `[n]` right
@@ -262,6 +262,32 @@ of only markers stays empty.
     differ, because it cannot take back a space that it already streamed.
     `backend/tests/unit/onyx/chat/test_citation_processor_properties.py`
     checks this.
+15. `step-documents-are-new-only` **A step carries only the citations and
+    documents that are new to its run.** `chat/agent.py:ChatFeature` keeps the
+    gathered documents by document ID, the latest copy of each in the order
+    first gathered. Each step's `ChatMessageMetadata.sources` and `.documents`,
+    and so its saved `MessageRendering.citation_documents` and `.document_ids`,
+    hold only the numbers and documents that the run's earlier steps do not
+    carry, or a new copy of one. A reader of a step's citations or documents
+    folds the steps of its run so far, in order, with
+    `chat/models.py:RunDocuments.add_steps`: `ResponsePresenter.consume`,
+    `_project_response_display` and `replay_response` in
+    `chat/presentation.py`. `ResponsePresenter.replay` hands the replayed
+    runs' documents to the live stream that continues a suspended response.
+    `db/chat_subagents.py:read_agent_completions` reads the citations of every
+    step up to the output's. Readers that union every message's sources, such
+    as `ChatFeature` for history numbers and `_collect_tool_history`, need no
+    fold. `ChatFeature._prepare_step` compares with the union of what earlier
+    steps recorded, each citation number in its own copy, to find what a step
+    adds. Saved steps that hold the
+    whole lists give the same result. Research steps hold only new
+    `ResearchMessageMetadata.sources` too (`deep_research/models.py:new_sources`),
+    except the report step: the parent and the final answer read its full
+    map alone.
+    `backend/tests/unit/onyx/chat/test_agent.py:test_each_step_carries_only_new_documents_and_shows_them_all`,
+    `test_steps_that_hold_whole_lists_show_each_document_once` and
+    `backend/tests/integration/tests/chat/test_chat_gathered_documents.py`
+    check this.
 
 ---
 
@@ -283,7 +309,7 @@ of only markers stays empty.
 - [[web-search]]: produces web sections and reuses numbers in `open_url`.
 - [[tools-framework]]: the call index that offsets each tool's number range.
 - [[context-assembly]]: places the citation reminder last.
-- [[core-chat-loop]]: `ChatAgent` holds the prompt mapping, and the renderer
+- [[core-chat-loop]]: `ChatFeature` holds the prompt mapping, and the renderer
   and `project_response` produce the emitted set for save.
 - [[streaming-protocol]]: the `CitationInfo` packet.
 - [[chat-persistence]]: stores the emitted mapping and replays it on reload.
@@ -293,9 +319,10 @@ of only markers stays empty.
 ## Recipes
 
 - `citeable-tool` **A new citeable tool.** Copy how `WebSearchTool` is wired; list the
-  current set in `tools/constants.py:CITEABLE_TOOLS_NAMES`. Add the tool name
-  there; it turns on the citation reminder in `build_chat_reminder` even when a
-  call finds nothing. Start its numbers at the offset in
+  current set in `chat/citation_utils.py:CITEABLE_TOOLS_NAMES`. Add the tool
+  name there (for a tool with shapes, the name from each shape); it turns on
+  the citation reminder in `build_chat_reminder` even when a call finds
+  nothing. Start its numbers at the offset in
   [[#number-block-per-tool-call]]. Return a `SearchDocsResponse` with
   `citation_mapping`, and put every cited document in `search_docs`.
   `chat/tool_results.py` owns the contract of every details type that carries

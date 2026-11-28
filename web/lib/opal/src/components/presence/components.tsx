@@ -82,6 +82,20 @@ type PresenceSwapProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>> & {
 // fires.
 const TRANSITION_FALLBACK_MS = 400;
 
+/**
+ * The content's size on `axis`. Its own CSS may cap its width at the box's,
+ * which is the previous size, so the width is read uncapped: the box can
+ * then grow to a longer title. It is rounded up, so no fraction is cut.
+ */
+function contentSize(content: HTMLElement, axis: PresenceSwapAxis): number {
+  if (axis !== "inline") return content.offsetHeight;
+  const { maxWidth } = content.style;
+  content.style.maxWidth = "none";
+  const width = content.getBoundingClientRect().width;
+  content.style.maxWidth = maxWidth;
+  return Math.ceil(width);
+}
+
 // ---------------------------------------------------------------------------
 // Presence
 // ---------------------------------------------------------------------------
@@ -287,17 +301,37 @@ function PresenceSwap({
     if (phase !== "exiting") shownChildrenRef.current = children;
   });
 
+  // The observers below only act while idle; the phase is read through a ref.
+  const phaseRef = useRef(phase);
+  useLayoutEffect(() => {
+    phaseRef.current = phase;
+  });
+
   // Track the content's size on `axis`, so the box animates to every new size.
+  // Also measure on each new key: capped at the old box, the content's own
+  // box may not change, so the resize observer would not report a longer
+  // title. New text under the same key is capped the same way, so a mutation
+  // observer measures it when the DOM changes.
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
-    const measure = () =>
-      setSize(axis === "inline" ? content.offsetWidth : content.offsetHeight);
+    const measure = () => setSize(contentSize(content, axis));
     measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(content);
-    return () => observer.disconnect();
-  }, [axis]);
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(content);
+    const mutationObserver = new MutationObserver(() => {
+      if (phaseRef.current === "idle") measure();
+    });
+    mutationObserver.observe(content, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, [axis, shownKey]);
 
   // Resizing: go straight on when the new content is the same size as the old,
   // and never stall if `transitionend` does not arrive. Runs once per phase
@@ -309,12 +343,14 @@ function PresenceSwap({
   useLayoutEffect(() => {
     if (phase !== "resizing") return;
     const content = contentRef.current;
-    const contentSize =
-      axis === "inline" ? content?.offsetWidth : content?.offsetHeight;
-    if (!content || contentSize === sizeRef.current) {
+    const next = content ? contentSize(content, axis) : null;
+    if (next === null || next === sizeRef.current) {
       setPhase("idle");
       return;
     }
+    // The content's own box can stay capped at the old width, so the
+    // observer may never report the new size; set it here.
+    setSize(next);
     const fallback = window.setTimeout(
       () => setPhase("idle"),
       TRANSITION_FALLBACK_MS

@@ -21,6 +21,7 @@ from onyx.tools.tool_implementations.code_mode.sandbox import (
     IMPORTABLE_MODULES,
     TOOLS_NAMESPACE,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import CodeModeShape
 from onyx.tools.tool_implementations.code_mode.store import (
     JSON_TYPES_TEXT,
     MAX_STORE_BYTES,
@@ -39,7 +40,7 @@ from onyx.tools.tool_implementations.utils import (
 
 # Characters of the notes after the output; they are never cut by the budget.
 MAX_NOTES_CHARS = 10_000
-# Bounds on the deferred namespace lines of the `execute_code` description.
+# Bounds on the deferred namespace lines of the run tool's description.
 MAX_DEFERRED_NAMESPACES_BYTES = 4 * 1024
 MAX_NAMESPACE_DESCRIPTION_CHARS = 250
 # Bytes kept for the omitted-namespaces line when the names do not all fit.
@@ -48,7 +49,7 @@ _CUT_SUFFIX = "..."
 # The characters that `str.splitlines` breaks lines at.
 _LINE_BREAK = re.compile(r"[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]")
 _DEFERRED_NAMESPACES_HEADING = (
-    "\n  Deferred tool namespaces (`tool_search` with a namespace finds its "
+    "\n  Deferred tool namespaces (`{search}` with a namespace finds its "
     "functions; call each by the name in its stub):\n"
 )
 _UNGROUPED_NOTE = "\n  Other deferred functions are in no namespace."
@@ -66,13 +67,13 @@ def _deferred_note(stubs: ToolStubs) -> str:
     """One line per deferred namespace, in `deferred_namespaces` order: its
     name and the first line of its description. The lines fit a byte budget;
     names take it before descriptions."""
+    search = stubs.shape.search.name
+    heading = _DEFERRED_NAMESPACES_HEADING.format(search=search)
     descriptions = stubs.deferred_namespaces
     ungrouped = (
         _UNGROUPED_NOTE if stubs.has_deferred_functions_without_namespace else ""
     )
-    budget = MAX_DEFERRED_NAMESPACES_BYTES - len(
-        f"{_DEFERRED_NAMESPACES_HEADING}{ungrouped}".encode()
-    )
+    budget = MAX_DEFERRED_NAMESPACES_BYTES - len(f"{heading}{ungrouped}".encode())
     name_bytes = {
         namespace: len(f"  - {namespace}\n".encode()) for namespace in descriptions
     }
@@ -115,12 +116,10 @@ def _deferred_note(stubs: ToolStubs) -> str:
                 )
                 remaining = 0
             lines.append(f"  - {namespace}: {first_line}")
-    listed = (
-        f"{_DEFERRED_NAMESPACES_HEADING}{'\n'.join(lines)}{ungrouped}" if lines else ""
-    )
+    listed = f"{heading}{'\n'.join(lines)}{ungrouped}" if lines else ""
     return (
         "\n- More functions are available than the ones in the Functions list "
-        "below. Find them with `await tool_search(query)`; each match has the "
+        f"below. Find them with `await {search}(query)`; each match has the "
         "function's name, description and stub. Read the stub before you call a "
         "function, then call it like a listed one, as "
         f"`await {TOOLS_NAMESPACE}.<name>(...)`, in this program or a later one."
@@ -129,29 +128,34 @@ def _deferred_note(stubs: ToolStubs) -> str:
 
 
 def code_mode_description(stubs: ToolStubs, limits: SandboxLimits) -> str:
-    """Model-facing description; deterministic for a given set of tools and limits."""
+    """Model-facing description; deterministic for a given set of tools, shape
+    and limits."""
+    shape = stubs.shape
+    run = shape.run_name
     deferred_note = _deferred_note(stubs) if stubs.tool_index is not None else ""
-    return f"""Run a Python program that calls the tools listed below. Use it to combine tool calls in one step, run independent calls in parallel, and filter large results before you read them.
+    describe_note = (
+        ""
+        if shape.describe is None
+        else f"\n- `await {shape.describe.name}(name)` returns the name, description "
+        "and full stub of one function."
+    )
+    return f"""Run a Python program that calls the tools listed below. Each `{run}` call starts a fresh Python interpreter: variables, functions and imports from earlier calls are gone. Keep values across calls with `store(key, value)` and `load(key)`. Use `{run}` to combine tool calls in one step, run independent calls in parallel, and filter large results before you read them.
 
 - The program runs in Monty, a sandboxed Python interpreter, not CPython. The program is for calling and combining the tools below. It has no files, processes or network of its own; anything outside the program comes from a tool.
 - Each tool is an async Python function of the `{TOOLS_NAMESPACE}` namespace, which every program has. Call it as `{TOOLS_NAMESPACE}.<name>` with keyword arguments only and `await` the result, for example `result = await {TOOLS_NAMESPACE}.tool_name(argument=value)`. These functions exist only inside programs: you cannot call them as tools yourself. Top-level `await` works; do not call `asyncio.run()`.
 - Await every call; calls that are not awaited are cancelled when the program ends.
-- Run independent calls in parallel with `asyncio.gather`, for example `a, b = await asyncio.gather({TOOLS_NAMESPACE}.f(x=1), {TOOLS_NAMESPACE}.g(y=2))`. Make a call that needs an earlier result after that result is available.
-- `asyncio.gather` takes no keyword arguments, so `return_exceptions=True` is not available, and one failed call fails the whole gather. To keep the other results, wrap each call:
-  `async def attempt(call):`
-  `    try: return await call`
-  `    except Exception as e: return {{"error": str(e)}}`
-  `results = await asyncio.gather(*(attempt({TOOLS_NAMESPACE}.f(x=v)) for v in values))`
+- Run independent calls in parallel with `asyncio.gather`. Make a call that needs an earlier result after that result is available.
+- `asyncio.gather` takes no keyword arguments, so `return_exceptions=True` is not available, and one failed call fails the whole gather. To keep the other results, wrap each call in `try`/`except` inside an async function and gather those functions.
 - Only text that the program prints and the value of the last expression come back to you; that value must be JSON data ({JSON_TYPES_TEXT}). Tool results stay inside the program until you print them. Print only the fields you need, such as titles, document numbers, URLs, and short excerpts. Do not print whole results.
+- Output over the limit is cut in the middle, and the result gives the original character count.
 - A tool error raises an exception in the program. To continue after an error, use `try:` / `except Exception as e:`. An uncaught exception stops the program and returns its traceback with the output printed before it.
-- Each `execute_code` call starts a fresh interpreter: variables, functions, and imports from earlier calls are gone. To keep a value for a later call, `store(key, value)` it, then `load(key)` it in the later call. `load` returns None for a missing key. `store`, `load` and `yield_control` are plain functions: do not `await` them.
-- Stored values stay available in all later `execute_code` calls of this chat, also in later messages. Store only JSON values ({JSON_TYPES_TEXT}). Storing None deletes the key. A program saves its writes when it ends by itself: it completes, or stops at an uncaught exception. Later programs see them from then on. The writes of a program that is terminated or times out are discarded. Each value can be up to {MAX_STORED_VALUE_BYTES // 1024} KB as JSON, and the whole store up to {MAX_STORE_BYTES // (1024 * 1024)} MB. Store values that you plan to reuse, such as IDs, totals, or filtered results, instead of calling the tools again.
+- Stored values stay available in all later `{run}` calls of this chat, also in later messages. Store only JSON values ({JSON_TYPES_TEXT}). Storing None deletes the key, and `load` returns None for a missing key. `store`, `load` and `yield_control` are plain functions: do not `await` them. A program saves its writes when it ends by itself: it completes, or stops at an uncaught exception. Later programs see them from then on. The writes of a program that is terminated or times out are discarded. Each value can be up to {MAX_STORED_VALUE_BYTES // 1024} KB as JSON, and the whole store up to {MAX_STORE_BYTES // (1024 * 1024)} MB. Store values that you plan to reuse, such as IDs, totals, or filtered results, instead of calling the tools again.
 - Each program is limited to {_limits_text(limits)}.
-- A program that runs longer than `yield_time_ms`, or that calls `yield_control()`, returns its output so far and keeps running as cell N. Call `wait_code` with the cell id to get more output or to stop the cell. Do other work while a cell runs. Open cells stop when you give your final answer, so wait for each cell whose result you need first. A cell stops after {limits.lifetime_seconds / 60:g} minutes.
+- A program that runs longer than `{shape.run_yield_argument}`, or that calls `yield_control()`, returns its output so far and keeps running as cell N. Call `{shape.wait_name}` with the cell id to get more output or to stop the cell. Do other work while a cell runs. Open cells stop when you give your final answer, so wait for each cell whose result you need first. A cell stops after {limits.lifetime_seconds / 60:g} minutes.
 - Supported Python: functions, closures, lambdas, comprehensions, f-strings, `try`/`except`/`finally`, `match`, `@dataclass`, and classes without base classes. Not supported: class inheritance, custom exception classes (catch `Exception`), generators (`yield`), `del`, and `async with`.
 - These modules are already imported in every program: {", ".join(IMPORTABLE_MODULES)}. Other modules are not available.
 - The program is type-checked before it runs. A wrong argument name or type in a tool call stops the program before any tool runs.
-- Search results have a `document` number. To cite a result in your answer, print its `document` number and write [n] in the answer, where n is that number.{deferred_note}
+- Search results have a `document` number. To cite a result in your answer, print its `document` number and write [n] in the answer, where n is that number.{describe_note}{deferred_note}
 
 Functions (already defined in every program, no import needed; call the tool functions as `await {TOOLS_NAMESPACE}.<name>(...)`):
 ```python
@@ -159,24 +163,37 @@ Functions (already defined in every program, no import needed; call the tool fun
 ```"""
 
 
-WAIT_CODE_DESCRIPTION = """Waits on a running `execute_code` cell and returns new output or completion.
-- Use `wait_code` only after `execute_code` returns `Execution running in cell N`.
-- `wait_code` returns only the new output since the last result for that cell, or the final completion or termination result.
-- If the cell is still running, `wait_code` may return again with the same `cell_id`.
-- If the cell has already finished, `wait_code` returns the completed result and closes the cell."""
+# The wait tool's description; `{run}` and `{wait}` are the shape's names.
+WAIT_DESCRIPTION = """Waits on a running `{run}` cell and returns new output or completion.
+- Use `{wait}` only after `{run}` returns `Execution running in cell N`.
+- `{wait}` returns only the new output since the last result for that cell, or the final completion or termination result.
+- If the cell is still running, `{wait}` may return again with the same `cell_id`.
+- If the cell has already finished, `{wait}` returns the completed result and closes the cell."""
 
+
+# The result of a call of a tool of another tool family's shapes, by a name
+# that this chat does not offer; `{use}` is one of the *_USE texts.
+OTHER_OPERATION_MESSAGE = "`{name}` is not a tool in this chat. {use}"
+TOOL_USE = "Call `{name}` instead."
+RUN_USE = "Run a program with `{run}`."
+WAIT_USE = "Wait on a running cell with `{wait}`."
+PROGRAM_FUNCTION_USE = "Call `await {function}({arguments})` in `{run}` programs."
 
 # The result of a call of a code mode function as a tool of its own.
 INNER_CALL_MESSAGE = (
-    "`{name}` is available only inside `execute_code` programs. Call it there: "
+    "`{name}` is available only inside `{run}` programs. Call it there: "
     "`await {called_name}({arguments})`."
 )
 
 
-def program_function_operation(called_name: str, *, deferred: bool) -> str:
-    """How a tool preference names a function of `execute_code` programs."""
-    found = "; find its stub with `await tool_search(query)`" if deferred else ""
-    return f"{called_name} (a function in `execute_code` programs{found})"
+def program_function_operation(
+    called_name: str, shape: CodeModeShape, *, deferred: bool
+) -> str:
+    """How a tool preference names a function of the shape's programs."""
+    found = (
+        f"; find its stub with `await {shape.search.name}(query)`" if deferred else ""
+    )
+    return f"{called_name} (a function in `{shape.run_name}` programs{found})"
 
 
 # How each status reads in a sentence about the cell.
@@ -283,15 +300,15 @@ def closing_heading(cell_id: int, closing: CellClosing) -> str:
 
 
 def closed_cell_text(
-    cell_id: int, closing: CellClosing | None, *, returned_end: bool
+    cell_id: int, closing: CellClosing | None, *, returned_end: bool, run_name: str
 ) -> str:
-    """What `wait_code` returns for a closed cell: how the cell's saved results
-    report its end. `closing` is the cell's closing record; `returned_end` says
-    that an observation reported the end."""
+    """What the wait tool returns for a closed cell: how the cell's saved
+    results report its end. `closing` is the cell's closing record;
+    `returned_end` says that an observation reported the end."""
     if closing is not None and closing.reason == "interrupted":
         return (
             f"Cell {cell_id} was interrupted when the server stopped. Start a new "
-            "execute_code call."
+            f"{run_name} call."
         )
     if closing is not None:
         event = (
@@ -302,19 +319,19 @@ def closed_cell_text(
                 f"Cell {cell_id} {_STATUS_TEXT[closing.status]} before {event}; its "
                 "output and result are in its earlier result."
             )
-        return f"Cell {cell_id} stopped when {event}. Start a new execute_code call."
+        return f"Cell {cell_id} stopped when {event}. Start a new {run_name} call."
     if returned_end:
         return f"Cell {cell_id} already returned its final result."
     return (
         f"Cell {cell_id} stopped when its response ended or its run paused. Start "
-        "a new execute_code call."
+        f"a new {run_name} call."
     )
 
 
-def continues_note(cell_id: int) -> str:
+def continues_note(cell_id: int, wait_name: str) -> str:
     return (
-        f"Cell {cell_id} continues. Call wait_code(cell_id={cell_id}) for more output, "
-        f"or wait_code(cell_id={cell_id}, terminate=true) to stop it."
+        f"Cell {cell_id} continues. Call {wait_name}(cell_id={cell_id}) for more "
+        f"output, or {wait_name}(cell_id={cell_id}, terminate=true) to stop it."
     )
 
 
@@ -333,6 +350,7 @@ def format_content(
     heading: str,
     status: CodeModeStatus,
     cell_id: int,
+    wait_name: str,
     cell_calls: Sequence[CodeModeCall],
     max_chars: int,
     end: SandboxResult | None,
@@ -351,7 +369,8 @@ def format_content(
     the middle, with a warning that gives the original character count.
     `elided_chars` were cut from the middle of the printed text before this;
     the count includes them. `lost_store_writes` are earlier commits that the
-    store dropped.
+    store dropped. The notes of a window that reports the cell running end
+    with how to continue it with the shape's wait tool, `wait_name`.
     """
     completed = status == "completed"
     running = status == "running"
@@ -376,7 +395,7 @@ def format_content(
             None if lost_store_writes is None else lost_store_writes.note,
             None if discarded is None else discarded.note,
             None if window.commit is None else store_summary(window.commit.writes),
-            continues_note(cell_id) if running else None,
+            continues_note(cell_id, wait_name) if running else None,
         )
         if note
     )

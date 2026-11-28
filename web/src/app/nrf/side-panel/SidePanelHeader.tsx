@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { FoldableLogo } from "@/lib/app/components";
 import { Button } from "@opal/components";
 import { SvgEditBig, SvgExternalLink } from "@opal/icons";
@@ -9,11 +10,14 @@ import { useSettings } from "@/lib/settings/hooks";
 interface SidePanelHeaderProps {
   onNewChat: () => void;
   chatSessionId?: string | null;
+  // The chat's activity toggle, before the header's buttons
+  activity?: ReactNode;
 }
 
 export default function SidePanelHeader({
   onNewChat,
   chatSessionId,
+  activity,
 }: SidePanelHeaderProps) {
   const t = useTranslations("chat");
   const { appName } = useSettings();
@@ -26,6 +30,7 @@ export default function SidePanelHeader({
     <header className="flex items-center justify-between px-4 py-3 border-b border-border-01 bg-background">
       <FoldableLogo />
       <div className="flex items-center gap-1">
+        {activity}
         <Button
           prominence="tertiary"
           icon={SvgEditBig}

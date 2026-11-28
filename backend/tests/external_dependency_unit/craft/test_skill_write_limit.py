@@ -16,6 +16,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Plugin, PluginVersion, User
 from onyx.db.plugin import set_plugin_preferences__no_commit
 from onyx.db.plugin_access import load_user_plugin_states, skill_usage_by_user
@@ -23,6 +24,7 @@ from onyx.db.skill import (
     replace_skill_bundle,
     set_skill_enabled_for_user,
 )
+from onyx.db.skill_limit import check_skill_limit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -33,6 +35,7 @@ from onyx.skills.models import SkillUsage
 from tests.external_dependency_unit.craft.db_helpers import (
     make_skill,
     make_user,
+    share_plugin_with_user,
 )
 
 _MB = 1024 * 1024
@@ -72,6 +75,47 @@ def test_backfilled_version_counts_as_zero(db_session: Session) -> None:
 
     _set_size(db_session, skill.id, 3 * _MB, 7)
     assert _usage(db_session, user, skill.id) == 3 * _MB
+
+
+def _same_name_pair(db_session: Session, user: User) -> tuple[Plugin, Plugin]:
+    """Two plugins with one skill name. The user's own one wins the name over
+    one that another user shares."""
+    winner = make_skill(db_session, name="same-name", author_user_id=user.id)
+    sharer = make_user(db_session, standard_account=True)
+    loser = make_skill(db_session, name="same-name", author_user_id=sharer.id)
+    share_plugin_with_user(db_session, loser.id, user.id, SkillSharePermission.VIEWER)
+    db_session.flush()
+    return winner, loser
+
+
+def test_a_plugin_that_loses_its_name_does_not_count(db_session: Session) -> None:
+    user = make_user(db_session, standard_account=True)
+    winner, loser = _same_name_pair(db_session, user)
+    set_plugin_preferences__no_commit(user.id, [winner.id, loser.id], True, db_session)
+    _set_size(db_session, winner.id, 3 * _MB, 7)
+    _set_size(db_session, loser.id, 5 * _MB, 11)
+
+    usage = skill_usage_by_user(load_user_plugin_states([user.id], db_session))
+
+    assert usage[user.id] == SkillUsage(bytes=3 * _MB, files=7)
+
+
+def test_a_write_that_lets_a_same_name_loser_run_is_checked(
+    db_session: Session,
+) -> None:
+    """Turning off the winner adds the loser's usage, though the write does
+    not touch the loser."""
+    user = make_user(db_session, standard_account=True)
+    winner, loser = _same_name_pair(db_session, user)
+    set_plugin_preferences__no_commit(user.id, [winner.id, loser.id], True, db_session)
+    _set_size(db_session, winner.id, _MB, 1)
+    _set_size(db_session, loser.id, SKILL_WRITE_MAX_BYTES + _MB, 1)
+
+    with pytest.raises(OnyxError) as error:
+        with check_skill_limit(db_session, user.id):
+            set_plugin_preferences__no_commit(user.id, [winner.id], False, db_session)
+
+    assert error.value.error_code == OnyxErrorCode.SKILL_LIMIT_EXCEEDED
 
 
 def _wait_for_lock_waiter(blocker_pid: int, timeout: float = 10.0) -> bool:
@@ -343,3 +387,18 @@ def test_a_file_edit_and_a_toggle_take_locks_in_one_order(
         assert errors == []
     finally:
         delete_bundle_blob(get_default_file_store(), bundle_file_id)
+
+
+def test_turning_off_a_winner_is_not_refused_for_its_loser(
+    db_session: Session,
+) -> None:
+    """A turn-off that lets an over-limit same-name loser run still saves."""
+    user = make_user(db_session, standard_account=True)
+    winner, loser = _same_name_pair(db_session, user)
+    set_plugin_preferences__no_commit(user.id, [winner.id, loser.id], True, db_session)
+    _set_size(db_session, winner.id, _MB, 1)
+    _set_size(db_session, loser.id, SKILL_WRITE_MAX_BYTES + _MB, 1)
+
+    set_skill_enabled_for_user(
+        skill_id=winner.id, enabled=False, user=user, db_session=db_session
+    )

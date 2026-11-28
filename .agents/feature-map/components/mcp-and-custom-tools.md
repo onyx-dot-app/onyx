@@ -21,12 +21,15 @@
   error and nothing is saved. A server with a sign-in is saved with no
   actions, and the admin refreshes the actions after the sign-in. A URL that SSRF protection blocks fails with a hint that names the
   SSRF Protection level that allows it, or says that no level does.
-- **An admin adds an OpenAPI action.** The admin pastes an OpenAPI 3 schema with
-  one server URL. Each operation in it becomes a tool that the model can call.
+- **An admin adds an OpenAPI action.** In the Add dialog, the admin enters a
+  spec URL or uploads an OpenAPI 3 spec. When the spec has no single server
+  URL, or comes from a file, the dialog asks for the base URL. Each operation
+  in it becomes a tool that the model can call. A spec that gives no tools
+  stops at that step with the skipped list.
   The admin can add static headers, link a per-tool OAuth client, or forward
-  each user's Onyx login token. A schema with a missing or duplicate
-  `operationId`, or a server URL that SSRF protection blocks, is rejected at
-  save.
+  each user's Onyx login token. An import drops each operation with a missing
+  or duplicate `operationId` and lists it as skipped. A save rejects such a
+  schema, or a server URL that SSRF protection blocks.
 - **A member connects an account.** On a per-user server, each member connects
   their own API key or OAuth account. One member's connection never serves
   another member.
@@ -48,7 +51,10 @@
   `awaiting_user`, and the response waits, saved, with no server holding
   it and no time limit. The user picks Approve once, Approve for this chat, or
   Reject. Approve once runs the exact call. Approve for this chat also runs
-  later calls of that tool in the chat session with no card. Reject gives the
+  later calls of that tool in the chat session with no card. An action that
+  always asks (`integrations/policy.py:always_asks`) has no Approve for this
+  chat, no saved grant skips its card, and `decide_approval` saves such an
+  approval as a single one. Reject gives the
   model a "did not run" result. Once no request of the response waits, the
   response continues in a new stream, on any server, and the answer continues.
   A policy change applies from the next message.
@@ -57,8 +63,8 @@
   and a run of the Discord bot's service key have no approver, so an action
   that is still Ask is not offered. Evals run Ask actions with no question.
   Usage-only incognito
-  chats and anonymous users cannot wait: an Ask call gives the model an error
-  that names the cause. Agent runs, foreground or background, ask and park as
+  chats and anonymous users cannot wait, so they also have no approver and an
+  Ask action is not offered. Agent runs, foreground or background, ask and park as
   the root does
   ([[#chat-approval-needs-waiting-client]]). The upgrade
   migration (`backend/alembic/versions/7c00f53ab75f_chat_tool_approvals.py`)
@@ -80,7 +86,7 @@ This component owns:
 - the MCP client: the admin and member API, create and refresh, OAuth, the
   setup probe, the SSRF guard, credential resolution, tool sync, and the `MCPTool`
   that runs a call;
-- OpenAPI custom tools: the admin API, schema parsing, and the `CustomTool`
+- OpenAPI custom tools: the admin API, schema parsing, and the `RestTool`
   that runs a call;
 - MCP server access grants and the per-server and per-user credential rows;
 - chat tool approvals: the policy materialized at tool construction, the
@@ -108,9 +114,9 @@ Persona --persona__integration--> Integration resolve_call_credentials(integrati
    (action_settings)               |            once per integration; a problem
                                    +--integration_action (schemas, defaults)
                                    +--integration_connection / oauth_client
-                                   +--kind row: mcp_server | OpenAPI tool
+                                   +--kind row: mcp_server | api_app
 MCP server kind  -> one MCPTool per offered action (mcp__<integration id>__...)
-OpenAPI kind     -> one CustomTool per offered operation (custom__<integration id>__...)
+OpenAPI kind     -> one RestTool per offered operation (custom__<integration id>__...)
 ```
 
 **MCP setup.** An admin adds an MCP server through
@@ -277,9 +283,8 @@ then picks the integrations
   sign-in.
 - An integration that is Required for the user stays when the tool options
   leave its id out.
-- Only integrations with `enabled = true`. An API integration with no OpenAPI
-  tool (a preset or custom app) gives no chat tool, so it is skipped before its
-  credential resolves. An agent has one link for each integration.
+- Only integrations with `enabled = true`. An old URL-pattern app (a CUSTOM
+  `external_app`; `ApiShape.has_chat_tools` is false) gives no chat tool. An agent has one link for each integration.
 
 For each integration, `integrations/call_credentials.py:resolve_call_credentials`
 calls `resolve_connection` and renders the `header_template`. An OAuth2 or Onyx
@@ -294,13 +299,39 @@ database session for it. Only an OAuth2 or Onyx login token that expires within
 `REFRESH_SKEW` resolves again (`integrations/call_credentials.py:resolve_fresh_call_credentials`).
 For OAuth2 on a non-SSE transport, construction reads the server settings
 (`mcp_oauth_server`), and each call passes `make_integration_oauth_provider` with
-`IntegrationTokenStorage`, so the MCP SDK can refresh during the call. A 401 on
-an API key connection sets it to Needs reconnect (`mark_api_key_rejected`).
+`IntegrationTokenStorage`, so the MCP SDK can refresh during the call. A 401, or an
+OAuth2 grant that the SDK cannot renew without the browser
+(`MCPReauthenticationRequired`) after the server answered 401 to the stored
+access token (`rejected_token_fingerprint`), sets an API key or OAuth2 connection
+to Needs reconnect (`mark_credential_rejected`). The mark compares that token,
+which the SDK can have renewed during the call, with the stored one. A failed refresh or a 403
+`insufficient_scope` shows the reconnect card but keeps the connection. Refresh actions does the same and answers
+"refused the credential", not "Could not reach".
+`RestTool`, `GraphQLTool` and `PresetActionTool` do the same refresh and mark
+through `fresh_call_credentials` and `note_rejected_credential`
+(`tools/tool_implementations/http_request.py`).
 Request MCP headers do not stand in for a missing connection. The kind handler (`build_chat_tools`) builds the tools:
-`MCPTool` for an MCP server, one `CustomTool` per operation for an OpenAPI spec,
-and none for a preset or custom app. Tool names use the integration id
-(`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>`), and each tool has
-`id = None`.
+`MCPTool` for an MCP server, one `RestTool` per operation for an OpenAPI spec,
+one `GraphQLTool` (`tools/tool_implementations/api_app/graphql_tool.py`, an
+`ApiTool` that writes a one-root-field document with variables and an
+optional `selection`) per root field of a GraphQL app, and one `PresetActionTool` (`tools/tool_implementations/api_app/preset_tool.py`)
+per catalog action of a preset, plus `app__<id>__request` for the other-request (`unspecified`)
+action. A preset tool sends a raw request only when the URL is in the
+preset's URL scope and the request matches only its own action. The
+`unspecified` action always asks (`integrations/policy.py:always_asks`): no
+setting, chat grant or run mode makes it Allow, it is Blocked with no person to
+answer, and its card offers no approval for the whole chat. `ApiTool` (REST and GraphQL) and
+`PresetActionTool` send through `tools/tool_implementations/http_request.py:send_tool_request`,
+which refuses redirects and caps the response. A preset, REST or GraphQL app whose
+credential does not resolve gives one `AppConnectTool` (`tools/tool_implementations/api_app/connect_tool.py`, `app__<id>__connect`):
+a call tells the model to ask the user to connect, and its auth error opens the
+connect card for the integration. Tool names use the integration id
+(`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>` (or `custom__<id>__<query|mutation>.<field>`, sanitized),
+`app__<id>__<action>`), and each tool has `id = None`.
+A failed `MCPTool` call returns `failed_tool_result` like the API tools, so
+its `CustomToolErrorInfo` marks a 401 or 403 as an auth error (with the reconnect
+card), a transport error or timeout as unreachable, and any other HTTP error
+with its status. Only an error without a status is checked for auth words.
 
 **Integrations API.** One API serves every integration. Routes:
 `server/features/integrations/admin_api.py` (`/admin/integrations`: list,
@@ -311,10 +342,9 @@ presets, create, read, PATCH, DELETE, actions GET/PUT, `actions/refresh`,
 OAuth start and callback stay in
 `backend/onyx/server/features/integrations/connections_api.py`. The logic is in
 `integrations/service.py`; the queries are in `db/integration.py` and
-`db/integration_policy.py`. Only Craft runs a preset or custom app, so when
-`is_craft_available_for_deployment` is false, create refuses those shapes and
-the presets list is empty. A user cannot save Always allow on an action whose
-admin value is not Ask.
+`db/integration_policy.py`. Chat runs a preset, so an admin can add one when
+Craft is not available. Create refuses the `custom` (URL-pattern) shape. A user
+cannot save Always allow on an action whose admin value is not Ask.
 - The access routes take the integration id (logic in
   `integrations/access.py`):
   `PUT /integrations/{id}/enabled` writes the user's on/off choice (Required
@@ -325,22 +355,57 @@ admin value is not Ask.
   `GET`/`PUT /integrations/{id}/access` reads and replaces the shares of a
   private integration (a user for whom `manages_integration` is true; the
   share rules of plugins apply through `db/plugin.py:check_access_change`),
-  `POST /integrations/{id}/publish` sets a private integration to AVAILABLE
-  (organization-wide manage-actions, no review; the shares stay), and
-  `GET /integrations/agents/{id}` gives the integration ids that a chat of
-  the agent uses for the user. Share and publish refuse an integration that
-  is not private with 400.
+  and `GET /integrations/agents/{id}` gives the integration ids that a chat
+  of the agent uses for the user. Share refuses an integration that is not
+  private with 400. Publish to Org has no route of its own: it sends
+  AVAILABLE to the installation-policy route, and the shares stay.
 - Create (`create_integration__no_commit`) writes, in one transaction, the
-  kind row (`mcp_server`, the OpenAPI `tool` row, or `external_app` with the
-  preset or URL patterns), then the `integration` row with exactly one of
-  `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client
-  and the actions. It writes no plugin row. An OpenAPI integration also gets
-  an `api_app` row (`integration.api_app_id`) with the spec as JSON text and
-  its server URL. For one release each create and spec change writes both
-  the `tool` row and the `api_app` row
-  (`db/integration.py:write_openapi_document__no_commit`); the readers still
-  read the `tool` row, and nothing reads `api_app` yet. Migration
-  `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
+  kind row (`mcp_server`, the OpenAPI `tool` row, the GraphQL `api_app` row,
+  or the preset `external_app`), then the `integration` row with exactly one
+  of `mcp_server_id`, `tool_id`, `api_app_id` or `external_app_id`, the OAuth
+  client and the actions. It writes no plugin row. An OpenAPI integration also gets
+  an `api_app` row (`integration.api_app_id`) with the spec text as the admin
+  gave it (YAML stays YAML) and its server URL. The `api_app` document is the
+  source: for one release each create and spec change also writes the parsed
+  object to the `tool` row, with path-level parameters copied into each
+  operation and server variable defaults filled into the server URL (`tools/tool_implementations/api_app/openapi_parsing.py:inline_path_parameters`), the
+  shape the previous release reads; a delete removes both
+  (`db/integration.py:write_openapi_document__no_commit`). The OpenAPI config
+  takes a document, or a base URL and endpoint lines
+  (`METHOD /path?query1&query2 Name`) that
+  `backend/onyx/integrations/openapi_endpoints.py:apply_endpoint_lines` applies to the
+  stored document: an unchanged line keeps its operation, a rename changes
+  only the `summary`, a removed line removes its operation, and a new line
+  adds a minimal one whose `operationId` comes from the method and path. A
+  line error names its line in `extra.line_errors`. The admin config view
+  gives the document, the base URL and the lines
+  (`backend/onyx/integrations/openapi_endpoints.py:endpoint_lines`). `POST /admin/integrations/openapi-import`
+  reads the base URL and lines of a pasted spec or of a spec URL, fetched with
+  `utils/url.py:ssrf_safe_get`. It drops each operation that no tool can call
+  (`backend/onyx/integrations/openapi_endpoints.py:drop_uncallable_operations`) and names it in
+  `skipped`. A line writes a query name with a space or `&?=#%` as `%XX`,
+  and a save decodes it. Then it runs the create checks except the server URL ones, so a
+  spec that imports also creates. A document that is not a spec is
+  `INVALID_INPUT`; a spec that fails is `VALIDATION_ERROR`, which stops the
+  add modal at step 1. `backend/onyx/tools/tool_implementations/api_app/openapi_parsing.py:openapi_to_method_specs` merges
+  path-level `parameters` into each operation and resolves local parameter
+  `$ref`s. Users cannot create a URL-pattern app
+  (a CUSTOM `external_app`). Only legacy ones exist: migration `933a21d46472`
+  made each one with a single `https://host/path/*` pattern a REST app and
+  kept the others; a kept one stays editable. The readers of the spec
+  (chat tools, the action sync, the admin config, the proxy match targets,
+  `sign_in_host` and the `/tool` snapshots) read `api_app.openapi_document`
+  through `tools/tool_implementations/api_app/openapi_parsing.py:parse_openapi_document`, which takes JSON or
+  YAML. Only the writes, the shape (`integrations/service.py:_shapes`) and the `/tool`
+  route ids still use the `tool` row. Migration `c2caf6a8285c` copied the existing rows. A GraphQL app
+  (`GraphQLConfigInput`: endpoint URL and SDL) is an `api_app` row with
+  `api_type = 'graphql'` and no `tool` row; `_shapes` reads an integration
+  with `api_app_id` and no `tool_id` as GRAPHQL. Its actions
+  (`integrations/kinds/api.py:graphql_action_specs`, source `graphql`) are
+  `query.<field>` (Allow) and `mutation.<field>` (Ask).
+  `POST /admin/integrations/graphql-introspect` sends an introspection query
+  with no credential through `send_tool_request` and returns the SDL.
+  The creator is the owner. "For the organization"
   sets the install setting AVAILABLE; else the integration is private and
   starts on for its owner. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
@@ -353,6 +418,11 @@ admin value is not Ask.
   organization connection with the tool row. A test keeps the query count
   constant
   (`backend/tests/external_dependency_unit/integrations/test_list_query_counts.py`).
+  These lists skip an integration with no known shape and log a warning
+  (`_shapes(..., skip_unknown=True)`), so a row that a later release wrote
+  does not break them after a rollback. An `api_app` row with no `tool` row
+  is a GraphQL app here. A direct read of an unknown row still gives 404
+  (`backend/tests/external_dependency_unit/integrations/test_unknown_shape_in_lists.py`).
 - Delete (`db/integration.py:delete_integration__no_commit`) deletes the
   integration, then its kind row and its `api_app` row. A deleted kind row deletes its integration by cascade.
 - A preset keeps its client id, secret and host settings (Zendesk
@@ -374,9 +444,14 @@ admin value is not Ask.
 - MCP actions:
   `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions` asks the server with
   the acting user's credential; the refresh writes the result as
-  `integration_action` rows. Only the create of a public server and a refresh
-  write MCP actions; the create and the update do not sync an MCP integration,
-  and no code reads MCP `tool` rows.
+  `integration_action` rows. The create of a public server, a refresh, and an
+  update that changes the server URL or the transport write MCP actions
+  (`backend/onyx/integrations/service.py:_reload_mcp_actions`). If the changed server does not answer
+  with the acting user's credential, the update saves no actions until a
+  refresh, so the old server's actions do not stay. Their admin policies stay
+  and apply again when a refresh finds the actions. A refresh that the server
+  answers without an action deletes the policy of that action. No code reads MCP `tool`
+  rows.
 - Agents: `PersonaUpsertRequest.integrations` replaces the
   `persona__integration` links (null keeps them). An editor adds only an
   integration that the editor has access to. An old custom or MCP id in
@@ -393,7 +468,8 @@ admin value is not Ask.
   `list_persona_mcp_tools`), so the old tool ids round-trip.
 - The eight public `/tool` and `/admin/tool` routes
   (`server/features/tool/api.py`) are aliases on `api` integrations with an
-  OpenAPI schema and return the `tool` row id. Plain headers become a shared
+  OpenAPI schema and return the `tool` row id. The `definition` they return
+  comes from the `api_app` row. Plain headers become a shared
   API key connection; `passthrough_auth` is `onyx_login`; `oauth_config_id` is
   refused; `default_chat_enabled` is true when `integration.installation_policy`
   is DEFAULT or REQUIRED. A write of true sets DEFAULT unless it is one of
@@ -402,8 +478,9 @@ admin value is not Ask.
   choice on the integration. A
   save of an OAuth integration keeps its sign-in when the headers and
   `passthrough_auth` are the values the read returned, and refuses others.
-- The four admin MCP server routes of the public API, which the Terraform
-  provider calls (`POST /admin/mcp/servers/create`,
+- The four admin MCP server routes of the public API, which the deprecated
+  Terraform `onyx_mcp_server` resource calls (they are `deprecated` in OpenAPI;
+  the `onyx_integration` resource uses `/admin/integrations`) (`POST /admin/mcp/servers/create`,
   `GET /admin/mcp/servers/{id}`, `PATCH` and `DELETE /admin/mcp/server/{id}`,
   in `server/features/mcp/api.py`), are aliases on `mcp` integrations and take
   and return the `mcp_server` row id. `API_TOKEN` maps to `api_key`: `ADMIN` is
@@ -421,10 +498,12 @@ admin value is not Ask.
 checks every request the MCP SDK makes, redirects included, at the admin SSRF
 Protection level. `MCP_SERVER_ALLOW_PRIVATE_NETWORK` and
 `MCP_SERVER_ALLOW_LOOPBACK` only seed that level's default. OpenAPI tools use
-`tools/tool_implementations/custom/custom_tool.py:custom_tool_ssrf_params`:
+`tools/tool_implementations/http_request.py:tool_request_ssrf_params`:
 self-hosted allows private targets at every level and loopback only at
 `DISABLED`, cloud blocks all internal targets, and `ssrf_safe_request` does not
-follow redirects.
+follow redirects. `send_tool_request` also ends the body read at the read
+timeout through `utils/url.py:read_bounded_body`, which open_url shares, so a
+server that sends a few bytes at a time gives a timeout failure.
 
 **Action policies.** `PUT /admin/integrations/{id}/actions` writes the admin
 rows through `backend/onyx/db/integration.py:set_policy_rows__no_commit` under
@@ -439,18 +518,22 @@ gate below read the same policies.
 integrations/chat_tools.py:build_integration_chat_tools   once per model response
   (integrations/policy.py:resolve_action_policies for each integration and link)
   Blocked -> tool not offered    Ask -> tool.approval = ToolApprovalScope(integration_id, action_id)
+built-in tool: tool.approval = ToolApprovalScope(None, "onyx:<operation>"), set
+  where the tool is built; no policy covers it
   Tool.bind -> AgentTool.approval_required
 agents/tool_execution.py:ToolBatch.decide_call   (direct calls, and program calls
   through ToolInvocation.nested_calls, a NestedCallGate)
   -> coordinator ToolApprovals = chat/run_store.py:ChatRunStore.request_approval
+     -> tools/interface.py:Tool.approval_details(arguments), before any
+        database work: None -> run; else the card's headline and payload
+        (default: the tool's display name and the call's arguments)
      -> chat/tool_approvals.py:open_tool_approval
         session grant (action_now_blocked is false) -> run
-        signed out -> error result
-        else ApprovalRequest row (display name, the call's arguments)
-          -> PendingToolInput(display_name)
+        else ApprovalRequest row (headline, payload)
+          -> PendingToolInput(display_name, display_arguments)
      the runtime marks the request PendingToolInput.approval
   a direct call waits in the run; a program call parks its cell's program
-  renderer sends tool_approval_request on the call's (or execute_code's) card
+  renderer sends tool_approval_request on the call's (or the run call's) card
 the run suspends when only such waits remain and its work is idle (see
   ToolInvocation.run_work)
 ChatRunStore.poll_control   one park pass over every owned run, once a second;
@@ -522,8 +605,12 @@ A decision row is the only channel between the API pod that takes the
 decision and the pod that owns the run. The `approval_request` row holds the
 session, the waiting response (`chat_message_id`), the `integration_id`, the
 action key, the decision, and for the saved record the step's call that shows the card
-(`tool_call_id`), the tool name, its display name and the call's arguments as
-the card shows them, so a live card and a replayed card are the same. Craft's proxy keeps its own `action_approval` table
+(`tool_call_id`), the tool name, and the card's headline (`display_name`) and
+payload (`arguments`) from `Tool.approval_details`. The payload is the tool's
+`ToolApprovalDetails.payload` (`PendingToolInput.display_arguments`), or the
+call's arguments when the tool gives none (`chat/renderer.py`). The live card reads the
+same two values from `PendingToolInput`, so a live card and a replayed card are
+the same, and a built-in tool's card needs no client change. Craft's proxy keeps its own `action_approval` table
 ([[craft-external-apps]]). The table, the decision route and the card are
 general, so future sandbox-proxy network approvals can reuse them. An
 "approve_session" decision is a session grant: it also approves the action's
@@ -532,7 +619,17 @@ other pending rows of that integration and action in the chat session, and
 unless the policy is now Blocked. A new row leaves the old `gated_app_id`
 column NULL. Deleting an
 integration sets `integration_id` to NULL; an approval of that row saves a
-rejection by the policy.
+rejection by the policy. A built-in action's row also has no integration, and
+an `onyx:` action key (`tools/models.py:is_builtin_action`): no policy blocks
+it, and its session grant matches rows with no integration and the same key
+(`db/integration_policy.py:list_session_granted_actions`,
+`db/approval_request.py:grant_session_to_pending_requests__no_commit`). No
+integration action key starts with `onyx:`: `IntegrationActionSpec` refuses
+an MCP tool or OpenAPI operation with that name, so a deleted integration's
+row never matches a built-in grant. The code that builds a built-in tool must
+resolve the run's `ApprovalMode`, as
+`integrations/policy.py:decide_action_policy` does for integrations: under
+`RUN_WITHOUT_ASKING` it sets no scope.
 
 **Policy order** (`integrations/policy.py`):
 (1) the admin value: the admin row of the action, else the admin default row
@@ -547,8 +644,12 @@ Ask into Allow. (6) `ApprovalMode.NO_APPROVER` turns Ask into Blocked;
 blocks each action. `integrations/policy.py:decide_action_policy` applies the
 order to loaded values; `resolve_action_policies` loads the rows for the actions
 that its caller passes. The approval re-check
-(`chat/tool_approvals.py:action_now_blocked`, also in the decision route) uses
-no chat grant. It reads the agent links that construction reads
+(`chat/tool_approvals.py:action_now_blocked`, also in the decision route) and
+the command approval re-check
+(`server/query_and_chat/command_approvals.py:_command_choice`) both use
+`integrations/policy.py:current_chat_action_policies` and `recheck_approval`
+(Blocked, or an action that asks now but did not ask before), with no chat
+grant. It reads the agent links that construction reads
 (`integrations/policy.py:agent_link_settings_by_integration`), so an
 integration that the user has no access to, or that the user turned off on the
 default agent, is Blocked.
@@ -582,8 +683,9 @@ default agent, is Blocked.
    the stored `integration_action` rows. A change on the remote server
    reaches the model only after a refresh
    (`POST /admin/integrations/{id}/actions/refresh`, which calls
-   `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions`) or a
-   create of a public server. OpenAPI tools need no refresh. The refresh saves
+   `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions`), a
+   create of a public server, or an update of the server URL or the transport.
+   An update to a server that does not answer clears the actions. OpenAPI tools need no refresh. The refresh saves
    the declared `outputSchema` and `annotations.readOnlyHint`, which sets the
    default policy of the action. The refresh uses the organization connection
    of a shared server and the acting admin's own connection of an individual
@@ -600,20 +702,24 @@ default agent, is Blocked.
    `header_template` only to a manager, and masks each value with no
    placeholder, because the migration put static header secrets there.
    `keep_masked_values` keeps the stored value when a client sends a masked
-   value back.
+   value back. Only a manager reads `ToolSnapshot.custom_headers` values,
+   with the partial mask that the Terraform provider compares
+   (`server/features/tool/api.py:_openapi_snapshots`). Agent responses
+   (`server/features/persona/`) give every reader no header values.
 8. `access-grants-default-chat-only` **Integration access gates chat, not
    server grants or plugins.** Chat offers an integration's actions to each
    user who can use the agent and has access to the integration, when the
    agent links it (`integrations/chat_tools.py`). The user's on/off choice
    applies only on the default agent. The agent link, a plugin, and old
-   server grants give no access in chat. While a scheduled run is in flight in
-   the chat, the task's links replace the agent's
+   server grants give no access in chat. In the chat of a scheduled run, the
+   task's current links replace the agent's, also after the run ends
    (`integrations/policy.py:chat_integrations`,
    [[craft-scheduled-tasks#task-choices-default-ask]]).
 9. `destination-change-deletes-credentials` **A changed URL or sign-in
    setting resets connections.** `integrations/connections.py:sign_in_settings_for`
-   includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL, the
-   app URL patterns and the preset host values. An admin PATCH that changes it
+   includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL
+   (without a trailing slash, which older releases kept), the
+   GraphQL endpoint URL, the app URL patterns and the preset host values. An admin PATCH that changes it
    sets every connection to Needs reconnect. A new destination must never
    receive credentials that were given for the old one. Only a global action
    manager can change the destination or headers of an Onyx login
@@ -631,24 +737,28 @@ default agent, is Blocked.
     notices only when neither readable content nor structured content exists.
     Transport exceptions report an auth error for a 401,
     `MCPReauthenticationRequired`, or auth words in the message.
-    `tools/tool_implementations/custom/custom_tool.py:CustomTool._run` returns a
+    `tools/tool_implementations/api_app/rest_tool.py:ApiTool._run` returns a
     failed result for a blocked destination, a timeout, a connection error
-    or a redirect, and flags only 401 and 403. Both put a
+    or a redirect (`tools/tool_implementations/http_request.py:send_tool_request`,
+    which the app tools also use), and flags only 401 and 403. Both put a
     `CustomToolCallSummary` in `details`, which the chat renderer draws:
-    `CustomTool` fills its `error`, and `MCPTool` puts an `{"error": ...}`
+    `ApiTool` fills its `error`, and `MCPTool` puts an `{"error": ...}`
     object in `tool_result`. In a chat with a sandbox, a large output goes to
     the VM, and the summary keeps only its preview in `spilled`
-    ([[code-execution]]). Other `CustomTool` exceptions reach `Tool.run`,
+    ([[code-execution]]). Other `ApiTool` exceptions reach `Tool.run`,
     which gives the model "Tool failed with error: <exception text>" and the
     user no error detail ([[tools-framework#run-errors-become-results]]).
 12. `reauth-mark-if-current` **A rejected credential is marked only if it is
     the one the call used.**
-    `MCPTool._run` marks an API key connection Needs reconnect for a 401
-    through `integrations/call_credentials.py:mark_api_key_rejected`. It locks
+    `MCPTool._run` marks an API key or OAuth2 connection Needs reconnect for a
+    401 through `integrations/call_credentials.py:mark_credential_rejected`. It locks
     the connection row that the call read (`connection_id`) and marks it only
     when the row still holds the key the call sent
     (`CallCredentials.secret_fingerprint`). A key saved during the call stays
-    connected. OAuth2 connections are left to the refresh.
+    connected. For OAuth2, `server/features/mcp/oauth.py:OnyxOAuthClientProvider`
+    records the access token that got the 401, which can be a token that the
+    call renewed, and the mark compares that token instead. A failed refresh or
+    a 403 does not mark the connection.
 13. `craft-sessions-bake-mcp-config` **Craft sessions bake MCP config.** A change
     to an integration or a new connection (also the OAuth callback,
     `server/features/integrations/connections_api.py:oauth_callback`) must call
@@ -671,10 +781,11 @@ default agent, is Blocked.
 15. `chat-approval-needs-waiting-client` **Every client handles approvals;
     any run of a signed-in owner's chat can wait.**
     `chat/run_store.py:ChatRunStore.request_approval` opens the request for
-    the root run and for agent runs alike; for an anonymous user,
-    `chat/tool_approvals.py:open_tool_approval` (`signed_out`) returns the
-    call's error result instead. A `USAGE_ONLY` incognito turn has no run
-    store, so the runtime's own error applies. Nothing about approvals goes
+    the root run and for agent runs alike. An anonymous user and a
+    `USAGE_ONLY` incognito turn (no run store) cannot wait:
+    `chat/process_message.py:prepare_chat_turn` sets `NO_APPROVER`, so no Ask
+    action is built. The runtime's "this run cannot ask" error stays as a
+    safety net. Nothing about approvals goes
     into the system prompt or tool descriptions. The root agent's question
     tool ([[tools-framework]]) asks the user where an approval can wait: a
     signed-in user's single-model turn that keeps content, asks for approval
@@ -796,7 +907,15 @@ default agent, is Blocked.
     resume turn before its run exists, such as a gone model or saved state,
     ends the response through `chat/run_store.py:fail_suspended_response`:
     failed, its rows ended, its checkpoint and its parked programs' dumps
-    deleted, so no retry repeats it. A transient error
+    deleted, so no retry repeats it. `chat/run_store.py:resume_failure` picks
+    the failure that the response is saved with and that the stream shows:
+    saved data that the running code cannot read gets `RESUME_UPDATED_MESSAGE`,
+    which says that Onyx was updated; other failures get
+    `RESUME_FAILED_MESSAGE`. Saved data is read in three places, which turn a
+    pydantic validation error into `chat/checkpoint.py:CheckpointVersionError`:
+    `db/chat_checkpoint.py:claim_checkpoint__no_commit`,
+    `chat/checkpoint.py:deserialize_checkpoint` and
+    `chat/restoration.py:restore_chat_agent` (feature state). A transient error
     (`RETRYABLE_START_ERRORS`) keeps the response suspended; the turn does not
     hand off, and its release asks dispatch for `retry_resume`, which
     dispatches again after the next of
@@ -826,7 +945,7 @@ default agent, is Blocked.
     (`ChatTurnExecution._publish`). Background agents keep running and keep
     their requests. A suspended response runs nothing, so a Stop finds no
     turn: the stop route only pauses the queue, and the requests still wait.
-    "Stop subagents"
+    Stop on an agent in the activity card
     (`server/query_and_chat/chat_backend.py:stop_chat_subagents`) sets each
     active agent's Stop key, saves the user's rejection of their rows, then
     cancels the live ones and ends the parked ones
@@ -856,17 +975,23 @@ default agent, is Blocked.
     returns 200; the model reads that the tool is disabled, and the card's
     outcome is `disabled`. A decision that repeats the saved one returns 200
     with the row's `decided_via`, also after the response ends or the policy
-    changes. An `approve_session` on a row the user approved once upgrades it
+    changes. The chat and command decisions share this rule
+    (`server/features/action_policies/models.py:ApprovalChoice.saved_answer`,
+    `ApprovalChoice.outcome` maps a choice to its decision and `decided_via`).
+    An `approve_session` on a row the user approved once upgrades it
     to a session grant; every request that a grant decides ends with the
     outcome `approved_for_chat` (`HumanToolAnswer.standing`).
 17. `chat-approval-records-replay` **A saved response shows the records its
     stream showed.** `db/chat_response.py:read_response_replay_data` loads the
     `approval_request` rows of an ended or suspended response and the child
     runs it shows, and the rows of the background agents that its
-    `spawn_agent` and `send_message` calls started, directly or through
+    spawn tool (`spawn_agent` or `agent`) and `send_message` calls started, directly or through
     their agents, at any status; those show in that call's card, with the
     agent's name (`ToolApprovalRequest.agent_name`). Every request shows the
-    arguments saved on its row, so a replayed card equals the live one. An
+    arguments saved on its row, and the kind of its integration
+    (`SavedToolApproval.integration_kind`, read by `load_chat_approvals`)
+    decides Approve for this chat by `always_asks`, so a replayed card equals
+    the live one. An
     agent's request never shows in a live stream: the client sees
     `approvals_version` change in the session status
     (`db/approval_request.py:approvals_version`, also on the session load) and
@@ -894,7 +1019,7 @@ default agent, is Blocked.
     program.** MCP tools stay program functions in code mode. A gated call
     opens its request through `ToolInvocation.nested_calls`
     (`agents/tools.py:NestedCallGate`), and its card shows at once on the
-    observing `execute_code` or `wait_code` card, also for a cell that runs in
+    observing run or wait call's card, also for a cell that runs in
     the background. The program parks once it waits only for such calls
     ([[code-execution]]), the observation ends with `NestedInputWait`, and the
     run hands off as for a direct call: the parked cell is saved in
@@ -965,13 +1090,16 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   let a bot run it.
 - An MCP server or OpenAPI tool made through the admin MCP or tool routes has
   no integration, so chat offers none of its actions.
+- The temporary shapes of API apps are in the tech debt register:
+  [the dual write to `tool`](../TECH-DEBT.md#dual-write-of-openapi-apps-to-tool) and
+  [URL-pattern apps](../TECH-DEBT.md#url-pattern-apps).
 
 - Schema placeholders are a plain string replace.
-  `build_custom_tools_from_openapi_schema_and_headers` replaces
+  `build_rest_tools` replaces
   `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` and `USER_EMAIL` anywhere in the
   JSON, descriptions included. Headers are not templated. An anonymous user's
   email is substituted as `anonymous` (`tools/tool_constructor.py`).
-- OpenAPI response files have no chat-session stamp. `CustomTool` saves a file
+- OpenAPI response files have no chat-session stamp. `ApiTool` saves a file
   response as `FileOrigin.CHAT_UPLOAD` with no session. Only the
   `ChatMessage.files` branch of the chat-file access check can serve it
   ([[access-control]]).
@@ -982,8 +1110,8 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - `MCPTransport.STDIO` is accepted by `McpServerConfigInput`, but the client
   has no STDIO path and uses `sse_client` for it. Do not remove the enum value:
   the column is a non-native enum, and a stored `STDIO` row would fail to load.
-- A per-tool OAuth token replaces a static `Authorization` header with only a
-  log warning (`tools/tool_implementations/custom/custom_tool.py:CustomTool`).
+- A per-tool OAuth token replaces a static `Authorization` header with no
+  warning (`tools/tool_implementations/api_app/rest_tool.py:ApiTool.headers`).
   Save rejects that pair only for `passthrough_auth`
   (`server/features/tool/api.py:_auth_settings`).
 - On CE, `_apply_mcp_server_access` raises `EE_REQUIRED` for a non-public

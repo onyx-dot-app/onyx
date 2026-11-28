@@ -1,4 +1,11 @@
-import React, { memo, JSX, useMemo, useCallback } from "react";
+import React, {
+  memo,
+  JSX,
+  useMemo,
+  useCallback,
+  useContext,
+  type MouseEvent,
+} from "react";
 import type { ExtraProps } from "react-markdown";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
@@ -15,11 +22,23 @@ import {
   getDisplayNameForSource,
 } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { openDocument } from "@/lib/search/utils";
-import { ensureHrefProtocol } from "@/lib/utils";
+import { ensureHrefProtocol, isBareRelativeHref } from "@/lib/utils";
 import { extractTextFromReactNode } from "@/lib/timeline/chat/message/codeUtils";
 import { useTranslations } from "next-intl";
+import { toast } from "@opal/layouts";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  type ChatArtifactFile,
+  parseArtifactLink,
+} from "@/lib/chat/publishedFiles";
+import { PublishedFilesPanelContext } from "@/sections/chat/PublishedFileCards";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 const CITATION_LABEL_PATTERN: RegExp = /^\[(D|Q)?\d+\]$/;
+
+// The number of the newest artifact link click, across all links
+let latestArtifactClick = 0;
 
 // Returns the label only when it has no nested elements (e.g. bold).
 function getPlainLabel(children: React.ReactNode): string | null {
@@ -160,6 +179,7 @@ export const MemoizedLink = memo(
     }) => {
     const t = useTranslations("chat.messages");
     const value = rest.children;
+    const panel = useContext(PublishedFilesPanelContext);
 
     // Convert document to SourceInfo for SourceTag
     const documentSourceInfo = useMemo(() => {
@@ -182,6 +202,8 @@ export const MemoizedLink = memo(
       }
     }, [document, updatePresentingDocument, question, openQuestion]);
 
+    // A VM path the model linked opens nothing in the browser.
+    const isVmPath: boolean = !!href?.trim() && isBareRelativeHref(href.trim());
     const url: string | undefined = ensureHrefProtocol(href);
     const isChatFile: boolean = !!url?.includes("/api/chat/file/");
     const plainLabel: string | null = getPlainLabel(value);
@@ -192,8 +214,9 @@ export const MemoizedLink = memo(
       CITATION_LABEL_PATTERN.test(plainLabel)
     ) {
       const sourceInfo = documentSourceInfo || questionSourceInfo;
+      // Find in chat skips citations: it searches the answer's own text.
       if (!sourceInfo) {
-        return <>{rest.children}</>;
+        return <span data-chat-find-ignore>{rest.children}</span>;
       }
 
       const displayName = document
@@ -201,15 +224,21 @@ export const MemoizedLink = memo(
         : question?.question || t("memoizedLink.questionFallback.label");
 
       return (
-        <SourceTag
-          variant="inlineCitation"
-          displayName={displayName}
-          sources={[sourceInfo]}
-          onSourceClick={handleSourceClick}
-          showDetailsCard
-          className="me-0.5"
-        />
+        <span data-chat-find-ignore>
+          <SourceTag
+            variant="inlineCitation"
+            displayName={displayName}
+            sources={[sourceInfo]}
+            onSourceClick={handleSourceClick}
+            showDetailsCard
+            className="me-0.5"
+          />
+        </span>
       );
+    }
+
+    if (isVmPath) {
+      return <span>{rest.children}</span>;
     }
 
     if (isChatFile && updatePresentingDocument) {
@@ -235,11 +264,49 @@ export const MemoizedLink = memo(
       );
     }
 
+    // An artifact link opens its file in this chat's panel, pinned to the
+    // version it names; a modified or middle click keeps the new tab, whose
+    // page opens the owning chat.
+    const artifactLink = url ? parseArtifactLink(url) : null;
+    function openArtifact(event: MouseEvent<HTMLAnchorElement>) {
+      if (
+        !artifactLink ||
+        !panel ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
+      event.preventDefault();
+      const { version } = artifactLink;
+      // Only the latest artifact click opens its file, and only while the
+      // user stays in the chat it was made in
+      const click = ++latestArtifactClick;
+      const sessionId = useChatSessionStore.getState().currentSessionId;
+      const stillLatest = () =>
+        click === latestArtifactClick &&
+        useChatSessionStore.getState().currentSessionId === sessionId;
+      errorHandlingFetcher<ChatArtifactFile>(
+        SWR_KEYS.chatArtifact(artifactLink.artifactId, version)
+      ).then(
+        (file) => {
+          if (stillLatest()) panel.openFile(file, version !== null);
+        },
+        () => {
+          if (stillLatest())
+            toast.error(t("memoizedLink.artifactError.message"));
+        }
+      );
+    }
+
     return (
       <a
         href={url}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={openArtifact}
         className="cursor-pointer underline underline-offset-2"
       >
         {rest.children}

@@ -9,12 +9,15 @@ import {
 } from "@opal/components";
 import { SvgPlus, SvgTrash } from "@opal/icons";
 import { InputVertical, Section } from "@opal/layouts";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import type {
   AuthMethod,
   AuthMode,
   IntegrationShape,
 } from "@/lib/integrations/types";
 import {
+  methodsForMode,
   PROVIDER_MODES,
   signInErrors,
   type HeaderDraft,
@@ -32,16 +35,87 @@ interface IntegrationSignInFieldsProps {
   disabled: boolean;
 }
 
-export default function IntegrationSignInFields({
+/** The server lets only an organization-wide action manager pick Onyx
+ * login. A saved Onyx login stays so the form shows it. */
+function useAllowedMethods(
+  methods: readonly AuthMethod[],
+  current: AuthMethod | null
+): readonly AuthMethod[] {
+  const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_ACTIONS);
+  return isGlobalHolder || current === "onyx_login"
+    ? methods
+    : methods.filter((method) => method !== "onyx_login");
+}
+
+export default function IntegrationSignInFields(
+  props: IntegrationSignInFieldsProps
+) {
+  return (
+    <Section gap={4} alignItems="stretch" height="auto">
+      <SignInModeField {...props} />
+      <SignInMethodFields {...props} />
+    </Section>
+  );
+}
+
+/** Who signs in: no one, one account for the organization, or each user. */
+export function SignInModeField({
   draft,
   onChange,
-  methods,
+  methods: allMethods,
+  shape,
+  disabled,
+}: IntegrationSignInFieldsProps) {
+  const methods = useAllowedMethods(allMethods, draft.authMethod);
+  // A preset with a sign-in method cannot call its API with no sign-in.
+  const allowsNone = shape !== "preset" || allMethods.length === 0;
+  const authModes = AUTH_MODES.filter((mode) =>
+    mode === "none" ? allowsNone : methodsForMode(methods, mode).length > 0
+  );
+  const t = useTranslations("admin.integrations.signIn");
+  return (
+    <InputVertical title={t("mode.title")} description={t("mode.description")}>
+      <InputSingleSelect
+        placeholder={t("mode.title")}
+        value={draft.authMode}
+        // A default makes a re-pick close the list instead of unselecting.
+        defaultOption={authModes[0]}
+        disabled={disabled}
+        options={authModes.map((mode) => ({
+          value: mode,
+          title: t(`mode.${mode}`),
+        }))}
+        onValueChange={(value) => {
+          const mode = authModes.find((option) => option === value);
+          if (!mode) return;
+          const fitting = methodsForMode(methods, mode);
+          onChange({
+            ...draft,
+            authMode: mode,
+            authMethod:
+              draft.authMethod && fitting.includes(draft.authMethod)
+                ? draft.authMethod
+                : (fitting[0] ?? null),
+          });
+        }}
+      />
+    </InputVertical>
+  );
+}
+
+/** The sign-in method and its fields: the header template or the OAuth
+ * client. Empty with no sign-in. */
+export function SignInMethodFields({
+  draft,
+  onChange,
+  methods: allMethods,
   shape,
   showErrors,
   disabled,
 }: IntegrationSignInFieldsProps) {
+  const methods = useAllowedMethods(allMethods, draft.authMethod);
   const providerModes = PROVIDER_MODES[shape];
-  const authModes: readonly AuthMode[] = methods.length ? AUTH_MODES : ["none"];
+  const fitting = methodsForMode(methods, draft.authMode);
   const t = useTranslations("admin.integrations.signIn");
   const errors = showErrors ? signInErrors(draft) : [];
   const variant = disabled ? "disabled" : "primary";
@@ -72,49 +146,32 @@ export default function IntegrationSignInFields({
     managed: t("method.managed"),
   };
 
+  if (draft.authMode === "none") return null;
+  // A saved method outside the list keeps the selector, so it can be changed.
+  const choosable =
+    fitting.length > 1 ||
+    (draft.authMethod !== null && draft.authMethod !== fitting[0]);
   return (
     <Section gap={4} alignItems="stretch" height="auto">
-      <InputVertical
-        title={t("mode.title")}
-        description={t("mode.description")}
-      >
-        <InputSingleSelect
-          placeholder={t("mode.title")}
-          value={draft.authMode}
-          disabled={disabled}
-          options={authModes.map((mode) => ({
-            value: mode,
-            title: t(`mode.${mode}`),
-          }))}
-          onValueChange={(value) => {
-            const mode = authModes.find((option) => option === value);
-            if (!mode) return;
-            update({
-              authMode: mode,
-              authMethod:
-                mode === "none" ? null : (draft.authMethod ?? methods[0]),
-            });
-          }}
-        />
-      </InputVertical>
-      {draft.authMode !== "none" && methods.length > 0 && (
+      {choosable && (
         <InputVertical title={t("method.title")}>
           <InputSingleSelect
             placeholder={t("method.title")}
             value={draft.authMethod ?? ""}
+            defaultOption={fitting[0]}
             disabled={disabled}
-            options={methods.map((method) => ({
+            options={fitting.map((method) => ({
               value: method,
               title: methodLabels[method],
             }))}
             onValueChange={(value) => {
-              const method = methods.find((option) => option === value);
+              const method = fitting.find((option) => option === value);
               if (method) update({ authMethod: method });
             }}
           />
         </InputVertical>
       )}
-      {draft.authMode !== "none" && draft.authMethod === "api_key" && (
+      {draft.authMethod === "api_key" && (
         <>
           {draft.headers.map((header, index) => {
             const suffix = index === 0 ? "" : ` ${index + 1}`;
@@ -219,13 +276,14 @@ export default function IntegrationSignInFields({
           </Section>
         </>
       )}
-      {draft.authMode !== "none" && draft.authMethod === "oauth2" && (
+      {draft.authMethod === "oauth2" && (
         <>
           {providerModes.length > 1 && (
             <InputVertical title={t("oauth.providerMode.title")}>
               <InputSingleSelect
                 placeholder={t("oauth.providerMode.title")}
                 value={draft.providerMode}
+                defaultOption={providerModes[0]}
                 disabled={disabled}
                 options={providerModes.map((mode) => ({
                   value: mode,
@@ -295,18 +353,21 @@ export default function IntegrationSignInFields({
               </InputVertical>
             </>
           )}
-          <InputVertical
-            title={t("oauth.scopes.title")}
-            description={t("oauth.scopes.description")}
-          >
-            <InputTypeIn
-              aria-label={t("oauth.scopes.title")}
-              placeholder={t("oauth.scopes.placeholder")}
-              value={draft.scopes}
-              variant={variant}
-              onChange={(event) => update({ scopes: event.target.value })}
-            />
-          </InputVertical>
+          {/* A preset's setup panel lists its scopes. */}
+          {draft.providerMode !== "preset" && (
+            <InputVertical
+              title={t("oauth.scopes.title")}
+              description={t("oauth.scopes.description")}
+            >
+              <InputTypeIn
+                aria-label={t("oauth.scopes.title")}
+                placeholder={t("oauth.scopes.placeholder")}
+                value={draft.scopes}
+                variant={variant}
+                onChange={(event) => update({ scopes: event.target.value })}
+              />
+            </InputVertical>
+          )}
         </>
       )}
     </Section>

@@ -8,8 +8,11 @@ import type {
   ProjectDetails,
 } from "@/lib/projects/types";
 
+const requestError = (action: string, status: number): Error =>
+  new Error(`${action} failed (Status: ${status})`);
+
 const handleRequestError = (action: string, response: Response): never => {
-  throw new Error(`${action} failed (Status: ${response.status})`);
+  throw requestError(action, response.status);
 };
 
 export async function fetchProjects(): Promise<Project[]> {
@@ -31,13 +34,25 @@ export async function createProject(name: string): Promise<Project> {
   return response.json();
 }
 
-export async function uploadFiles(
+export interface UploadFilesOptions {
+  /** Called with the fraction of the request body sent, from 0 to 1. */
+  onProgress?: (progress: number) => void;
+  signal?: AbortSignal;
+}
+
+export function isUploadCancelled(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+// fetch cannot report upload progress, so this uses XMLHttpRequest.
+export function uploadFiles(
   files: File[],
   projectId?: number | null,
   // The temporary ID of each file, in order; the server returns each with
   // its file.
   tempIds?: string[],
-  incognitoSessionId?: string | null
+  incognitoSessionId?: string | null,
+  options: UploadFilesOptions = {}
 ): Promise<CategorizedFiles> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
@@ -52,16 +67,44 @@ export async function uploadFiles(
     formData.append("temp_ids", JSON.stringify(tempIds));
   }
 
-  const response = await fetch("/api/user/projects/file/upload", {
-    method: "POST",
-    body: formData,
+  const { onProgress, signal } = options;
+  return new Promise<CategorizedFiles>((resolve, reject) => {
+    const cancelled = () => {
+      const error = new Error("Upload cancelled");
+      error.name = "AbortError";
+      return error;
+    };
+    if (signal?.aborted) {
+      reject(cancelled());
+      return;
+    }
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/user/projects/file/upload");
+    if (onProgress) {
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          onProgress(event.loaded / event.total);
+        }
+      });
+    }
+    xhr.addEventListener("load", () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(requestError("Upload files", xhr.status));
+        return;
+      }
+      try {
+        resolve(JSON.parse(xhr.responseText));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    xhr.addEventListener("error", () =>
+      reject(new Error("Upload files failed"))
+    );
+    xhr.addEventListener("abort", () => reject(cancelled()));
+    signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+    xhr.send(formData);
   });
-
-  if (!response.ok) {
-    handleRequestError("Upload files", response);
-  }
-
-  return response.json();
 }
 
 export async function getRecentFiles(): Promise<ProjectFile[]> {

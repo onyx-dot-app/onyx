@@ -24,6 +24,7 @@ from onyx.skills.models import (
     GITHUB_SKILL_MAX_COUNT,
     PluginManifest,
     SkillBundleFile,
+    SkillName,
     UserPastWriteLimit,
 )
 
@@ -186,7 +187,7 @@ class SkillResponse(BaseModel):
         return cls(
             source="custom",
             id=plugin.id,
-            name=access.name or plugin.name,
+            name=access.name,
             description=access.description,
             kind="skill" if access.is_skill else "plugin",
             available_count=counts.available_count if counts is not None else 0,
@@ -274,7 +275,7 @@ class SkillPreviewResponse(BaseModel):
         return cls(
             source="custom",
             id=plugin.id,
-            name=access.name or plugin.name,
+            name=access.name,
             description=access.description,
             author_email=access.author_email,
             instructions_markdown=instructions_markdown,
@@ -348,6 +349,9 @@ class PluginUploadTarget(BaseModel):
     plugin_id: UUID | None
     plugin_name: str
     version_number: int
+    # A new plugin whose name the user's "My uploads" already holds. Saving
+    # it is refused until the user picks another name.
+    name_taken: bool = False
 
 
 class PluginUploadPreview(BaseModel):
@@ -552,6 +556,8 @@ class SkillShareRequest(SkillBulkSharing):
 
 class TransferSkillOwnershipRequest(BaseModel):
     new_owner_user_id: UUID
+    # The name in the new owner's "My uploads". Omit to keep the current name.
+    name: SkillName | None = None
 
 
 class SkillBulkShareRequest(BaseModel):

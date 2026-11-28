@@ -9,6 +9,7 @@ import os
 import threading
 import time
 from collections.abc import Buffer, Callable, Generator
+from copy import copy
 from typing import IO, Protocol
 from uuid import UUID, uuid4
 
@@ -27,6 +28,7 @@ from onyx.file_store.file_store import (
     get_default_file_store,
 )
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolResult
 from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.models import FileListing
@@ -53,6 +55,7 @@ from onyx.tools.tool_implementations.sandbox.file_copies import (
 )
 from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import ExecCommandTool
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.microvm.conftest import (
@@ -148,6 +151,7 @@ def new_turn(
             chat_session_id=chat or chat_session_id,
             vm_chat_files=chat_files or [],
             copy_vm_chat_files=chat_files is not None,
+            shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
         refs.append(turn.start_call())
         return turn, refs[-1]
@@ -255,14 +259,22 @@ class _Wrapped(SessionFiles):
     def __init__(self, files: SessionFiles) -> None:
         self.files = files
 
-    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
-        self.files.write(path, data, timeout_seconds=timeout_seconds)
+    def write(
+        self, path: str, data: IO[bytes], *, timeout_seconds: float, overwrite: bool
+    ) -> None:
+        self.files.write(
+            path, data, timeout_seconds=timeout_seconds, overwrite=overwrite
+        )
 
     def delete(self, path: str) -> bool:
         return self.files.delete(path)
 
-    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
-        return self.files.list_files(directory, max_entries=max_entries)
+    def list_files(
+        self, directory: str, *, max_entries: int, include_hidden: bool = False
+    ) -> FileListing:
+        return self.files.list_files(
+            directory, max_entries=max_entries, include_hidden=include_hidden
+        )
 
     def mark_busy(self, seconds: float | None) -> None:
         self.files.mark_busy(seconds)
@@ -403,7 +415,7 @@ def test_each_failure_has_its_reason(
     chat_files = [_file(file_id, "attachments/a.txt")]
     downloads: list[str] = []
     if reason == "the file store did not return the file":
-        store = get_default_file_store()
+        store = copy(get_default_file_store())
 
         def unreadable(
             file_id: str,
@@ -475,7 +487,7 @@ def test_a_file_without_a_size_or_a_stored_object_is_not_copied_alone(
         update(FileRecord).where(FileRecord.file_id == gone).values(file_size=None)
     )
     db_session.commit()
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     get_file_size = store.get_file_size
 
     def missing_object(file_id: str, db_session: Session | None = None) -> int | None:
@@ -517,7 +529,7 @@ def test_a_file_whose_stored_object_is_known_gone_is_not_copied(
     )
     db_session.commit()
     downloads: list[str] = []
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     read_file = store.read_file
 
     def counted(
@@ -683,7 +695,7 @@ def test_a_copy_in_its_first_download_keeps_the_vm_busy(
     file_id = store_file(b"a")
     downloading = threading.Event()
     release = threading.Event()
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     read_file = store.read_file
 
     def slow(
@@ -760,7 +772,9 @@ class _DyingFiles(_Wrapped):
         super().__init__(files)
         self._pod = pod
 
-    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+    def write(
+        self, path: str, data: IO[bytes], *, timeout_seconds: float, overwrite: bool
+    ) -> None:
         if self._pod.broke.is_set():
             raise HarnessSandboxError("the pod is gone")
         size = data.seek(0, os.SEEK_END)
@@ -770,6 +784,7 @@ class _DyingFiles(_Wrapped):
                 path,
                 io.BufferedReader(_BreaksAtHalf(data, size)),
                 timeout_seconds=timeout_seconds,
+                overwrite=overwrite,
             )
         except Exception:
             self._pod.broke.set()
@@ -980,7 +995,7 @@ def test_one_download_serves_every_try(
         SandboxDaemonErrorReason.INTERNAL, count=2
     )
     downloads: list[str] = []
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     read_file = store.read_file
 
     def counted(
@@ -1296,10 +1311,14 @@ def test_a_failed_listing_writes_only_in_verified_directories(
     node.agent.links[_key(ref, link)] = target
 
     class _FailedListing(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
             if directory == failed:
                 raise RuntimeError("the listing failed")
-            return super().list_files(directory, max_entries=max_entries)
+            return super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
 
     _wrap(monkeypatch, sandbox, _FailedListing)
     turn, _ = new_turn([_file(added, "attachments/project/added.txt")])
@@ -1342,8 +1361,12 @@ def test_a_truncated_listing_writes_only_in_verified_directories(
     node.agent.links[_key(ref, link)] = target
 
     class _TruncatedListing(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
-            listing = super().list_files(directory, max_entries=max_entries)
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
+            listing = super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
             if directory != truncated:
                 return listing
             return FileListing(

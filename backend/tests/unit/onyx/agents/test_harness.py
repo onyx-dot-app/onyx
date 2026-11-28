@@ -12,6 +12,7 @@ from onyx.agents.events import AgentEvent, AgentEventType, ToolEndEvent
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
+    RunHooks,
     RunState,
     StepInput,
     StepResult,
@@ -174,7 +175,6 @@ def test_sequential_calls_wait_for_their_tool_without_blocking_other_tools() -> 
     run = Agent(
         scripted(message, answer()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        after_tool_call=finalize,
         tools=[
             echo(execute, sequential=True),
             AgentTool(
@@ -182,6 +182,7 @@ def test_sequential_calls_wait_for_their_tool_without_blocking_other_tools() -> 
                 execute=execute_other,
             ),
         ],
+        feature=RunHooks(after_tool_call=finalize),
     ).start(max_steps=2, on_event=observe)
     try:
         assert other_completed.wait(3)
@@ -399,7 +400,7 @@ def test_named_tool_choice_blocks_other_declared_tools() -> None:
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=tools,
         options=GenerationOptions(tool_choice=NamedToolChoice(name="selected")),
-        before_tool_call=before_tool_call,
+        feature=RunHooks(before_tool_call=before_tool_call),
     )
     run_agent(agent, runs=[], max_steps=2)
     assert executed == ["selected"]
@@ -426,8 +427,10 @@ def test_context_transform_does_not_rewrite_durable_history() -> None:
         scripted(answer()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="original")]),
-        prepare_step=lambda _state: PreparedStep(
-            assemble_messages=lambda _messages: []
+        feature=RunHooks(
+            prepare_step=lambda _state: PreparedStep(
+                assemble_messages=lambda _messages: []
+            )
         ),
     )
     run_agent(agent, runs=runs, max_steps=1)
@@ -435,7 +438,7 @@ def test_context_transform_does_not_rewrite_durable_history() -> None:
     assert agent.state.messages[0].content == "original"
 
 
-def test_preparation_previous_output_shares_only_detached_callback_messages() -> None:
+def test_preparation_input_shares_the_recorded_history() -> None:
     requests: list[GenerationRequest] = []
     prepared_inputs: list[StepInput] = []
     tool = echo(
@@ -456,14 +459,6 @@ def test_preparation_previous_output_shares_only_detached_callback_messages() ->
             previous = state.previous
             assert previous.message is state.messages[0]
             assert previous.tool_results[0] is state.messages[1]
-            previous.message.content.clear()
-            previous.tool_results[0].content = "callback output"
-            details = previous.tool_results[0].details
-            assert isinstance(details, ToolProgress)
-            details.content = "callback detail"
-            previous.options.max_tokens = 1
-            state.history.clear()
-            state.input_messages.clear()
         return PreparedStep(options=GenerationOptions(max_tokens=128))
 
     agent = Agent(
@@ -471,7 +466,7 @@ def test_preparation_previous_output_shares_only_detached_callback_messages() ->
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="history")]),
         tools=[tool],
-        prepare_step=prepare,
+        feature=RunHooks(prepare_step=prepare),
     )
     run = agent.start(max_steps=2, messages=[UserMessage(content="question")])
     assert run.result(3).output.text == "done"
@@ -486,12 +481,47 @@ def test_preparation_previous_output_shares_only_detached_callback_messages() ->
     model_message = requests[1].messages[2]
     assert isinstance(model_message, AssistantMessage)
     assert [call.name for call in model_message.tool_calls] == ["echo"]
+    # The request shares the recorded messages that the hook saw.
+    assert requests[1].messages[0] is prepared_inputs[1].history[0]
+    assert requests[1].messages[3] is prepared_inputs[1].messages[1]
     assert all(request.options.max_tokens == 128 for request in requests)
-    saved_result = run.snapshot().steps[0].tools["0"].result
-    assert saved_result is not None
-    assert saved_result.content == "tool output"
-    assert isinstance(saved_result.details, ToolProgress)
-    assert saved_result.details.content == "detail"
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda state, _previous: state.messages.append(UserMessage(content="new")),
+        lambda _state, previous: setattr(previous, "message", answer("rewritten")),
+    ],
+    ids=["change-tuple", "replace-field"],
+)
+def test_preparation_hook_that_changes_history_fails_the_run(
+    mutate: Callable[[StepInput, StepResult], None],
+) -> None:
+    def prepare(state: StepInput) -> PreparedStep:
+        if state.previous is not None:
+            mutate(state, state.previous)
+        return PreparedStep()
+
+    agent = Agent(
+        FakeModelClient(
+            lambda request, _signal: calls() if len(request.messages) == 2 else answer()
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content="history")]),
+        tools=[echo()],
+        feature=RunHooks(prepare_step=prepare),
+    )
+    run = agent.start(max_steps=2, messages=[UserMessage(content="question")])
+    with pytest.raises(RunFailed):
+        run.result(3)
+    assert run.wait_for_idle(3)
+    assert [message.text for message in agent.state.messages] == [
+        "history",
+        "question",
+        "",
+        "0",
+    ]
 
 
 def test_tool_hooks_can_block_transform_and_report_progress() -> None:
@@ -505,13 +535,15 @@ def test_tool_hooks_can_block_transform_and_report_progress() -> None:
         scripted(calls(2), answer()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[echo(execute)],
-        before_tool_call=lambda context: (
-            ToolResult(content="blocked", is_error=True)
-            if context.call.id == "1"
-            else None
-        ),
-        after_tool_call=lambda _context, result: result.model_copy(
-            update={"content": str(result.content) + "!"}
+        feature=RunHooks(
+            before_tool_call=lambda context: (
+                ToolResult(content="blocked", is_error=True)
+                if context.call.id == "1"
+                else None
+            ),
+            after_tool_call=lambda _context, result: result.model_copy(
+                update={"content": str(result.content) + "!"}
+            ),
         ),
     )
     events: list[AgentEvent] = []
@@ -879,8 +911,7 @@ def test_current_thread_start_completes_storage_before_return() -> None:
     run = Agent(
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=prepare,
-        after_step=after,
+        feature=RunHooks(prepare_step=prepare, after_step=after),
     ).start(background=False, max_steps=1, coordinator=coordinator)
     assert run.result(0).output.text == "done"
     assert coordinator.completion(run.id).result(0).run_id == run.id
@@ -974,7 +1005,6 @@ def test_tool_configuration_and_permissions_survive_caller_and_model_mutation(
         inspection[0].definition.parameters["changed"] = "inspection"
         request.tools.clear()
         request.allowed_tool_names = None
-        request.options.tool_choice = ToolChoiceOptions.AUTO
         return AssistantMessage(
             content=[
                 ToolCall(id=name, name=name, arguments={"name": name})
@@ -1001,8 +1031,7 @@ def test_tool_configuration_and_permissions_survive_caller_and_model_mutation(
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=tools,
-        prepare_step=prepare,
-        before_tool_call=approve,
+        feature=RunHooks(prepare_step=prepare, before_tool_call=approve),
     )
     run_agent(agent, max_steps=2)
     assert requests[0] == requests[1]
@@ -1036,8 +1065,10 @@ def test_tool_phases_preserve_configured_order_and_reject_permission_broadening(
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=tools,
         tool_phases={"both": ["second", "first"], "finish": ["second"]},
-        prepare_step=lambda state: PreparedStep(
-            tool_phase="both" if state.step.index == 0 else "finish"
+        feature=RunHooks(
+            prepare_step=lambda state: PreparedStep(
+                tool_phase="both" if state.step.index == 0 else "finish"
+            )
         ),
     )
     run_agent(agent, max_steps=2)
@@ -1045,8 +1076,10 @@ def test_tool_phases_preserve_configured_order_and_reject_permission_broadening(
         ["first", "second"],
         ["second"],
     ]
-    agent.prepare_step = lambda _: PreparedStep(
-        tool_phase="finish", allowed_tool_names=frozenset({"first"})
+    agent.feature = RunHooks(
+        prepare_step=lambda _: PreparedStep(
+            tool_phase="finish", allowed_tool_names=frozenset({"first"})
+        )
     )
     run = agent.start(background=False, max_steps=1)
     with pytest.raises(RunFailed):

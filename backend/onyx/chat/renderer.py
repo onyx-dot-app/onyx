@@ -20,11 +20,12 @@ from onyx.chat.models import (
     CitationMode,
     MessageRendering,
     PresentationMode,
+    RunDocuments,
     ToolApprovalDenial,
 )
 from onyx.chat.response import tool_arguments_for_display
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.context.search.models import SearchDocsResponse
 from onyx.db.enums import QuestionAnsweredVia, QuestionOutcome
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import (
@@ -49,13 +50,10 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.constants import (
-    CODE_MODE_TOOL_NAME,
-    QUESTION_TOOL_NAMES,
-    WAIT_CODE_TOOL_NAME,
-)
+from onyx.tools.constants import WRITE_STDIN_TOOL_NAME
 from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import (
+    CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     FileReadResult,
@@ -66,6 +64,7 @@ from onyx.tools.models import (
     ToolExecutionError,
     ToolExecutionException,
 )
+from onyx.tools.tool_implementations.api_app.openapi_parsing import REQUEST_BODY
 from onyx.tools.tool_implementations.code_mode.models import (
     CellWindow,
     CodeModeCall,
@@ -75,28 +74,36 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeExecutionResult,
     CodeModeStdout,
 )
-from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CODE_MODE_TOOL_NAMES,
+    RUN_TOOL_NAMES,
+    WAIT_TOOL_NAMES,
+)
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import OPEN_URL_TOOL_NAMES
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
-from onyx.tools.tool_implementations.question.models import (
-    QuestionArguments,
-    QuestionToolDetails,
+from onyx.tools.tool_implementations.question.models import QuestionToolDetails
+from onyx.tools.tool_implementations.question.shapes import (
+    QUESTION_SHAPES_BY_NAME,
+    QUESTION_TOOL_NAMES,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACT_PUBLISH_PATHS,
     ApplyPatchResult,
+    CommandApprovalRequest,
+    CommandApprovalResolved,
     FileToolName,
     PublishedFiles,
     PublishedFileView,
+    PublishFileArgument,
     SandboxExecResult,
     SpilledOutput,
-    WriteStdinArguments,
 )
 from onyx.tools.tool_implementations.sandbox.patch import (
     HUNK_HEADER_MARKERS,
@@ -104,11 +111,15 @@ from onyx.tools.tool_implementations.sandbox.patch import (
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
+    ArtifactTool,
     EditTool,
-    ExecCommandTool,
-    PublishFilesTool,
-    WriteStdinTool,
+    LibraryCreateLibraryFileTool,
+    LibraryReplaceLibraryFileTool,
     WriteTool,
+)
+from onyx.tools.tool_implementations.sandbox.shapes import (
+    SHELL_SHAPES_BY_NAME,
+    SHELL_TOOL_NAMES,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -125,11 +136,9 @@ HIDDEN_TOOLS = frozenset(
 # The card's note between the head and the tail of a spilled result.
 SPILLED_OUTPUT_NOTE = "Large output: the full result was saved to the sandbox."
 # Tools whose code argument streams to the browser while the model writes it.
-CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, CODE_MODE_TOOL_NAME})
+CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, *RUN_TOOL_NAMES})
 # Tools whose prompt argument streams to the browser while the model writes it.
 PROMPT_ARGUMENT_TOOLS = frozenset({ImageGenerationTool.NAME})
-# Tools whose calls observe a code mode cell; each call renders as one code mode card.
-CODE_MODE_TOOL_NAMES = frozenset({CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME})
 
 
 class FileToolArguments(NamedTuple):
@@ -146,17 +155,23 @@ FILE_TOOL_ARGUMENTS: dict[FileToolName, FileToolArguments] = {
     EditTool.NAME: FileToolArguments(text="new_string", path="file_path"),
     WriteTool.NAME: FileToolArguments(text="content", path="file_path"),
 }
+OwnEndPacket = (
+    type[packets.ExecEnd] | type[packets.ApplyPatchEnd] | type[packets.PublishFilesEnd]
+)
 # Tools whose calls end with their own end packet, and its type; a failed call
 # ends with that packet's error. Each call of these tools sends its own start
-# packet too, so the end never lands on a generic card.
-OWN_END_PACKETS: dict[
-    str,
-    type[packets.ExecEnd] | type[packets.ApplyPatchEnd] | type[packets.PublishFilesEnd],
-] = {
-    ExecCommandTool.NAME: packets.ExecEnd,
-    WriteStdinTool.NAME: packets.ExecEnd,
+# packet too, so the end never lands on a generic card. A call with the publish
+# card (publish_card_files) ends with PublishFilesEnd.
+OWN_END_PACKETS: dict[str, OwnEndPacket] = {
+    **dict.fromkeys(SHELL_TOOL_NAMES, packets.ExecEnd),
+    WRITE_STDIN_TOOL_NAME: packets.ExecEnd,
     **dict.fromkeys(FILE_TOOL_ARGUMENTS, packets.ApplyPatchEnd),
-    PublishFilesTool.NAME: packets.PublishFilesEnd,
+}
+# The arguments that name the file, or the files, of each tool's publish.
+_PUBLISH_PATH_ARGUMENTS: dict[str, tuple[str, str | None]] = {
+    LibraryCreateLibraryFileTool.NAME: ("file", "files"),
+    LibraryReplaceLibraryFileTool.NAME: ("file", None),
+    ArtifactTool.NAME: ARTIFACT_PUBLISH_PATHS,
 }
 # The shortest time between two reports of a call's streamed arguments.
 # Between reports the renderer only collects fragments, so it parses the
@@ -168,6 +183,34 @@ _OPTIONAL_STRING = TypeAdapter(str | None)
 _INT = TypeAdapter(int)
 _STRINGS = TypeAdapter(list[str])
 logger = setup_logger()
+
+
+def publish_card_files(
+    name: str, args: dict[str, JsonValue]
+) -> list[PublishFileArgument] | None:
+    """The files that a call of tool `name` asks to publish, as the model
+    wrote them, when the call shows the publish card; None for any other
+    call. Raises ValidationError when the arguments do not fit the card."""
+    keys = _PUBLISH_PATH_ARGUMENTS.get(name)
+    # A missing or null action is a publish, as parse_tool_arguments reads
+    # it. The artifact tool's publish with a path copies a stored file (an
+    # update), which shows the generic card.
+    if keys is None or (
+        name == ArtifactTool.NAME
+        and (
+            args.get("action") not in (None, "publish") or args.get("path") is not None
+        )
+    ):
+        return None
+    one, several = keys
+    path = args.get(one)
+    title = _OPTIONAL_STRING.validate_python(args.get("title"))
+    return [
+        PublishFileArgument(path=path, title=title)
+        for path in _STRINGS.validate_python(
+            [path] if path is not None else (several and args.get(several)) or []
+        )
+    ]
 
 
 def _spilled_card_text(spilled: SpilledOutput) -> str:
@@ -316,19 +359,19 @@ class MessageRenderer:
     def __init__(
         self,
         settings: MessageRendering,
-        documents: Mapping[str, SearchDoc],
+        documents: RunDocuments,
         layout: ResponseLayout,
         parent: Placement | None = None,
     ) -> None:
+        """`documents` are those of the message's run up to and including
+        the message's step."""
         self.settings = settings
         self.layout = layout
         self.parent = parent
         self.answer = ""
         self.reasoning = ""
         self.citations: list[packets.CitationInfo] = []
-        self.documents = [
-            documents[key] for key in settings.document_ids if key in documents
-        ]
+        self.documents = list(documents.shown.values())
         self._answer_placement: Placement | None = None
         self._reasoning_placement: Placement | None = None
         self._raw_text = ""
@@ -345,13 +388,7 @@ class MessageRenderer:
             else None
         )
         if self.citation_processor:
-            self.citation_processor.update_citation_mapping(
-                {
-                    number: documents[key]
-                    for number, key in settings.citation_documents.items()
-                    if key in documents
-                }
-            )
+            self.citation_processor.update_citation_mapping(documents.citations)
 
     @property
     def answer_started(self) -> bool:
@@ -713,6 +750,15 @@ class ToolRenderer:
         self._files: set[str] = set()
         self._started = False
         self._finished = False
+        # The end packet of a failed call, chosen with the start packet.
+        self._own_end: OwnEndPacket | None = None
+        # The call shows on the generic tool card (CustomToolStart).
+        self._generic_display = False
+        # An approval request of the call ended without an approval, so its
+        # error result is that decision, not a failure.
+        self._not_approved = False
+        # The command approval cards of the call that wait for a resolution.
+        self._open_command_approvals: dict[str, None] = {}
 
     def consume(
         self,
@@ -742,14 +788,25 @@ class ToolRenderer:
                 tool_call_id=call.id,
                 tool_name=call.name,
                 display_name=event.request.display_name or call.name,
-                arguments=tool_arguments_for_display(call),
+                arguments=event.request.display_arguments
+                if event.request.display_arguments is not None
+                else tool_arguments_for_display(call),
+                can_approve_for_chat=event.request.can_approve_for_chat,
+                app_name=event.request.app_name,
             )
         else:
-            obj = packets.ToolApprovalResolved(
-                approval_id=event.request.request_id,
-                outcome=approval_outcome(event.answer),
+            obj = self.approval_resolved(
+                event.request.request_id, approval_outcome(event.answer)
             )
         return [packets.Packet(placement=self.placement, obj=obj)]
+
+    def approval_resolved(
+        self, approval_id: str, outcome: packets.ToolApprovalOutcome
+    ) -> packets.ToolApprovalResolved:
+        """The end of one of the call's approval requests, live or saved."""
+        if outcome not in ("approved", "approved_for_chat"):
+            self._not_approved = True
+        return packets.ToolApprovalResolved(approval_id=approval_id, outcome=outcome)
 
     def start(self) -> list[packets.Packet]:
         if self._started:
@@ -766,8 +823,18 @@ class ToolRenderer:
             )
             # A tool with its own end packet keeps its own card, which then
             # shows empty arguments; the end packet carries the error.
-            objects = self._start_objects({}) if name in OWN_END_PACKETS else []
+            objects = (
+                self._start_objects({})
+                if name in OWN_END_PACKETS or publish_card_files(name, {}) is not None
+                else []
+            )
+        self._own_end = (
+            packets.PublishFilesEnd
+            if any(isinstance(obj, packets.PublishFilesStart) for obj in objects)
+            else OWN_END_PACKETS.get(name)
+        )
         if not objects:
+            self._generic_display = True
             objects = [
                 packets.CustomToolStart(
                     tool_name=name,
@@ -809,7 +876,7 @@ class ToolRenderer:
             queries = _STRINGS.validate_python(args.get("queries", []))
             self._queries.update(queries)
             objects.append(packets.SearchToolQueriesDelta(queries=queries))
-        elif name == OpenURLTool.NAME:
+        elif name in OPEN_URL_TOOL_NAMES:
             objects = [
                 packets.OpenUrlStart(),
                 packets.OpenUrlUrls(
@@ -822,20 +889,32 @@ class ToolRenderer:
                     code=_STRING.validate_python(args.get("code", ""))
                 )
             ]
-        elif name == ExecCommandTool.NAME:
+        elif name in SHELL_TOOL_NAMES:
+            shell = SHELL_SHAPES_BY_NAME[name]
             objects = [
                 packets.ExecCommandStart(
-                    cmd=_STRING.validate_python(args.get("cmd", "")),
-                    workdir=_OPTIONAL_STRING.validate_python(args.get("workdir")),
+                    cmd=_STRING.validate_python(args.get(shell.command_argument, "")),
+                    workdir=None
+                    if shell.workdir_argument is None
+                    else _OPTIONAL_STRING.validate_python(
+                        args.get(shell.workdir_argument)
+                    ),
                 )
             ]
-        elif name == WriteStdinTool.NAME:
-            # Interrupted arguments can lack the session ID.
-            write = parse_tool_arguments(
-                WriteStdinArguments, {"session_id": "", **args}
-            )
+        elif name == WRITE_STDIN_TOOL_NAME:
+            # Every shape names the session ID and the characters alike; the
+            # card reads only those. Interrupted arguments can lack them,
+            # null selects the default as the tool reads it, and models may
+            # send the session ID as a number.
+            session_id = args.get("session_id")
             objects = [
-                packets.WriteStdinStart(session_id=write.session_id, chars=write.chars)
+                packets.WriteStdinStart(
+                    session_id=_OPTIONAL_STRING.validate_python(
+                        str(session_id) if isinstance(session_id, int) else session_id
+                    )
+                    or "",
+                    chars=_OPTIONAL_STRING.validate_python(args.get("chars")) or "",
+                )
             ]
         elif is_file_tool(name):
             text_key, path_key = FILE_TOOL_ARGUMENTS[name]
@@ -853,13 +932,13 @@ class ToolRenderer:
                 # starts empty.
                 patch = display_patch(path, old or None, patch) if path else ""
             objects = [packets.ApplyPatchStart(patch=patch, tool_name=name)]
-        elif name == PublishFilesTool.NAME:
+        elif (files := publish_card_files(name, args)) is not None:
             objects = [
-                packets.PublishFilesStart.model_validate(
-                    {
-                        "files": args.get("files", []),
-                        "description": args.get("description"),
-                    }
+                packets.PublishFilesStart(
+                    files=files,
+                    description=_OPTIONAL_STRING.validate_python(
+                        args.get("description")
+                    ),
                 )
             ]
         elif name == FileReaderTool.NAME:
@@ -888,7 +967,7 @@ class ToolRenderer:
         )
         new_docs = [doc for doc in docs if doc.document_id not in self._documents]
         self._documents.update(doc.document_id for doc in docs)
-        if self.call.name == OpenURLTool.NAME:
+        if self.call.name in OPEN_URL_TOOL_NAMES:
             return (
                 [packets.OpenUrlDocuments(documents=new_docs, urls=details.opened_urls)]
                 if new_docs
@@ -927,6 +1006,34 @@ class ToolRenderer:
     ) -> list[packets.Packet]:
         """Render result details; content already rendered is skipped."""
         objects: list[packets.PacketObj] = []
+        if isinstance(details, CommandApprovalRequest):
+            self._open_command_approvals[details.approval_id] = None
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.ToolApprovalRequest(
+                        approval_id=details.approval_id,
+                        tool_call_id=self.call.id,
+                        tool_name=details.action_type,
+                        display_name=details.display_name,
+                        arguments=details.arguments,
+                        can_approve_for_chat=False,
+                        can_approve_for_command=details.can_approve_for_command,
+                        app_name=details.app_name,
+                        expires_at=details.expires_at,
+                    ),
+                )
+            ]
+        if isinstance(details, CommandApprovalResolved):
+            self._open_command_approvals.pop(details.approval_id, None)
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.ToolApprovalResolved(
+                        approval_id=details.approval_id, outcome=details.outcome
+                    ),
+                )
+            ]
         if isinstance(
             details,
             (SandboxOutputDelta, SandboxExecResult, ApplyPatchResult, PublishedFiles),
@@ -1015,6 +1122,7 @@ class ToolRenderer:
                 packets.CustomToolDelta(
                     tool_name=details.tool_name,
                     tool_id=self.tool_id,
+                    integration_id=details.integration_id,
                     response_type=details.response_type,
                     data=data,
                     file_ids=files.file_ids if files else None,
@@ -1048,7 +1156,7 @@ class ToolRenderer:
             not in {
                 SearchTool.NAME,
                 WebSearchTool.NAME,
-                OpenURLTool.NAME,
+                *OPEN_URL_TOOL_NAMES,
                 ImageGenerationTool.NAME,
                 MemoryTool.NAME,
                 PostgresTool.NAME,
@@ -1114,6 +1222,17 @@ class ToolRenderer:
         output = self.start()
         output.extend(self._result_packets(result))
         self._finished = True
+        # A stopped call reports no more progress, so its open cards close here.
+        output.extend(
+            packets.Packet(
+                placement=self.placement,
+                obj=packets.ToolApprovalResolved(
+                    approval_id=approval_id, outcome="cancelled"
+                ),
+            )
+            for approval_id in self._open_command_approvals
+        )
+        self._open_command_approvals.clear()
         if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(
                 packets.Packet(
@@ -1132,7 +1251,7 @@ class ToolRenderer:
 
     def _result_packets(self, result: ToolResultFields | None) -> list[packets.Packet]:
         """The packets of a final result of the call, before its section end."""
-        end = OWN_END_PACKETS.get(self.call.name)
+        end = self._own_end
         if (
             end is not None
             and result is not None
@@ -1144,11 +1263,30 @@ class ToolRenderer:
             return [
                 packets.Packet(placement=self.placement, obj=end(error=result.text))
             ]
-        if result is not None:
-            return self._detail_packets(
-                result.details, "" if result.is_error else result.text
-            )
-        return []
+        if result is None:
+            return []
+        if (
+            self._generic_display
+            and result.is_error
+            and result.details is None
+            and not self._not_approved
+        ):
+            # A rejected call (ToolCallException) has no public error details.
+            # Its text goes to the model and can be private, so the card gets
+            # only the failure. An error packet would end the widget's stream.
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.CustomToolDelta(
+                        tool_name=self.call.name,
+                        tool_id=self.tool_id,
+                        response_type=CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
+                    ),
+                )
+            ]
+        return self._detail_packets(
+            result.details, "" if result.is_error else result.text
+        )
 
     def amend(self, result: ToolResultFields) -> list[packets.Packet]:
         """Render the result that a release hook set for the call.
@@ -1189,8 +1327,9 @@ class QuestionToolRenderer(ToolRenderer):
                 question_request_id=event.request.request_id,
                 tool_call_id=self.call.id,
                 questions=parse_tool_arguments(
-                    QuestionArguments, tool_arguments_for_display(self.call)
-                ).questions,
+                    QUESTION_SHAPES_BY_NAME[self.call.name].arguments,
+                    tool_arguments_for_display(self.call),
+                ).request(),
             )
         elif isinstance(event, InputEndedEvent):
             obj = question_resolved(event.request.request_id, event.answer)
@@ -1232,8 +1371,8 @@ class CodeModeRenderer(ToolRenderer):
     the call ends, so one call can stream its start packet several times, under
     the placement of each observation. Clients identify a call by its cell and
     its `sub_turn_index`, and show the latest report. The cell id is on
-    `CodeModeStart.cell_id` (wait_code) or on the final `CodeModeDelta.cell_id`
-    (execute_code). The cell's closing record follows the section end of its
+    `CodeModeStart.cell_id` (a wait call) or on the final
+    `CodeModeDelta.cell_id` (a run call). The cell's closing record follows the section end of its
     last observation, under the same placement.
     """
 
@@ -1249,7 +1388,7 @@ class CodeModeRenderer(ToolRenderer):
         self._stdout = ""
 
     def _start_objects(self, args: dict[str, JsonValue]) -> list[packets.PacketObj]:
-        if self.call.name == WAIT_CODE_TOOL_NAME:
+        if self.call.name in WAIT_TOOL_NAMES:
             return [
                 packets.CodeModeStart(
                     code="",

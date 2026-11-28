@@ -2,9 +2,12 @@
 
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import UUID, uuid4
 
 import pytest
 
+from onyx.configs.constants import ANONYMOUS_USER_UUID
+from onyx.db.models import User
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server import playground as playground_module
 from onyx.server.playground import PlaygroundRestrictedFeature
@@ -12,8 +15,10 @@ from onyx.server.settings import api as settings_api
 from onyx.server.settings.models import Settings, UserSettings
 
 
-def _fetch_settings(monkeypatch: pytest.MonkeyPatch) -> UserSettings:
-    """Call the endpoint as an anonymous visitor, with no store behind it."""
+def _fetch_settings(
+    monkeypatch: pytest.MonkeyPatch, user: User | None = None
+) -> UserSettings:
+    """Call the endpoint (by default with no user), with no store behind it."""
     kv_store = MagicMock()
     kv_store.load.side_effect = KvKeyNotFoundError()
     monkeypatch.setattr(settings_api, "get_kv_store", lambda: kv_store)
@@ -33,8 +38,11 @@ def _fetch_settings(monkeypatch: pytest.MonkeyPatch) -> UserSettings:
         lambda _module, _name, fallback: fallback,
     )
     monkeypatch.setattr(settings_api.global_version, "is_ee_version", lambda: False)
-    user: Any = None
-    return settings_api.fetch_settings(user=user, db_session=MagicMock())
+    monkeypatch.setattr(
+        settings_api, "is_craft_available_for_deployment", lambda _user: False
+    )
+    caller: Any = user
+    return settings_api.fetch_settings(user=caller, db_session=MagicMock())
 
 
 @pytest.mark.parametrize("playground", [False, True])
@@ -56,3 +64,16 @@ def test_restricted_features_are_listed_only_on_the_playground(
         assert PlaygroundRestrictedFeature.LLM_GATEWAY in listed
     else:
         assert listed == []
+
+
+def test_the_browser_is_available_to_signed_in_users_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings_api, "HARNESS_SANDBOX_ENABLED", True)
+    signed_in = User(id=uuid4(), email="user@example.com")
+    anonymous = User(id=UUID(ANONYMOUS_USER_UUID), email="anonymous@example.com")
+
+    assert _fetch_settings(monkeypatch, signed_in).chat_browser_available
+    # The browser routes refuse the anonymous user.
+    assert not _fetch_settings(monkeypatch, anonymous).chat_browser_available
+    assert not _fetch_settings(monkeypatch).chat_browser_available

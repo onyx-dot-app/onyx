@@ -21,7 +21,9 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/grpc"
 
+	"github.com/onyx-dot-app/onyx/microvm/internal/egressrelay"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/sysops"
@@ -71,6 +73,7 @@ func main() {
 	flag.Int64Var(&fc.Limits.Entries, "capture-max-entries", files.DefaultLimits.Entries, "most files and directories in a session archive")
 	zlevel := flag.String("capture-zstd-level", "fastest", "zstd level of CaptureSession: fastest, default, better or best")
 	fileOwner := flag.String("file-owner", files.DefaultOwner, "uid:gid that gets the files and directories that WriteFile, UploadFile and RestoreSession make in the sessions root and the onyx root (the image's sandbox user); empty: they stay root's")
+	browserBin := flag.String("browser-binary", browser.DefaultBinary, "Chrome that BrowserStart runs; empty turns the browser calls, the browser service and its relay off")
 	cmdUser := flag.String("command-user", files.DefaultOwner, "uid:gid that runs every command (the image's sandbox user); empty: commands run as root")
 	flag.Parse()
 	var ok bool
@@ -91,6 +94,10 @@ func main() {
 	}
 	if ident != nil && os.Geteuid() != 0 {
 		fmt.Fprintf(os.Stderr, "--command-user=%s needs a root daemon; run as root or set --command-user=\n", *cmdUser)
+		os.Exit(2)
+	}
+	if err := checkPorts(*port, *listen, *browserBin); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
 	fc.ReadLinkRoots = splitList(*readLinks)
@@ -153,7 +160,15 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	if err := run(log, sys, managed, reclaimer, fstore, ident, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
+	var bcfg *browser.Config
+	if *browserBin != "" {
+		bcfg = &browser.Config{Binary: *browserBin, ServiceScript: browser.DefaultServiceScript,
+			SessionsRoot: fstore.Config().SessionsRoot, Log: log}
+		if ident != nil {
+			bcfg.Credential = ident.cred
+		}
+	}
+	if err := run(log, sys, managed, reclaimer, fstore, ident, bcfg, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
 		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, OutputBudget: *outBudget, MaxRunning: *maxRunning, MaxTracked: *maxTracked, Log: log,
 	}); err != nil {
 		log.Error("guest-daemon failed", "err", err)
@@ -176,6 +191,14 @@ func baseEnv(environ []string, ident *commandIdentity) map[string]string {
 	return base
 }
 
+// checkPorts refuses a vsock API port that the browser relay also needs.
+func checkPorts(port uint, listen, browserBin string) error {
+	if port == browser.RelayPort && listen == "" && browserBin != "" {
+		return fmt.Errorf("--port=%d is the browser relay port; pick another port or set --browser-binary=", port)
+	}
+	return nil
+}
+
 // splitList splits a comma-separated flag. An empty flag is an empty list.
 func splitList(s string) []string {
 	out := []string{}
@@ -187,7 +210,7 @@ func splitList(s string) []string {
 	return out
 }
 
-func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, reclaimer *guestd.Reclaimer, fstore *files.Store, ident *commandIdentity, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
+func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, reclaimer *guestd.Reclaimer, fstore *files.Store, ident *commandIdentity, bcfg *browser.Config, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
 	if cgroupRoot != "" {
 		if err := sysops.EnsureCgroup2(filepath.Dir(cgroupRoot)); err != nil {
 			return fmt.Errorf("mount cgroup2: %w", err)
@@ -200,6 +223,20 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 	} else {
 		log.Warn("no cgroup root: commands that call setsid escape Cancel and deadlines")
 		ecfg.Isolator = execs.ProcessGroups{}
+	}
+	var br *browser.Browser
+	if bcfg != nil {
+		bcfg.Isolator = execs.ProcessGroups{}
+		if cgroupRoot != "" {
+			// A sibling of the executions' root: the execution manager never
+			// sees the browser, and a daemon restart kills a leftover one.
+			cg, err := execs.NewCgroups(filepath.Join(filepath.Dir(cgroupRoot), "guestd-browser"))
+			if err != nil {
+				return err
+			}
+			bcfg.Isolator = cg
+		}
+		br = browser.New(*bcfg)
 	}
 	if ident != nil {
 		ecfg.Credential = ident.cred
@@ -218,8 +255,8 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 	// The image's guest.env (proxy and CA settings) comes in as the daemon's env.
 	base := baseEnv(os.Environ(), ident)
 	srv, err := guestd.NewServer(guestd.Config{
-		Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Managed: managed,
-		Reclaimer: reclaimer, Files: fstore, Log: log,
+		Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Managed: managed, Browser: br,
+		BrowserRelay: br != nil && listen == "", Reclaimer: reclaimer, Files: fstore, Log: log,
 	}, sys, m)
 	if err != nil {
 		return err
@@ -249,6 +286,23 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 	gs := srv.NewGRPCServer(grpc.InitialWindowSize(windowBytes), grpc.InitialConnWindowSize(windowBytes),
 		grpc.ReadBufferSize(1<<20), grpc.WriteBufferSize(1<<20))
 
+	if br != nil && listen == "" {
+		bln, err := vsock.Listen(browser.RelayPort)
+		if err != nil {
+			return fmt.Errorf("browser relay port %d: %w", browser.RelayPort, err)
+		}
+		defer func() { _ = bln.Close() }()
+		// Each connection goes to the service socket, or closes when no service
+		// runs. There is no idle timeout: a viewer gets no bytes while its tab
+		// does not change, and the host side ends the stream.
+		relay := &egressrelay.Relay{Dial: br.DialService, Log: log}
+		go func() {
+			if err := relay.Serve(bln); err != nil {
+				log.Error("browser relay stopped", "err", err)
+			}
+		}()
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	go reclaimer.Run(ctx)
@@ -260,6 +314,11 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 	log.Info("guest-daemon serving", "version", version, "addr", ln.Addr().String())
 	err = gs.Serve(ln)
 	m.Shutdown()
+	if br != nil {
+		if _, serr := br.Stop(); serr != nil {
+			log.Warn("stop browser", "err", serr)
+		}
+	}
 	if ctx.Err() != nil {
 		return nil
 	}

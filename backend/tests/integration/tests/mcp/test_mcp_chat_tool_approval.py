@@ -17,7 +17,7 @@ from onyx.agents.models import RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.models import ChatFullResponse, ResponseCheckpoint
 from onyx.chat.process_message import run_chat_turn
-from onyx.chat.run_store import RESUME_FAILED_MESSAGE, ownerless_response_ids
+from onyx.chat.run_store import RESUME_UPDATED_MESSAGE, ownerless_response_ids
 from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
 from onyx.db.api_key import insert_api_key, remove_api_key
 from onyx.db.chat import delete_chat_session
@@ -904,9 +904,10 @@ def test_a_response_that_cannot_continue_fails_once_and_frees_the_chat(
     streaming_api: str,
     incompatibility: str,
 ) -> None:
-    """A continuation that fails before its run starts ends the response as
-    failed, with its saved state; nothing tries it again, and the chat
-    accepts messages."""
+    """A continuation whose saved data does not match the running code fails
+    before its run starts: the response ends with the update message, its
+    saved state is deleted, nothing tries it again, and the chat accepts
+    messages."""
     hello = _hello(connected_mcp_server, CALL_ID, "team")
     mock_llm.conversation(
         "chat",
@@ -946,7 +947,7 @@ def test_a_response_that_cannot_continue_fails_once_and_frees_the_chat(
         assert response.response_status == RunStatus.ERROR
         assert (
             response.response_failure is not None
-            and response.response_failure.message == RESUME_FAILED_MESSAGE
+            and response.response_failure.message == RESUME_UPDATED_MESSAGE
         )
         assert db_session.get(ChatResponseCheckpoint, response_id) is None
     status = _status(admin_user, chat_session_id)
@@ -1115,7 +1116,7 @@ def _cells(first: str, second: str) -> tuple[ToolCall, ToolCall, ToolCall]:
         ToolCall(id="cell2", name="execute_code", arguments={"code": second}),
         ToolCall(
             id="wait1",
-            name="wait_code",
+            name="wait",
             arguments={"cell_id": 1, "yield_time_ms": 20_000},
         ),
     )
@@ -1217,7 +1218,7 @@ def test_a_cell_that_runs_while_a_program_waits_keeps_its_result(
     assert cell1_result is not None and wait_result is not None
     if decide == "after_the_stop":
         # The answer stopped only after cell 1 ended: its closing record holds
-        # the end, and wait_code points to it.
+        # the end, and wait points to it.
         assert "Cell 1 completed after this output, before the run paused." in (
             cell1_result
         )
@@ -1242,7 +1243,7 @@ def test_a_background_cell_keeps_its_own_approval_request(
 ) -> None:
     """Cell 1 asks for approval in the background while cell 2 waits for its
     own. Both requests stay open while the answer is saved; after both
-    decisions, cell 1 continues and wait_code returns its result."""
+    decisions, cell 1 continues and wait returns its result."""
     monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", True)
     hello_function = function_name(connected_mcp_server.callable_name("hello"))
     cell1, cell2, wait1 = _cells(
@@ -1496,6 +1497,99 @@ def test_a_bot_runs_an_action_its_agent_allows(
     assert tool_result is not None and f"Hello, {name}!" in tool_result
 
 
+@pytest.fixture
+def usage_only_incognito(admin_user: DATestUser) -> Generator[None, None, None]:
+    security_url = f"{API_SERVER_URL}/admin/security"
+    response = client.get(security_url, headers=admin_user.headers)
+    response.raise_for_status()
+    previous = {
+        key: response.json()[key]
+        for key in ("incognito_availability", "incognito_record_mode")
+    }
+    client.put(
+        security_url,
+        json={
+            "incognito_availability": "everyone",
+            "incognito_record_mode": "usage_only",
+        },
+        headers=admin_user.headers,
+    ).raise_for_status()
+    yield
+    client.put(
+        security_url, json=previous, headers=admin_user.headers
+    ).raise_for_status()
+
+
+@pytest.mark.parametrize("policy", ["ask", "allow"])
+def test_a_usage_only_incognito_turn_gets_no_ask_action(
+    connected_mcp_server: ConnectedMCPServer,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+    usage_only_incognito: None,  # noqa: ARG001
+    policy: str,
+) -> None:
+    """A usage-only incognito turn has no run store to wait in, so an action
+    that would ask is not offered to the model. An allowed action runs."""
+    name = uuid4().hex
+    hello = _hello(connected_mcp_server, CALL_ID, name)
+    if policy == "ask":
+        mock_llm.conversation(
+            "chat",
+            Reply(
+                text="I cannot greet.",
+                conditions=RequestConditions(does_not_offer=[hello.name]),
+            ),
+        )
+    else:
+        mock_llm.conversation(
+            "chat",
+            Reply(
+                tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])
+            ),
+            Reply(
+                text="Done.", conditions=RequestConditions(has_results_for=[CALL_ID])
+            ),
+        )
+    persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
+    link_persona(
+        persona.id,
+        connected_mcp_server.integration_id,
+        {"default": "blocked", "actions": {"hello": policy}},
+    )
+    try:
+        created = client.post(
+            f"{API_SERVER_URL}/chat/create-chat-session",
+            json=ChatSessionCreationRequest(
+                persona_id=persona.id, incognito=True
+            ).model_dump(mode="json"),
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+        )
+        created.raise_for_status()
+        sent = client.post(
+            f"{API_SERVER_URL}/chat/send-chat-message",
+            json=_request(UUID(created.json()["chat_session_id"])).model_dump(
+                mode="json"
+            )
+            | {"stream": False},
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+        )
+        sent.raise_for_status()
+        response = ChatFullResponse.model_validate(sent.json())
+    finally:
+        PersonaManager.delete(persona, admin_user)
+
+    assert response.error_msg is None
+    assert response.pending_tool_approvals == []
+    if policy == "ask":
+        assert response.answer == "I cannot greet."
+        return
+    assert response.answer == "Done."
+    tool_result = mock_llm.requests_in("chat")[-1].tool_result(CALL_ID)
+    assert tool_result is not None and f"Hello, {name}!" in tool_result
+
+
 def test_a_non_streaming_request_returns_when_a_call_waits_for_approval(
     connected_mcp_server: ConnectedMCPServer,
     new_chat: NewChat,
@@ -1553,7 +1647,7 @@ def _spawn(call_id: str, name: str, instruction: str) -> ToolCall:
     return ToolCall(
         id=call_id,
         name=SPAWN_AGENT_TOOL_NAME,
-        arguments={"name": name, "instruction": instruction},
+        arguments={"task_name": name, "message": instruction},
     )
 
 

@@ -494,7 +494,7 @@ def update_contents(
     if line_endings > MAX_UPDATE_LINES:
         raise PatchError(
             f"Failed to update {path}: it has more than {MAX_UPDATE_LINES} lines; "
-            "edit it with exec_command"
+            "edit it with a shell command"
         )
     source_lines: list[tuple[str, str | None]] = []
     line_start = 0

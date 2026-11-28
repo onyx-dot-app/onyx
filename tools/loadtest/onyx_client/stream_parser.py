@@ -37,10 +37,13 @@ FIRST_DR_PLAN = "first_dr_plan"
 FIRST_RESEARCH_AGENT = "first_research_agent"
 
 # Final code_mode_delta statuses of a program that did not finish its work.
-# "running" is not final: a later wait_code observation reports the end.
+# "running" is not final: a later wait observation reports the end.
 CODE_FAILED_STATUSES = frozenset({"failed", "timed_out", "cancelled", "terminated"})
 # BUSY_MESSAGE in backend/onyx/tools/tool_implementations/code_mode/sandbox.py.
 CODE_SANDBOX_BUSY = "The code sandbox is busy"
+# The error of a failure that the mock's program plans (PLANNED_FAILURE in
+# mock_llm/code_mode.py); it is model behavior, not a failed turn.
+CODE_PLANNED_FAILURE = "mock_planned_failure"
 
 # A packet group: the turn and tab of its placement.
 Group = tuple[object, object]
@@ -55,13 +58,16 @@ class StreamSummary:
     search_calls: int = 0
     reasoning_packets: int = 0
     citations: int = 0
-    # Code mode: execute_code programs, wait_code observations, searches that
-    # programs made, each once (also counted in search_calls), and failed
-    # observations.
+    # Code mode: programs, wait observations, searches that
+    # programs made, each once (also counted in search_calls), failed
+    # observations, planned program failures, and the printed output
+    # characters of all observations.
     code_programs: int = 0
     code_waits: int = 0
     nested_search_calls: int = 0
     code_failures: int = 0
+    code_planned_failures: int = 0
+    code_output_chars: int = 0
     # First failed code mode observation; it fails the turn.
     code_error: str | None = None
     saw_message_start: bool = False
@@ -90,6 +96,8 @@ class ChatStreamAnalyzer:
         self._code_mode_groups: dict[Group, Group] = {}
         self._cells: dict[int, Group] = {}
         self._program_searches: set[tuple[Group, object]] = set()
+        # Printed characters of each observation so far.
+        self._stdout_chars: dict[Group, int] = {}
 
     def feed(self, line: str) -> list[str]:
         if not line:
@@ -181,7 +189,7 @@ class ChatStreamAnalyzer:
         group = _group(placement)
         cell_id = obj.get("cell_id")
         if packet_type == CODE_MODE_START:
-            # A wait_code observation names its cell; execute_code starts one.
+            # A wait observation names its cell; a program starts one.
             cell = self._cells.get(cell_id) if isinstance(cell_id, int) else None
             self._code_mode_groups[group] = cell or group
             if obj.get("observation") or 0:
@@ -190,11 +198,16 @@ class ChatStreamAnalyzer:
                 self.summary.code_programs += 1
             return True
         if packet_type == CODE_MODE_DELTA:
-            # The final delta of execute_code names the cell it started.
+            # The final delta of a program names the cell it started.
             if isinstance(cell_id, int):
                 self._cells.setdefault(
                     cell_id, self._code_mode_groups.get(group, group)
                 )
+            stdout = obj.get("stdout") or ""
+            before = self._stdout_chars.get(group, 0)
+            after = len(stdout) + (0 if obj.get("replace_stdout") else before)
+            self._stdout_chars[group] = after
+            self.summary.code_output_chars += after - before
             # Its `error` is the program's, judged by status, not a stream error.
             self._code_status(obj)
             return True
@@ -205,6 +218,9 @@ class ChatStreamAnalyzer:
         error = str(obj.get("error") or "")
         busy = CODE_SANDBOX_BUSY in error
         if status not in CODE_FAILED_STATUSES and not busy:
+            return
+        if status == "failed" and CODE_PLANNED_FAILURE in error:
+            self.summary.code_planned_failures += 1
             return
         self.summary.code_failures += 1
         if self.summary.code_error is None:

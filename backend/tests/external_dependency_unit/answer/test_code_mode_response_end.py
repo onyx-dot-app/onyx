@@ -82,7 +82,7 @@ def test_turn_deadline_closes_open_cells_and_reports_its_own_stop_reason(
             tool_step(
                 "execute_code", "start", {"code": program, "yield_time_ms": 1000}
             ),
-            tool_step("wait_code", "wait", {"cell_id": 1, "yield_time_ms": 1000}),
+            tool_step("wait", "wait", {"cell_id": 1, "yield_time_ms": 1000}),
         ],
         hold_open=True,
     )

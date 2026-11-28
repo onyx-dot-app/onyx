@@ -87,3 +87,35 @@ class _WithOptionalMappings(BaseModel):
 def test_strict_definition_rejects_object_arguments(model: type[BaseModel]) -> None:
     with pytest.raises(ValueError, match="object argument"):
         tool_definition_from_arguments("t", "d", model, strict=True)
+
+
+class _DocumentedInner(BaseModel):
+    """For developers only."""
+
+    value: str
+
+
+class _Documented(BaseModel):
+    """For developers only."""
+
+    inner: _DocumentedInner
+    items: list[_DocumentedInner] = []
+
+
+def test_definition_leaves_out_titles_and_model_docstrings() -> None:
+    inner = {"$ref": "#/$defs/_DocumentedInner"}
+    assert tool_definition_from_arguments("t", "d", _Documented).parameters == {
+        "$defs": {
+            "_DocumentedInner": {
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+                "type": "object",
+            }
+        },
+        "properties": {
+            "inner": inner,
+            "items": {"default": [], "items": inner, "type": "array"},
+        },
+        "required": ["inner"],
+        "type": "object",
+    }

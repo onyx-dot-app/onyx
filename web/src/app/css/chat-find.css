@@ -1,0 +1,9 @@
+/* Find in chat (`sections/chat/ChatFind.tsx`) paints its matches without
+   changing the rendered text or what the user copies. */
+::highlight(onyx-chat-find) {
+  background-color: var(--highlight-match);
+}
+
+::highlight(onyx-chat-find-active) {
+  background-color: var(--highlight-active);
+}

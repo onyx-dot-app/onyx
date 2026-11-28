@@ -78,6 +78,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource, MessageTy
 from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.db import chat_response as chat_response_module
 from onyx.db import chat_subagents
+from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import (
     MAX_AGENT_DEPTH,
     checkpoint_from_summary,
@@ -120,6 +121,7 @@ from onyx.db.chat_response import (
     read_response_replay_data,
     read_response_status__no_commit,
     read_response_steps,
+    read_suspended_response_replay,
     reserve_child_response__no_commit,
     save_chat_response_to_db,
     save_chat_turn,
@@ -203,7 +205,9 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox.models import PublishedFile, PublishedFiles
-from onyx.tools.tool_implementations.sandbox.sandbox_tools import PublishFilesTool
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    LibraryCreateLibraryFileTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.threadpool_concurrency import start_thread_future
@@ -703,6 +707,64 @@ def test_abandoned_background_child_is_delivered_as_failure(
     assert stored.response_failure.kind == RunFailureKind.EXECUTION
 
 
+def test_agent_completion_cites_the_sources_of_every_step(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """Each step's metadata holds only the sources new to its run, so the
+    completion's output collects the sources of all the run's steps."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Sources [2] and [3].", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None
+    snapshot = response_snapshot(child)
+    snapshot.steps = _steps(
+        child.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="lookup", name="lookup", arguments={})]
+            ),
+            ToolResultMessage(
+                tool_call_id="lookup", tool_name="lookup", content="Found"
+            ),
+            AssistantMessage(content=[TextContent(text="Sources [2] and [3].")]),
+        ],
+    )
+    snapshot.answer_step_index = 1
+    snapshot.steps[0].message.metadata = ChatMessageMetadata(
+        sources={2: _source_doc("first-source")}
+    )
+    snapshot.steps[1].message.metadata = ChatMessageMetadata(
+        sources={3: _source_doc("second-source")}
+    )
+    projected = project_response(snapshot, tool_ids={})
+    save_chat_turn(
+        message_text=projected.answer or "",
+        reasoning_tokens=projected.reasoning,
+        tool_calls=projected.tool_calls,
+        citation_to_doc=projected.citation_to_doc,
+        all_search_docs=projected.all_search_docs,
+        db_session=db_session,
+        assistant_message=child_row,
+        response_record=projected.response,
+        presentation=projected.presentation,
+    )
+    db_session.expire_all()
+
+    [completion] = read_agent_completions(db_session, [child_row.id])
+
+    assert completion.output is not None
+    assert completion.output.text == "Sources [2] and [3]."
+    cited = message_citation_sources(completion.output)
+    assert {number: doc.document_id for number, doc in cited.items()} == {
+        2: "first-source",
+        3: "second-source",
+    }
+
+
 def test_agent_completion_preserves_cited_output_and_durable_input_receipt(
     db_session: Session, conversation: ChatSession
 ) -> None:
@@ -1169,11 +1231,15 @@ def test_a_repeated_save_lists_each_published_file_once(
         record.run_id,
         [
             AssistantMessage(
-                content=[ToolCall(id="call", name=PublishFilesTool.NAME, arguments={})]
+                content=[
+                    ToolCall(
+                        id="call", name=LibraryCreateLibraryFileTool.NAME, arguments={}
+                    )
+                ]
             ),
             ToolResultMessage(
                 tool_call_id="call",
-                tool_name=PublishFilesTool.NAME,
+                tool_name=LibraryCreateLibraryFileTool.NAME,
                 content="Published.",
                 details=PublishedFiles(files=[published]),
             ),
@@ -1182,7 +1248,7 @@ def test_a_repeated_save_lists_each_published_file_once(
     )
     record.answer_step_index = 1
     projected = project_response(
-        response_snapshot(record), tool_ids={PublishFilesTool.NAME: None}
+        response_snapshot(record), tool_ids={LibraryCreateLibraryFileTool.NAME: None}
     )
     # The checkpoint contract lets an initial execution repeat its terminal save.
     for _ in range(2):
@@ -2162,6 +2228,28 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
             str(grandchild_id),
             str(child_id),
         )
+    # A transcript holds only the selected branch's replies of the agent.
+    latest_ids: list[int] = []
+    message_sets: list[set[int]] = []
+    for branch in branches:
+        selected = ChatBranch(
+            chat_session_id=conversation.id,
+            message_ids=visible_message_ids(db_session, branch),
+        )
+        latest = chat_subagents.latest_agent_response(
+            db_session, selected, str(grandchild_id)
+        )
+        assert latest is not None
+        latest_ids.append(latest.id)
+        message_sets.append(
+            chat_subagents.selected_agent_message_ids(
+                db_session, selected, grandchild_id
+            )
+        )
+    assert latest_ids[0] != latest_ids[1]
+    for index, other in ((0, 1), (1, 0)):
+        assert latest_ids[index] in message_sets[index]
+        assert latest_ids[other] not in message_sets[index]
 
 
 def test_any_agent_in_the_visible_tree_is_listed_and_addressable(
@@ -3144,6 +3232,54 @@ def test_session_replay_query_count_does_not_grow_with_tool_turns(
     assert query_counts[0] == query_counts[1]
 
 
+def test_a_claimed_agent_response_replays_its_requests_from_the_root_chat(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """A parked agent that resumed is running, and its requests live under
+    the root chat; its live stream still replays them."""
+    root = ChatSession(id=uuid4(), description="response storage root")
+    db_session.add(root)
+    db_session.flush()
+    root_id = root.id
+    try:
+        response = _response(db_session, conversation)
+        record = _record(response)
+        record.steps = _steps(
+            record.run_id,
+            [
+                AssistantMessage(
+                    content=[ToolCall(id="gated", name="acme", arguments={})]
+                )
+            ],
+        )
+        _save(db_session, response, record)
+        # The resume's claim
+        response.response_status = RunStatus.RUNNING
+        create_approval_request__no_commit(
+            db_session,
+            chat_session_id=root_id,
+            chat_message_id=response.id,
+            integration_id=None,
+            action_id="acme",
+            tool_call_id="gated",
+            tool_name="acme",
+            display_name="Acme",
+            arguments={},
+        )
+        db_session.commit()
+        db_session.expire_all()
+
+        _, replay = read_suspended_response_replay(
+            db_session, response.id, claimed=True, root_session_id=root_id
+        )
+
+        assert [key[1] for key in replay.approvals] == ["gated"]
+    finally:
+        db_session.rollback()
+        db_session.execute(delete(ChatSession).where(ChatSession.id == root_id))
+        db_session.commit()
+
+
 def test_public_message_read_does_not_fetch_response_items(
     db_session: Session,
     conversation: ChatSession,
@@ -3671,6 +3807,51 @@ def test_projected_response_round_trip_replays_tool_and_answer(
     assert memory[0].memory_text == "Prefers tea"
     assert memory[0].memory_id == 7
     assert memory[0].operation == "add"
+
+
+def test_response_stopped_before_its_answer_keeps_its_duration(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    response.time_sent = datetime.now(timezone.utc) - timedelta(seconds=14)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="remember", name="memory", arguments={"text": "Prefers tea"}
+                    )
+                ]
+            ),
+        ],
+    )
+    projected = project_response(
+        RunState(
+            run_id=record.run_id,
+            agent_id=record.agent_id,
+            status=RunStatus.CANCELLED,
+            input_messages=record.input_messages,
+            steps=record.steps,
+        ),
+        tool_ids={},
+    )
+    assert projected.cancelled
+    assert projected.pre_answer_processing_time is None
+    message_id, session_id = response.id, conversation.id
+    db_session.commit()
+    save_chat_response_to_db(
+        message_id=message_id,
+        chat_session_id=session_id,
+        expected_persist_content=True,
+        response=projected,
+    )
+    db_session.expire_all()
+    stored = db_session.get(ChatMessage, message_id)
+    assert stored is not None
+    assert stored.processing_duration_seconds is not None
+    assert 14 <= stored.processing_duration_seconds < 60
 
 
 def test_search_projection_restores_saved_source_cards(

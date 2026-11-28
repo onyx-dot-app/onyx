@@ -3,13 +3,22 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import englishMessages from "@/i18n/messages/en.json";
 import { ProjectsProvider, useProjectsContext } from "@/lib/projects/providers";
-import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import {
+  type ProjectFile,
+  type UserFileDeleteResult,
+  UserFileStatus,
+} from "@/lib/projects/types";
 import { ChatFileType } from "@/app/app/types";
+import type { UploadFilesOptions } from "@/lib/projects/svc";
+import { cancelUpload } from "@/lib/projects/uploadProgress";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
 const mockToastWarning = jest.fn();
+const mockToastError = jest.fn();
 const mockGetUserFileStatuses = jest.fn();
+const mockDeleteUserFile = jest.fn();
+const mockUnlinkFileFromProject = jest.fn();
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -44,7 +53,7 @@ jest.mock("@/lib/settings/hooks", () => ({
 jest.mock("@opal/layouts/toast/store", () => ({
   toast: {
     warning: (...args: unknown[]) => mockToastWarning(...args),
-    error: jest.fn(),
+    error: (...args: unknown[]) => mockToastError(...args),
     success: jest.fn(),
   },
 }));
@@ -64,13 +73,20 @@ jest.mock("@/lib/projects/svc", () => {
     getProjectDetails: jest.fn(),
     renameProject: jest.fn(),
     deleteProject: jest.fn(),
-    deleteUserFile: jest.fn(),
+    deleteUserFile: (...args: unknown[]) => mockDeleteUserFile(...args),
     getUserFileStatuses: (...args: unknown[]) =>
       mockGetUserFileStatuses(...args),
-    unlinkFileFromProject: jest.fn(),
+    unlinkFileFromProject: (...args: unknown[]) =>
+      mockUnlinkFileFromProject(...args),
     linkFileToProject: jest.fn(),
   };
 });
+
+const DELETED: UserFileDeleteResult = {
+  has_associations: false,
+  project_names: [],
+  assistant_names: [],
+};
 
 const wrapper = ({ children }: PropsWithChildren) => (
   <NextIntlClientProvider locale="en" messages={englishMessages}>
@@ -344,7 +360,95 @@ describe("ProjectsContext attached file status polling", () => {
     expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"]);
   });
 
-  it("keeps a file attached while an earlier status request is in flight", async () => {
+  it("does not poll a completed file, such as one from a sent message", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([
+        { ...makePendingFile("store-id"), status: UserFileStatus.COMPLETED },
+      ]);
+    });
+
+    expect(mockGetUserFileStatuses).not.toHaveBeenCalled();
+    expect(result.current.currentMessageFiles).toHaveLength(1);
+  });
+
+  it("updates a pending file attached again while its status request runs", async () => {
+    const pendingFile = makePendingFile("file-1");
+    let resolveFirstPoll: (value: ProjectFile[]) => void = () => {};
+    mockGetUserFileStatuses
+      .mockImplementationOnce(
+        () =>
+          new Promise<ProjectFile[]>((resolve) => {
+            resolveFirstPoll = resolve;
+          })
+      )
+      .mockImplementation(async (ids: string[]) => completedStatuses(ids));
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    // A draft set aside for an edit keeps the pending copy.
+    await act(async () => {
+      result.current.setCurrentMessageFiles([pendingFile]);
+    });
+    await waitFor(() =>
+      expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"])
+    );
+    await act(async () => {
+      result.current.setCurrentMessageFiles([]);
+    });
+    await act(async () => {
+      result.current.setCurrentMessageFiles([pendingFile]);
+    });
+    await act(async () => {
+      resolveFirstPoll(completedStatuses(["file-1"]));
+    });
+
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[0]?.status).toBe(
+        UserFileStatus.COMPLETED
+      )
+    );
+  });
+
+  it("polls a file attached while a finished poll refreshes recent files", async () => {
+    let releaseRecentFiles: () => void = () => {};
+    const recentFiles = new Promise<Response>((resolve) => {
+      releaseRecentFiles = () => resolve(new Response("[]", { status: 200 }));
+    });
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(() => recentFiles);
+    mockGetUserFileStatuses.mockImplementation(async (ids: string[]) =>
+      completedStatuses(ids)
+    );
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    // The first poll finishes its file, then waits on the recent files.
+    await act(async () => {
+      result.current.setCurrentMessageFiles([makePendingFile("file-1")]);
+    });
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[0]?.status).toBe(
+        UserFileStatus.COMPLETED
+      )
+    );
+    await act(async () => {
+      result.current.setCurrentMessageFiles([
+        ...result.current.currentMessageFiles,
+        makePendingFile("file-2"),
+      ]);
+    });
+    await act(async () => releaseRecentFiles());
+
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[1]?.status).toBe(
+        UserFileStatus.COMPLETED
+      )
+    );
+    fetchSpy.mockRestore();
+  });
+
+  it("polls a file attached during a status request right after it", async () => {
     const first = makePendingFile("file-1");
     const second = makePendingFile("file-2");
     let resolveFirstPoll: (value: ProjectFile[]) => void = () => {};
@@ -373,12 +477,358 @@ describe("ProjectsContext attached file status polling", () => {
       resolveFirstPoll(completedStatuses(["file-1"]));
     });
 
-    await waitFor(
-      () =>
-        expect(result.current.currentMessageFiles.map((f) => f.status)).toEqual(
-          [UserFileStatus.COMPLETED, UserFileStatus.COMPLETED]
-        ),
-      { timeout: 5000 }
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles.map((f) => f.status)).toEqual([
+        UserFileStatus.COMPLETED,
+        UserFileStatus.COMPLETED,
+      ])
     );
-  }, 10000);
+  });
+});
+
+describe("ProjectsContext beginUpload cancel", () => {
+  beforeEach(() => {
+    mockUploadFiles.mockReset();
+    mockGetRecentFiles.mockReset();
+    mockToastError.mockReset();
+    mockGetRecentFiles.mockResolvedValue([]);
+    mockGetUserFileStatuses.mockResolvedValue([]);
+  });
+
+  it("aborts the request and shows no error toast", async () => {
+    let signal: AbortSignal | undefined;
+    mockUploadFiles.mockImplementation(
+      (
+        _files: File[],
+        _projectId: number | null,
+        _tempIds: string[],
+        _incognito: string | null,
+        options: UploadFilesOptions
+      ) =>
+        new Promise((_resolve, reject) => {
+          signal = options.signal;
+          options.signal?.addEventListener("abort", () => {
+            const error = new Error("Upload cancelled");
+            error.name = "AbortError";
+            reject(error);
+          });
+        })
+    );
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+    const onFailure = jest.fn();
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [new File(["a"], "a.txt", { type: "text/plain" })],
+        null,
+        undefined,
+        onFailure
+      );
+    });
+    const tempId = optimisticFiles[0]?.temp_id ?? "";
+
+    act(() => cancelUpload(tempId));
+
+    expect(signal?.aborted).toBe(true);
+    await waitFor(() => expect(onFailure).toHaveBeenCalledWith([tempId]));
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+  it("deletes a file cancelled while the rest of its batch uploaded", async () => {
+    let finishUpload: (value: unknown) => void = () => {};
+    mockUploadFiles.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishUpload = resolve;
+        })
+    );
+    mockDeleteUserFile.mockReset();
+    mockDeleteUserFile.mockResolvedValue(DELETED);
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+    const onSuccess = jest.fn();
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [
+          new File(["a"], "kept.txt", { type: "text/plain" }),
+          new File(["b"], "removed.txt", { type: "text/plain" }),
+        ],
+        null,
+        onSuccess
+      );
+    });
+    const [kept, removed] = optimisticFiles.map((f) => f.temp_id ?? "");
+    act(() => cancelUpload(removed ?? ""));
+    const serverFile = (tempId: string | undefined, id: string) => ({
+      ...optimisticFiles[0],
+      id,
+      temp_id: tempId,
+      status: UserFileStatus.PROCESSING,
+    });
+
+    await act(async () => {
+      finishUpload({
+        user_files: [
+          serverFile(kept, "user-kept"),
+          serverFile(removed, "user-removed"),
+        ],
+        rejected_files: [],
+      });
+    });
+
+    await waitFor(() =>
+      expect(mockDeleteUserFile).toHaveBeenCalledWith("user-removed")
+    );
+    expect(mockDeleteUserFile).toHaveBeenCalledTimes(1);
+    expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
+      removed
+    );
+    expect(onSuccess).toHaveBeenCalledWith({
+      user_files: [serverFile(kept, "user-kept")],
+      rejected_files: [],
+    });
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+  it("deletes a file cancelled after its whole body was sent", async () => {
+    let finishUpload: (value: unknown) => void = () => {};
+    let uploadOptions: UploadFilesOptions = {};
+    mockUploadFiles.mockImplementation(
+      (
+        _files: File[],
+        _projectId: number | null,
+        _tempIds: string[],
+        _incognito: string | null,
+        options: UploadFilesOptions
+      ) =>
+        new Promise((resolve) => {
+          uploadOptions = options;
+          finishUpload = resolve;
+        })
+    );
+    mockDeleteUserFile.mockReset();
+    mockDeleteUserFile.mockResolvedValue(DELETED);
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [new File(["a"], "sent.txt", { type: "text/plain" })],
+        null
+      );
+    });
+    const tempId = optimisticFiles[0]?.temp_id ?? "";
+    act(() => uploadOptions.onProgress?.(1));
+    act(() => cancelUpload(tempId));
+
+    expect(uploadOptions.signal?.aborted).toBe(false);
+    await act(async () => {
+      finishUpload({
+        user_files: [
+          {
+            ...optimisticFiles[0],
+            id: "user-sent",
+            temp_id: tempId,
+            status: UserFileStatus.PROCESSING,
+          },
+        ],
+        rejected_files: [],
+      });
+    });
+
+    await waitFor(() =>
+      expect(mockDeleteUserFile).toHaveBeenCalledWith("user-sent")
+    );
+    expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
+      tempId
+    );
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  it("unlinks a cancelled project upload, deletes it, then refreshes", async () => {
+    let finishUpload: (value: unknown) => void = () => {};
+    let uploadOptions: UploadFilesOptions = {};
+    mockUploadFiles.mockImplementation(
+      (
+        _files: File[],
+        _projectId: number | null,
+        _tempIds: string[],
+        _incognito: string | null,
+        options: UploadFilesOptions
+      ) =>
+        new Promise((resolve) => {
+          uploadOptions = options;
+          finishUpload = resolve;
+        })
+    );
+    const calls: string[] = [];
+    mockUnlinkFileFromProject.mockReset();
+    let finishUnlink: () => void = () => {};
+    mockUnlinkFileFromProject.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishUnlink = () => {
+            calls.push("unlink");
+            resolve();
+          };
+        })
+    );
+    mockDeleteUserFile.mockReset();
+    mockDeleteUserFile.mockImplementation(async () => {
+      calls.push("delete");
+      return { has_associations: false };
+    });
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [new File(["a"], "sent.txt", { type: "text/plain" })],
+        7
+      );
+    });
+    const tempId = optimisticFiles[0]?.temp_id ?? "";
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).includes("/api/user/files/recent")) {
+          calls.push("refresh");
+        }
+        return new Response("[]", { status: 200 });
+      });
+    act(() => uploadOptions.onProgress?.(1));
+    act(() => cancelUpload(tempId));
+
+    expect(uploadOptions.signal?.aborted).toBe(false);
+    await act(async () => {
+      finishUpload({
+        user_files: [
+          {
+            ...optimisticFiles[0],
+            id: "user-sent",
+            temp_id: tempId,
+            status: UserFileStatus.PROCESSING,
+          },
+        ],
+        rejected_files: [],
+      });
+    });
+
+    // The refresh waits while the unlink is still running.
+    await waitFor(() =>
+      expect(mockUnlinkFileFromProject).toHaveBeenCalledWith(7, "user-sent")
+    );
+    expect(calls).toEqual([]);
+    await act(async () => finishUnlink());
+    await waitFor(() => expect(calls).toEqual(["unlink", "delete", "refresh"]));
+    fetchSpy.mockRestore();
+    expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
+      tempId
+    );
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  it("a kept file that finishes during the cleanup does not refresh before it", async () => {
+    let finishUpload: (value: unknown) => void = () => {};
+    let uploadOptions: UploadFilesOptions = {};
+    mockUploadFiles.mockImplementation(
+      (
+        _files: File[],
+        _projectId: number | null,
+        _tempIds: string[],
+        _incognito: string | null,
+        options: UploadFilesOptions
+      ) =>
+        new Promise((resolve) => {
+          uploadOptions = options;
+          finishUpload = resolve;
+        })
+    );
+    const calls: string[] = [];
+    mockUnlinkFileFromProject.mockReset();
+    let finishUnlink: () => void = () => {};
+    mockUnlinkFileFromProject.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishUnlink = () => {
+            calls.push("unlink");
+            resolve();
+          };
+        })
+    );
+    mockDeleteUserFile.mockReset();
+    mockDeleteUserFile.mockImplementation(async () => {
+      calls.push("delete");
+      return { has_associations: false };
+    });
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [
+          new File(["a"], "sent.txt", { type: "text/plain" }),
+          new File(["b"], "kept.txt", { type: "text/plain" }),
+        ],
+        7
+      );
+    });
+    const tempId = optimisticFiles[0]?.temp_id ?? "";
+    const keptTempId = optimisticFiles[1]?.temp_id ?? "";
+    // The kept file has finished processing by the first status poll.
+    mockGetUserFileStatuses.mockResolvedValue([
+      {
+        ...optimisticFiles[1],
+        id: "user-kept",
+        status: UserFileStatus.COMPLETED,
+      },
+    ]);
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).includes("/api/user/files/recent")) {
+          calls.push("refresh");
+        }
+        return new Response("[]", { status: 200 });
+      });
+    act(() => uploadOptions.onProgress?.(1));
+    act(() => cancelUpload(tempId));
+
+    expect(uploadOptions.signal?.aborted).toBe(false);
+    await act(async () => {
+      finishUpload({
+        user_files: [
+          {
+            ...optimisticFiles[0],
+            id: "user-sent",
+            temp_id: tempId,
+            status: UserFileStatus.PROCESSING,
+          },
+          {
+            ...optimisticFiles[1],
+            id: "user-kept",
+            temp_id: keptTempId,
+            status: UserFileStatus.PROCESSING,
+          },
+        ],
+        rejected_files: [],
+      });
+    });
+
+    // The poll sees the kept file finish, but no refresh runs while the
+    // cancelled file is still being unlinked.
+    await waitFor(() =>
+      expect(mockUnlinkFileFromProject).toHaveBeenCalledWith(7, "user-sent")
+    );
+    await waitFor(() => expect(mockGetUserFileStatuses).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(calls).toEqual([]);
+    await act(async () => finishUnlink());
+    await waitFor(() => expect(calls).toEqual(["unlink", "delete", "refresh"]));
+    fetchSpy.mockRestore();
+    expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
+      tempId
+    );
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
 });

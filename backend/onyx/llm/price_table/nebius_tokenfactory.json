@@ -8,7 +8,7 @@
         "input": 0.3,
         "output": 1.2
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -35,7 +35,7 @@
         "input": 0.15,
         "output": 0.6
       },
-      "family": "minimax",
+      "family": "minimax-m-flash",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -60,7 +60,7 @@
     "NousResearch/Hermes-4-405B": {
       "attachment": false,
       "cost": {
-        "cache_read": 1,
+        "cache_read": 0.2,
         "input": 1,
         "output": 3,
         "reasoning": 3
@@ -149,7 +149,7 @@
         "input": 0.01,
         "output": 0
       },
-      "family": "qwen",
+      "family": "qwen-embedding",
       "limit": {
         "context": 40960,
         "input": 40960,
@@ -196,6 +196,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-02-15",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -253,6 +254,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-31",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -281,6 +283,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -292,7 +295,7 @@
         "input": 1.32,
         "output": 3.96
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-pro",
       "limit": {
         "context": 979000,
         "output": 979000
@@ -338,6 +341,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-10",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -371,10 +375,39 @@
       "temperature": true,
       "tool_call": true
     },
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017-fast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.012,
+        "input": 0.6,
+        "output": 2.4
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017 (fast)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "google/gemma-3-27b-it": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.1,
+        "cache_read": 0.04,
         "input": 0.1,
         "output": 0.3
       },
@@ -408,7 +441,7 @@
         "input": 1.25,
         "output": 4.25
       },
-      "family": "muse",
+      "family": "muse-spark",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -455,6 +488,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -466,7 +500,7 @@
         "input": 3,
         "output": 15
       },
-      "family": "kimi-k3",
+      "family": "kimi",
       "limit": {
         "context": 1024000,
         "output": 8000
@@ -488,6 +522,63 @@
       "temperature": false,
       "tool_call": true
     },
+    "moonshotai/Kimi-K3.1-Pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.012,
+        "input": 0.06,
+        "output": 0.24
+      },
+      "family": "nemotron-nano",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "NVIDIA-Nemotron-3-Nano-30B-A3B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-12-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "nvidia/Nemotron-3-Ultra-550b-a55b": {
       "attachment": false,
       "cost": {
@@ -495,7 +586,7 @@
         "input": 1,
         "output": 3
       },
-      "family": "nemotron",
+      "family": "nemotron-ultra",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -522,7 +613,7 @@
         "input": 0.3,
         "output": 0.9
       },
-      "family": "nemotron",
+      "family": "nemotron-super",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -548,11 +639,11 @@
     "nvidia/Nemotron-3_5-Lightning": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.06,
+        "cache_read": 0.03,
         "input": 0.06,
         "output": 0.24
       },
-      "family": "nemotron",
+      "family": "nemotron-lightning",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -580,7 +671,7 @@
         "input": 0.3,
         "output": 0.9
       },
-      "family": "nemotron",
+      "family": "nemotron-super",
       "limit": {
         "context": 262144,
         "input": 262144,
@@ -605,7 +696,7 @@
     "openai/gpt-oss-120b": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.15,
+        "cache_read": 0.1,
         "input": 0.15,
         "output": 0.6,
         "reasoning": 0.6
@@ -656,6 +747,35 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-10-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "thinkingmachines/Inkling-2-Small": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.06,
+        "input": 0.3,
+        "output": 1
+      },
+      "family": "inkling-small",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Inkling 2 Small",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-11-05",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

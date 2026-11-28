@@ -3,11 +3,11 @@ variable "BASE_IMAGE_REGISTRY" {
 }
 
 variable "NODE_IMAGE" {
-  default = "library/node:24-trixie-slim@sha256:af02d57b57719b9657a45199a79264a9437940cd55b3c7b3fc99615654f124a0"
+  default = "library/node:24-trixie-slim@sha256:4d00acb4bcc42c454c4eb801526f7ad7f772ea3bd4fd168c5cc2e384abcbb9d4"
 }
 
 variable "PYTHON_IMAGE" {
-  default = "library/python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90"
+  default = "library/python:3.13-slim@sha256:7249d5587b78209a006dc4a3b5340678f84ea729239193aa559962cd8c1fce50"
 }
 
 variable "UV_IMAGE" {

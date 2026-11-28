@@ -69,7 +69,6 @@ const props: ChatUIProps = {
   stopGenerating: jest.fn(),
   onSubmit: jest.fn(async () => {}),
   deepResearchEnabled: true,
-  currentMessageFiles: [],
   onResubmit: jest.fn(),
 };
 
@@ -402,6 +401,8 @@ test.each([false, true])(
 );
 
 test("accepting an instruction reveals preceding text before its user bubble", () => {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query) => ({ ...matchMedia(query), matches: false });
   const animation = jest
     .spyOn(window, "requestAnimationFrame")
     .mockImplementation(() => 1);
@@ -469,10 +470,11 @@ test("accepting an instruction reveals preceding text before its user bubble", (
   } finally {
     view.unmount();
     animation.mockRestore();
+    window.matchMedia = matchMedia;
   }
 });
 
-test("an automatic follow-up renders a divider instead of a user bubble", () => {
+test("an automatic follow-up continues the turn: no user bubble, and one row of actions", () => {
   const answer = (id: string, content: string): Packet[] => [
     {
       placement: { turn_index: 0 },
@@ -520,21 +522,35 @@ test("an automatic follow-up renders a divider instead of a user bubble", () => 
   useChatSessionStore.getState().updateSessionMessageTree("session", tree);
   render(<ChatUI {...props} />);
 
-  const divider = screen.getByText("Subagent results received");
   expect(screen.getAllByTestId("human-message-bubble")).toHaveLength(1);
+  expect(screen.queryByText("Subagent results received")).toBeNull();
   expect(
-    screen.getByText("Earlier answer").compareDocumentPosition(divider) &
+    screen
+      .getByText("Earlier answer")
+      .compareDocumentPosition(screen.getByText("Follow-up answer")) &
       Node.DOCUMENT_POSITION_FOLLOWING
   ).toBeTruthy();
-  expect(
-    divider.compareDocumentPosition(screen.getByText("Follow-up answer")) &
-      Node.DOCUMENT_POSITION_FOLLOWING
-  ).toBeTruthy();
-  // The follow-up names its model but has no question to regenerate from.
-  expect(screen.getAllByTestId("AgentMessage/regenerate")).toHaveLength(1);
+  // The turn's actions show once, under its last answer. The follow-up names
+  // its model but has no question to regenerate from.
+  expect(screen.getAllByTestId("AgentMessage/toolbar")).toHaveLength(1);
+  expect(screen.queryByTestId("AgentMessage/regenerate")).toBeNull();
   const followUp = screen
     .getByText("Follow-up answer")
     .closest<HTMLElement>('[data-testid="onyx-ai-message"]');
   if (!followUp) throw new Error("Follow-up answer is missing");
+  expect(within(followUp).getByTestId("AgentMessage/toolbar")).toBeVisible();
   expect(within(followUp).getByText("test")).toBeVisible();
+});
+
+test("a sent message offers Edit only while the chat is idle", () => {
+  render(<ChatUI {...props} onEditMessage={jest.fn()} />);
+  expect(screen.getByTestId("HumanMessage/edit-button")).toBeInTheDocument();
+
+  act(() =>
+    useChatSessionStore.getState().updateChatState("session", "streaming")
+  );
+
+  expect(
+    screen.queryByTestId("HumanMessage/edit-button")
+  ).not.toBeInTheDocument();
 });

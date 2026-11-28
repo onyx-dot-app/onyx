@@ -16,7 +16,7 @@ import urllib.request
 from typing import Any
 
 _BASE = "https://slides.googleapis.com/v1/"
-_HTTP_TIMEOUT_SECONDS = 180
+_HTTP_TIMEOUT_SECONDS = 200
 # Compact structure view: object ids, element kinds, and text content — enough
 # to target edits without the full styling/transform payload.
 _DEFAULT_GET_FIELDS = (

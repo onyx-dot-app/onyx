@@ -84,6 +84,21 @@ or select **Send now** to stop the current response and send that message. Stopp
 To make **Enter** stop the current response instead,
 change **Send Behavior While Working** under **Settings → Chat Preferences → Interactions**.
 
+## Find in a Chat
+
+Press **Ctrl+F** (**Cmd+F** on macOS) in an open chat to find text in the whole chat,
+also in parts that are not on the screen.
+You can also select **Find in Session** in the **Search Chats** menu (**Ctrl+K**, **Cmd+K** on macOS). Outside a chat,
+**Ctrl+F** opens the find of your browser.
+
+Find is not case-sensitive. It searches your messages and the text of the answers, including code.
+It does not search tool steps, thinking, or citations. The bar shows the current match and the number of matches,
+for example **3 of 12**. In a long chat, the first search loads the older messages,
+and the bar shows **Loading older messages…** until they are loaded. In a very long chat,
+find searches only the most recent messages and shows how many it searched.
+- Press **Enter** to go to the next match, or **Shift+Enter** to go to the previous match.
+- Press **Escape** to close the bar.
+
 ## Sources Panel
 
 <img className="rounded-image" src="/assets/overview/core_features/sources_sidebar.webp" alt="Sources panel with Cited Sources and More"/>
@@ -103,7 +118,9 @@ When Onyx creates files during a chat, it shows a card for each file under the a
 Select a card to open the file in the panel on the right. Select **Files** in the panel to see all files of the chat.
 
 The panel shows each file in its own format:
-- Documents, slides, PDFs, spreadsheets and images show as pages, slides, tables or pictures.
+- Word, PowerPoint and PDF files show as pages. If Onyx cannot make a preview of a Word or PowerPoint file,
+  the panel shows a button to download the file.
+- Spreadsheets show as tables, and images show as pictures.
 - HTML files show as a static web page. The page cannot use your Onyx session, runs no scripts, and loads nothing
   from other sites: it shows only the styles and images that the file holds.
   Charts or other parts that need scripts or files from a website do not show. To see the page as written,
@@ -119,11 +136,20 @@ The other buttons copy the file's text or download it.
 
 The **Activity** button in the chat header shows what the chat is doing. Select it to open the activity card:
 - **Needs You**: tool approvals and questions that wait for your answer. Select one to go to it in the chat.
-- **Agents**: the background agents that the chat started, each with its status.
-  Finished agents are under **Previous agents**.
+- **Agents**: the background agents that the chat started. A running agent shows how long it has worked.
+  Point to a running agent and select **Stop** to stop it and the agents that it started. The other agents keep working.
+  Finished agents are under **Previous agents**. Select an agent to open its conversation.
 - **Files**: select **View all files** to open the Files panel.
 
-The card stays open until you select **Activity** again.
+The card opens when a chat starts background agents. It stays open until you select **Activity** again.
+
+An agent's conversation opens in place of the chat. It shows the instructions that the agent received and its work.
+While the agent works, its output appears as it is written.
+The bar in place of the message box shows the agent's model and its state,
+such as **Running 12s** or **Completed in 1m 53s**. While the agent works, select **Stop** in the bar to stop it.
+Select **Open parent**, or the **Subagent of** label at the top, to go back to the chat. In the chat,
+each agent shows as a card with its state and what it does now.
+Agents that one step starts together show under one header that counts them by state. Select a card to open that agent.
 
 ## Projects
 

@@ -18,6 +18,7 @@ import {
   createCustomSkillFromEditor,
   inspectSkillBundle,
   isSkillNameConflict,
+  takenPluginName,
 } from "@/lib/skills/api";
 import {
   mergeSkillFilesUploads,
@@ -117,6 +118,8 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
   const [conflictingSkillName, setConflictingSkillName] = useState<
     string | null
   >(null);
+  // Names a create refused because they are already in use.
+  const [takenNames, setTakenNames] = useState<string[]>([]);
 
   const parsed = parseSkillMarkdown(text);
   const name = parsed.ok ? parsed.name : "";
@@ -148,9 +151,11 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       ? contentsCopy(`errors.${parsed.error}`)
       : !parsed.name
         ? t("editor.saveTooltip.missingName")
-        : !parsed.instructions
-          ? t("editor.saveTooltip.missingInstructions")
-          : undefined;
+        : takenNames.includes(parsed.name)
+          ? t("takenName.taken", { name: parsed.name })
+          : !parsed.instructions
+            ? t("editor.saveTooltip.missingInstructions")
+            : undefined;
   const canCreate = !busy && createTooltip === undefined;
 
   const files = bundleFiles([], uploads, removed);
@@ -212,9 +217,12 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     try {
       // One upload with every file that is left, so the skill is created,
       // shared and published as one version. An upload whose files were all
-      // removed (a ZIP lists as one row) is left out whole.
-      const live = uploads.filter((item) =>
-        uploadPaths(item).some((path) => !removed.has(path))
+      // removed (a ZIP lists as one row) is left out whole. An upload with a
+      // SKILL.md always goes, so the server keeps its other frontmatter.
+      const live = uploads.filter(
+        (item) =>
+          item.containsSkillMd ||
+          uploadPaths(item).some((path) => !removed.has(path))
       );
       const [only] = live;
       const upload =
@@ -249,6 +257,13 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       if (!createDisabled && isSkillNameConflict(err)) {
         setConflictingSkillName(parsed.name);
         nameConflictModal.toggle(true);
+        return;
+      }
+      const taken = takenPluginName(err);
+      if (taken !== null) {
+        nameConflictModal.toggle(false);
+        setTakenNames((names) => [...names, taken]);
+        toast.error(t("takenName.taken", { name: taken }));
         return;
       }
       console.error("Failed to save skill", err);
@@ -332,7 +347,12 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       <ShareSkillModal
         mode="create"
         draft={sharingDraft}
-        onSaveDraft={setCreationSharing}
+        onSaveDraft={(draft) => {
+          // A taken name is taken in one marketplace; new sharing can
+          // change the marketplace, so the server checks the name again.
+          setCreationSharing(draft);
+          setTakenNames([]);
+        }}
         open={shareOpen}
         onClose={() => setShareOpen(false)}
       />

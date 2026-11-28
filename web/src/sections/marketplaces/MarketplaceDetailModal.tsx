@@ -14,7 +14,7 @@ import { sortMarketplaceEntries } from "@/lib/marketplaces/utils";
 import type { MarketplaceDetail } from "@/lib/marketplaces/types";
 import {
   useInstallationPolicyCopy,
-  useRefreshSkillLists,
+  useRefreshPluginLists,
 } from "@/lib/skills/hooks";
 import { ENTRY_STATUS_COLOR } from "@/sections/marketplaces/MarketplacePreview";
 import MarketplaceSyncStatus, {
@@ -144,7 +144,7 @@ export default function MarketplaceDetailModal({
 }: MarketplaceDetailModalProps) {
   const t = useTranslations("plugins.marketplaces");
   const { marketplace, error, refresh } = useMarketplace(marketplaceId);
-  const refreshSkillLists = useRefreshSkillLists();
+  const refreshSkillLists = useRefreshPluginLists();
   const [busy, setBusy] = useState(false);
 
   async function run(

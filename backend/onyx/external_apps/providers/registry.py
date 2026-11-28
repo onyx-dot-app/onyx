@@ -1,10 +1,5 @@
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
-from onyx.external_apps.models import (
-    BuiltInExternalAppDescriptor,
-    EndpointDescriptor,
-    OrgCredentialFieldDescriptor,
-)
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider, OnyxManagedExtApp
 from onyx.external_apps.providers.github import GitHubProvider
@@ -69,38 +64,6 @@ def uses_cloud_scope(app_type: ExternalAppType) -> bool:
     return MULTI_TENANT and get_onyx_managed_provider(app_type) is not None
 
 
-def _descriptor_for(
-    provider_cls: type[ExternalAppProvider],
-) -> BuiltInExternalAppDescriptor:
-    spec = provider_cls.spec
-    descriptor = spec.descriptor
-    return BuiltInExternalAppDescriptor(
-        app_type=spec.app_type,
-        name=spec.app_name,
-        upstream_url_patterns=list(descriptor.upstream_url_patterns),
-        auth_template=dict(descriptor.auth_template),
-        required_org_credential_fields=[
-            OrgCredentialFieldDescriptor(
-                key=f.key,
-                label=f.label,
-                description=f.description,
-                secret=f.secret,
-            )
-            for f in descriptor.required_org_credential_fields
-        ],
-        setup_instructions=descriptor.setup_instructions,
-        actions=[
-            EndpointDescriptor(
-                action_id=e.id,
-                normalised_name=e.normalised_name,
-                description=e.description,
-                default_policy=e.default_policy,
-            )
-            for e in get_endpoint_catalog(spec.app_type)
-        ],
-    )
-
-
 def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
     """The action catalog for an app_type (empty for CUSTOM / unregistered),
     minus the actions the OAuth grant in force can't cover. Every consumer
@@ -125,13 +88,3 @@ def withheld_on_cloud(app_type: ExternalAppType) -> list[EndpointSpec]:
     # uses_cloud_scope implies the provider is registered.
     catalog = PROVIDERS[app_type].spec.endpoint_catalog
     return [e for e in catalog if e.requires_self_hosted_scope]
-
-
-def fetch_onyx_managed_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
-    """Built-in providers Onyx owns the credentials for — the apps cloud
-    provisioning seeds per tenant. Excludes non-managed built-ins."""
-    return [
-        _descriptor_for(cls)
-        for cls in _PROVIDER_CLASSES
-        if issubclass(cls, OnyxManagedExtApp)
-    ]

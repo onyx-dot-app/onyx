@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 from collections.abc import Callable, Generator, Sequence
+from copy import copy
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -18,38 +19,51 @@ import pytest
 from azure.core.exceptions import HttpResponseError, ServiceResponseError
 from botocore.exceptions import ClientError
 from google.api_core.exceptions import Forbidden, ServiceUnavailable
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentState, ExecutionCheckpoint, RunStatus
+from onyx.agents.models import (
+    AgentState,
+    ExecutionCheckpoint,
+    ExecutionStatus,
+    RunStatus,
+    StepRecord,
+)
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,
+    PendingToolInput,
     ToolInvocation,
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import restoration, run_store
+from onyx.chat.checkpoint import CheckpointVersionError
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatFeatureState,
     ChatInbox,
+    ResponseRecord,
 )
-from onyx.chat.presentation import ResponsePresenter
+from onyx.chat.presentation import ResponsePresenter, replay_response
 from onyx.chat.run_store import (
     RESUME_FAILED_MESSAGE,
+    RESUME_UPDATED_MESSAGE,
     ChatRunStore,
     fail_suspended_response,
+    resume_failure,
 )
+from onyx.chat.tool_approvals import open_tool_approval
 from onyx.chat.tool_questions import CANCELLED_QUESTION_MESSAGE
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.chat_inputs import read_chat_inbox
+from onyx.db.chat_response import load_chat_approvals
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import (
     ApprovalDecidedVia,
@@ -59,6 +73,7 @@ from onyx.db.enums import (
     QuestionAnsweredVia,
     QuestionOutcome,
 )
+from onyx.db.integration_policy import list_session_granted_actions
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
@@ -69,12 +84,18 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import (
+    FileStore,
+    S3BackedFileStore,
+    get_default_file_store,
+)
 from onyx.file_store.gcs_file_store import GCSBackedFileStore
 from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -104,9 +125,8 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolApprovalResolved,
     ToolQuestionResolved,
 )
-from onyx.tools.constants import REQUEST_USER_INPUT_TOOL_NAME
 from onyx.tools.interface import Tool as ChatTool
-from onyx.tools.models import ToolApprovalScope, ToolContext
+from onyx.tools.models import ToolApprovalDetails, ToolApprovalScope, ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
 from onyx.tools.tool_implementations.code_mode.cells import (
     PARK_REFUSED_MESSAGE,
@@ -116,9 +136,11 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     CodeModeTool,
     WaitCodeTool,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.question.models import ToolQuestionAnswer
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.question.shapes import QUESTION_SHAPES
 from onyx.tracing.flows import LLMFlow
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_run_store import (
@@ -128,11 +150,17 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
+    make_app_integration,
     make_mcp_integration,
     set_policy,
 )
 from tests.unit.onyx.agents.fakes import FakeModelClient
-from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeMCPTool, until
+from tests.unit.onyx.tools.code_mode.fakes import (
+    LIMITS,
+    FakeMCPTool,
+    FakeTool,
+    until,
+)
 
 ACTION = "send_email"
 
@@ -231,7 +259,7 @@ class ApprovalChat(BaseModel):
     def asking(self) -> QuestionTool:
         """The response's question tool, as a turn that offers it builds it."""
         return QuestionTool(
-            REQUEST_USER_INPUT_TOOL_NAME,
+            QUESTION_SHAPES[ToolFamily.OPENAI],
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chat_session_id=self.chat_session_id,
             response_id=self.response_id,
@@ -253,6 +281,18 @@ def chat(
     give_access(
         db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
+    integration_id = integration.id
+    chat = _saved_turn(db_session, user, integration_id)
+    try:
+        yield chat
+    finally:
+        db_session.rollback()
+        delete_messages_and_files_from_chat_session(chat.chat_session_id, db_session)
+        delete_integrations(db_session, [integration_id])
+
+
+def _saved_turn(db_session: Session, user: User, integration_id: int) -> ApprovalChat:
+    """A new chat session of the user, with a saved question and its response."""
     chat_session = ChatSession(
         id=uuid4(),
         user_id=user.id,
@@ -279,20 +319,14 @@ def chat(
     db_session.add(response)
     db_session.flush()
     question.latest_child_message_id = response.id
-    integration_id = integration.id
     db_session.commit()
-    try:
-        yield ApprovalChat(
-            user=user,
-            integration_id=integration_id,
-            chat_session_id=chat_session.id,
-            question=UserMessage(id=f"chat:{question.id}", content=question.message),
-            response_id=response.id,
-        )
-    finally:
-        db_session.rollback()
-        delete_messages_and_files_from_chat_session(chat_session.id, db_session)
-        delete_integrations(db_session, [integration_id])
+    return ApprovalChat(
+        user=user,
+        integration_id=integration_id,
+        chat_session_id=chat_session.id,
+        question=UserMessage(id=f"chat:{question.id}", content=question.message),
+        response_id=response.id,
+    )
 
 
 def _replies(first: AssistantMessage) -> Callable[..., AssistantMessage]:
@@ -532,6 +566,10 @@ def test_a_waiting_direct_call_hands_off_and_another_process_resumes_it(
     )
 
     _hand_off(owned)
+    # The card shows the call's own arguments, so the request keeps no copy.
+    progress = owned.run.snapshot().progress
+    assert progress is not None
+    assert [request.display_arguments for request in progress.input_requests] == [None]
 
     db_session.expire_all()
     response = db_session.get(ChatMessage, chat.response_id)
@@ -669,7 +707,7 @@ def test_a_decision_and_a_stop_of_the_live_turn_keep_the_first(
 
 
 _CARD = ChatQuestionAnswersRequest(
-    answers=[ToolQuestionAnswer(question_id="scope", option_label="Company")]
+    answers=[ToolQuestionAnswer(question_id="scope", option_labels=["Company"])]
 )
 
 
@@ -1146,7 +1184,7 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
 ) -> None:
     sent: list[str] = []
     tool = _gated_function(chat, sent)
-    cells = CodeCells()
+    cells = CodeCells(OPENAI_CODE_MODE)
     live: list[Packet] = []
     call_waits = threading.Event()
 
@@ -1173,7 +1211,7 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
                 content=[
                     ToolCall(
                         id="stop",
-                        name="wait_code",
+                        name="wait",
                         arguments={"cell_id": 1, "terminate": True},
                     )
                 ]
@@ -1211,12 +1249,17 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
     ]
 
 
+_SEND_PROGRAM = f"await tools.mcp__1__acme__{ACTION}(value='team')\n"
+
+
 def _program(
-    chat: ApprovalChat, owned_runs: list[OwnedRun], sent: list[str]
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    tool: ChatTool,
+    code: str = _SEND_PROGRAM,
+    on_event: Callable[[AgentEvent], None] = lambda _event: None,
 ) -> OwnedRun:
     """A chat response whose code mode program calls the gated tool."""
-    tool = _gated_function(chat, sent)
-    code = f"await tools.mcp__1__acme__{ACTION}(value='team')\n"
     owner = _store(chat, [tool])
     coordinator = AgentCoordinator()
     agent = chat_agent(
@@ -1239,7 +1282,12 @@ def _program(
     owned = OwnedRun(
         owner=owner,
         coordinator=coordinator,
-        run=agent.start(messages=[chat.question], max_steps=3, coordinator=view),
+        run=agent.start(
+            messages=[chat.question],
+            max_steps=3,
+            coordinator=view,
+            on_event=on_event,
+        ),
     )
     owned_runs.append(owned)
     return owned
@@ -1270,11 +1318,14 @@ def test_an_unresumable_response_fails_and_drops_its_saved_state(
     """A response whose model or saved state is gone cannot continue: it is
     saved as failed, and its checkpoint and its parked program's dump go."""
     sent: list[str] = []
-    _hand_off(_program(chat, owned_runs, sent))
+    _hand_off(_program(chat, owned_runs, _gated_function(chat, sent)))
     assert len(dumps()) == 1
 
     fail_suspended_response(
-        get_cache_backend(), POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, chat.response_id
+        get_cache_backend(),
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat.response_id,
+        resume_failure(ValueError("The model that this response ran on is gone")),
     )
 
     db_session.expire_all()
@@ -1289,6 +1340,57 @@ def test_an_unresumable_response_fails_and_drops_its_saved_state(
     assert [row.decision for row in chat.rows(db_session)] == [ApprovalDecision.EXPIRED]
     assert dumps() == []
     assert sent == []
+
+
+@pytest.mark.parametrize("changed", ["checkpoint", "progress"])
+def test_a_checkpoint_that_this_version_cannot_read_fails_with_the_update_message(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun], changed: str
+) -> None:
+    """A checkpoint saved in a shape that the running code does not read ends
+    the response with the message that Onyx was updated, and the chat takes
+    a new message. The claim reads the checkpoint; restoration reads its
+    progress."""
+    _hand_off(_direct_call(chat, owned_runs))
+    row = db_session.get_one(ChatResponseCheckpoint, chat.response_id)
+    progress = row.state["progress"]
+    assert isinstance(progress, dict)
+    row.state = (
+        {**row.state, "tool_configuration_digest": "digest"}
+        if changed == "checkpoint"
+        else {
+            **row.state,
+            "progress": {**progress, "tool_configuration_digest": "digest"},
+        }
+    )
+    db_session.commit()
+    tool = chat.tool()
+
+    with pytest.raises(CheckpointVersionError) as failure:
+        _resume(
+            chat,
+            owned_runs,
+            reply=_calls(tool, "send"),
+            tools=[_sending(tool)],
+            gated=[tool],
+        )
+    fail_suspended_response(
+        get_cache_backend(),
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat.response_id,
+        resume_failure(failure.value),
+    )
+
+    db_session.expire_all()
+    response = db_session.get(ChatMessage, chat.response_id)
+    assert response is not None and response.response_status == RunStatus.ERROR
+    assert (
+        response.response_failure is not None
+        and response.response_failure.message == RESUME_UPDATED_MESSAGE
+    )
+    assert db_session.get(ChatResponseCheckpoint, chat.response_id) is None
+    db_session.rollback()
+    assert [row.decision for row in chat.rows(db_session)] == [ApprovalDecision.EXPIRED]
+    _reject_while_user_input_waits(db_session, chat.chat_session_id)
 
 
 def test_a_response_whose_owner_is_lost_ends_its_requests(
@@ -1387,9 +1489,9 @@ def test_a_park_refused_for_its_size_ends_the_request_and_does_not_block_sends(
             )
         ),
         tools=[
-            CodeModeTool([tool], cells=CodeCells(), limits=PARKING_LIMITS).bind(
-                ToolContext
-            )
+            CodeModeTool(
+                [tool], cells=CodeCells(OPENAI_CODE_MODE), limits=PARKING_LIMITS
+            ).bind(ToolContext)
         ],
         gated=[tool],
         on_event=ResponsePresenter(Emitter(live.append)).consume,
@@ -1436,8 +1538,8 @@ def _azure_forbidden() -> HttpResponseError:
     "error, retries, file_store",
     [
         (OperationalError("SELECT 1", {}, Exception("connection lost")), True, None),
-        (_storage_error("SlowDown", 503), True, None),
-        (_storage_error("AccessDenied", 403), False, None),
+        (_storage_error("SlowDown", 503), True, "s3"),
+        (_storage_error("AccessDenied", 403), False, "s3"),
         (ServiceResponseError("connection reset"), True, "azure"),
         (_azure_forbidden(), False, "azure"),
         (ServiceUnavailable("backend busy"), True, "gcs"),
@@ -1468,15 +1570,17 @@ def test_a_park_that_fails_for_a_moment_keeps_the_run_and_its_dump_goes(
     retrying each second. The configured file store tells the two apart."""
     if file_store is not None:
         # Only the park's error check reads this store; dumps use the default.
-        store = (
-            AzureBlobBackedFileStore(
+        store: FileStore
+        if file_store == "s3":
+            store = S3BackedFileStore(bucket_name="parks")
+        elif file_store == "azure":
+            store = AzureBlobBackedFileStore(
                 container_name="parks", connection_string="UseDevelopmentStorage=true"
             )
-            if file_store == "azure"
-            else GCSBackedFileStore(bucket_name="parks")
-        )
+        else:
+            store = GCSBackedFileStore(bucket_name="parks")
         monkeypatch.setattr(run_store, "get_default_file_store", lambda: store)
-    owned = _program(chat, owned_runs, [])
+    owned = _program(chat, owned_runs, _gated_function(chat, []))
     assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
     assert owned.run.wait_for_idle(10)
     publish = run_store.publish_checkpoint__no_commit
@@ -1515,7 +1619,7 @@ def test_a_failed_dump_save_deletes_the_dumps_saved_before_it(
     """A checkpoint with two parked programs saves a dump for each. When the
     second save fails, the first dump is deleted and the error reaches the
     park, which never learns that dump's ID."""
-    owned = _program(chat, owned_runs, [])
+    owned = _program(chat, owned_runs, _gated_function(chat, []))
     assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
     assert owned.run.wait_for_idle(10)
     captured = owned.run.capture()
@@ -1535,7 +1639,7 @@ def test_a_failed_dump_save_deletes_the_dumps_saved_before_it(
         )
     )
     progress.feature_state = state.model_dump(mode="json")
-    store = get_default_file_store()
+    store = copy(get_default_file_store())
     save_file = store.save_file
     saves: list[str] = []
 
@@ -1562,7 +1666,7 @@ def test_a_response_that_parks_after_its_chat_was_deleted_ends(
     """A soft delete ends only the responses that are parked. One that still
     runs, such as a resume turn's, parks nothing afterwards: nobody could
     decide its requests. It ends, and its dump goes."""
-    owned = _program(chat, owned_runs, [])
+    owned = _program(chat, owned_runs, _gated_function(chat, []))
     assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
     assert owned.run.wait_for_idle(10)
 
@@ -1611,7 +1715,7 @@ def test_soft_deleting_a_chat_ends_its_parked_response_and_its_dump(
 ) -> None:
     """Nothing can decide the requests of a deleted chat, so its parked
     responses end: the requests end and the checkpoint and its dump go."""
-    _hand_off(_program(chat, owned_runs, []))
+    _hand_off(_program(chat, owned_runs, _gated_function(chat, [])))
     assert len(dumps()) == 1
 
     delete_chat_session_by_id(
@@ -1680,3 +1784,464 @@ def test_a_suspended_response_without_its_checkpoint_is_repaired(
     ) == {chat.response_id}
     assert _status(chat.response_id) == RunStatus.ERROR
     _reject_while_user_input_waits(db_session, chat.chat_session_id)
+
+
+BUILTIN_ACTION = "onyx:library.delete"
+
+
+class _LibraryTool(FakeTool):
+    """A built-in tool whose `delete` operation asks the user."""
+
+    def approval_details(
+        self, arguments: dict[str, JsonValue]
+    ) -> ToolApprovalDetails | None:
+        name = arguments.get("name")
+        if arguments.get("operation") != "delete" or not isinstance(name, str):
+            return None
+        return ToolApprovalDetails(
+            display_name=f"Delete {name}", payload={"Delete": [name]}
+        )
+
+
+def _library(ran: list[str]) -> _LibraryTool:
+    """The built-in tool with its gated action, recording each call that runs."""
+
+    def run(invocation: ToolInvocation, _context: ToolContext) -> ToolResult:
+        done = f"{invocation.arguments['operation']} {invocation.arguments['name']}"
+        ran.append(done)
+        return ToolResult(content=done)
+
+    tool = _LibraryTool(
+        "library",
+        run,
+        parameters={
+            "type": "object",
+            "properties": {
+                "operation": {"type": "string"},
+                "name": {"type": "string"},
+            },
+            "required": ["operation", "name"],
+        },
+    )
+    tool.approval = ToolApprovalScope(integration_id=None, action_id=BUILTIN_ACTION)
+    return tool
+
+
+def _library_call(call_id: str, operation: str) -> ToolCall:
+    return ToolCall(
+        id=call_id,
+        name="library",
+        arguments={"operation": operation, "name": f"{call_id}.pdf"},
+    )
+
+
+def _approval_requests(live: list[Packet]) -> list[ToolApprovalRequest]:
+    return [p.obj for p in live if isinstance(p.obj, ToolApprovalRequest)]
+
+
+def test_a_builtin_call_that_does_not_ask_runs_without_a_request(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """The tool's hook decides each call before any database work, and the
+    run, which opened no request, closes none when it ends."""
+    ran: list[str] = []
+    tool = _library(ran)
+    with (
+        patch.object(
+            run_store, "open_tool_approval", side_effect=AssertionError("opened")
+        ),
+        patch.object(
+            run_store,
+            "close_pending_approval_requests__no_commit",
+            wraps=run_store.close_pending_approval_requests__no_commit,
+        ) as close,
+    ):
+        owned = _start(
+            chat,
+            owned_runs,
+            reply=_replies(AssistantMessage(content=[_library_call("notes", "list")])),
+            tools=[tool.bind(ToolContext)],
+            gated=[tool],
+        )
+        assert owned.run.result(timeout=10).output.text == "done"
+        until(lambda: not owned.owner.has_owned_work)
+    close.assert_not_called()
+
+    assert ran == ["list notes.pdf"]
+    assert chat.rows(db_session) == []
+
+
+@pytest.mark.parametrize("choice", [ApprovalChoice.APPROVE_ONCE, ApprovalChoice.REJECT])
+def test_a_builtin_call_that_asks_waits_with_its_tools_card(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    choice: ApprovalChoice,
+) -> None:
+    """The request and the live card show the hook's headline and payload.
+    The user's decision is saved as made, and the resumed call runs or reads
+    the rejection."""
+    ran: list[str] = []
+    tool = _library(ran)
+    reply = _replies(AssistantMessage(content=[_library_call("report", "delete")]))
+    live: list[Packet] = []
+    owned = _start(
+        chat,
+        owned_runs,
+        reply=reply,
+        tools=[tool.bind(ToolContext)],
+        gated=[tool],
+        on_event=ResponsePresenter(Emitter(live.append)).consume,
+    )
+    _hand_off(owned)
+
+    [row] = chat.rows(db_session)
+    assert (row.integration_id, row.action_id) == (None, BUILTIN_ACTION)
+    assert (row.display_name, row.arguments) == (
+        "Delete report.pdf",
+        {"Delete": ["report.pdf"]},
+    )
+    [card] = _approval_requests(live)
+    assert (card.display_name, card.arguments) == (
+        "Delete report.pdf",
+        {"Delete": ["report.pdf"]},
+    )
+    approved = choice == ApprovalChoice.APPROVE_ONCE
+    decided = chat.decide(db_session, row.id, choice)
+    assert (decided.decision, decided.decided_via) == (
+        ApprovalDecision.APPROVED if approved else ApprovalDecision.REJECTED,
+        ApprovalDecidedVia.USER,
+    )
+
+    resumed = _resume(
+        chat, owned_runs, reply=reply, tools=[tool.bind(ToolContext)], gated=[tool]
+    )
+    assert resumed is not None
+    assert resumed.run.result(timeout=10).output.text == "done"
+    if approved:
+        assert ran == ["delete report.pdf"]
+        assert resumed.first_result("report") == "delete report.pdf"
+    else:
+        assert ran == []
+        assert resumed.first_result("report") == (
+            "The user rejected this library call, so it did not run."
+        )
+
+
+def test_a_chat_grant_of_a_builtin_action_runs_later_calls_of_that_chat_only(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """ "Approve for this chat" approves the action's other waiting call, and
+    a later call of the chat runs with no request. Another chat still asks."""
+    other = _saved_turn(db_session, chat.user, chat.integration_id)
+    try:
+        ran: list[str] = []
+        tool = _library(ran)
+
+        def reply(
+            request: GenerationRequest, _signal: CancellationSignal
+        ) -> AssistantMessage:
+            results = [m for m in request.messages if isinstance(m, ToolResultMessage)]
+            if not results:
+                return AssistantMessage(
+                    content=[
+                        _library_call("first", "delete"),
+                        _library_call("second", "delete"),
+                    ]
+                )
+            if len(results) == 2:
+                return AssistantMessage(content=[_library_call("third", "delete")])
+            return AssistantMessage(content=[TextContent(text="done")])
+
+        _hand_off(
+            _start(
+                chat,
+                owned_runs,
+                reply=reply,
+                tools=[tool.bind(ToolContext)],
+                gated=[tool],
+            )
+        )
+        first, _second = chat.rows(db_session)
+        chat.decide(db_session, first.id, ApprovalChoice.APPROVE_SESSION)
+        assert [(row.decision, row.decided_via) for row in chat.rows(db_session)] == [
+            (ApprovalDecision.APPROVED, ApprovalDecidedVia.SESSION_GRANT)
+        ] * 2
+        assert list_session_granted_actions(
+            db_session, chat.chat_session_id, [None, chat.integration_id]
+        ) == {None: {BUILTIN_ACTION}, chat.integration_id: set()}
+
+        resumed = _resume(
+            chat,
+            owned_runs,
+            reply=reply,
+            tools=[tool.bind(ToolContext)],
+            gated=[tool],
+        )
+        assert resumed is not None
+        assert resumed.run.result(timeout=10).output.text == "done"
+        assert sorted(ran) == [
+            "delete first.pdf",
+            "delete second.pdf",
+            "delete third.pdf",
+        ]
+        assert len(chat.rows(db_session)) == 2
+
+        elsewhere = _start(
+            other,
+            owned_runs,
+            reply=_replies(
+                AssistantMessage(content=[_library_call("other", "delete")])
+            ),
+            tools=[tool.bind(ToolContext)],
+            gated=[tool],
+        )
+        assert elsewhere.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+        assert [row.decision for row in other.rows(db_session)] == [None]
+        assert "delete other.pdf" not in ran
+    finally:
+        db_session.rollback()
+        delete_messages_and_files_from_chat_session(other.chat_session_id, db_session)
+
+
+@pytest.mark.parametrize(
+    "choice", [ApprovalChoice.APPROVE_ONCE, ApprovalChoice.APPROVE_SESSION]
+)
+def test_an_approval_of_a_builtin_request_is_never_a_policy_rejection(
+    db_session: Session, chat: ApprovalChat, choice: ApprovalChoice
+) -> None:
+    """No policy covers a built-in action. A request whose integration was
+    deleted also has no integration, and its approval is still rejected."""
+    approvals = {
+        action_id: create_approval_request__no_commit(
+            db_session,
+            chat_session_id=chat.chat_session_id,
+            chat_message_id=chat.response_id,
+            integration_id=None,
+            action_id=action_id,
+            tool_call_id=action_id,
+            tool_name="library",
+            display_name="Delete report.pdf",
+            arguments={},
+        )
+        for action_id in (BUILTIN_ACTION, ACTION)
+    }
+    db_session.commit()
+
+    decided = {
+        action_id: chat.decide(db_session, approval_id, choice)
+        for action_id, approval_id in approvals.items()
+    }
+
+    assert (decided[BUILTIN_ACTION].decision, decided[BUILTIN_ACTION].decided_via) == (
+        ApprovalDecision.APPROVED,
+        ApprovalDecidedVia.USER
+        if choice == ApprovalChoice.APPROVE_ONCE
+        else ApprovalDecidedVia.SESSION_GRANT,
+    )
+    assert (decided[ACTION].decision, decided[ACTION].decided_via) == (
+        ApprovalDecision.REJECTED,
+        ApprovalDecidedVia.POLICY,
+    )
+
+
+def test_a_builtin_program_call_asks_the_same_way(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """A code mode program's call that does not ask runs; one that asks waits
+    on the program's card with the hook's card, and runs once approved."""
+    ran: list[str] = []
+    live: list[Packet] = []
+    owned = _program(
+        chat,
+        owned_runs,
+        _library(ran),
+        "await tools.library(operation='list', name='notes.pdf')\n"
+        "await tools.library(operation='delete', name='report.pdf')\n",
+        on_event=ResponsePresenter(Emitter(live.append)).consume,
+    )
+    assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+    assert ran == ["list notes.pdf"]
+    [row] = chat.rows(db_session)
+    assert (row.tool_call_id, row.display_name, row.arguments) == (
+        "program",
+        "Delete report.pdf",
+        {"Delete": ["report.pdf"]},
+    )
+    [card] = _approval_requests(live)
+    assert (card.display_name, card.arguments) == (row.display_name, row.arguments)
+
+    chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+    owned.owner.poll_control()
+
+    assert owned.run.result(timeout=20).output.text == "done"
+    assert ran == ["list notes.pdf", "delete report.pdf"]
+
+
+def test_a_resumed_run_ends_the_requests_an_earlier_process_opened(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """The resuming store opened no request itself. When the resumed run
+    ends, the request that it still waits on ends too."""
+    ran: list[str] = []
+    tool = _library(ran)
+    reply = _replies(
+        AssistantMessage(
+            content=[
+                _library_call("first", "delete"),
+                _library_call("second", "delete"),
+            ]
+        )
+    )
+    _hand_off(
+        _start(
+            chat, owned_runs, reply=reply, tools=[tool.bind(ToolContext)], gated=[tool]
+        )
+    )
+    rows = {row.tool_call_id: row for row in chat.rows(db_session)}
+    chat.decide(db_session, rows["first"].id, ApprovalChoice.APPROVE_ONCE)
+
+    resumed = _resume(
+        chat, owned_runs, reply=reply, tools=[tool.bind(ToolContext)], gated=[tool]
+    )
+    assert resumed is not None
+    assert resumed.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+    assert ran == ["delete first.pdf"]
+    resumed.run.cancel()
+    until(lambda: not resumed.owner.has_owned_work)
+
+    assert {row.tool_call_id: row.decision for row in chat.rows(db_session)} == {
+        "first": ApprovalDecision.APPROVED,
+        "second": ApprovalDecision.EXPIRED,
+    }
+
+
+def test_the_hook_decides_on_the_arguments_that_the_call_runs_with(
+    chat: ApprovalChat,
+) -> None:
+    """A call's displayed arguments can differ from the ones it runs with,
+    such as a partial call's raw text. The hook sees the ones that run."""
+    tool = _library([])
+    call = ToolCall(
+        id="notes",
+        name="library",
+        arguments={"operation": "list", "name": "notes.pdf"},
+        raw_arguments='{"operation": "delete", "name": "notes.pdf"',
+        arguments_complete=False,
+    )
+    with patch.object(
+        run_store, "open_tool_approval", side_effect=AssertionError("opened")
+    ):
+        assert (
+            _store(chat, [tool]).request_approval(
+                MagicMock(spec=Run, id=str(chat.response_id)), call, None
+            )
+            is None
+        )
+
+
+def test_an_action_with_no_integration_needs_a_builtin_key() -> None:
+    """Only a built-in action has no integration."""
+    with pytest.raises(ValidationError):
+        ToolApprovalScope(integration_id=None, action_id=ACTION)
+    assert ToolApprovalScope(integration_id=None, action_id=BUILTIN_ACTION)
+
+
+def _ask_for_request_tool(
+    chat: ApprovalChat, action_id: str
+) -> PendingToolInput | ToolResult | None:
+    return open_tool_approval(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=chat.chat_session_id,
+        response_id=chat.response_id,
+        user_id=chat.user.id,
+        tool_call_id=f"call-{uuid4().hex[:8]}",
+        tool_name="app__1__request",
+        details=ToolApprovalDetails(display_name="Any other request"),
+        arguments={},
+        scope=ToolApprovalScope(
+            integration_id=chat.integration_id, action_id=action_id
+        ),
+    )
+
+
+def _replayed_request(
+    db_session: Session, chat: ApprovalChat, pending: PendingToolInput
+) -> ToolApprovalRequest:
+    """The card of the saved request, as a reload of the suspended response
+    shows it."""
+    [row] = [row for row in chat.rows(db_session) if str(row.id) == pending.request_id]
+    call = ToolCall(id=row.tool_call_id, name=row.tool_name, arguments={})
+    response = ResponseRecord(
+        run_id=str(chat.response_id),
+        status=RunStatus.SUSPENDED,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="message", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+            )
+        ],
+    )
+    requests = load_chat_approvals(
+        db_session, chat.chat_session_id, [chat.response_id]
+    ).requests[chat.response_id]
+    [card] = [
+        packet.obj
+        for packet in replay_response(
+            response,
+            {},
+            {},
+            {},
+            approvals={(response.run_id, call.id): requests},
+        )
+        if isinstance(packet.obj, ToolApprovalRequest)
+    ]
+    return card
+
+
+def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
+    db_session: Session, chat: ApprovalChat
+) -> None:
+    """The other-request action of an app (`unspecified`) asks each time: an
+    approval for the chat is saved as a single approval, and the next call
+    asks again."""
+    integration, _ = make_app_integration(
+        db_session, upstream_url_patterns=["https://api.example.com/*"]
+    )
+    give_access(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    app_chat = _saved_turn(db_session, chat.user, integration.id)
+    try:
+        first = _ask_for_request_tool(app_chat, OTHER_REQUEST_ACTION_KEY)
+        assert isinstance(first, PendingToolInput)
+        assert not first.can_approve_for_chat
+        assert not _replayed_request(db_session, app_chat, first).can_approve_for_chat
+
+        app_chat.decide(db_session, first.request_id, ApprovalChoice.APPROVE_SESSION)
+
+        [row] = app_chat.rows(db_session)
+        assert (row.decision, row.decided_via) == (
+            ApprovalDecision.APPROVED,
+            ApprovalDecidedVia.USER,
+        )
+        assert isinstance(
+            _ask_for_request_tool(app_chat, OTHER_REQUEST_ACTION_KEY),
+            PendingToolInput,
+        )
+    finally:
+        db_session.rollback()
+        delete_messages_and_files_from_chat_session(
+            app_chat.chat_session_id, db_session
+        )
+        delete_integrations(db_session, [integration.id])
+
+
+def test_an_mcp_tool_named_like_the_request_tool_can_be_approved_for_the_chat(
+    db_session: Session, chat: ApprovalChat
+) -> None:
+    pending = _ask_for_request_tool(chat, OTHER_REQUEST_ACTION_KEY)
+
+    assert isinstance(pending, PendingToolInput)
+    assert pending.can_approve_for_chat
+    assert _replayed_request(db_session, chat, pending).can_approve_for_chat

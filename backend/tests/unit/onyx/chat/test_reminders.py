@@ -13,8 +13,8 @@ from onyx.prompts.chat_prompts import (
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
 )
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME
 from onyx.tools.models import GeneratedImage
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeCall,
     CodeModeExecutionResult,
@@ -33,6 +33,11 @@ IMAGES = FinalImageGenerationResponse(
 )
 
 
+_OPEN_URL_REMINDER = OPEN_URL_REMINDER.format(
+    web_search="web_search", open_url="open_url"
+)
+
+
 def _context(
     *,
     task_prompt: str | None = None,
@@ -41,7 +46,7 @@ def _context(
     out_of_cycles: bool = False,
 ) -> ChatReminderContext:
     return ChatReminderContext(
-        has_open_url_tool=open_url,
+        open_url_reminder=_OPEN_URL_REMINDER if open_url else None,
         out_of_cycles=out_of_cycles,
         persona_task_prompt=task_prompt,
         has_context_documents=context_documents,
@@ -60,7 +65,7 @@ def _direct_image() -> ToolResultMessage:
 def _nested_image() -> ToolResultMessage:
     return ToolResultMessage(
         tool_call_id="code",
-        tool_name=CodeModeTool.NAME,
+        tool_name=EXECUTE_CODE_TOOL_NAME,
         content="Execution completed",
         details=CodeModeExecutionResult(
             cell_id=1,
@@ -116,14 +121,16 @@ def test_web_search_reminder_requires_available_open_url_tool() -> None:
         ),
     )
     context = _context(open_url=True)
-    assert build_chat_reminder(context, [], [result], enabled=True) == OPEN_URL_REMINDER
+    assert (
+        build_chat_reminder(context, [], [result], enabled=True) == _OPEN_URL_REMINDER
+    )
     cited = build_chat_reminder(context, [result], [result], enabled=True)
     assert cited is not None
-    assert OPEN_URL_REMINDER in cited
+    assert _OPEN_URL_REMINDER in cited
     assert REQUIRE_CITATION_GUIDANCE.strip() in cited
-    context.has_open_url_tool = False
+    context.open_url_reminder = None
     assert build_chat_reminder(context, [], [result], enabled=True) is None
-    context.has_open_url_tool = True
+    context.open_url_reminder = _OPEN_URL_REMINDER
     context.out_of_cycles = True
     assert (
         build_chat_reminder(context, [], [result], enabled=True)

@@ -18,11 +18,14 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
 )
 from onyx.db.models import Integration, IntegrationAction, MCPServer
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.call_credentials import CallCredentials
 from onyx.integrations.kinds import mcp_server as mcp_kind
 from onyx.integrations.kinds.mcp_server import McpServerKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
+from onyx.integrations.models import BUILTIN_ACTION_PREFIX
 from onyx.sandbox_proxy.mcp_jsonrpc import MCP_UNCLASSIFIABLE_ACTION_TYPE
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     IntegrationMatchTarget,
@@ -132,6 +135,35 @@ def test_discovered_tools_map_to_actions_with_read_only_defaults(
     assert all(s.source is IntegrationActionSource.MCP for s in specs)
     assert specs[0].input_schema == schema
     assert specs[0].output_schema == {"type": "object"}
+
+
+def test_mcp_tool_cannot_take_a_builtin_action_key(
+    monkeypatch: pytest.MonkeyPatch,
+    integration: Integration,
+    server: MCPServer,  # noqa: ARG001
+) -> None:
+    tools = [
+        MCPLibTool(
+            name=f"{BUILTIN_ACTION_PREFIX}artifacts.delete",
+            inputSchema={"type": "object"},
+        )
+    ]
+    credentials = CallCredentials(
+        integration_id=integration.id,
+        auth_method=None,
+        connection_id=None,
+        connection_user_id=None,
+        headers={},
+    )
+    monkeypatch.setattr(
+        mcp_kind, "resolve_call_credentials", lambda *_a, **_k: credentials
+    )
+    monkeypatch.setattr(mcp_kind, "mcp_oauth_server", lambda *_a, **_k: None)
+    monkeypatch.setattr(mcp_kind, "discover_mcp_tools", lambda *_a, **_k: tools)
+
+    with pytest.raises(OnyxError, match="reserved") as error:
+        mcp_kind.fetch_mcp_actions(integration, None, DB)
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 def test_match_tools_call_uses_action_defaults(

@@ -3,6 +3,7 @@ per-account provider (Zendesk) tells the agent which account it is on."""
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +15,10 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.db.skill import RuntimeSkillFolder
 from onyx.external_apps.providers.zendesk import ZendeskProvider
+from onyx.server.features.build.configs import (
+    SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
     BUILTIN_SKILLS_PATH,
@@ -25,6 +30,7 @@ from onyx.skills.rendering import (
     render_external_app_skill,
 )
 
+_SCRIPT_TIMEOUT_RE = re.compile(r"^_HTTP_TIMEOUT_SECONDS = (\d+)$", re.MULTILINE)
 _TEMPLATE = "---\nname: x\ndescription: d\n---\n\nbase: {{APP:base_url}}\n"
 
 
@@ -246,3 +252,42 @@ def test_rendered_files_withhold_secret_credential_fields(
         "test-client-secret-do-not-render" not in content
         for content in rendered.values()
     )
+
+
+def test_each_app_skill_tells_the_model_when_to_use_the_app_tools() -> None:
+    """A background command cannot ask for approval, so the skill sends
+    such a request to the foreground or to the tool of the action."""
+    for skill_id in ("github", "linear", "slack"):
+        template = (BUILTIN_SKILLS_PATH / skill_id / "SKILL.md.template").read_text()
+        app_type = ExternalAppType(skill_id.upper())
+        with_tools = render_external_app_skill(template, app_type, set(), {}, 12)
+        without = render_external_app_skill(template, app_type, set(), {})
+
+        assert "`app__12__`" in with_tools
+        assert "approval_needs_tool" in with_tools
+        assert (
+            f"up to **{SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS} seconds**" in with_tools
+        )
+        assert (
+            "client timeout of **at least "
+            f"{SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS}"
+            " seconds**"
+        ) in with_tools
+        assert "app__" not in without
+
+
+def test_app_scripts_outwait_the_proxy_approval_window() -> None:
+    """The proxy holds a request that waits for approval for the approval
+    window after it saves the approval, so an app script must wait longer to
+    get the decision instead of its own timeout."""
+    timeouts = {
+        script.relative_to(BUILTIN_SKILLS_PATH): int(match.group(1))
+        for script in BUILTIN_SKILLS_PATH.rglob("*_api.py")
+        if (match := _SCRIPT_TIMEOUT_RE.search(script.read_text()))
+    }
+
+    assert timeouts
+    for script, timeout in timeouts.items():
+        assert timeout >= (
+            SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS
+        ), script

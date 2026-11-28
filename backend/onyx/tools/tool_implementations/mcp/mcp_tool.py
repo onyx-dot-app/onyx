@@ -9,7 +9,7 @@ from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import MCPTransport
 from onyx.integrations.call_credentials import (
     credentials_near_expiry,
-    mark_api_key_rejected,
+    mark_credential_rejected,
     mcp_oauth_provider,
     resolve_fresh_call_credentials,
 )
@@ -19,7 +19,10 @@ from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.server.features.mcp.client import (
     call_mcp_tool,
+    has_auth_rejection_response,
     has_unauthorized_response,
+    http_status,
+    is_unreachable_error,
     process_mcp_result,
 )
 from onyx.server.features.mcp.models import (
@@ -32,6 +35,7 @@ from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
+    CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
     CodeModeExposure,
     CodeModeFunctionName,
     CodeModeResultKind,
@@ -41,7 +45,10 @@ from onyx.tools.models import (
     ToolApprovalScope,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
+from onyx.tools.tool_implementations.http_request import failed_tool_result
 from onyx.tools.tool_name import normalize_external_tool_name, sanitize_tool_name
+from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -99,6 +106,8 @@ class MCPTool(Tool):
     that construction resolved, and resolves it again only when its token
     is near expiry. ``oauth_server`` lets the MCP SDK refresh an OAuth2
     token during the call."""
+
+    rank = ToolRank.INTEGRATION
 
     def __init__(
         self,
@@ -193,7 +202,10 @@ class MCPTool(Tool):
         error_result = {"error": message}
         return ToolResult(
             details=CustomToolCallSummary(
-                tool_name=self._name, response_type="json", tool_result=error_result
+                tool_name=self._name,
+                integration_id=self._integration_id,
+                response_type=CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
+                tool_result=error_result,
             ),
             content=json.dumps(error_result),
             is_error=True,
@@ -230,9 +242,12 @@ class MCPTool(Tool):
                         resolved.code.value,
                     )
                     outcome = MCPToolCallStatus.AUTH_ERROR
-                    return self._error_result(
-                        f"The {self._name} tool from {self._integration_name} "
-                        f"cannot run: {resolved.reason}"
+                    return failed_tool_result(
+                        tool_name=self._name,
+                        integration_id=self._integration_id,
+                        message=f"The {self._name} tool from "
+                        f"{self._integration_name} cannot run: {resolved.reason}",
+                        is_auth_error=True,
                     )
                 self._credentials = resolved
             credentials = self._credentials
@@ -280,29 +295,68 @@ class MCPTool(Tool):
             outcome = MCPToolCallStatus.CANCELLED
             raise
         except Exception as e:
-            unauthorized_response = has_unauthorized_response(e)
-            if unauthorized_response and credentials is not None:
+            status_code = http_status(e)
+            rejected_token_fingerprint = (
+                e.rejected_token_fingerprint
+                if isinstance(e, MCPReauthenticationRequired)
+                else None
+            )
+            if credentials is not None and (
+                has_unauthorized_response(e) or rejected_token_fingerprint is not None
+            ):
                 try:
-                    mark_api_key_rejected(credentials)
+                    mark_credential_rejected(
+                        credentials,
+                        rejected_token_fingerprint=rejected_token_fingerprint,
+                    )
                 except Exception:
                     logger.exception("Could not record rejected MCP credentials")
             error_str = str(e).lower()
             logger.error("Failed to execute MCP tool '%s': %s", self._name, e)
 
+            # The text check is only for errors without a status: an HTTP
+            # error's text holds its URL, which can contain "authentication".
             is_auth_error = (
-                unauthorized_response
+                has_auth_rejection_response(e)
                 or isinstance(e, MCPReauthenticationRequired)
-                or any(indicator in error_str for indicator in _AUTH_ERROR_INDICATORS)
+                or (
+                    status_code is None
+                    and not is_unreachable_error(e)
+                    and any(
+                        indicator in error_str for indicator in _AUTH_ERROR_INDICATORS
+                    )
+                )
             )
 
             if is_auth_error:
                 outcome = MCPToolCallStatus.AUTH_ERROR
-                return self._error_result(
-                    f"Authentication failed for the {self._name} tool from "
-                    f"{self._integration_name}. Reconnect {self._integration_name} "
-                    f"from the Plugins page. Original error: {str(e)}"
+                return failed_tool_result(
+                    tool_name=self._name,
+                    integration_id=self._integration_id,
+                    message=f"Authentication failed for the {self._name} tool "
+                    f"from {self._integration_name}. Reconnect "
+                    f"{self._integration_name} in Customize > Integrations. "
+                    f"Original error: {e}",
+                    status_code=status_code,
+                    is_auth_error=True,
                 )
-            return self._error_result(f"Tool execution failed: {str(e)}")
+            if is_unreachable_error(e):
+                return failed_tool_result(
+                    tool_name=self._name,
+                    integration_id=self._integration_id,
+                    message=f"The {self._name} tool could not reach "
+                    f"{self._integration_name}: {e}",
+                    is_unreachable=True,
+                )
+            if status_code is not None:
+                return failed_tool_result(
+                    tool_name=self._name,
+                    integration_id=self._integration_id,
+                    message=f"The {self._name} tool from {self._integration_name} "
+                    f"failed with HTTP {status_code}: {e}",
+                    status_code=status_code,
+                )
+            return self._error_result(f"Tool execution failed: {e}")
         finally:
             record_mcp_client_tool_outcome(
                 server_name=_server,
@@ -310,3 +364,7 @@ class MCPTool(Tool):
                 start_time=_start,
                 status=outcome,
             )
+            if outcome == MCPToolCallStatus.AUTH_ERROR and (
+                observation := CURRENT_QUERY_OBSERVATION.get()
+            ):
+                observation.mcp_auth_failed()

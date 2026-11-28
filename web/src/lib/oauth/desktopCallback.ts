@@ -4,7 +4,8 @@ export const DESKTOP_STATE_SUFFIX = ".desktop";
 /** Page served in place of a callback that must go back to the desktop app. */
 export const DESKTOP_HANDOFF_PATH = "/oauth/desktop-handoff";
 
-// Same allowlist as desktop/src-tauri/src/oauth_handoff.rs.
+// Same allowlist as oauth_handoff.rs in the earlier desktop app, which older
+// installs still run.
 const CALLBACK_PATHS = new Set([
   "/mcp/oauth/callback",
   "/federated/oauth/callback",

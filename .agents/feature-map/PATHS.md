@@ -31,6 +31,7 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/subagents/` | core-chat-loop, tools-framework |
 | `backend/onyx/tools/tool_implementations/skills/` | skills, tools-framework |
 | `backend/onyx/chat/files.py` | context-assembly, projects |
+| `backend/onyx/chat/file_preview.py` | file-store-and-user-files, code-execution |
 | `backend/onyx/chat/README.md` | core-chat-loop, context-assembly |
 | `backend/onyx/chat/models.py` | core-chat-loop, streaming-protocol |
 | `backend/onyx/chat/mention_models.py` | skills, streaming-protocol, chat-persistence |
@@ -38,7 +39,7 @@ covers new files that match it.
 | `backend/onyx/chat/chat_utils.py` | context-assembly, chat-persistence |
 | `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/deep_research/` | core-chat-loop, tools-framework |
-| `backend/onyx/chat/emitter.py`, `backend/onyx/chat/stream_buffer.py` | core-chat-loop, streaming-protocol |
+| `backend/onyx/chat/emitter.py`, `backend/onyx/chat/stream_buffer.py`, `backend/onyx/chat/agent_stream.py` | core-chat-loop, streaming-protocol |
 | `backend/onyx/chat/incognito.py`, `backend/onyx/db/incognito.py` | chat-persistence |
 | `backend/onyx/chat/incognito_context.py` | chat-persistence, context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly |
@@ -51,6 +52,8 @@ covers new files that match it.
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `backend/onyx/server/query_and_chat/models.py`, `backend/onyx/server/query_and_chat/session_loading.py`, `backend/onyx/server/query_and_chat/chat_utils.py` | core-chat-loop, chat-persistence |
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py`, `backend/onyx/server/query_and_chat/acp_stream.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
+| `backend/onyx/server/query_and_chat/chat_browser.py` | craft-sandboxes, code-execution |
+| `backend/onyx/server/query_and_chat/command_approvals.py` | craft-external-apps |
 | `backend/onyx/secondary_llm_flows/chat_session_naming.py` | chat-persistence |
 | `backend/onyx/chat/session_naming.py` | chat-persistence, core-chat-loop |
 | `backend/onyx/secondary_llm_flows/memory_update.py` | chat-preferences |
@@ -64,8 +67,8 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
 | `backend/onyx/tools/tool_implementations/python/`, `backend/onyx/tools/tool_implementations/code_mode/` | code-execution |
-| `backend/onyx/tools/tool_implementations/sandbox/`, `backend/onyx/prompts/sandbox_tools.py` | code-execution |
-| `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/custom/` | mcp-and-custom-tools |
+| `backend/onyx/tools/tool_implementations/sandbox/`, `backend/onyx/prompts/sandbox_tools.py`, `backend/onyx/prompts/browser_tools.py` | code-execution |
+| `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/api_app/` | mcp-and-custom-tools |
 | `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
 | `backend/onyx/tools/file_snapshot.py` | file-store-and-user-files, chat-persistence |
@@ -118,6 +121,7 @@ covers new files that match it.
 | `backend/onyx/connectors/teams/` | teams |
 | `backend/onyx/indexing/` | indexing-pipeline |
 | `backend/onyx/indexing/adapters/user_file_indexing_adapter.py` | file-store-and-user-files, indexing-pipeline |
+| `backend/onyx/indexing/adapters/chat_artifact_indexing_adapter.py`, `backend/onyx/indexing/chat_artifact_index.py` | file-store-and-user-files, indexing-pipeline |
 | `backend/onyx/background/indexing/`, `backend/onyx/db/index_attempt*.py`, `backend/onyx/db/indexing_coordination.py` | indexing-pipeline |
 | `backend/onyx/background/celery/tasks/docfetching/`, `backend/onyx/background/celery/tasks/docprocessing/`, `backend/onyx/background/celery/tasks/docconversion/`, `backend/onyx/background/celery/tasks/tabular_rechunk/` | indexing-pipeline |
 | `backend/onyx/file_store/document_batch_storage.py`, `backend/onyx/db/targeted_reindex.py`, `backend/onyx/redis/redis_docprocessing.py` | indexing-pipeline |
@@ -130,7 +134,7 @@ covers new files that match it.
 | `backend/ee/onyx/db/cc_pair_data_access.py`, `backend/ee/onyx/db/connector_manage_access.py` | cc-pairs-and-creds, access-control |
 | `backend/onyx/db/document.py`, `backend/onyx/db/chunk.py`, `backend/onyx/db/tag.py` | indexing-pipeline, document-index |
 | `backend/onyx/file_processing/`, `backend/onyx/file_store/`, `backend/onyx/db/file_record.py`, `backend/onyx/db/file_content.py`, `backend/onyx/db/user_file.py` | file-store-and-user-files |
-| `backend/onyx/background/celery/tasks/user_file_processing/` | file-store-and-user-files |
+| `backend/onyx/background/celery/tasks/user_file_processing/`, `backend/onyx/background/celery/tasks/chat_artifact_indexing/` | file-store-and-user-files |
 | `backend/onyx/server/documents/` | cc-pairs-and-creds, indexing-pipeline |
 
 ## Backend: configuration surfaces
@@ -179,12 +183,12 @@ covers new files that match it.
 | `web/src/lib/badges/` | editions-and-gating |
 | `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
-| `backend/onyx/tracing/`, `backend/onyx/server/manage/tracing/`, `backend/onyx/db/tracing.py`, `backend/onyx/server/metrics/` | observability |
+| `backend/onyx/tracing/`, `backend/ee/onyx/tracing/`, `backend/onyx/server/manage/tracing/`, `backend/onyx/db/tracing.py`, `backend/onyx/server/metrics/` | observability |
 | `backend/onyx/server/metrics/mcp_server.py` | mcp-server, observability |
 | `backend/onyx/server/metrics/mcp_client.py` | mcp-and-custom-tools, observability |
 | `backend/onyx/db/llm_usage.py`, `backend/onyx/db/usage.py`, `backend/onyx/db/user_usage.py`, `backend/onyx/db/system_usage.py`, `backend/onyx/server/features/usage/` | observability |
 | `backend/ee/onyx/server/analytics/`, `backend/ee/onyx/db/analytics.py`, `backend/ee/onyx/db/usage_export.py` | observability |
-| `backend/onyx/utils/audit.py`, `backend/ee/onyx/server/query_history/`, `backend/ee/onyx/db/query_history.py`, `backend/ee/onyx/server/reporting/`, `backend/ee/onyx/background/celery/tasks/usage_reporting/` | observability |
+| `backend/onyx/utils/audit.py`, `backend/onyx/utils/credential_audit.py`, `backend/ee/onyx/utils/audit.py`, `backend/ee/onyx/utils/credential_audit.py`, `backend/ee/onyx/utils/audit_stats.py`, `backend/ee/onyx/server/security/`, `web/src/views/admin/AuditLogsSection.tsx`, `backend/ee/onyx/server/query_history/`, `backend/ee/onyx/db/query_history.py`, `backend/ee/onyx/server/reporting/`, `backend/ee/onyx/background/celery/tasks/usage_reporting/` | observability |
 | `backend/onyx/db/cost_override.py`, `backend/onyx/llm/cost_overrides.py` | observability, llm-providers |
 | `backend/onyx/utils/telemetry.py`, `backend/onyx/utils/timing.py`, `backend/ee/onyx/utils/telemetry.py`, `backend/ee/onyx/utils/posthog_client.py` | observability |
 | `backend/onyx/utils/fleet_telemetry.py`, `backend/onyx/utils/fleet_query_telemetry.py`, `backend/onyx/utils/fleet_telemetry_collector.py`, `backend/onyx/utils/fleet_telemetry_resources.py`, `backend/onyx/db/fleet_enrollment.py`, `backend/onyx/db/fleet_telemetry.py`, `deployment/fleet-telemetry.md` | fleet-telemetry |
@@ -270,7 +274,7 @@ covers new files that match it.
 | `web/src/app/api/[...path]/route.ts` | chat-frontend |
 | `web/next.config.js` | chat-frontend, plugins |
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts`, `web/src/hooks/useContentEditable.ts` | chat-frontend |
-| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/chatScroll/`, `web/src/lib/multiModel/`, `web/src/lib/sandbox/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
+| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/chatScroll/`, `web/src/lib/chatFind/`, `web/src/lib/multiModel/`, `web/src/lib/sandbox/`, `web/src/lib/sidebar/`, `web/src/lib/shortcuts/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
 | `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
 | `web/src/lib/timeline/` | chat-frontend, craft-frontend |
 | `web/src/lib/outputPanel/`, `web/src/sections/output-panel/` | chat-frontend, craft-frontend |
@@ -302,7 +306,7 @@ covers new files that match it.
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |
 | `mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts` | mobile-app, streaming-protocol |
-| `desktop/`, `desktop-v2/`, `widget/`, `extensions/` | desktop-widget-extensions |
+| `desktop/`, `widget/`, `extensions/` | desktop-widget-extensions |
 
 ## Frontend: Craft
 
@@ -313,8 +317,8 @@ covers new files that match it.
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx`, `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-frontend |
 | `web/src/app/craft/services/workspaceDirectorySnapshots.ts`, `web/src/app/craft/services/outputInventorySnapshots.ts`, `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts`, `web/src/app/craft/services/filePreview.ts` | craft-frontend |
 | `web/tools/prepare-pdf-assets.cjs`, `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts`, `web/src/lib/spreadsheetPreview.ts` | craft-frontend |
-| `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
-| `web/src/lib/pptx/` | chat-frontend |
+| `web/src/lib/docx/` | craft-frontend |
+| `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
 | `web/src/app/app/scheduled-tasks/`, `web/src/sections/scheduledTasks/`, `web/src/lib/scheduledTasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
@@ -356,6 +360,7 @@ covers new files that match it.
 | `web/src/app/admin/llm-gateway/`, `web/src/views/admin/LLMGatewayPage/` | llm-gateway |
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
 | `web/src/app/admin/integrations/` | plugins |
+| `web/src/app/admin/plugins/` | plugins, skills |
 | `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx` | plugins |
 | `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/modals/plugins/` | plugins |
 | `web/src/sections/marketplaces/`, `web/src/lib/marketplaces/` | skills, plugins |

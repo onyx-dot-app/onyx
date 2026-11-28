@@ -63,6 +63,12 @@ class PendingToolInput(BaseModel):
     approval: bool = False
     # How the requester names the action, for display.
     display_name: str | None = None
+    # What the requester shows of the call; None shows the call's arguments.
+    display_arguments: dict[str, JsonValue] | None = None
+    # The integration of the action, for display.
+    app_name: str | None = None
+    # Whether the user can approve the action for the rest of the chat.
+    can_approve_for_chat: bool = True
 
 
 class HumanToolAnswer(BaseModel):
@@ -231,8 +237,8 @@ class NestedCallGate(Protocol):
 class ToolInvocation:
     """Tool inputs and runtime services.
 
-    The update callback captures progress before returning; tools may then mutate
-    their local data. Callbacks that retain updates must take an isolated copy.
+    The update callback publishes the progress object itself: the tool must not
+    change it, or an object inside it, afterwards; it sends a new value instead.
     """
 
     def __init__(
@@ -252,11 +258,13 @@ class ToolInvocation:
     ) -> None:
         self.call_id = call_id
         self.call_index = call_index
+        # A copy of the recorded call's arguments, or a merge of several
+        # calls'; the tool owns it.
         self.arguments = arguments
         self.cancellation = cancellation
         self.update = update
-        # The model's view of the conversation, after compaction, without result
-        # details. Read only.
+        # The model's view of the conversation, after compaction: the run's
+        # message objects, tool results with their details. Read only.
         self.messages = messages
         # Every recorded tool result of the conversation before this call, with
         # details and without compaction, oldest first: earlier steps, then this
@@ -323,7 +331,6 @@ class AgentTool:
         interrupted_result: ToolResult | None = None,
         display_name: str | None = None,
         approval_required: Collection[str] = (),
-        inner_call_hint: Callable[[str], str | None] | None = None,
     ) -> None:
         self.definition = definition
         self.execute = execute
@@ -345,9 +352,6 @@ class AgentTool:
         # Names of calls, this tool's own or those it makes for the model, that
         # wait for the user's approval before they run.
         self.approval_required = frozenset(approval_required)
-        # For a call of a name that is no offered tool: how to call it through
-        # this tool, when it is one of the tools that this tool's calls make.
-        self.inner_call_hint = inner_call_hint
 
     def snapshot(self) -> "AgentTool":
         definition = self.definition.model_copy(deep=True)
@@ -363,7 +367,6 @@ class AgentTool:
             interrupted_result=self.interrupted_result,
             display_name=self.display_name,
             approval_required=self.approval_required,
-            inner_call_hint=self.inner_call_hint,
         )
 
     @property

@@ -11,6 +11,7 @@ import {
   errorHandlingFetcher,
   FetchError,
   fetchErrorDetail,
+  isNotFoundError,
 } from "@/lib/fetcher";
 import { getTextAroundCursor, type CaretText } from "@/lib/contentEditable";
 import {
@@ -35,11 +36,17 @@ import {
 } from "@opal/components";
 import { toast } from "@opal/layouts";
 import {
+  bulkUpdateSkills,
+  deleteUserSkill,
   isSkillNameConflict,
   setSkillEnabled,
   skillNameConflictNames,
+  type SkillShareUpdatePayload,
 } from "@/lib/skills/api";
-import { refreshSkillListsChecked } from "@/lib/skills/cache";
+import {
+  refreshSkillLists,
+  refreshSkillListsChecked,
+} from "@/lib/skills/cache";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
@@ -51,8 +58,10 @@ import {
   type InheritOption,
 } from "@/lib/skills/installationPolicy";
 import { skillLimitOf } from "@/lib/skills/limits";
+import { canShareSkill } from "@/lib/skills/sharing";
 import type {
   ChatSkill,
+  CustomSkill,
   Skill,
   SkillInstallationPolicy,
   SkillsList,
@@ -85,8 +94,8 @@ export interface ChatSkillEntries {
 
 /** The skills that the user's chat agents get (`GET /api/skills/chat`).
  * Skill changes made in this app fetch them again (`lib/skills/cache.ts`).
- * Changes from elsewhere show after the chat input gains focus; a window
- * focus does not fetch them. */
+ * Changes from elsewhere show after the chat input or the window gains focus,
+ * at most once a minute. */
 export function useChatSkills({
   builtIns,
 }: {
@@ -101,7 +110,10 @@ export function useChatSkills({
       lastFetchRef.current = Date.now();
       return errorHandlingFetcher<ChatSkill[]>(url);
     },
-    { revalidateOnFocus: false }
+    {
+      revalidateOnFocus: true,
+      focusThrottleInterval: CHAT_SKILLS_FOCUS_THROTTLE_MS,
+    }
   );
   const onInputFocus = useCallback(() => {
     if (Date.now() - lastFetchRef.current < CHAT_SKILLS_FOCUS_THROTTLE_MS)
@@ -118,6 +130,7 @@ export function useChatSkills({
             slug: skill.name,
             name: skill.name,
             description: skill.short_description ?? skill.description,
+            pluginId: skill.plugin_id,
           })
         ),
       apps: [],
@@ -126,6 +139,27 @@ export function useChatSkills({
     [data, builtIns]
   );
   return { entries, onInputFocus };
+}
+
+/** The ids of the built-in skills that chat offers. The server leaves out
+ * the built-ins whose service is unavailable, and all of them when the
+ * deployment has no chat VMs. */
+export function useChatBuiltInSkillIds(): ReadonlySet<string> {
+  const { user } = useUser();
+  const { data } = useSWR<ChatSkill[]>(
+    user ? SWR_KEYS.chatSkills : null,
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
+  );
+  return useMemo(
+    () =>
+      new Set(
+        (data ?? [])
+          .filter((skill) => skill.built_in_skill_id !== null)
+          .map((skill) => skill.version_id)
+      ),
+    [data]
+  );
 }
 
 interface UseEntryPickerOptions {
@@ -431,23 +465,27 @@ export function useSkillLimitCopy(): SkillLimitCopy {
   return { describeError };
 }
 
-export interface SkillToggleTarget {
+export interface PluginToggleTarget {
   id: string;
   name: string;
   enabled: boolean;
+  /** False for a skill the user cannot turn off, such as a required one. */
+  can_toggle?: boolean;
+  /** A plugin's name is its label, not the names of the skills inside it. */
+  kind?: "skill" | "plugin";
 }
 
-export interface SkillEnablement {
+export interface PluginEnablement {
   setEnabled: (
-    item: SkillToggleTarget,
+    item: PluginToggleTarget,
     enabled: boolean,
     replaceConflict?: boolean
   ) => Promise<void>;
   isPending: (id: string) => boolean;
   /** The state to show: an in-flight change wins over the loaded one. */
-  enabledOf: (item: SkillToggleTarget) => boolean;
+  enabledOf: (item: PluginToggleTarget) => boolean;
   /** A skill whose name another enabled skill holds, waiting for a confirm. */
-  switchTarget: SkillToggleTarget | null;
+  switchTarget: PluginToggleTarget | null;
   /** The skills that the switch turns off. */
   switchConflicts: string[];
   switchModal: ModalCreationInterface;
@@ -456,11 +494,11 @@ export interface SkillEnablement {
 /** Turns skills on and off. Only one enabled skill holds a name, so turning
  * on a skill whose name is taken asks first, then replaces the other one.
  * `onEnabled` gets the skill as the server returns it after a turn on. */
-export function useSkillEnablement(
-  items: readonly SkillToggleTarget[],
+export function usePluginEnablement(
+  items: readonly PluginToggleTarget[],
   refresh: KeyedMutator<SkillsList>,
   onEnabled?: (skill: Skill) => void
-): SkillEnablement {
+): PluginEnablement {
   const t = useTranslations("skills");
   const { describeError } = useSkillLimitCopy();
   const { mutate, cache } = useSWRConfig();
@@ -469,28 +507,38 @@ export function useSkillEnablement(
   const [optimistic, setOptimistic] = useState<ReadonlyMap<string, boolean>>(
     new Map()
   );
-  const [switchTarget, setSwitchTarget] = useState<SkillToggleTarget | null>(
+  const [switchTarget, setSwitchTarget] = useState<PluginToggleTarget | null>(
     null
   );
   const [switchConflicts, setSwitchConflicts] = useState<string[]>([]);
 
-  function askToSwitch(item: SkillToggleTarget, conflicts: string[]) {
+  function askToSwitch(item: PluginToggleTarget, conflicts: string[]) {
     setSwitchTarget(item);
     setSwitchConflicts(conflicts);
     switchModal.toggle(true);
   }
 
   async function setEnabled(
-    item: SkillToggleTarget,
+    item: PluginToggleTarget,
     enabled: boolean,
     replaceConflict = false
   ): Promise<void> {
-    const holders = items.filter(
-      (candidate) =>
-        candidate.id !== item.id &&
-        candidate.name === item.name &&
-        candidate.enabled
-    );
+    // A plugin's label is not a skill name, so the server finds its clashes.
+    const holders =
+      item.kind === "plugin"
+        ? []
+        : items.filter(
+            (candidate) =>
+              candidate.id !== item.id &&
+              candidate.kind !== "plugin" &&
+              candidate.name === item.name &&
+              candidate.enabled
+          );
+    if (enabled && holders.some((holder) => holder.can_toggle === false)) {
+      switchModal.toggle(false);
+      toast.error(t("page.toasts.requiredHolder", { name: item.name }));
+      return;
+    }
     if (enabled && !replaceConflict && holders.length > 0) {
       // A holder found here has the same name, so the dialog names nothing.
       askToSwitch(item, []);
@@ -544,6 +592,8 @@ export function useSkillEnablement(
         askToSwitch(item, skillNameConflictNames(error));
         return;
       }
+      // Deleted elsewhere: the refreshed list drops it.
+      if (isNotFoundError(error)) void refreshSkillLists(mutate);
       toast.error(
         describeError(
           error,
@@ -577,13 +627,288 @@ export function useSkillEnablement(
   };
 }
 
+/** A row a bulk disable turns off. A row the user turned on that a same-name
+ * skill holds shows off, but would run once the holder turns off. */
+export function isDisableTarget(item: CustomSkill): boolean {
+  return item.enabled || item.name_held_by.length > 0;
+}
+
 /** Refreshes the skill lists after a change, and reports a failed refresh. */
-export function useRefreshSkillLists(): () => void {
+export function useRefreshPluginLists(): () => void {
   const t = useTranslations("skills");
   const { mutate, cache } = useSWRConfig();
   return () => {
     void refreshSkillListsChecked(mutate, cache).then((ok) => {
       if (!ok) toast.error(t("page.toasts.listRefreshFailed"));
     });
+  };
+}
+
+/** What the selected rows are: the copy names them. */
+export type PluginNoun = "skill" | "plugin";
+
+interface PluginDeleteOptions {
+  noun: PluginNoun;
+  /** Runs after the delete and before the list refresh. */
+  onDeleted?: (skill: Pick<Skill, "id" | "name">) => Promise<void>;
+}
+
+export interface PluginDelete {
+  deleting: boolean;
+  /** Tells whether the skill was deleted. */
+  remove: (skill: Pick<Skill, "id" | "name">) => Promise<boolean>;
+}
+
+/** Deletes one skill or plugin, refreshes the skill lists and toasts the
+ * result. */
+export function usePluginDelete({
+  noun,
+  onDeleted,
+}: PluginDeleteOptions): PluginDelete {
+  const skillCopy = useTranslations("skills.editor.toasts");
+  const pluginCopy = useTranslations("plugins.member.detail.remove");
+  const refreshLists = useRefreshPluginLists();
+  const [deleting, setDeleting] = useState(false);
+
+  async function remove(skill: Pick<Skill, "id" | "name">): Promise<boolean> {
+    if (deleting) return false;
+    setDeleting(true);
+    try {
+      await deleteUserSkill(skill.id);
+      await onDeleted?.(skill);
+      refreshLists();
+      toast.success(
+        noun === "plugin"
+          ? pluginCopy("done", { name: skill.name })
+          : skillCopy("deleted", { name: skill.name })
+      );
+      return true;
+    } catch (failure) {
+      toast.error(
+        failure instanceof Error && failure.message
+          ? failure.message
+          : noun === "plugin"
+            ? pluginCopy("failed")
+            : skillCopy("deleteFailed")
+      );
+      return false;
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return { deleting, remove };
+}
+
+export type BulkPluginAction = "share" | "enable" | "disable" | "delete";
+
+export interface PluginBulkFailure {
+  name: string;
+  detail: string;
+}
+
+interface PluginBulkSelectionOptions {
+  items: readonly CustomSkill[];
+  enablement: Pick<PluginEnablement, "isPending" | "enabledOf">;
+  noun: PluginNoun;
+}
+
+export interface PluginBulkSelection {
+  selectedIds: ReadonlySet<string>;
+  select: (ids: ReadonlySet<string>) => void;
+  /** The selected skills, with the enabled state to show. */
+  selectedItems: CustomSkill[];
+  /** The skills the delete confirm lists. */
+  deleteTargets: CustomSkill[];
+  toggleableItems: CustomSkill[];
+  canShareSelected: boolean;
+  busy: boolean;
+  /** A bulk action or a row toggle of the selection is in flight. */
+  locked: boolean;
+  /** A bulk action or a row toggle of the delete targets is in flight. */
+  deleteLocked: boolean;
+  failures: PluginBulkFailure[];
+  failuresTitle: string;
+  sharingOpen: boolean;
+  setSharingOpen: (open: boolean) => void;
+  deleteModal: ModalCreationInterface;
+  /** Opens the delete confirm for exactly these skills. */
+  confirmDelete: (items: CustomSkill[]) => void;
+  run: (
+    action: BulkPluginAction,
+    sharing?: SkillShareUpdatePayload
+  ) => Promise<void>;
+  /** Clears the selection and the failure report, as a filter change must. */
+  reset: () => void;
+}
+
+/** Selection plus bulk share, enable, disable and delete requests for an
+ * admin table of skills or plugins. */
+export function usePluginBulkSelection({
+  items,
+  enablement,
+  noun,
+}: PluginBulkSelectionOptions): PluginBulkSelection {
+  const bulkCopy = useTranslations("skills.bulk");
+  const pluginNounCopy = useTranslations("plugins.bulk");
+  // The strings that name the rows say "plugin" or "skill".
+  const nounCopy = noun === "plugin" ? pluginNounCopy : bulkCopy;
+  const listCopy = useTranslations("skills");
+  const { mutate, cache } = useSWRConfig();
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
+    new Set()
+  );
+  const [busy, setBusy] = useState(false);
+  const [sharingOpen, setSharingOpen] = useState(false);
+  const deleteModal = useCreateModal();
+  const [failures, setFailures] = useState<PluginBulkFailure[]>([]);
+  const [failedAction, setFailedAction] = useState<BulkPluginAction>("share");
+
+  const selectedItems = items
+    .filter((item) => selectedIds.has(item.id))
+    .map((item) => ({ ...item, enabled: enablement.enabledOf(item) }));
+  // A skill deleted elsewhere leaves the list but may stay in the selection.
+  const listedSelectedIds = useMemo(
+    () =>
+      new Set(
+        items.filter((item) => selectedIds.has(item.id)).map((item) => item.id)
+      ),
+    [items, selectedIds]
+  );
+  // Snapshotted on open: the selection clears when the delete lands, while
+  // the card still fades out.
+  const [deleteTargets, setDeleteTargets] = useState<CustomSkill[]>([]);
+  const canShareSelected =
+    selectedItems.length > 0 && selectedItems.every(canShareSkill);
+  const toggleableItems = selectedItems.filter((item) => item.can_toggle);
+  // A row toggle still in flight must settle before a bulk action may race it.
+  const locked =
+    busy || selectedItems.some((item) => enablement.isPending(item.id));
+  // Delete races only a toggle of the skills it deletes, not of the selection.
+  const deleteLocked =
+    busy || deleteTargets.some((item) => enablement.isPending(item.id));
+
+  async function run(
+    action: BulkPluginAction,
+    sharing?: SkillShareUpdatePayload
+  ) {
+    // Delete acts on exactly the skills its confirm listed.
+    const targets =
+      action === "delete"
+        ? deleteTargets
+        : action === "share"
+          ? selectedItems
+          : action === "enable"
+            ? toggleableItems.filter((item) => !item.enabled)
+            : toggleableItems.filter(isDisableTarget);
+    const skipped =
+      action === "enable" || action === "disable"
+        ? selectedItems.filter(
+            (item) => !item.can_toggle && item.enabled !== (action === "enable")
+          ).length
+        : 0;
+    if (action === "delete" ? deleteLocked : locked) return;
+    if (targets.length === 0) {
+      if (skipped) toast.info(nounCopy("skipped", { count: skipped }));
+      return;
+    }
+    setBusy(true);
+    setFailures([]);
+    try {
+      const skill_ids = targets.map((item) => item.id);
+      const result = await bulkUpdateSkills(
+        action === "share"
+          ? { action, skill_ids, sharing: sharing ?? {} }
+          : { action, skill_ids }
+      );
+      if (action === "delete") {
+        // A row delete may target a skill outside the selection.
+        const deleted = new Set(result.succeeded);
+        setSelectedIds(
+          (current) => new Set([...current].filter((id) => !deleted.has(id)))
+        );
+        // Drop the deleted skills now, so a failed refresh does not show them.
+        await mutate<SkillsList>(
+          SWR_KEYS.userSkills,
+          (current) =>
+            current && {
+              ...current,
+              customs: current.customs.filter(
+                (skill) => !deleted.has(skill.id)
+              ),
+            },
+          { revalidate: false }
+        );
+      } else {
+        setSelectedIds(
+          new Set(result.failed.map((failure) => failure.skill_id))
+        );
+      }
+      // Names come from the request targets: a skill deleted elsewhere in the
+      // meantime is gone from the refreshed list but must still be reported.
+      setFailedAction(action);
+      setFailures(
+        result.failed.map((failure) => ({
+          name:
+            targets.find((item) => item.id === failure.skill_id)?.name ??
+            failure.skill_id,
+          detail: failure.detail,
+        }))
+      );
+      if (result.succeeded.length)
+        toast.success(
+          nounCopy(action === "delete" ? "deleted" : "updated", {
+            count: result.succeeded.length,
+          })
+        );
+      if (skipped) toast.info(nounCopy("skipped", { count: skipped }));
+      // The report sits at the top of the list, out of view of a row menu.
+      if (result.failed.length)
+        toast.error(
+          nounCopy(action === "delete" ? "deleteFailure" : "partialFailure", {
+            count: result.failed.length,
+          })
+        );
+      // Another action's dialog may have opened while this one ran.
+      if (action === "share") setSharingOpen(false);
+      if (action === "delete") deleteModal.toggle(false);
+      if (!(await refreshSkillListsChecked(mutate, cache)))
+        toast.error(listCopy("page.toasts.listRefreshFailed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : nounCopy("failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function confirmDelete(targets: CustomSkill[]) {
+    setDeleteTargets(targets);
+    deleteModal.toggle(true);
+  }
+
+  return {
+    selectedIds: listedSelectedIds,
+    select: setSelectedIds,
+    selectedItems,
+    deleteTargets,
+    toggleableItems,
+    canShareSelected,
+    busy,
+    locked,
+    deleteLocked,
+    failures,
+    failuresTitle: nounCopy(
+      failedAction === "delete" ? "deleteFailure" : "partialFailure",
+      { count: failures.length }
+    ),
+    sharingOpen,
+    setSharingOpen,
+    deleteModal,
+    confirmDelete,
+    run,
+    reset: () => {
+      setSelectedIds(new Set());
+      setFailures([]);
+    },
   };
 }

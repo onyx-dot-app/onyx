@@ -63,6 +63,7 @@ function file(
     artifact_id: `artifact-${fileId}`,
     version: 1,
     thumbnail_file_id: null,
+    chat_id: null,
   };
 }
 
@@ -70,7 +71,7 @@ test("the Files list shows a tile for each file, with its title, else its name",
   const onOpen = jest.fn();
   const files = [
     file("file-2", "report.html", "Q3 report"),
-    file("file-3", "chart.png", null),
+    { ...file("file-3", "chart.png", null), mime_type: "image/png" },
     { ...file("file-4", "notes.md", null), display_path: "drafts/notes.md" },
     { ...file("file-5", "notes.md", null), display_path: "final/notes.md" },
   ];
@@ -151,7 +152,7 @@ test("a file's preview renders HTML in a sandboxed frame with its own actions", 
   );
   expect(fetchChatFile).toHaveBeenCalledWith(
     "file-2",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(within(preview).getByRole("link", { name: "Download" })).toBeVisible();
@@ -187,7 +188,7 @@ test("a text tile shows the start of its file once it nears the view", async () 
   expect(tile.querySelector("h1")).toHaveTextContent("Plan");
   // A file past the text limit keeps its icon, and loads nothing
   expect(fetchChatFile).toHaveBeenCalledTimes(1);
-  expect(fetchChatFile).toHaveBeenCalledWith("file-6", false, undefined);
+  expect(fetchChatFile).toHaveBeenCalledWith("file-6", "original", undefined);
 });
 
 test("an SVG tile draws its image and a CSV tile shows its rows", async () => {
@@ -254,7 +255,7 @@ test("a text tile reads its file through the preview's bounded loader", async ()
   );
   expect(tile).not.toHaveTextContent("Hidden");
   expect(tile.querySelector("svg")).not.toBeNull();
-  expect(fetchChatFile).toHaveBeenCalledWith("file-11", false, undefined);
+  expect(fetchChatFile).toHaveBeenCalledWith("file-11", "original", undefined);
 });
 
 test("a document tile shows its published thumbnail, else its icon", () => {

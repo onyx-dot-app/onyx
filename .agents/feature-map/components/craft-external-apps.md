@@ -32,6 +32,11 @@ already has credentials. It shows Connected only after the decision succeeds,
 and stays retryable after a failure. When the user declines, the agent gets a
 rejection and can choose another way.
 
+A command that a chat runs in its VM gets the same wait while the chat's
+`exec_command` call waits on it: the card shows on that call, with approve
+once, approve for this command, or reject. A background process gets an
+error instead ([[#chat-command-approvals]]).
+
 The user can set personal Allow, Ask or Blocked choices per action when
 the admin allows it. Scheduled tasks run in chat, not in Craft
 ([[craft-scheduled-tasks]]).
@@ -97,8 +102,11 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
                     each candidate the user runs; API before MCP
                     None -> no gate; host-claiming resolvers may still inject
  6 session          verified session tag required for any matched request
- 7 policy           resolve_craft_action_policies; strictest action governs
+ 7 policy           resolve_craft_action_policies (a chat: its agent's
+                    policies); strictest action governs
                     DENY -> 403   ASK -> session grant or approval wait
+                    (a chat: command grant or approval wait while a call
+                    waits on the command, else 403)
  8 recheck          after an approval: same actions, live policy, same run
  9 injection        CredentialInjectionDispatcher: OnyxPat, Integration
                     resolvers, first claim wins
@@ -106,11 +114,20 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
 ```
 
 **Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
-loads the integrations the sandbox owner can use. These are the integrations
-that are on for the user ([[mcp-and-custom-tools]] has the access rule).
+loads the integrations the sandbox owner can use (`_usable_ids`). For a Craft
+session these are the integrations that are on for the user
+([[mcp-and-custom-tools]] has the access rule).
 `sandbox_proxy/usable_integrations.py:UsableIntegrations`
 caches the integration ids of each user for 30 seconds, and the evaluator and
-the resolver share it. It also caches, for 30 seconds per tenant, one
+the resolver share it. A request whose session tag is a chat of the owner
+reads, on each request and with no cache, the integrations of that chat
+(`integrations/policy.py:chat_session_integrations`): the agent links, or,
+in the chat of a scheduled run, the task's current links, also after the run
+ends, narrowed by the chat's saved tool options (`apply_tool_options`),
+Required ones kept. These can include a linked integration that the user
+turned off. A chat on a custom agent that the user can no longer access
+(`onyx/db/persona.py:user_can_access_persona`) reads no integrations, and the
+default agent's integrations do not take their place. `UsableIntegrations` also caches, for 30 seconds per tenant, one
 `IntegrationMatchTarget` (`sandbox_proxy/resolvers/mcp_matching.py`) for each
 enabled integration: the MCP server URL, the OpenAPI base URL or the app URL
 patterns. `load_match_targets` reads them with one query for each kind table.
@@ -124,9 +141,13 @@ over an MCP server on a shared host, and the lowest id wins between API
 integrations. For an external app, `external_apps/matching/engine.py:url_matches_patterns`
 full-matches the URL against the app's patterns and `recognize_actions` maps
 the request to catalog actions. A request that matches no catalog action gets
-one synthetic `unspecified` action. A GraphQL request that also invokes a root
+the other-request action (`unspecified`). A GraphQL request that also invokes a root
 field no matched action covers gets `unspecified` next to the matched actions,
-so an unknown mutation cannot ride on a known read's Allow. An MCP server attributes by host and path
+so an unknown mutation cannot ride on a known read's Allow. A custom GraphQL
+app matches the same way under its endpoint URL
+(`integrations/kinds/api.py:ApiKindHandler._match_graphql`): each root field
+in the body maps to `query.<field>` or `mutation.<field>`, and a body with no
+root field, or with one that is no action, adds `unspecified`. An MCP server attributes by host and path
 prefix (`sandbox_proxy/resolvers/mcp_matching.py:match_request`) and returns
 the prefix length in `RequestMatch`; the evaluator picks the longest prefix
 across servers, and a tie matches nothing. The kind then parses the JSON-RPC
@@ -141,14 +162,29 @@ calls the one policy function (`integrations/policy.py:resolve_action_policies`)
 with the interactive approval mode and the stored actions, so Ask keeps the
 approval wait. An interactive session and the task catalog pass empty link
 settings, which inherit each action; no link (`None`) would block each
-action. The gate maps Allow, Ask and Blocked to the
-`ActionPolicy` values that approval rows store (`sandbox_proxy/addons/gate.py:resolve_gate_policies`),
-then forces `unspecified` on an API integration to Ask unless it resolved to
-DENY (`GateAddon._resolve_request_policies`). `AllMatchedActions` sorts actions
+action. The policy function itself makes each `always_asks` action
+(`unspecified`) Ask unless it is Blocked. The gate maps Allow, Ask and Blocked
+to the `ActionPolicy` values that approval rows store
+(`sandbox_proxy/addons/gate.py:resolve_gate_policies`). A request from a chat
+VM takes the policies of the agent of that chat
+(`integrations/policy.py:resolve_chat_action_policies`), and the evaluator
+matches it against that agent's integrations, linked ones that the user
+turned off included. The chat's saved tool options narrow both as they narrow
+the chat tools (`integrations/policy.py:apply_tool_options`). The evaluator
+does not match an integration that the chat turned off, unless it is
+Required: the proxy injects no credential and applies no policy, so a
+request to a public API still goes out without the app's credentials. An
+action that the chat turned off on an integration that still matches is
+Blocked. A chat Ask from a foreground command that a client streams waits
+for an approval card (see the command approvals below); a command grant of
+the command also covers an Ask after its call stops waiting; any other chat
+Ask gets `approval_needs_tool`. Its detail names
+the chat tools to call instead, and the connect tool for a user with no
+sign-in, or says that the app has no tool for the request, as for a URL-pattern app (`sandbox_proxy/addons/gate.py:_chat_tool_hint`, which asks `integrations/kinds/api.py:chat_tool_name` for each action; `GatedTarget.api_shape` gives the shape, None for an MCP server). `AllMatchedActions` sorts actions
 strictest first, and `governing_action` decides the verdict.
 
 **Approvals.** For an Ask verdict, `GateAddon._apply_session_grant` first looks
-for an "approve for session" grant. Otherwise `_persist_approval_row` commits a
+for an "approve for session" grant. Otherwise `_persist_approval_row` commits, off the event loop, a
 pending `ActionApproval`, announces it in Redis
 (`sandbox_proxy/approval_cache.py:announce_approval`), and `_await_decision`
 blocks on a wake key for `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`. The decision
@@ -172,7 +208,7 @@ request and stashes the context to answer it in the cache
 permission on the sandbox: allow for connected, reject for declined.
 
 **Craft catalog.** Craft uses the integrations that are on for the user
-(`integrations/craft.py:list_runnable_integrations`).
+(`integrations/craft.py:list_turned_on_integrations`).
 `server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
@@ -241,7 +277,20 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    only for a session of the IP-resolved user. A forged tag can only move an
    approval to another session of the same user. The comment in
    `GateAddon._extract_session_tag` explains why signing the MCP session header
-   adds nothing. Keep the user check. The initial IP listing fails loudly when
+   adds nothing. Keep the user check. A tag with a command ID is a chat's,
+   and a tag without one is a build session's: each chat VM command sends
+   `<chat session>.<command ID>` as the proxy URL user (`server/features/build/sandbox/firecracker/harness_sandbox.py:command_proxy_user`,
+   parsed by `sandbox_proxy/addons/gate.py:parse_session_tag`), and `IdentityResolver.resolve_chat_session`
+   accepts a chat of the owner that is not deleted. Such a request takes the
+   agent policies of that chat (`integrations/policy.py:resolve_chat_action_policies`)
+   with no chat grant and no run mode. Allow goes out, and Blocked is denied.
+   Ask is held only while a call of the chat waits on the command
+   ([[#chat-command-approvals]]); otherwise, as for a background process, it is
+   refused with `approval_needs_tool`, which names the chat tool
+   (`integrations/kinds/api.py:chat_tool_name`: `custom__<id>__<action key>` for a REST or GraphQL app,
+   `app__<id>__<action>` for a preset), or says that the app has no tool for
+   the request, as for a request that matches only `unspecified`. The command ID is a same-user hint like
+   the session tag: a process of the VM can send another command's ID. The initial IP listing fails loudly when
    two sandboxes share an IP
    (`backend/onyx/sandbox_proxy/sandbox_identity/kubernetes.py:K8sInformerLookup._initial_list`,
    `backend/onyx/sandbox_proxy/sandbox_identity/docker.py:DockerEventsLookup._initial_sync`).
@@ -275,7 +324,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    an off-catalog request run unattended.
    `sandbox_proxy/addons/gate.py:GateAddon._session_grant` returns false for
    it, and `backend/onyx/server/features/build/approvals/api.py:ApprovalView.can_approve_for_session` refuses
-   "approve for session" for any whole-domain action on an external app.
+   "approve for session" by the same `always_asks` check. The rule covers
+   only API apps: an MCP tool named `unspecified` follows the normal
+   approval rules.
    The admin Actions tab (`web/src/sections/integrations/IntegrationActionsTab.tsx`)
    reads `always_asks` on each action and does not offer Allow for it.
 8. `approval-single-writer` **Approval decisions have one writer.** Only
@@ -316,6 +367,72 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     (`backend/onyx/server/features/build/connect_app.py:_PENDING_TTL_S`). "Connected" only allows the permission;
     it does not check that a credential exists. The proxy still gates the
     later calls.
+13. `chat-command-approvals` **A chat command's Ask waits only on a call that
+    shows its card.** The `exec_command` or `write_stdin` call that waits on a
+    command marks it in the foreground
+    (`sandbox_proxy/approval_cache.py:mark_command_foreground`, renewed each
+    second, 60 s TTL) through
+    `tools/tool_implementations/sandbox/command_approvals.py:CommandApprovals`,
+    which the harness calls before the start or the write
+    (`server/features/build/sandbox/harness_base.py:CommandHold`). The gate holds the request only while the
+    mark names the tagged chat, writes an `action_approval` row with
+    `chat_session_id` and `command_id` (method, origin, path and body as its payload,
+    the body decoded by `external_apps/presentation/decode.py:decode_payload`;
+    `body_bytes` in place of a body that is not JSON, is over 64 KB, or holds
+    a value JSONB refuses),
+    announces it under the command ID, and sends no notification. It checks
+    the mark again after the write and expires its own row when the call
+    ended, so no row waits that no card shows. The call's watcher shows the row
+    as a `ToolApprovalRequest` progress card and its end as the resolution;
+    `HarnessSandbox._collect` does not yield while a row of the command waits.
+    The user decides through `POST /chat/approvals/{id}/decision`
+    (`server/query_and_chat/command_approvals.py:decide_command_approval`):
+    approve once (also `approve_session`, from clients with no command
+    scope), `approve_command` (`decided_via` COMMAND_GRANT, one cache key
+    per command, chat and `integration:action` that the gate checks before it
+    holds, which also approves the command's other waiting rows that the
+    command's grants together cover), or reject. An approval of a request that
+    the current policies block, or whose integration is gone or turned off,
+    saves a rejection by the policy (`decided_via` POLICY) and grants nothing;
+    the held request then gets 403 `policy_denied`, not `user_rejected`.
+    The scan does the same check for each covered row (one policy read for
+    all of them), so a covered row with a now-blocked action is a rejection
+    by the policy, not an approval. A covered row with an action that asks
+    now but did not ask when it arrived keeps waiting: the gate's recheck
+    refuses a command grant that misses a current Ask action. For the same
+    reason, `approve_command` on such a row approves it once (`decided_via`
+    USER) and saves no grant.
+    The decision records its row and commits, then saves the grant (best
+    effort: a cache error only makes later requests ask again), wakes the
+    proxy, and scans the waiting rows: a grant exists only for a committed
+    approval, a request that misses the grant committed its row before that
+    check, and two decisions never lock each other's rows. A repeated
+    decision runs the wake and the scan again. A failed grant drop is logged,
+    and the command's result still returns. A grant covers the command until it exits, also after the
+    call stops waiting on it (the gate reads it when the foreground mark is gone, so it sees a grant
+    saved before the call stopped waiting),
+    and never covers an action that always asks. The harness drops the
+    command's grants when a call sees the command end
+    (`server/features/build/sandbox/firecracker/harness_sandbox.py:_end_exec_session`,
+    `sandbox_proxy/approval_cache.py:drop_command_grants`), so a process that the command left
+    running gets none; the 4 h TTL (the VM command deadline) covers an end
+    that no call reads. The drop first sets an `ended` mark with the grant TTL,
+    and a grant save checks it after its write and removes the grant, so a
+    save that races the drop (a Stop during the decision) leaves no grant. The
+    recheck before forwarding checks a COMMAND_GRANT row against the current
+    policy: the request's Ask actions must be Ask actions of its own row, so
+    the decided request needs no saved grant. Only a call whose `ToolContext.
+    shows_command_approvals` is set holds: a root agent of a streamed turn
+    (`chat/agent.py:build_chat_agent`) that the desktop launcher did not
+    send; a background agent, a launcher turn or a `run_chat_turn` caller
+    gets `approval_needs_tool`. When the last call of
+    this process that waits on the command ends, `CommandApprovals.end`
+    refuses the command's waiting rows: REJECTED by the user on a Stop,
+    EXPIRED otherwise. Each card ends with its row's outcome; a stopped call
+    reports no progress, so `chat/renderer.py:ToolRenderer.complete` closes
+    its open cards as `cancelled`. These rows are not in
+    `approval_request`, so the chat run state, replay and Stop routes never
+    read them.
 
 ---
 
@@ -345,6 +462,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 - An external app or MCP server that the old admin routes create has no
   integration row until the integration routes replace them, so the proxy does
   not match it.
+- The tech debt register holds
+  [URL-pattern apps](../TECH-DEBT.md#url-pattern-apps) and the
+  [Linear and Notion presets hidden from the catalog](../TECH-DEBT.md#linear-and-notion-presets-hidden-from-the-catalog).
 
 ---
 
@@ -421,5 +541,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 - Matching and policies: `backend/tests/unit/external_apps/` and
   `backend/tests/external_dependency_unit/integrations/`.
 - Approval routes: `backend/tests/external_dependency_unit/craft/`.
+- Chat command approvals: `backend/tests/unit/sandbox_proxy/test_gate.py`,
+  `backend/tests/unit/sandbox_proxy/test_command_grants.py` and
+  `backend/tests/external_dependency_unit/sandbox_proxy/test_chat_command_approvals.py`.
+  Only a Firecracker VM proves the proxy URL user through the host relay.
 - End to end with a real sandbox and proxy:
   `backend/tests/integration/tests/craft/docker_e2e/`.
