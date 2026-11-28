@@ -7,6 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
 
@@ -44,6 +45,34 @@ class JSMRequest:
     web_link: str
     comments: list[JSMComment] = field(default_factory=list)
     extra_fields: dict[str, Any] = field(default_factory=dict)
+
+
+
+def _parse_utc_dt(value: str) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.strip().replace("Z", "+00:00")
+    # Support Jira's "+0000" / "-0500" offset format on all Python versions
+    if len(normalized) >= 5 and normalized[-5] in ("+", "-") and normalized[-4:].isdigit():
+        normalized = f"{normalized[:-2]}:{normalized[-2:]}"
+    try:
+        dt = datetime.fromisoformat(normalized)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _select_latest_iso(candidates: list[str], fallback: str = "") -> str:
+    parsed: list[tuple[datetime, str]] = []
+    for ts in candidates:
+        dt = _parse_utc_dt(ts)
+        if dt is not None:
+            parsed.append((dt, dt.isoformat()))
+    if parsed:
+        return max(parsed, key=lambda item: item[0])[1]
+    return fallback
 
 
 def normalize_base_url(base_url: str) -> str:
@@ -139,7 +168,10 @@ class JSMClient:
                 {"fields": "updated"},
             )
             return str((data.get("fields") or {}).get("updated") or "")
-        except JSMClientError:
+        except JSMClientError as exc:
+            # Propagate rate-limit / transient / auth errors so polling never silently skips edited tickets.
+            if exc.status_code != 404:
+                raise
             return ""
 
     def list_request_comments(
@@ -225,7 +257,7 @@ class JSMClient:
                 issue_updated_iso = self.get_issue_updated_timestamp(issue_key) if issue_key else ""
                 candidates = [ts for ts in (issue_updated_iso, status_iso, created_iso) if ts]
                 candidates.extend(c.created_at for c in comments if c.created_at)
-                updated_iso = max(candidates) if candidates else created_iso
+                updated_iso = _select_latest_iso(candidates, fallback=created_iso)
 
                 yield JSMRequest(
                     issue_id=str(raw.get("issueId") or issue_key),

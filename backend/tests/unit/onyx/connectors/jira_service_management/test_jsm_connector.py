@@ -157,5 +157,49 @@ class TestJSMConnector(unittest.TestCase):
             client.resolve_service_desk_id("UNKNOWN")
 
 
+    def test_mixed_timezone_offsets_compare_utc_instants(self) -> None:
+        def tz_http(url: str, headers: dict, timeout: int):
+            if "/rest/api/3/issue/ITSD-202" in url:
+                # 01:30 -0500 == 06:30 UTC (later than 01:59 -0400 == 05:59 UTC)
+                return 200, {"id": "2002", "key": "ITSD-202", "fields": {"updated": "2026-11-01T01:30:00-0500"}}
+            if "/request?" in url:
+                return 200, {
+                    "isLastPage": True,
+                    "values": [{
+                        "issueId": "2002",
+                        "issueKey": "ITSD-202",
+                        "serviceDeskId": "42",
+                        "requestTypeId": "7",
+                        "requestFieldValues": [{"fieldId": "summary", "value": "DST offset check"}],
+                        "currentStatus": {"status": "Open", "statusDate": {"iso8601": "2026-11-01T01:59:00-0400"}},
+                        "createdDate": {"iso8601": "2026-11-01T00:00:00Z"},
+                        "_links": {"web": "https://acme.atlassian.net/browse/ITSD-202"},
+                    }],
+                }
+            if "/comment" in url:
+                return 200, {"isLastPage": True, "values": []}
+            return 404, {}
+
+        client = JSMClient(base_url="https://acme.atlassian.net", bearer_token="pat", http_get=tz_http)
+        conn = JiraServiceManagementConnector(jira_base_url="https://acme.atlassian.net", service_desk_id="42")
+        conn.set_client(client)
+        start_ts = datetime(2026, 11, 1, 6, 0, 0, tzinfo=timezone.utc).timestamp()
+        end_ts = datetime(2026, 11, 1, 7, 0, 0, tzinfo=timezone.utc).timestamp()
+        batches = list(conn.poll_source(start=start_ts, end=end_ts))
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(batches[0][0].doc_updated_at, datetime(2026, 11, 1, 6, 30, 0, tzinfo=timezone.utc))
+
+    def test_retryable_timestamp_lookup_failure_propagates(self) -> None:
+        def rate_limited_http(url: str, headers: dict, timeout: int):
+            if "/rest/api/3/issue/ITSD-101" in url:
+                return 429, {"errorMessage": "Rate limit exceeded"}
+            return self._mock_http(url, headers, timeout)
+
+        client = JSMClient(base_url="https://acme.atlassian.net", bearer_token="pat", http_get=rate_limited_http)
+        with self.assertRaises(JSMClientError) as ctx:
+            list(client.iter_requests(service_desk_id="42", include_comments=False))
+        self.assertEqual(ctx.exception.status_code, 429)
+
+
 if __name__ == "__main__":
     unittest.main()
