@@ -49,6 +49,8 @@ jobs:
         with:
           # chart-releaser needs full history to resolve the release commit.
           fetch-depth: 0
+          # chart-app-version.sh reads the Onyx release tags.
+          fetch-tags: true
           # cr authenticates with CR_TOKEN, not the git credential helper.
           persist-credentials: false
 
@@ -80,11 +82,19 @@ jobs:
       # index.yaml entry and the OCI artifact all ship the same bytes.
       - name: Package chart
         id: package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           helm dependency build "${CHART_DIR}"
           mkdir -p "${PACKAGE_DIR}"
-          helm package "${CHART_DIR}" --destination "${PACKAGE_DIR}"
+          # appVersion = the newest stable Onyx tag, the release behind the
+          # default global.version "latest". The Firecracker image tags
+          # follow it, so a default install needs no global.version pin.
+          app_version="$(.github/scripts/chart-app-version.sh)"
+          echo "appVersion ${app_version}"
+          helm package "${CHART_DIR}" --app-version "${app_version}" \
+            --destination "${PACKAGE_DIR}"
 
           # Derive the version from the artifact helm just wrote rather than by
           # parsing Chart.yaml, so the release, the index entry and the OCI tag
@@ -93,6 +103,18 @@ jobs:
           [ -n "$package" ] || { echo "helm package produced no tarball" >&2; exit 1; }
           version="$(basename "$package" .tgz)"
           version="${version#onyx-}"
+
+          # A re-run after a newer Onyx tag would stamp another appVersion
+          # under the same chart version. Reuse the released tarball so the
+          # remaining publish steps (index, GHCR) ship the same bytes.
+          release="helm/onyx-${version}"
+          if gh release view "${release}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            rm -f "${package}"
+            gh release download "${release}" --repo "${GITHUB_REPOSITORY}" \
+              --pattern "onyx-${version}.tgz" --dir "${PACKAGE_DIR}"
+            [ -f "${package}" ] || { echo "${release} has no onyx-${version}.tgz asset" >&2; exit 1; }
+            echo "Reusing the ${release} tarball"
+          fi
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "package=${package}" >> "$GITHUB_OUTPUT"
