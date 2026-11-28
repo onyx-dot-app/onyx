@@ -190,13 +190,3 @@ def get_all_tenant_ids() -> list[str]:
             if not tenant_id.startswith(TENANT_TEMPLATE_SCHEMA)
         }
     )
-
-
-def get_template_shards() -> list[str]:
-    """Shards holding a rollout template. Every shard has its own copy under one
-    name, so maintenance that must reach them, such as key rotation, goes by shard."""
-    return sorted(
-        shard_name
-        for shard_name, tenant_ids in get_tenant_ids_by_shard().items()
-        if TENANT_TEMPLATE_SCHEMA in tenant_ids
-    )

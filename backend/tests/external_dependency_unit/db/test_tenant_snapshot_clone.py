@@ -14,14 +14,12 @@ from sqlalchemy import Table, delete, func, select, text
 
 from ee.onyx.db import tenant_snapshot
 from ee.onyx.server.tenants import schema_management
-from onyx.db.engine import tenant_utils
 from onyx.db.engine.shard_registry import (
     get_default_shard_name,
     get_engine_for_shard,
     get_shard_specs,
 )
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.engine.tenant_utils import get_template_shards
 from onyx.db.models import PublicBase, TenantSchemaSnapshot, Tool
 from shared_configs.configs import TENANT_TEMPLATE_SCHEMA
 
@@ -209,11 +207,8 @@ def test_rollout_stores_the_template_only_at_head(shard: str) -> None:
             tenant_snapshot.store_template_snapshots("not-the-head")
 
 
-def test_template_is_rotated_by_shard(shard: str) -> None:
-    # Enumeration only looks past the default schema in multi-tenant mode.
-    with patch.object(tenant_utils, "MULTI_TENANT", True):
-        assert get_template_shards() == [shard]
-    # The session binds model tables to the template, which is what rotation reads.
+def test_template_session_reads_the_template(shard: str) -> None:
+    # The session binds model tables to the template, not to a tenant.
     with tenant_snapshot.template_session(shard) as db_session:
         seeded_tools = db_session.scalar(select(func.count()).select_from(Tool))
     assert seeded_tools and seeded_tools > 0

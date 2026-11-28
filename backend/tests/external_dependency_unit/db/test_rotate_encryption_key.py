@@ -36,6 +36,7 @@ from ee.onyx.db.rotate_encryption_key import (
     EncryptedColumn,
     RotationMode,
     ValueOutcome,
+    classify_value,
     discover_encrypted_columns,
     rotate_encryption_key,
     rotate_schema,
@@ -47,7 +48,6 @@ from ee.onyx.utils.encryption import (
     build_keyring,
     decrypt_with_keyring,
     encrypt_with_keyring,
-    is_current_ciphertext,
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import DocumentSource
@@ -75,6 +75,11 @@ PROVIDER_TABLE = cast(Table, InternetSearchProvider.__table__)
 SANDBOX_TABLE = cast(Table, Sandbox.__table__)
 SCRATCH_TABLES = (CREDENTIAL_TABLE, PROVIDER_TABLE, SANDBOX_TABLE)
 CREDENTIAL_JSON = '{"api_key": "sk-test-1234",  "endpoint": "https://example.com"}'
+
+
+def _is_current(keyring: Keyring, raw: bytes) -> bool:
+    outcome = classify_value(keyring, raw, is_json=False, decrypt_current=False)
+    return outcome.outcome == ValueOutcome.CURRENT
 
 
 def _column(table: Table, name: str) -> EncryptedColumn:
@@ -265,7 +270,7 @@ class TestConversion:
         with session_on(schema) as db_session:
             for credential_id in (legacy_id, plain_id):
                 raw = raw_credential(db_session, credential_id)
-                assert raw is not None and is_current_ciphertext(NEW, raw)
+                assert raw is not None and _is_current(NEW, raw)
                 # The same string, spacing included: a JSON column is not re-dumped.
                 assert decrypt_with_keyring(RETIRED, raw).plaintext == CREDENTIAL_JSON
             assert (
@@ -357,7 +362,7 @@ class TestConversion:
         }
         with session_on(schema) as db_session:
             raw = raw_credential(db_session, credential_id)
-        assert raw is not None and is_current_ciphertext(next_keyring, raw)
+        assert raw is not None and _is_current(next_keyring, raw)
 
 
 class TestVerification:
@@ -459,7 +464,7 @@ class TestPartialSchemas:
         }
         with session_on(schema) as db_session:
             raw = raw_credential(db_session, credential_id)
-        assert raw is not None and is_current_ciphertext(NEW, raw)
+        assert raw is not None and _is_current(NEW, raw)
 
     def test_a_table_the_role_cannot_read_fails_instead_of_being_skipped(
         self, schema: str
@@ -540,7 +545,7 @@ class TestConcurrentWriters:
         }
         with session_on(schema) as db_session:
             raw = raw_credential(db_session, credential_id)
-        assert raw is not None and is_current_ciphertext(NEW, raw)
+        assert raw is not None and _is_current(NEW, raw)
         assert decrypt_with_keyring(NEW, raw).plaintext == '{"v": "newer"}'
 
     def test_update_by_an_envelope_writer_after_the_read_survives(
@@ -694,7 +699,7 @@ class TestInterruptedRun:
                     select(CREDENTIAL_TABLE.c.credential_json.cast(LargeBinary))
                 ).scalars()
             ]
-        current = sum(is_current_ciphertext(NEW, raw) for raw in rows)
+        current = sum(_is_current(NEW, raw) for raw in rows)
         assert current == rotation._BATCH_SIZE, (
             "one batch committed, the next rolled back"
         )
@@ -840,7 +845,7 @@ class TestPhysicalCoverage:
         ].items():
             with session_on(schema_name, shard_name) as db_session:
                 raw = raw_credential(db_session, credential_id)
-            assert raw is not None and is_current_ciphertext(NEW, raw), (
+            assert raw is not None and _is_current(NEW, raw), (
                 shard_name,
                 schema_name,
             )
@@ -902,7 +907,7 @@ class TestPhysicalCoverage:
             ]
             with session_on(TENANT_TEMPLATE_SCHEMA, shard_name) as db_session:
                 raw = raw_credential(db_session, credential_id)
-            assert raw is not None and not is_current_ciphertext(NEW, raw)
+            assert raw is not None and not _is_current(NEW, raw)
 
     @pytest.mark.usefixtures("two_shards")
     def test_verify_reads_the_snapshot_a_new_tenant_would_be_cloned_from(
@@ -972,7 +977,7 @@ class TestPhysicalCoverage:
         ].items():
             with session_on(schema_name, shard_name) as db_session:
                 raw = raw_credential(db_session, credential_id)
-            assert raw is not None and not is_current_ciphertext(NEW, raw)
+            assert raw is not None and not _is_current(NEW, raw)
 
     def test_a_sandbox_on_only_one_copy_of_a_moved_tenant_is_converted(
         self, two_shards: dict[str, Any]
