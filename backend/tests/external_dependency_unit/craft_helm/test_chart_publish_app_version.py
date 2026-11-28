@@ -157,6 +157,41 @@ def test_published_pre_v6_chart_keeps_pod_sandboxes(
     assert "pinned" in firecracker.stderr
 
 
+def test_explicit_v6_backend_tags_win_over_a_pre_v6_app_version(
+    tmp_path: Path,
+) -> None:
+    """The appVersion describes only the images without a tag of their own."""
+    v6_tags = [
+        *_REGISTRATION,
+        "--set-string",
+        "api.image.tag=v6.0.0",
+        "--set-string",
+        "celery_shared.image.tag=v6.0.0",
+    ]
+    docs = _docs(_render_published(tmp_path, "v5.2.0", v6_tags))
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == "auto"
+
+    one_tag = [*_REGISTRATION, "--set-string", "api.image.tag=v6.0.0"]
+    docs = _docs(_render_published(tmp_path / "one", "v5.2.0", one_tag))
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == "pod"
+
+
+@pytest.mark.parametrize(
+    ("app_version", "runtime"), [("v5.2.0", "pod"), ("v6.0.0", "auto")]
+)
+def test_an_unset_global_version_acts_as_latest(
+    tmp_path: Path, app_version: str, runtime: str
+) -> None:
+    docs = _docs(
+        _render_published(
+            tmp_path, app_version, [*_REGISTRATION, "--set", "global.version=null"]
+        )
+    )
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == runtime
+    agent = _find(docs, "DaemonSet", "onyx-craft-fc-host-agent")
+    assert (agent is not None) == (runtime == "auto")
+
+
 def test_pinned_global_version_wins_over_app_version(tmp_path: Path) -> None:
     docs = _docs(
         _render_published(

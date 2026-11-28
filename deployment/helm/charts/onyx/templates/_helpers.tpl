@@ -309,27 +309,33 @@ Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
 
 {{/*
 "true" when the Onyx images are a release before v6.0.0: global.version,
-or the chart appVersion for "latest" (onyx.craftAppVersionIsLatest), or
-an api or celery_shared image tag that overrides it.
+or an api or celery_shared image tag that overrides it. For "latest"
+(onyx.craftAppVersionIsLatest), the chart appVersion stands in for each of
+the two images that has no tag of its own.
 */}}
 {{- define "onyx.craftPreV6App" -}}
-{{- $v := toString .Values.global.version -}}
-{{- if include "onyx.craftAppVersionIsLatest" . -}}{{- $v = toString .Chart.AppVersion -}}{{- end -}}
+{{- $api := toString (dig "image" "tag" "" (.Values.api | default dict)) -}}
+{{- $celery := toString (dig "image" "tag" "" (.Values.celery_shared | default dict)) -}}
+{{- $candidates := list (toString (.Values.global.version | default "")) $api $celery -}}
+{{- if include "onyx.craftAppVersionIsLatest" . -}}
+{{- $app := toString .Chart.AppVersion -}}
+{{- $candidates = list ($api | default $app) ($celery | default $app) -}}
+{{- end -}}
 {{- $old := false -}}
-{{- range list $v (dig "image" "tag" "" (.Values.api | default dict)) (dig "image" "tag" "" (.Values.celery_shared | default dict)) -}}
-{{- if include "onyx.craftPreV6Version" (toString .) -}}{{- $old = true -}}{{- end -}}
+{{- range $candidates -}}
+{{- if include "onyx.craftPreV6Version" . -}}{{- $old = true -}}{{- end -}}
 {{- end -}}
 {{- if $old -}}true{{- end -}}
 {{- end }}
 
 {{/*
-"true" when global.version is empty, "latest" or "latest-dev". A published
+"true" when global.version is unset, empty, "latest" or "latest-dev". A published
 chart carries the newest stable Onyx tag as its appVersion
 (helm-chart-releases.yml), the release that "latest" points at. It says
 nothing about "edge" or "beta" images.
 */}}
 {{- define "onyx.craftAppVersionIsLatest" -}}
-{{- if has (trimSuffix "-dev" (toString .Values.global.version)) (list "" "latest") -}}true{{- end -}}
+{{- if has (trimSuffix "-dev" (toString (.Values.global.version | default ""))) (list "" "latest") -}}true{{- end -}}
 {{- end }}
 
 {{/* "true" when the tag is a release before v6.0.0, also a short one such as 5 or 5.1. */}}
@@ -490,7 +496,7 @@ drive only under pinned tags (craft-runtime-release.yml), from v6 on.
 {{- $app := toString .Chart.AppVersion -}}
 {{- $appTag := "" -}}
 {{- if and (include "onyx.craftAppVersionIsLatest" .) (not (include "onyx.craftPreV6Version" $app)) -}}{{- $appTag = include "onyx.craftFcReleaseTagOf" $app -}}{{- end -}}
-{{- include "onyx.craftFcReleaseTagOf" (toString .Values.global.version) | default $appTag -}}
+{{- include "onyx.craftFcReleaseTagOf" (toString (.Values.global.version | default "")) | default $appTag -}}
 {{- end }}
 
 {{/*
