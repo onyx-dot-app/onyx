@@ -119,6 +119,12 @@ To find internal notes, each permission sync reads the comments of each ticket t
 On an account with many tickets, this makes the sync much slower and uses much of your Zendesk API rate limit.
 Turn it on only if end users need to find their tickets in Onyx.
 
+### Accounts with several brands
+
+Zendesk can limit an agent to some brands, whatever their role allows.
+**Sync with Zendesk** does not support accounts with more than one brand yet: its checks fail,
+and no permission sync runs. For such an account, use **Everyone in Your Organization** or **Specific Groups**.
+
 ### Token and schedule
 
 The API token must belong to a Zendesk **admin**. Only admins can read the ticket export, every restricted article,

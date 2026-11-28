@@ -495,3 +495,14 @@ class ZendeskSourceOperations(SourceOperations):
             for page in self._cursor_pages("help_center/user_segments", "user_segments")
             for segment in page
         ]
+
+    @source_operation(
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def count_brands(self) -> int:
+        """How many brands the account has."""
+        return sum(len(page) for page in self._cursor_pages("brands", "brands"))

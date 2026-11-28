@@ -389,6 +389,7 @@ def _configure_zendesk_spy(spy: MagicMock) -> None:
     spy.iterate_organizations.side_effect = lambda: iter([[ZendeskOrganization(id=1)]])
     spy.iterate_organization_users.side_effect = lambda **_kwargs: iter([[]])
     spy.list_user_segments.return_value = []
+    spy.count_brands.return_value = 1
 
 
 def _configure_azure_datalake_spy(spy: MagicMock) -> None:

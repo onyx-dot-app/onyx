@@ -10,7 +10,10 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CredentialCapability,
 )
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.zendesk.capability_checks import (
     PROBE_PAGE_SIZE,
     gateway_from_context,
@@ -131,9 +134,42 @@ class _TicketAccessCheck(CapabilityCheck[ZendeskConnectorConfig]):
         return None
 
 
+class _SingleBrandCheck(CapabilityCheck[ZendeskConnectorConfig]):
+    """Zendesk can limit an agent to some brands whatever their role allows.
+    The sync does not model brands yet, so it refuses multi-brand accounts
+    rather than grant one brand's tickets to another brand's agents."""
+
+    config_class = ZendeskConnectorConfig
+
+    def __init__(self, capability: CredentialCapability) -> None:
+        super().__init__(
+            capability=capability,
+            # One id for both capabilities, so the runner reads brands once.
+            check_id="zendesk_single_brand",
+            display_name="The account has one brand",
+            requires_connector_instance=False,
+            remediation=(
+                "Permission sync does not support Zendesk accounts with more than "
+                "one brand yet. Use Everyone in Your Organization or Specific Groups."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        brands: int = probe(
+            gateway_from_context(context).count_brands, "Zendesk did not answer."
+        )
+        if brands > 1:
+            raise ConnectorValidationError(
+                f"This Zendesk account has {brands} brands. Permission sync does not "
+                "support accounts with more than one brand yet, since agents can be "
+                "limited to some brands."
+            )
+
+
 def build_zendesk_doc_permission_sync_checks() -> list[CapabilityCheck]:
     return [
         _AdminCheck(CredentialCapability.DOC_PERMISSION_SYNC),
+        _SingleBrandCheck(CredentialCapability.DOC_PERMISSION_SYNC),
         _ArticleAccessCheck(),
         _TicketAccessCheck(),
     ]
@@ -223,6 +259,7 @@ class _UserSegmentsCheck(CapabilityCheck[ZendeskConnectorConfig]):
 def build_zendesk_group_sync_checks() -> list[CapabilityCheck]:
     return [
         _AdminCheck(CredentialCapability.EXTERNAL_GROUP_SYNC),
+        _SingleBrandCheck(CredentialCapability.EXTERNAL_GROUP_SYNC),
         _UsersCheck(),
         _MembershipsCheck(),
         _UserSegmentsCheck(),
