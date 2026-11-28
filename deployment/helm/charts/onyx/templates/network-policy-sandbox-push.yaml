@@ -4,7 +4,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "onyx.resourceName" (list . "sandbox-push") }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
 spec:
   podSelector:
     matchLabels:

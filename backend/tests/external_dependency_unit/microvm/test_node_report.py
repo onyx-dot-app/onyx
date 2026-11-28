@@ -54,7 +54,6 @@ from onyx.microvm.registry import (
     write_sandbox_placement,
 )
 from onyx.server.auth_check import check_router_auth
-from onyx.server.features.build.configs import SandboxRuntime
 from onyx.server.features.microvm import api as microvm_api
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
@@ -356,7 +355,7 @@ def test_route_is_absent_without_firecracker(
 ) -> None:
     from onyx import main as onyx_main
 
-    monkeypatch.setattr(onyx_main, "SANDBOX_RUNTIME", SandboxRuntime.POD)
+    monkeypatch.setattr(onyx_main, "SANDBOX_FIRECRACKER_ENABLED", False)
     monkeypatch.setattr(onyx_main, "APP_API_PREFIX", "")
     client = TestClient(onyx_main.get_application())
     assert client.post(PATH, content=b"{}").status_code == 404

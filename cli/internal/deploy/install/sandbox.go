@@ -57,3 +57,33 @@ const craftSecurityWarning = `⚠  Craft + docker backend: api_server and backgr
 ⚠  labels, and the events stream). Only enable on hosts you fully
 ⚠  control. On EC2, require IMDSv2 (HttpTokens=required) so
 ⚠  sandboxes cannot pull IAM credentials from instance metadata.`
+
+// sandboxContainersMinVersion is the first release with the craft-runtime
+// container image that the chat sandbox overlay runs.
+var sandboxContainersMinVersion = version.Semver{Major: 6, Minor: 0, Patch: 0}
+
+// applySandboxEnv records --sandbox-docker-runtime in .env and prints the
+// chat sandbox notes. The overlay sets every other sandbox variable.
+func (in *installer) applySandboxEnv(env, tag string) string {
+	if !in.sandbox {
+		return env
+	}
+	if runtime := in.opts.SandboxDockerRuntime; runtime != "" {
+		env = SetVarUncomment(env, "SANDBOX_DOCKER_RUNTIME", runtime)
+		in.warnf("SANDBOX_DOCKER_RUNTIME=%s: install it and register it with Docker first. The sandbox firewall is not yet validated under it.", runtime)
+	}
+	in.successf("Chat sandbox containers enabled (docker-compose.sandbox.yml)")
+	in.plainf("%s", sandboxSecurityWarning)
+	if v, ok := version.Parse(tag); ok && v.LessThan(sandboxContainersMinVersion) {
+		in.warnf("Image tag %s predates chat sandbox containers (v6.0.0+); the sandbox image will not exist.", tag)
+	}
+	return env
+}
+
+// sandboxSecurityWarning is printed when the chat sandbox overlay is on.
+const sandboxSecurityWarning = `⚠  Chat sandbox containers: api_server and background bind-mount
+⚠  /var/run/docker.sock (RW = root on host on compromise);
+⚠  sandbox-proxy bind-mounts it RO. Only enable on hosts you fully
+⚠  control. On EC2, IMDSv2 alone does not stop containers from
+⚠  reading instance metadata: also set HttpPutResponseHopLimit=1, or
+⚠  drop bridge traffic to 169.254.169.254 in the DOCKER-USER chain.`

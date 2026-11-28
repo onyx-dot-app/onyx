@@ -1,0 +1,47 @@
+{{- if eq (include "onyx.harnessSandboxEnabled" .) "true" }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $harness := .Values.harnessSandbox | default dict }}
+# Only the Onyx pods that call harness sandboxes reach the guest daemon port.
+# The daemon also checks TLS and a per-sandbox key; this policy keeps other
+# pods (and other sandboxes) off the port. Enforced only where the CNI honors
+# NetworkPolicy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.resourceName" (list . "harness-sandbox-daemon") }}
+  namespace: {{ $sandboxNs | quote }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+      onyx.app/sandbox-kind: harness
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- /* api-server: chat tools and purges. heavy: the sandbox queue
+        (idle stop, orphan sweep). light: chat retention purges.
+        scheduled-tasks: scheduled task runs. */}}
+        {{- range $workload := list "api" "celery_worker_heavy" "celery_worker_light" "celery_worker_scheduled_tasks" }}
+        {{- /* The same labels that the workload's Deployment selects its pods by. */}}
+        {{- $labels := (index $.Values $workload | default dict).deploymentLabels | default dict }}
+        {{- $matchLabels := dict }}
+        {{- range $k, $v := $labels }}{{- if not (kindIs "invalid" $v) }}{{- $_ := set $matchLabels $k (toString $v) }}{{- end }}{{- end }}
+        {{- if $matchLabels }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $matchLabels | nindent 14 }}
+        {{- end }}
+        {{- end }}
+        {{- range $harness.extraDaemonClients | default list }}
+        - {{- toYaml . | nindent 10 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.harnessSandboxDaemonPort" . }}
+{{- end }}

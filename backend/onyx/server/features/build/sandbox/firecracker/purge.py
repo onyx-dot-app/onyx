@@ -1,10 +1,10 @@
 """Delete hooks for harness sandboxes.
 
 Onyx calls these after a Craft session, a chat session, a user or a tenant
-is deleted. They do nothing unless harness sandboxes run (today on
-Firecracker: `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`), and
-they never raise: a failure is logged. They call the `HarnessSandbox` purge
-methods of `get_harness_sandbox()`. The heavy client stack loads only when
+is deleted. They do nothing unless a harness backend is on (Firecracker or
+the container backend), and they never raise: a failure is logged. They
+call the `HarnessSandbox` purge methods of `get_harness_sandbox()`, which
+purge on every backend that is on. The heavy client stack loads only when
 enabled.
 
 - Session: its save archive, its directory on the running sandbox and its
@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
+from onyx.microvm.configs import HARNESS_SANDBOX_CONFIGURED
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.contextvars import get_current_tenant_id
@@ -31,7 +31,7 @@ logger = setup_logger()
 def purge_harness_session(
     sandbox_id: UUID, session_id: UUID, *, retention: bool = False
 ) -> None:
-    if not HARNESS_SANDBOX_ENABLED:
+    if not HARNESS_SANDBOX_CONFIGURED:
         return
     try:
         from onyx.server.features.build.sandbox.harness_factory import (
@@ -57,7 +57,7 @@ def purge_deleted_chat_sessions(user_id: UUID, session_ids: list[UUID]) -> None:
     restore a deleted chat. A delete of one chat purges before it returns, as
     Craft's session delete does; a delete of many purges in the background,
     since each purge can wait for a VM call."""
-    if not HARNESS_SANDBOX_ENABLED or not session_ids:
+    if not HARNESS_SANDBOX_CONFIGURED or not session_ids:
         return
 
     def purge_sessions() -> None:
@@ -87,7 +87,7 @@ def purge_deleted_chat_sessions(user_id: UUID, session_ids: list[UUID]) -> None:
 def purge_harness_sandboxes(targets: dict[UUID, list[UUID]]) -> None:
     """`targets`: sandbox ID -> session IDs to purge with it (older saves
     that the saved-session index may not name)."""
-    if not HARNESS_SANDBOX_ENABLED or not targets:
+    if not HARNESS_SANDBOX_CONFIGURED or not targets:
         return
     tenant_id = get_current_tenant_id()
     try:
@@ -115,7 +115,7 @@ def purge_expired_harness_sessions(
     whose build session had no activity in `retention_days`, until
     `deadline` (monotonic). The next run takes the rest. Run after the
     retention deletes commit."""
-    if not HARNESS_SANDBOX_ENABLED:
+    if not HARNESS_SANDBOX_CONFIGURED:
         return
     cutoff = datetime.now(tz=timezone.utc) - timedelta(days=retention_days)
     # The scan gets half the time, so the purges always get the rest.
@@ -181,7 +181,7 @@ def purge_expired_harness_sessions(
 def purge_harness_sandboxes_in_background(targets: dict[UUID, list[UUID]]) -> None:
     """For sync callers that may run on an event loop: a purge can wait a
     minute for the sandbox lock and the VM stop."""
-    if not HARNESS_SANDBOX_ENABLED or not targets:
+    if not HARNESS_SANDBOX_CONFIGURED or not targets:
         return
     start_thread_with_context(
         target=purge_harness_sandboxes,

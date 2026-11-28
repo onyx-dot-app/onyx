@@ -16,6 +16,9 @@ func (in *installer) printPlan(defaultTag string) {
 	if in.craft {
 		in.plainf("  • Include Craft: true")
 	}
+	if in.sandbox {
+		in.plainf("  • Chat sandbox containers: true (Docker socket on api_server and background)")
+	}
 	if in.dev {
 		in.plainf("  • Dev overlay: true (service ports published on the host)")
 	}

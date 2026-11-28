@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- if eq (include "onyx.sandboxPodsEnabled" .) "true" }}
 {{- $craft := .Values.craft | default dict }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $saName := (index .Values.configMap "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox" }}
@@ -16,7 +16,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ $saName }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox
@@ -26,7 +26,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $sandboxManagerName }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-manager
@@ -44,7 +44,7 @@ rules:
     verbs: ["get", "list", "create", "delete"]
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list", "create", "update", "delete"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["pods/exec"]
     verbs: ["create", "get"]
@@ -56,7 +56,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ $sandboxManagerName }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-manager

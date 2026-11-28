@@ -52,7 +52,7 @@ data:
   onyx-indexing-pruning.json: |
     {{- .Files.Get "dashboards/indexing-pruning.json" | nindent 4 }}
 {{- $fcMetrics := dig "hostAgent" "metrics" "enabled" false (.Values.craft | default dict) }}
-{{- if and (eq (include "onyx.craftSandboxRuntime" .) "firecracker") $fcMetrics }}
+{{- if and (include "onyx.craftFcEnabled" .) $fcMetrics }}
 ---
 apiVersion: v1
 kind: ConfigMap

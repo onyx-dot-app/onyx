@@ -385,6 +385,37 @@ func TestRerunRefusesWhileRunning(t *testing.T) {
 	}
 }
 
+// An overlay that the rerun adds is not on disk yet, so it stays out of the
+// running check: Compose fails on a missing -f, which would skip the guard.
+func TestRerunRefusesWhileRunningWhenAddingTheSandboxOverlay(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "deployment"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "deployment", ".env"), []byte("IMAGE_TAG=v1.0.0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		a := argv(c)
+		if strings.Contains(a, "ps -q") {
+			if strings.Contains(a, "docker-compose.sandbox.yml") {
+				return dockercmd.Result{}, errors.New("open docker-compose.sandbox.yml: no such file or directory")
+			}
+			return dockercmd.Result{Stdout: "abc123\n"}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, runner, notFoundServer(t))
+
+	err := RunInstall(context.Background(), deps, Options{NoPrompt: true, Dir: root, Tag: "v1.0.0", IncludeSandbox: true})
+	if err == nil || !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("expected refusal while services are running, got %v", err)
+	}
+}
+
 // A rerun over a live deployment asks once. Restart and Upgrade both replace
 // the running services, so the choice is the sign-off — a second "this
 // restarts things, continue?" question would only ask it again.
@@ -1128,5 +1159,49 @@ func TestInstallMissingFileAtRefDoesNotDisableFetching(t *testing.T) {
 	}
 	if string(craft) == upstream {
 		t.Error("craft overlay should have come from the embedded copy")
+	}
+}
+
+// A dry rerun shows the overlays that a real rerun keeps, and probes nothing.
+func TestDryRunShowsTheKeptSandboxOverlay(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	install := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	if err := RunInstall(context.Background(), install, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true, IncludeSandbox: true,
+	}); err != nil {
+		t.Fatalf("install: %v\noutput:\n%s", err, outBuf(install).String())
+	}
+	dry := &fakeRunner{handler: healthyDockerHandler}
+	deps := testDeps(t, dry, notFoundServer(t))
+	if err := RunInstall(context.Background(), deps, Options{DryRun: true, Tag: "v4.2.0", Dir: root}); err != nil {
+		t.Fatalf("RunInstall: %v", err)
+	}
+	if !strings.Contains(outBuf(deps).String(), "Chat sandbox containers: true") {
+		t.Errorf("plan misses the sandbox overlay:\n%s", outBuf(deps).String())
+	}
+	if len(dry.calls) != 0 {
+		t.Errorf("dry-run executed commands: %v", dry.calls)
+	}
+}
+
+// A lite rerun drops a sandbox overlay, so the dry-run plan does not show it.
+func TestDryRunOnLiteDoesNotShowASandboxOverlay(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.2.0")
+	m, err := state.Load(root)
+	if err != nil || m == nil || m.Mode != state.ModeLite {
+		t.Skipf("fixture is not a lite install: %+v %v", m, err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "deployment", "docker-compose.sandbox.yml"), []byte("services: {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	if err := RunInstall(context.Background(), deps, Options{DryRun: true, Tag: "v4.2.0", Dir: root}); err != nil {
+		t.Fatalf("RunInstall: %v", err)
+	}
+	if strings.Contains(outBuf(deps).String(), "Chat sandbox containers: true") {
+		t.Errorf("plan shows a sandbox overlay that a lite rerun removes:\n%s", outBuf(deps).String())
 	}
 }

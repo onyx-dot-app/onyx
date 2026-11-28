@@ -68,6 +68,37 @@ func TestDeployInstallRejectsLiteWithCraft(t *testing.T) {
 	}
 }
 
+func TestDeployInstallSandboxDryRun(t *testing.T) {
+	t.Setenv("ONYX_DEPLOYMENT_DIR", "")
+	t.Setenv("INSTALL_PREFIX", "")
+	ios, out, _ := testutil.TestIOStreams()
+	cmd := newDeployInstallCmd(ios)
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetArgs([]string{"--include-sandbox", "--sandbox-docker-runtime", "runsc", "--dry-run",
+		"--tag", "v6.0.0", "--dir", filepath.Join(t.TempDir(), "onyx")})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "Chat sandbox containers: true") {
+		t.Errorf("dry run does not show the sandbox overlay:\n%s", got)
+	}
+}
+
+func TestDeployInstallRejectsLiteWithSandbox(t *testing.T) {
+	ios, _, _ := testutil.TestIOStreams()
+	cmd := newDeployInstallCmd(ios)
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetArgs([]string{"--lite", "--include-sandbox", "--dry-run"})
+
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "cannot be used together") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestInstallOnyxIsAnAlias(t *testing.T) {
 	ios, _, _ := testutil.TestIOStreams()
 	alias := newInstallOnyxCmd(ios)
@@ -75,7 +106,7 @@ func TestInstallOnyxIsAnAlias(t *testing.T) {
 		t.Fatalf("Use = %q", alias.Use)
 	}
 	// Same flag surface as deploy install.
-	for _, name := range []string{"lite", "include-craft", "tag", "local", "offline", "no-prompt", "dry-run", "verbose", "no-wait", "dir", "force"} {
+	for _, name := range []string{"lite", "include-craft", "include-sandbox", "sandbox-docker-runtime", "tag", "local", "offline", "no-prompt", "dry-run", "verbose", "no-wait", "dir", "force"} {
 		if alias.Flags().Lookup(name) == nil {
 			t.Errorf("alias missing --%s", name)
 		}

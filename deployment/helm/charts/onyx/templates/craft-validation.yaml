@@ -1,4 +1,8 @@
 {{- $craftEnabled := eq (include "onyx.craftEnabled" .) "true" }}
+{{- $runtime := include "onyx.craftSandboxRuntime" . }}
+{{- if and $craftEnabled (eq $runtime "off") }}
+{{- fail "craft.sandboxRuntime=off renders no sandbox parts, but Craft (configMap.ENABLE_CRAFT=true) needs pod sandboxes: set craft.sandboxRuntime to auto or pod, or turn off ENABLE_CRAFT" }}
+{{- end }}
 {{- if $craftEnabled }}
 {{- /* Empty SANDBOX_BACKEND is intentional: absent/null/"" uses the backend's Kubernetes default. */}}
 {{- $sandboxBackend := lower (toString (index .Values.configMap "SANDBOX_BACKEND" | default "")) }}
@@ -10,6 +14,8 @@
 {{- if ne (toString (dig "enabled" false $sandboxPushSecret)) "true" }}
 {{- fail "auth.sandboxPushSecret.enabled must be true when configMap.ENABLE_CRAFT is enabled" }}
 {{- end }}
+{{- end }}
+{{- if include "onyx.sandboxProxyEnabled" . }}
 {{- $proxy := .Values.sandboxProxy | default dict }}
 {{- if and (or $proxy.egressAllowIPv6 $proxy.allowGlobalClients (contains ":" ($proxy.listenHost | default "0.0.0.0"))) (empty $proxy.internalCIDRs) }}
 {{- fail "sandboxProxy.internalCIDRs must include internal VPC, pod, Service, and node networks when IPv6 or global proxy clients are enabled" }}

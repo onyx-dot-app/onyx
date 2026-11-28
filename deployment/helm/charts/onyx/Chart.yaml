@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.59
+version: 0.10.2
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,8 +21,30 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: The light Celery worker also consumes the
-        suggested_questions queue (used only by the Playground).
+      description: harnessSandbox renders the container backend of chat
+        sandbox tools (the harness-sandbox-pod PodTemplate, a daemon-port
+        ingress NetworkPolicy, sandbox-proxy and the sandbox RBAC) with
+        craft.sandboxRuntime auto or pod, without ENABLE_CRAFT. On by
+        default. harnessSandbox.runtimeClassName opts in to gVisor.
+    - kind: changed
+      description: craft.sandboxRuntime defaults to "auto" and also takes
+        "off". With a pinned release tag, "auto" renders the Firecracker
+        host agent, sandbox-proxy and their certificates without ENABLE_CRAFT.
+        The chart sets SANDBOX_RUNTIME.
+    - kind: added
+      description: auth.sandboxNodeRegistration is on by default. With no
+        value and no existingSecret, the chart makes a random value on
+        install and keeps it on upgrade. Renders without cluster access
+        (helm template, Argo CD) make a new value each time, so set
+        existingSecret or a value there.
+    - kind: changed
+      description: The Firecracker image tags fall back to a pinned chart
+        appVersion when global.version is latest, edge or beta. Only
+        stable, beta and nightly-latest release tags give Firecracker image
+        tags; dev builds need explicit image tags.
+    - kind: changed
+      description: craft.firecrackerPreflight is on by default and checks
+        only onyx.app/kvm=true nodes.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

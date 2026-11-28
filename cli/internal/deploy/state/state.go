@@ -46,6 +46,8 @@ type Manifest struct {
 	CLIVersion    string `json:"cli_version"`
 	Mode          Mode   `json:"mode"`
 	IncludeCraft  bool   `json:"include_craft"`
+	// IncludeSandbox records the chat sandbox overlay (Docker containers).
+	IncludeSandbox bool `json:"include_sandbox,omitempty"`
 	// Dev records the dev overlay (published service ports). Not a Mode: it
 	// stacks on standard and lite alike.
 	Dev bool `json:"dev,omitempty"`

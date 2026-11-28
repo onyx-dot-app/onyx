@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- if include "onyx.sandboxProxyEnabled" . }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $relayTls := include "onyx.craftFcRelayTls.enabled" . }}
 # Ingress restricted to the sandbox namespace. The proxy has no
@@ -22,8 +22,8 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ $sandboxNs }}
-        {{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
+              kubernetes.io/metadata.name: {{ $sandboxNs | quote }}
+        {{- if include "onyx.craftFcEnabled" . }}
         {{- /* With relayTls off, the relays use the plain port. With it on,
         the port stays open to them so that agents that have not rolled yet
         keep egress during an upgrade; agents with relayTls never use it. */}}

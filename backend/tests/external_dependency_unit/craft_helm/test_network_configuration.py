@@ -96,7 +96,10 @@ def test_sandbox_processes_share_the_configured_listener(listen_host: str) -> No
         resource for resource in yaml.safe_load_all(result.stdout) if resource
     ]
     template: dict[str, Any] = next(
-        resource for resource in resources if resource["kind"] == "PodTemplate"
+        resource
+        for resource in resources
+        if resource["kind"] == "PodTemplate"
+        and resource["metadata"]["name"] == "sandbox-pod"
     )
     spec: dict[str, Any] = template["template"]["spec"]
     containers: dict[str, dict[str, Any]] = {

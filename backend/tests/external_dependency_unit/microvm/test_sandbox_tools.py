@@ -358,7 +358,8 @@ def sandbox(
     )
     monkeypatch.setattr(harness_factory, "HARNESS_SANDBOX_ENABLED", True)
     monkeypatch.setattr(harness_factory, "_instance", instance)
-    monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", True)
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: True)
+    monkeypatch.setattr(process_message, "sandbox_tools_configured", lambda: True)
     return instance
 
 
@@ -756,6 +757,9 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     ref = chat.ref(db_session)
     assert _stops(parts) == [packets.AWAITING_USER]
     assert ended == [ref]
+    # With `auto`, the node can stop serving during the park; the resumed root
+    # keeps its sandbox tools.
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: False)
 
     # The approval resumes the root from its saved state with new agent and
     # tool objects, as another API pod does; its release ends the turn again.
@@ -2148,7 +2152,7 @@ def test_every_agent_gets_the_sandbox_tools_when_harness_sandboxes_run(
     sandbox: FirecrackerHarnessSandbox,  # noqa: ARG001
     enabled: bool,
 ) -> None:
-    monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", enabled)
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: enabled)
     built: list[tuple[Agent, ChatFeature | DeepResearchFeature]] = []
     create_chat_agent = execution.create_chat_agent
 
@@ -2304,7 +2308,7 @@ def test_a_chat_delete_purges_the_session_directory_hard_or_soft(
     node: RunningFakeAgent,
     make_tools: MakeTools,
 ) -> None:
-    monkeypatch.setattr(purge, "HARNESS_SANDBOX_ENABLED", True)
+    monkeypatch.setattr(purge, "HARNESS_SANDBOX_CONFIGURED", True)
     refs: dict[str, HarnessSandboxRef] = {}
     for name in ("hard", "soft", "bulk"):
         chat_session = create_chat_session(db_session, name, user.id, persona_id=0)
@@ -4139,7 +4143,7 @@ def test_a_chat_without_a_sandbox_keeps_a_large_result_whole(
     node: RunningFakeAgent,
     chat: SandboxChat,
 ) -> None:
-    monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", False)
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: False)
     _offer_mcp_tool(monkeypatch, "fetch_report", _big)
     llm = ChatLLM([tool_step("fetch_report", "big", {}), Delta(content="Done.")])
     chat.send(llm)
@@ -4222,7 +4226,7 @@ def test_a_chat_purge_deletes_only_its_own_spilled_results(
     user: User,
     steps: list[Delta],
 ) -> None:
-    monkeypatch.setattr(purge, "HARNESS_SANDBOX_ENABLED", True)
+    monkeypatch.setattr(purge, "HARNESS_SANDBOX_CONFIGURED", True)
     _offer_mcp_tool(monkeypatch, "fetch_report", _big)
     chats = [
         SandboxChat(
@@ -5626,7 +5630,7 @@ def test_open_url_without_a_sandbox_keeps_its_page_excerpts(
     db_session: Session,
     chat: SandboxChat,
 ) -> None:
-    monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", False)
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: False)
     pages = [_web_page(index, 40_000) for index in range(1, 4)]
     llm = _search_and_open(pages, "Done.")
     _send_with_pages(chat, db_session, monkeypatch, pages, llm)

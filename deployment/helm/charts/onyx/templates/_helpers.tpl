@@ -291,13 +291,128 @@ true
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
 
-{{/* craft.sandboxRuntime: "pod" (default) or "firecracker". Mirrors Terraform craft_sandbox_runtime. */}}
+{{/*
+craft.sandboxRuntime: "auto" (default), "firecracker", "pod" or "off".
+Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
+(global.version, or the api or celery_shared image tag) does not know
+"auto", so "auto" acts as "pod" there.
+*/}}
 {{- define "onyx.craftSandboxRuntime" -}}
-{{- $runtime := lower (toString ((.Values.craft | default dict).sandboxRuntime | default "pod")) -}}
-{{- if not (has $runtime (list "pod" "firecracker")) -}}
-{{- fail (printf "craft.sandboxRuntime must be \"pod\" or \"firecracker\", not %q" $runtime) -}}
+{{- $runtime := lower (toString ((.Values.craft | default dict).sandboxRuntime | default "auto")) -}}
+{{- if not (has $runtime (list "auto" "firecracker" "pod" "off")) -}}
+{{- fail (printf "craft.sandboxRuntime must be \"auto\", \"firecracker\", \"pod\" or \"off\", not %q" $runtime) -}}
+{{- end -}}
+{{- if and (eq $runtime "auto") (include "onyx.craftPreV6App" .) -}}
+{{- $runtime = "pod" -}}
 {{- end -}}
 {{- $runtime -}}
+{{- end }}
+
+{{/*
+"true" when the backend runs a release before v6.0.0: global.version, or an
+api or celery_shared image tag that overrides it. Short tags such as 5 or
+5.1 count.
+*/}}
+{{- define "onyx.craftPreV6App" -}}
+{{- $old := false -}}
+{{- range list .Values.global.version (dig "image" "tag" "" (.Values.api | default dict)) (dig "image" "tag" "" (.Values.celery_shared | default dict)) -}}
+{{- $v := trimSuffix "-dev" (toString .) -}}
+{{- if and (regexMatch "^v?[0-9]+(\\.[0-9]+){0,2}(-[0-9A-Za-z.-]+)?$" $v) (semverCompare "<6.0.0-0" $v) -}}{{- $old = true -}}{{- end -}}
+{{- end -}}
+{{- if $old -}}true{{- end -}}
+{{- end }}
+
+{{/*
+SANDBOX_RUNTIME for the backend and sandbox-proxy: the runtime, or empty
+for "off" on a release before v6 (it does not know "off").
+*/}}
+{{- define "onyx.craftSandboxRuntimeEnv" -}}
+{{- $runtime := include "onyx.craftSandboxRuntime" . -}}
+{{- if not (and (eq $runtime "off") (include "onyx.craftPreV6App" .)) -}}{{- $runtime -}}{{- end -}}
+{{- end }}
+
+{{/*
+"true" when the chart renders the Firecracker parts: the host agent, its
+mTLS sets, the relay TLS, the egress CA access and sandbox-proxy. Always
+with "firecracker" (which fails on a missing input). With "auto" only when
+the chart has every input: an image tag for the agent and the root drive,
+and auth.sandboxNodeRegistration. Else "auto" renders none of them and the
+backend offers no sandbox tools.
+*/}}
+{{- define "onyx.craftFcEnabled" -}}
+{{- $runtime := include "onyx.craftSandboxRuntime" . -}}
+{{- if eq $runtime "firecracker" -}}
+true
+{{- else if eq $runtime "auto" -}}
+{{- $agent := (.Values.craft | default dict).hostAgent | default dict -}}
+{{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict -}}
+{{- $agentTag := dig "image" "tag" "" $agent | default (include "onyx.craftFcReleaseTag" .) -}}
+{{- $rootfsTag := dig "rootfs" "image" "tag" "" $agent | default (dig "rootfs" "version" "" $agent) | default (include "onyx.craftFcReleaseTag" .) -}}
+{{- /* An explicit drive image needs its template name (craft-fc-host-agent.yaml). */}}
+{{- if and (dig "rootfs" "image" "tag" "" $agent) (not (index .Values.configMap "SANDBOX_FC_TEMPLATE")) -}}
+{{- $rootfsTag = "" -}}
+{{- end -}}
+{{- /* The agent needs its own copy of the credential (craft-fc-host-agent.yaml). */}}
+{{- $agentReg := or $agent.registrationExistingSecret (and (not $reg.existingSecret) (include "onyx.sandboxNodeRegistrationValue" .)) -}}
+{{- if and (include "onyx.craftFcPinned" $agentTag) (include "onyx.craftFcPinned" $rootfsTag) (eq (toString $reg.enabled) "true") $agentReg -}}true{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+The node registration value when auth.sandboxNodeRegistration has no
+existingSecret: the inline value, else the value in the Secret of an earlier
+install (upgrades keep it), else a new random value. The first call stores it
+in .Values, so every template of one render uses the same value.
+*/}}
+{{- define "onyx.sandboxNodeRegistrationValue" -}}
+{{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict -}}
+{{- if not $reg.existingSecret -}}
+{{- $key := dig "secretKeys" "SANDBOX_NODE_REGISTRATION_SECRET" "sandbox_node_registration_secret" $reg -}}
+{{- $value := dig "values" $key "" $reg -}}
+{{- if not $value -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace ($reg.secretName | default "onyx-sandbox-node-registration") -}}
+{{- $value = index (($existing | default dict).data | default dict) $key | default "" | b64dec -}}
+{{- if not $value -}}{{- $value = randAlphaNum 64 -}}{{- end -}}
+{{- if not $reg.values -}}{{- $_ := set $reg "values" dict -}}{{- end -}}
+{{- $_ := set $reg.values $key $value -}}
+{{- end -}}
+{{- $value -}}
+{{- end -}}
+{{- end }}
+
+{{/* "true" when sandbox-proxy and the sandbox namespace render: for Craft pod sandboxes, for Firecracker or for harness sandbox pods. */}}
+{{- define "onyx.sandboxProxyEnabled" -}}
+{{- if or (include "onyx.craftEnabled" .) (include "onyx.craftFcEnabled" .) (include "onyx.harnessSandboxEnabled" .) -}}true{{- end -}}
+{{- end }}
+
+{{/*
+"true" when the container backend of harness sandboxes renders (one pod per
+user sandbox, chat sandbox tools without KVM): craft.sandboxRuntime auto or
+pod, harnessSandbox.enabled, an Onyx release from v6 on, and the Celery
+workers (not Lite, vectorDB.enabled=false): beat and the heavy worker stop
+idle pods and delete orphans. Does not need ENABLE_CRAFT. With auto, the
+backend uses Firecracker while a node serves the template, and these pods
+otherwise.
+*/}}
+{{- define "onyx.harnessSandboxEnabled" -}}
+{{- $runtime := include "onyx.craftSandboxRuntime" . -}}
+{{- $harness := .Values.harnessSandbox | default dict -}}
+{{- if and (has $runtime (list "auto" "pod")) (ne (toString $harness.enabled) "false") (not (include "onyx.craftPreV6App" .)) .Values.vectorDB.enabled -}}true{{- end -}}
+{{- end }}
+
+{{/* "true" when the sandbox namespace gets the sandbox-manager RBAC: for Craft pod sandboxes or for harness sandbox pods. */}}
+{{- define "onyx.sandboxPodsEnabled" -}}
+{{- if or (include "onyx.craftEnabled" .) (include "onyx.harnessSandboxEnabled" .) -}}true{{- end -}}
+{{- end }}
+
+{{/* The craft-runtime container image of harness sandbox pods. Releases publish it as <Onyx tag>-container. */}}
+{{- define "onyx.harnessSandboxImage" -}}
+{{- $image := (.Values.harnessSandbox | default dict).image | default dict -}}
+{{- printf "%s:%s" ($image.repository | default "onyxdotapp/craft-runtime") ($image.tag | default (printf "%s-container" (toString (.Values.global.version | default .Chart.AppVersion)))) -}}
+{{- end }}
+
+{{- define "onyx.harnessSandboxDaemonPort" -}}
+{{- (.Values.harnessSandbox | default dict).daemonPort | default 8052 | int -}}
 {{- end }}
 
 {{/* Tolerations (default: the sandbox tolerations) plus the onyx.app/kvm taint
@@ -323,16 +438,32 @@ prepuller must not. Call with (dict "ctx" $ "tolerations" $list). */}}
 {{- end }}
 
 {{/* Fails when sandboxPod.tolerations would let pod sandboxes onto the
-onyx.app/kvm nodes: that key, or an Exists toleration without a key. */}}
+onyx.app/kvm nodes. */}}
 {{- define "onyx.craftCheckSandboxTolerations" -}}
-{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
-{{- range (index (.Values.sandboxPod | default dict) "tolerations" | default list) -}}
+{{- include "onyx.craftCheckNoKvmTolerations" (dict "ctx" . "field" "sandboxPod.tolerations" "tolerations" (index (.Values.sandboxPod | default dict) "tolerations" | default list)) -}}
+{{- end }}
+
+{{/* Fails when a sandbox pod toleration list would let the pods onto the
+onyx.app/kvm nodes while Firecracker renders: that key, or an Exists
+toleration without a key. Call with (dict "ctx" $ "field" <values path>
+"tolerations" $list). */}}
+{{- define "onyx.craftCheckNoKvmTolerations" -}}
+{{- if include "onyx.craftFcEnabled" .ctx -}}
+{{- $field := .field -}}
+{{- range .tolerations -}}
 {{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
 {{- if and $effectMatches (or (eq (toString .key) "onyx.app/kvm") (and (not .key) (eq (toString .operator) "Exists"))) -}}
-{{- fail "sandboxPod.tolerations must not tolerate the onyx.app/kvm taint (key onyx.app/kvm, or operator Exists without a key) with craft.sandboxRuntime=firecracker: pod sandboxes must stay off the Firecracker nodes" -}}
+{{- fail (printf "%s must not tolerate the onyx.app/kvm taint (key onyx.app/kvm, or operator Exists without a key) while the chart renders Firecracker (craft.sandboxRuntime auto or firecracker): pod sandboxes must stay off the Firecracker nodes" $field) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- end }}
+
+{{/* The tolerations of harness sandbox pods: harnessSandbox.tolerations,
+else sandboxPod.tolerations, else the sandbox node pool taint. */}}
+{{- define "onyx.harnessSandboxTolerations" -}}
+{{- $harness := .Values.harnessSandbox | default dict -}}
+{{- toYaml ($harness.tolerations | default (index (.Values.sandboxPod | default dict) "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule"))) -}}
 {{- end }}
 
 {{/* Prometheus job label of the host agent series (alert rules, dashboard).
@@ -379,11 +510,34 @@ locked
 {{- end }}
 
 {{/*
-Onyx release tag for the Craft Firecracker images: global.version (else
-appVersion) without the "-dev" suffix of the debug image twins.
+Onyx release tag for the Craft Firecracker images, without the "-dev"
+suffix of the debug image twins: global.version when it is pinned, else the
+chart appVersion when it is pinned, else empty. Releases publish the agent
+and the root drive only under pinned tags (craft-runtime-release.yml).
 */}}
 {{- define "onyx.craftFcReleaseTag" -}}
-{{- trimSuffix "-dev" (toString (.Values.global.version | default .Chart.AppVersion)) -}}
+{{- include "onyx.craftFcReleaseTagOf" (toString .Values.global.version) | default (include "onyx.craftFcReleaseTagOf" (toString .Chart.AppVersion)) -}}
+{{- end }}
+
+{{/*
+The Firecracker release tag of one Onyx image tag, or empty. Releases
+publish the images only for stable, beta and nightly-latest git tags
+(craft-runtime-release.yml), so 6.0.0 maps to v6.0.0, and other tags
+(6, 6.0, dev-build-*, edge) give none.
+*/}}
+{{- define "onyx.craftFcReleaseTagOf" -}}
+{{- $v := trimSuffix "-dev" . -}}
+{{- if regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+" $v -}}
+{{- $v = printf "v%s" $v -}}
+{{- end -}}
+{{- if or (regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[0-9]+)?$" $v) (regexMatch "^nightly-latest-[0-9A-Za-z.-]+$" $v) -}}
+{{- $v -}}
+{{- end -}}
+{{- end }}
+
+{{/* The tag, or empty when it is empty or floating. */}}
+{{- define "onyx.craftFcPinned" -}}
+{{- if not (has (toString .) (list "" "latest" "edge" "beta")) -}}{{- . -}}{{- end -}}
 {{- end }}
 
 {{/*
@@ -399,8 +553,8 @@ release tag. The rootfs image is rootfs-<version> and SANDBOX_FC_TEMPLATE is
 {{/* Returns the tag, or fails when it is empty or floating. Input: (list tag what value). */}}
 {{- define "onyx.craftFcPinnedTag" -}}
 {{- $v := index . 0 -}}
-{{- if or (not $v) (has $v (list "latest" "edge" "beta")) -}}
-{{- fail (printf "craft.sandboxRuntime=firecracker needs a pinned %s, not %q: set global.version to an Onyx release tag (for example v5.2.0) or set %s" (index . 1) $v (index . 2)) -}}
+{{- if not (include "onyx.craftFcPinned" $v) -}}
+{{- fail (printf "craft.sandboxRuntime=firecracker needs a pinned %s, not %q: set global.version to a stable, beta or nightly-latest Onyx release tag (for example v6.0.0; not latest, edge, beta or a dev build), or set %s" (index . 1) $v (index . 2)) -}}
 {{- end -}}
 {{- $v -}}
 {{- end }}
@@ -408,11 +562,11 @@ release tag. The rootfs image is rootfs-<version> and SANDBOX_FC_TEMPLATE is
 {{/*
 mTLS client of the Craft Firecracker host agents, for the pods that call them:
 api_server, and the heavy (VM reconcile) and scheduled-tasks workers. Empty
-unless craft.sandboxRuntime=firecracker. Env names: backend/onyx/microvm/configs.py.
+unless the chart renders Firecracker (onyx.craftFcEnabled). Env names: backend/onyx/microvm/configs.py.
 With no existingSecret, craft-fc-host-agent.yaml makes the certificates.
 */}}
 {{- define "onyx.craftFcAgentClient.secretName" -}}
-{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- if include "onyx.craftFcEnabled" . -}}
 {{- $agent := (.Values.craft | default dict).hostAgent | default dict -}}
 {{- $name := dig "client" "existingSecret" "" $agent -}}
 {{- if ne (empty $name) (empty (dig "tls" "existingSecret" "" $agent)) -}}
@@ -470,13 +624,13 @@ onyx.app/craft-fc-cert-revision: {{ (get $stored "revision" | default .Release.R
 
 {{/*
 mTLS on the relay → sandbox-proxy hop (craft.hostAgent.relayTls). On with
-craft.sandboxRuntime=firecracker unless relayTls.enabled=false. Its own CA,
+Firecracker (onyx.craftFcEnabled) unless relayTls.enabled=false. Its own CA,
 apart from the agent set: the two sets renew on their own, and an agent or
 client certificate never opens the proxy relay port. With no existingSecret,
 craft-fc-relay-tls.yaml makes the certificates.
 */}}
 {{- define "onyx.craftFcRelayTls.enabled" -}}
-{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- if include "onyx.craftFcEnabled" . -}}
 {{- if ne (toString (dig "hostAgent" "relayTls" "enabled" true (.Values.craft | default dict))) "false" -}}true{{- end -}}
 {{- end -}}
 {{- end }}
@@ -1053,7 +1207,7 @@ it is the FQDN; otherwise the short name.
 */}}
 {{- define "onyx.bundledStoreHost" -}}
 {{- $ctx := index . 0 -}}
-{{- if eq (include "onyx.craftSandboxRuntime" $ctx) "firecracker" -}}
+{{- if include "onyx.craftFcEnabled" $ctx -}}
 {{- include "onyx.serviceFqdn" (list $ctx (index . 1)) -}}
 {{- else -}}
 {{- index . 1 -}}

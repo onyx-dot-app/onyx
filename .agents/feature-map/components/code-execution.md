@@ -45,8 +45,11 @@
 - **When the admin switch is off, the service is unreachable, or the URL is
   set to an empty value**, the model cannot call `run_python`. When code fails or
   times out, the user sees the error output and the turn continues.
-- **With harness sandboxes** (`SANDBOX_RUNTIME=firecracker` and
-  `SANDBOX_FC_TEMPLATE`), every chat agent gives the model a shell tool
+- **With harness sandboxes** (the container backend,
+  `SANDBOX_CONTAINER_HARNESS=true` with `auto` or `pod`; or Firecracker,
+  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`, with `auto` only
+  while a live registered node reports a compatible template of that tag),
+  every chat agent gives the model a shell tool
   (`bash` for Claude models, `exec_command` for all other models),
   `write_stdin` and file tools: `edit` and `write` for Claude models (in
   the shapes of Claude Code's Edit and Write), `apply_patch` for all other
@@ -293,7 +296,8 @@ run / wait tools (code mode; a cell per program, a store per chat)
 
 ```
 exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch + library_create_library_file + library_list + library_prepare_materialize + library_read + library_find + library_replace_library_file + library_manage_library + library_search | edit + write + artifact (no tool row; Tool.id is None)
-  prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
+  prepare_chat_turn                     ChatTurnSetup.sandbox_tools: sandbox_tools_available()
+                                        (sandbox_tools_configured() for a resumed run),
                                         only for the chat's owner (not in a chat without
                                         one, which any user can open), and not for
                                         anonymous users (one VM per user), in

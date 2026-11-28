@@ -19,18 +19,19 @@ import (
 
 // Status is the machine-readable `deploy status --json` payload.
 type Status struct {
-	Services     []Service `json:"services"`
-	Dir          string    `json:"dir"`
-	Source       string    `json:"source"`
-	ManifestTag  string    `json:"manifest_tag,omitempty"`
-	EnvTag       string    `json:"env_tag,omitempty"`
-	RunningTag   string    `json:"running_tag,omitempty"`
-	Mode         string    `json:"mode,omitempty"`
-	AccessURL    string    `json:"access_url,omitempty"`
-	Installed    bool      `json:"installed"`
-	IncludeCraft bool      `json:"include_craft"`
-	Dev          bool      `json:"dev"`
-	Healthy      bool      `json:"healthy"`
+	Services       []Service `json:"services"`
+	Dir            string    `json:"dir"`
+	Source         string    `json:"source"`
+	ManifestTag    string    `json:"manifest_tag,omitempty"`
+	EnvTag         string    `json:"env_tag,omitempty"`
+	RunningTag     string    `json:"running_tag,omitempty"`
+	Mode           string    `json:"mode,omitempty"`
+	AccessURL      string    `json:"access_url,omitempty"`
+	Installed      bool      `json:"installed"`
+	IncludeCraft   bool      `json:"include_craft"`
+	IncludeSandbox bool      `json:"include_sandbox"`
+	Dev            bool      `json:"dev"`
+	Healthy        bool      `json:"healthy"`
 }
 
 // Service is one container of the deployment. The fields past Status are
@@ -94,6 +95,7 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 		st.ManifestTag = manifest.InstalledTag
 		st.Mode = string(manifest.Mode)
 		st.IncludeCraft = manifest.IncludeCraft
+		st.IncludeSandbox = manifest.IncludeSandbox
 		st.Dev = manifest.Dev
 	}
 	in.resolveProject(manifest)
@@ -111,6 +113,7 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 	}
 	// The overlay on disk is what the lifecycle verbs stack, manifest or not.
 	st.Dev = st.Dev || in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel))
+	st.IncludeSandbox = st.IncludeSandbox || in.overlayOnDisk(filepath.Base(deployfiles.SandboxOverlay.DestRel))
 
 	st.Services, st.RunningTag, st.AccessURL = in.inspectContainers(ctx)
 	// Prod publishes 80/443 behind a real domain; the port-derived localhost
@@ -142,8 +145,9 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 	}
 
 	in.plainf("Onyx deployment at %s (%s)", st.Dir, st.Source)
-	in.plainf("  Mode: %s%s%s", st.Mode,
+	in.plainf("  Mode: %s%s%s%s", st.Mode,
 		map[bool]string{true: " + craft", false: ""}[st.IncludeCraft],
+		map[bool]string{true: " + sandbox", false: ""}[st.IncludeSandbox],
 		map[bool]string{true: " + dev", false: ""}[st.Dev])
 	in.plainf("  Version (manifest): %s", in.orUnknown(st.ManifestTag))
 	in.plainf("  Version (.env):     %s", in.orUnknown(st.EnvTag))

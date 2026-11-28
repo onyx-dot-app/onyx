@@ -1,0 +1,131 @@
+{{- if eq (include "onyx.harnessSandboxEnabled" .) "true" }}
+{{/*
+Static shape of a harness sandbox pod (container backend, no KVM).
+PodRuntime (sandbox/container/pod_runtime.py) reads it and overlays the
+per-pod fields: name and labels, the daemon command, port, readiness probe
+and resources, the daemon's key and TLS Secret, the workspaces emptyDir,
+restartPolicy and the proxy hostAlias.
+*/}}
+{{- $cm := .Values.configMap }}
+{{- $harness := .Values.harnessSandbox | default dict }}
+{{- $sandboxNs := $cm.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $image := include "onyx.harnessSandboxImage" . }}
+{{- $pullPolicy := ($harness.image | default dict).pullPolicy | default .Values.global.pullPolicy }}
+{{- $proxyPort := include "onyx.sandboxProxyPort" . }}
+{{- $proxyHost := include "onyx.sandboxProxyHost" . }}
+{{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
+{{- $netAdminLockdown := eq (include "onyx.sandboxNetAdminLockdown" .) "true" }}
+{{- $caBundleFile := "/etc/ssl/sandbox/ca-bundle.crt" }}
+{{- $volumes := $harness.volumes | default dict }}
+{{- $tolerations := include "onyx.harnessSandboxTolerations" . }}
+{{- include "onyx.craftCheckNoKvmTolerations" (dict "ctx" . "field" "harnessSandbox.tolerations (or the sandboxPod.tolerations it falls back to)" "tolerations" (fromYamlArray $tolerations)) }}
+apiVersion: v1
+kind: PodTemplate
+metadata:
+  name: {{ (index $cm "SANDBOX_HARNESS_POD_TEMPLATE") | default "harness-sandbox-pod" }}
+  namespace: {{ $sandboxNs | quote }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox
+template:
+  metadata:
+    labels:
+      app.kubernetes.io/component: sandbox
+      app.kubernetes.io/managed-by: onyx
+      onyx.app/sandbox-kind: harness
+      onyx.app/net-admin-lockdown: {{ $netAdminLockdown | quote }}
+      admission.datadoghq.com/enabled: "false"
+  spec:
+    {{- with $harness.runtimeClassName }}
+    runtimeClassName: {{ . | quote }}
+    {{- end }}
+    automountServiceAccountToken: false
+    terminationGracePeriodSeconds: 5
+    enableServiceLinks: false
+    shareProcessNamespace: false
+    hostNetwork: false
+    hostPID: false
+    hostIPC: false
+    {{- with $harness.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $harness.affinity }}
+    affinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    tolerations:
+      {{- $tolerations | nindent 6 }}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      # The daemon Secret files are root's, readable by this group.
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    initContainers:
+      # Proxy CA bundle and iptables lockdown (proxy only), as for Craft pods.
+      - name: sandbox-init
+        image: {{ $image }}
+        imagePullPolicy: {{ $pullPolicy }}
+        command: ["/usr/local/bin/firewall-init"]
+        env:
+          - { name: SANDBOX_PROXY_HOST, value: "{{ $proxyHost }}" }
+          - { name: SANDBOX_PROXY_PORT, value: "{{ $proxyPort }}" }
+          - { name: SANDBOX_PROXY_BOOTSTRAP_MODE, value: "initcontainer" }
+          - { name: SANDBOX_NET_ADMIN_LOCKDOWN, value: {{ $netAdminLockdown | quote }} }
+          - { name: SANDBOX_PROXY_CA_BUNDLE_SRC, value: "/sandbox-ca/ca.crt" }
+          - { name: SANDBOX_PROXY_CA_BUNDLE_DST, value: "{{ $caBundleFile }}" }
+        volumeMounts:
+          - { name: sandbox-ca-source, mountPath: /sandbox-ca, readOnly: true }
+          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox }
+        resources:
+          requests: { cpu: "50m", memory: "32Mi" }
+          limits: { cpu: "500m", memory: "128Mi" }
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          privileged: false
+          capabilities:
+            drop: ["ALL"]
+            {{- if $netAdminLockdown }}
+            add: ["NET_ADMIN"]
+            {{- end }}
+    containers:
+      - name: sandbox
+        image: {{ $image }}
+        imagePullPolicy: {{ $pullPolicy }}
+        env:
+          {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
+          # The image entrypoint adds this CA to Chrome's NSS database.
+          - { name: SANDBOX_PROXY_CA_BUNDLE_SRC, value: "/sandbox-ca/ca.crt" }
+        volumeMounts:
+          - { name: sandbox-ca-source, mountPath: /sandbox-ca, readOnly: true }
+          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
+          - { name: tmp, mountPath: /tmp }
+          - { name: skills, mountPath: /var/lib/onyx/skills }
+          # Chrome needs more shared memory than the runtime default.
+          - { name: dshm, mountPath: /dev/shm }
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          privileged: false
+          capabilities:
+            drop: ["ALL"]
+    volumes:
+      - name: tmp
+        emptyDir: { sizeLimit: {{ $volumes.tmpSizeLimit | default "5Gi" }} }
+      - name: skills
+        emptyDir: { sizeLimit: {{ $volumes.skillsSizeLimit | default "2Gi" }} }
+      - name: dshm
+        emptyDir: { medium: Memory, sizeLimit: {{ $volumes.shmSizeLimit | default "1Gi" }} }
+      - name: sandbox-ca-source
+        configMap:
+          name: {{ $caConfigMap }}
+          optional: false
+      - name: sandbox-ca-bundle
+        emptyDir: {}
+{{- end }}

@@ -56,6 +56,15 @@ var (
 		DestRel:   "deployment/docker-compose.craft.yml",
 		Mode:      0644,
 	}
+	// SandboxOverlay runs chat sandboxes as Docker containers. Flag-only
+	// (--include-sandbox): it mounts the Docker socket on api_server and
+	// background.
+	SandboxOverlay = File{
+		EmbedPath: "embedded/docker_compose/docker-compose.sandbox.yml",
+		RepoPath:  "deployment/docker_compose/docker-compose.sandbox.yml",
+		DestRel:   "deployment/docker-compose.sandbox.yml",
+		Mode:      0644,
+	}
 	// DevOverlay publishes the service ports (API, Postgres, Redis,
 	// OpenSearch, model server, object store, MinIO, code interpreter) on the host. Stacked
 	// on Compose like LiteOverlay, but flag-only (--dev): it takes the
@@ -159,6 +168,7 @@ var All = []File{
 	Compose,
 	LiteOverlay,
 	CraftOverlay,
+	SandboxOverlay,
 	DevOverlay,
 	ProdCompose,
 	EnvTemplate,

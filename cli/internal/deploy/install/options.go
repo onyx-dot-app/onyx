@@ -27,15 +27,20 @@ type Options struct {
 
 	Lite         bool
 	IncludeCraft bool
-	Prod         bool
-	Dev          bool
-	Local        bool
-	Offline      bool
-	NoPrompt     bool
-	DryRun       bool
-	Verbose      bool
-	NoWait       bool
-	Force        bool
+	// IncludeSandbox stacks docker-compose.sandbox.yml: chat sandboxes run
+	// as Docker containers.
+	IncludeSandbox bool
+	// SandboxDockerRuntime sets SANDBOX_DOCKER_RUNTIME (for example runsc).
+	SandboxDockerRuntime string
+	Prod                 bool
+	Dev                  bool
+	Local                bool
+	Offline              bool
+	NoPrompt             bool
+	DryRun               bool
+	Verbose              bool
+	NoWait               bool
+	Force                bool
 	// AllowDowngrade proceeds when the target version is older than the
 	// installed one. Deliberately separate from Force: a scripted rollback
 	// must not also have to opt into overwriting hand-edited files.
@@ -88,6 +93,7 @@ type installer struct {
 	paint    ui.Painter
 	lite     bool
 	craft    bool
+	sandbox  bool
 	prod     bool
 	dev      bool
 	rootless bool // daemon runs rootless (limits what compose can grant)

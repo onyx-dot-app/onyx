@@ -1813,11 +1813,15 @@ auth:
     values:
       private_key: ""
   # Shared credential that Craft Firecracker host agents send to register
-  # their node signing key (craft.sandboxRuntime=firecracker). The api_server
-  # rejects every registration while it is unset. An inline value must be at
-  # least 32 characters (the chart fails otherwise).
+  # their node signing key (craft.sandboxRuntime auto or firecracker). With
+  # no value and no existingSecret, the chart makes a random value on install
+  # and keeps it on upgrade. An inline value must be at least 32 characters
+  # (the chart fails otherwise). Renders without cluster access (helm
+  # template, Argo CD) cannot read the earlier value and make a new one each
+  # time, which breaks node registration: there, set existingSecret (plus
+  # craft.hostAgent.registrationExistingSecret) or a value.
   sandboxNodeRegistration:
-    enabled: false
+    enabled: true
     allPods: false  # Restricted: only the API server checks it (plus the other restricted pods)
     secretName: 'onyx-sandbox-node-registration'
     existingSecret: ""
@@ -2087,7 +2091,7 @@ configMap:
   # ONYX_SERVER_URL: "https://onyx.example/api"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
-# -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
+# -- Craft and Firecracker sandbox settings.
 craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
   # The chart's service account and the api-server's (see logExport) are always bound.
@@ -2111,13 +2115,14 @@ craft:
   # Empty (default) = the chart-deployed proxy, covered by the podSelector (incl. the
   # SANDBOX_PROXY_NAMESPACE shared-proxy path); leave empty unless you point at a non-pod proxy.
   proxyExtraCIDRs: []
-  # Opt-in check that sandbox nodes can run Firecracker. Runs one pod per
-  # sandbox node (sandboxPod.nodeSelector + tolerations + the onyx.app/kvm
-  # taint; with sandboxRuntime=firecracker only onyx.app/kvm=true nodes) and writes
-  # PASS/FAIL/WARN lines to the pod log. See README "Check your nodes for
+  # Check that the Firecracker nodes can run Firecracker. With sandboxRuntime
+  # auto or firecracker, runs one pod per onyx.app/kvm=true sandbox node
+  # (sandboxPod.nodeSelector + tolerations + the onyx.app/kvm taint) and
+  # writes PASS/FAIL/WARN lines to the pod log. No KVM nodes: no pods. A
+  # failed check does not fail the install. See README "Check your nodes for
   # Craft Firecracker". Does not need ENABLE_CRAFT.
   firecrackerPreflight:
-    enabled: false
+    enabled: true
     # Image with POSIX sh, awk, grep and GNU coreutils. Empty = the sandbox
     # image. The prepuller only caches it when Craft and sandboxImagePrepull
     # are on; otherwise the first preflight pod pulls it.
@@ -2132,16 +2137,26 @@ craft:
     scratchHostPath: ""
     # Free disk below this is a WARN.
     minFreeDiskGi: 50
-  # How Craft sandboxes run: "pod" (default) or "firecracker". Mirrors the
-  # Terraform craft_sandbox_runtime of the sandbox node pool. "firecracker"
-  # sets SANDBOX_RUNTIME=firecracker for the backend and sandbox-proxy, deploys
-  # the host agent below, and lets the agent pods reach sandbox-proxy. Needs
-  # ENABLE_CRAFT, auth.sandboxNodeRegistration and a pinned global.version
-  # (an Onyx release tag such as v5.2.0, not "latest"): the agent image and
-  # the root drive follow it.
-  sandboxRuntime: pod
+  # How sandboxes run. The chart sets SANDBOX_RUNTIME to this value for the
+  # backend and sandbox-proxy. Mirrors the Terraform craft_sandbox_runtime.
+  # - "auto" (default): Firecracker on the onyx.app/kvm=true nodes, when the
+  #   chart has every input: auth.sandboxNodeRegistration and a stable,
+  #   beta or nightly-latest release tag (global.version or the chart
+  #   appVersion; not "latest", "edge", "beta" or a dev build), or
+  #   craft.hostAgent.image.tag and a root drive tag.
+  #   Then the chart deploys the host agent below, sandbox-proxy and the
+  #   egress certificates, with or without ENABLE_CRAFT. Without KVM nodes
+  #   the agent has no pods, and the backend offers no sandbox tools. Without
+  #   the inputs, the chart renders no Firecracker parts. With a
+  #   global.version, api.image.tag or celery_shared.image.tag before
+  #   v6.0.0, "auto" acts as "pod".
+  # - "firecracker": the same parts always; the chart fails on a missing input.
+  # - "pod": no Firecracker. Craft (ENABLE_CRAFT) uses pod sandboxes.
+  # - "off": no sandbox parts. Not with ENABLE_CRAFT.
+  # Craft pod sandboxes work beside Firecracker with "auto" and "firecracker".
+  sandboxRuntime: auto
   # Craft Firecracker host agent: a privileged DaemonSet with hostPID on the
-  # Firecracker sandbox nodes. Rendered only with sandboxRuntime=firecracker.
+  # Firecracker sandbox nodes. Rendered with Firecracker (see sandboxRuntime).
   # Flags: microvm/README.md.
   hostAgent:
     # Own namespace, with Pod Security "privileged". It must differ from the
@@ -2151,7 +2166,8 @@ craft:
     createNamespace: true
     image:
       repository: onyxdotapp/craft-fc-host-agent
-      # Empty = the Onyx release tag (global.version without "-dev").
+      # Empty = the Onyx release tag (global.version without "-dev", else the
+      # chart appVersion, when pinned).
       tag: ""
       pullPolicy: IfNotPresent
     # Pull secrets for a private agent image, for example [{name: regcred}].
@@ -2326,8 +2342,8 @@ craft:
     rootfs:
       # Tag of the craft-runtime image that the drive was built from. The
       # chart pulls the drive rootfs-<version> and sets
-      # configMap.SANDBOX_FC_TEMPLATE to <version>. Empty = the Onyx release
-      # tag (global.version without "-dev").
+      # configMap.SANDBOX_FC_TEMPLATE to <version> (a configMap value wins).
+      # Empty = the Onyx release tag, like image.tag above.
       version: ""
       image:
         repository: onyxdotapp/craft-fc-artifacts
@@ -2416,6 +2432,62 @@ sandboxPod:
       operator: Equal
       value: sandbox
       effect: NoSchedule
+
+# -- Harness sandbox pods: the container backend of chat sandbox tools, for
+# clusters without KVM nodes. One pod per user sandbox, from the
+# harness-sandbox-pod PodTemplate, running the craft-runtime container image.
+# Renders with craft.sandboxRuntime auto or pod (not firecracker or off), on
+# Onyx v6 and later, and not in Lite mode (vectorDB.enabled=false has no
+# Celery beat or heavy worker to stop idle pods). Does not need ENABLE_CRAFT. With auto, a sandbox starts on
+# Firecracker while a KVM node serves the template, else on a pod. A running
+# sandbox stays on its backend until it stops.
+# The chart sets SANDBOX_CONTAINER_HARNESS, SANDBOX_HARNESS_IMAGE and
+# SANDBOX_HARNESS_DAEMON_PORT from these values. Set these optional backend
+# settings under configMap:
+#   SANDBOX_POD_CPU_REQUEST / SANDBOX_POD_CPU_LIMIT (1000m / 2000m),
+#   SANDBOX_POD_MEMORY_REQUEST / SANDBOX_POD_MEMORY_LIMIT (2Gi / 10Gi),
+#   SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST / _LIMIT (5Gi / 20Gi): pod size.
+#   SANDBOX_HARNESS_START_TIMEOUT_SECONDS (120): time limit of a pod start.
+#   SANDBOX_HARNESS_IDLE_TIMEOUT_SECONDS (900): idle time before a pod is
+#   saved and deleted.
+#   SANDBOX_HARNESS_POD_TEMPLATE (harness-sandbox-pod): the PodTemplate name.
+# The kubelet podPidsLimit is the only process limit of a pod.
+harnessSandbox:
+  enabled: true
+  image:
+    repository: onyxdotapp/craft-runtime
+    # Empty: "<global.version or appVersion>-container".
+    tag: ""
+    # Empty: global.pullPolicy.
+    pullPolicy: ""
+  # Optional, cluster-provided RuntimeClass, for example "gvisor" (GKE
+  # Sandbox). gVisor has partial iptables support: set
+  # sandboxPod.netAdminLockdown=false and use a CNI that enforces
+  # NetworkPolicy (for example Dataplane V2). Add the RuntimeClass overhead
+  # to the node memory budget.
+  runtimeClassName: ""
+  # The guest daemon's TLS port in each pod.
+  daemonPort: 8052
+  # Scheduling. No nodeSelector by default, so the pods run on any node; the
+  # default affinity prefers a dedicated sandbox pool (onyx.app/workload=sandbox).
+  nodeSelector: {}
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: onyx.app/workload
+                operator: In
+                values: ["sandbox"]
+  # Empty: sandboxPod.tolerations.
+  tolerations: []
+  volumes:
+    tmpSizeLimit: 5Gi
+    skillsSizeLimit: 2Gi
+    shmSizeLimit: 1Gi
+  # More NetworkPolicy peers (`from` entries) that may reach the daemon port.
+  extraDaemonClients: []
 
 # -- Pre-pull the sandbox image onto the sandbox node pool (DaemonSet), so a
 # user's first sandbox on a node doesn't pay the image pull (~31s measured).

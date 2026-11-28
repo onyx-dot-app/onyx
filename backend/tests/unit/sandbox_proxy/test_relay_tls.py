@@ -23,7 +23,6 @@ from onyx.sandbox_proxy.relay_tls import (
     RelayTLSListener,
     loopback_for,
 )
-from onyx.server.features.build.configs import SandboxRuntime
 
 _RELAY_SAN = "onyx-craft-fc-relay.onyx-sandbox-runtime.svc"
 _PROXY_SAN = "localhost"
@@ -275,11 +274,12 @@ def test_config_needs_firecracker_and_all_files(
     assert server._relay_tls_config() is None
 
     monkeypatch.setattr(server, "SANDBOX_PROXY_RELAY_TLS_PORT", 8443)
-    monkeypatch.setattr(server, "SANDBOX_RUNTIME", SandboxRuntime.POD)
-    with pytest.raises(ValueError, match="SANDBOX_RUNTIME=firecracker"):
+    # pod, off, and auto with SANDBOX_BACKEND=docker.
+    monkeypatch.setattr(server, "SANDBOX_FIRECRACKER_ENABLED", False)
+    with pytest.raises(ValueError, match="SANDBOX_RUNTIME=firecracker or auto"):
         server._relay_tls_config()
 
-    monkeypatch.setattr(server, "SANDBOX_RUNTIME", SandboxRuntime.FIRECRACKER)
+    monkeypatch.setattr(server, "SANDBOX_FIRECRACKER_ENABLED", True)
     monkeypatch.setattr(server, "SANDBOX_PROXY_RELAY_TLS_CERT_PATH", "/c")
     monkeypatch.setattr(server, "SANDBOX_PROXY_RELAY_TLS_KEY_PATH", "")
     monkeypatch.setattr(server, "SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH", "/ca")

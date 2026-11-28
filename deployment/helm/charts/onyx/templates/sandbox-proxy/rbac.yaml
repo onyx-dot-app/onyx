@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- if include "onyx.sandboxProxyEnabled" . }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $sandboxProxyServiceAccount := .Values.sandboxProxy.serviceAccount | default dict }}
 {{- $sandboxProxyServiceAccountAutomount := true }}
@@ -60,7 +60,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-proxy
@@ -80,7 +80,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-proxy
