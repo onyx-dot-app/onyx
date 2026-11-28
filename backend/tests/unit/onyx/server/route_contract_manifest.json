@@ -624,7 +624,6 @@
   "POST /input_prompt/{input_prompt_id}/hide": "basic",
   "POST /integrations/oauth/callback": "basic",
   "POST /integrations/{integration_id}/oauth/start": "basic",
-  "POST /integrations/{integration_id}/publish": "manage:actions +scope",
   "POST /license/claim": "admin",
   "POST /license/downgrade": "admin",
   "POST /license/refresh": "admin",
