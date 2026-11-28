@@ -97,6 +97,13 @@ const nextConfig = {
           process.env.INTERNAL_URL || "http://localhost:8080"
         }/chat/sessions/:sessionId/browser/ws`,
       },
+      // The live preview of the user's Chrome, as the chat browser's above
+      {
+        source: "/api/chat/sessions/:sessionId/browser/chrome/ws",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/chat/sessions/:sessionId/browser/chrome/ws`,
+      },
       // The Onyx Chrome extension's socket; a single-use token authenticates it.
       {
         source: "/api/chat/browser/extension/ws",
