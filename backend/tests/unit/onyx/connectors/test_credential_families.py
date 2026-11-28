@@ -164,6 +164,63 @@ def test_jira_refuses_a_confluence_oauth_credential() -> None:
         )
 
 
+_JIRA_JSON: dict[str, Any] = {
+    "jira_user_email": "user@example.com",
+    "jira_api_token": "token",
+}
+
+
+def test_jira_credential_is_shared_with_jira_service_management() -> None:
+    stored = to_stored_credential_json(DocumentSource.JIRA, _JIRA_JSON, None)
+
+    assert is_credential_usable_for_source(
+        DocumentSource.JIRA, stored, DocumentSource.JIRA_SERVICE_MANAGEMENT
+    )
+    assert (
+        to_source_credential_json(DocumentSource.JIRA_SERVICE_MANAGEMENT, stored)
+        == _JIRA_JSON
+    )
+
+
+def test_jira_service_management_credential_is_shared_with_jira() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.JIRA_SERVICE_MANAGEMENT, _JIRA_JSON, None
+    )
+
+    assert is_credential_usable_for_source(
+        DocumentSource.JIRA_SERVICE_MANAGEMENT, stored, DocumentSource.JIRA
+    )
+    assert to_source_credential_json(DocumentSource.JIRA, stored) == _JIRA_JSON
+
+
+def test_confluence_credential_is_usable_by_jira_service_management() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.CONFLUENCE, _CONFLUENCE_JSON, None
+    )
+
+    assert is_credential_usable_for_source(
+        DocumentSource.CONFLUENCE, stored, DocumentSource.JIRA_SERVICE_MANAGEMENT
+    )
+
+
+def test_jira_service_management_refuses_other_credentials() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.CONFLUENCE, _CONFLUENCE_OAUTH_JSON, None
+    )
+
+    assert not is_credential_usable_for_source(
+        DocumentSource.CONFLUENCE, stored, DocumentSource.JIRA_SERVICE_MANAGEMENT
+    )
+    assert not is_credential_usable_for_source(
+        DocumentSource.SLACK,
+        {"slack_bot_token": "x"},
+        DocumentSource.JIRA_SERVICE_MANAGEMENT,
+    )
+    assert not is_credential_usable_for_source(
+        DocumentSource.JIRA_SERVICE_MANAGEMENT, _JIRA_JSON, DocumentSource.JIRA
+    )
+
+
 def test_malformed_family_credential_is_not_usable_by_other_sources() -> None:
     stored = {"email": "user@example.com", CREDENTIAL_FAMILY_KEY: "atlassian"}
 
