@@ -1,6 +1,6 @@
 name: Load Test Harness Tests
 concurrency:
-  group: Load-Test-Harness-Tests-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: Load-Test-Harness-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 # The harness tests (tools/loadtest/tests) also read backend prompts and stream
@@ -19,6 +19,14 @@ on:
 permissions: {}
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   loadtest-harness-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 15

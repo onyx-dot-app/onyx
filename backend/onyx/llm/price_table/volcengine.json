@@ -1,6 +1,93 @@
 {
   "aliases": {},
   "models": {
+    "deepseek-v4-1-flash-260910": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.00299,
+        "input": 0.14972,
+        "output": 0.59886
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-v4-1-flash-261017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.00299,
+        "input": 0.14972,
+        "output": 0.59886
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-v4-1-flash-economy-261017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0024,
+        "input": 0.11977,
+        "output": 0.47909
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017 Economy",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "deepseek-v4-flash-ga-260731": {
       "attachment": false,
       "cost": {
@@ -36,7 +123,7 @@
         "input": 1.3359,
         "output": 4.00771
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-pro",
       "limit": {
         "context": 1000000,
         "output": 384000
@@ -315,6 +402,7 @@
       "cost": {
         "cache_read": 0.01781,
         "input": 0.08906,
+        "input_audio": 1.3359,
         "output": 0.53436,
         "tiers": [
           {
@@ -337,15 +425,17 @@
           }
         ]
       },
-      "family": "seed",
+      "family": "seed-lite",
       "limit": {
         "context": 256000,
+        "input": 224000,
         "output": 131072
       },
       "modalities": {
         "input": [
           "text",
           "image",
+          "audio",
           "video"
         ],
         "output": [
@@ -365,6 +455,7 @@
       "cost": {
         "cache_read": 0.00594,
         "input": 0.02969,
+        "input_audio": 0.4453,
         "output": 0.29687,
         "tiers": [
           {
@@ -387,15 +478,17 @@
           }
         ]
       },
-      "family": "seed",
+      "family": "seed-mini",
       "limit": {
         "context": 256000,
+        "input": 224000,
         "output": 131072
       },
       "modalities": {
         "input": [
           "text",
           "image",
+          "audio",
           "video"
         ],
         "output": [
@@ -437,9 +530,10 @@
           }
         ]
       },
-      "family": "seed",
+      "family": "seed-pro",
       "limit": {
         "context": 256000,
+        "input": 224000,
         "output": 128000
       },
       "modalities": {
@@ -461,6 +555,38 @@
       "temperature": false,
       "tool_call": true
     },
+    "doubao-seed-2-1-lite-260915": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.02395,
+        "input": 0.11977,
+        "input_audio": 1.7966,
+        "output": 0.40423
+      },
+      "family": "seed-lite",
+      "limit": {
+        "context": 1024000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "audio",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 2.1 Lite",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "doubao-seed-2-1-pro-260628": {
       "attachment": true,
       "cost": {
@@ -468,9 +594,40 @@
         "input": 0.8906,
         "output": 4.45301
       },
-      "family": "seed",
+      "family": "seed-pro",
       "limit": {
         "context": 256000,
+        "input": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 2.1 Pro",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-2-1-pro-260915": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.17966,
+        "input": 0.8983,
+        "output": 4.49149
+      },
+      "family": "seed-pro",
+      "limit": {
+        "context": 1024000,
         "output": 256000
       },
       "modalities": {
@@ -498,7 +655,7 @@
         "input": 0.4453,
         "output": 2.22651
       },
-      "family": "seed",
+      "family": "seed-turbo",
       "limit": {
         "context": 256000,
         "output": 256000
@@ -541,8 +698,9 @@
       },
       "family": "seed",
       "limit": {
-        "context": 256000,
-        "output": 256000
+        "context": 128000,
+        "input": 128000,
+        "output": 32000
       },
       "modalities": {
         "input": [
@@ -571,7 +729,7 @@
       },
       "family": "seed",
       "limit": {
-        "context": 256000,
+        "context": 1024000,
         "output": 256000
       },
       "modalities": {
@@ -649,6 +807,36 @@
       "release_date": "2026-08-26",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "kimi-k3-1-pro-261024": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.19463,
+        "input": 1.94631,
+        "output": 10.18071
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     }
   },

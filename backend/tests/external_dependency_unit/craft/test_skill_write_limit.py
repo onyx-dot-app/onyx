@@ -9,7 +9,6 @@ import io
 import threading
 import time
 import zipfile
-from datetime import timedelta
 from uuid import UUID
 
 import pytest
@@ -17,6 +16,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Plugin, PluginVersion, User
 from onyx.db.plugin import set_plugin_preferences__no_commit
 from onyx.db.plugin_access import load_user_plugin_states, skill_usage_by_user
@@ -35,6 +35,7 @@ from onyx.skills.models import SkillUsage
 from tests.external_dependency_unit.craft.db_helpers import (
     make_skill,
     make_user,
+    share_plugin_with_user,
 )
 
 _MB = 1024 * 1024
@@ -77,10 +78,12 @@ def test_backfilled_version_counts_as_zero(db_session: Session) -> None:
 
 
 def _same_name_pair(db_session: Session, user: User) -> tuple[Plugin, Plugin]:
-    """Two plugins with one skill name. The older one wins the name."""
+    """Two plugins with one skill name. The user's own one wins the name over
+    one that another user shares."""
     winner = make_skill(db_session, name="same-name", author_user_id=user.id)
-    loser = make_skill(db_session, name="same-name", author_user_id=user.id)
-    loser.created_at = winner.created_at + timedelta(seconds=1)
+    sharer = make_user(db_session, standard_account=True)
+    loser = make_skill(db_session, name="same-name", author_user_id=sharer.id)
+    share_plugin_with_user(db_session, loser.id, user.id, SkillSharePermission.VIEWER)
     db_session.flush()
     return winner, loser
 

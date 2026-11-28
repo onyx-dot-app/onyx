@@ -70,16 +70,15 @@ STUCK_QUEUED_OLDER_THAN = timedelta(seconds=SCHEDULED_RUN_QUEUE_RESIDENCY_SECOND
 # A started run makes its chat response within seconds; counted from the start.
 NO_RESPONSE_OLDER_THAN = timedelta(minutes=15)
 APPROVAL_WAIT_LIMIT = timedelta(hours=24)
-# The chat of a run that nobody approved in time says that it hit a time
-# limit, not that the user stopped it.
-# The reason a cancelled approval wait gives in its chat, by run error class.
+# The chat of a run that nobody approved in time says that its approval wait
+# expired, not that the user stopped it.
 _APPROVAL_WAIT_ENDED = {
     ScheduledTaskErrorClass.APPROVAL_TIMEOUT: RunFailure(
-        kind=RunFailureKind.DEADLINE,
+        kind=RunFailureKind.APPROVAL_EXPIRED,
         message="Nobody answered the approval request in time.",
     ),
     ScheduledTaskErrorClass.SUPERSEDED_BY_NEXT_FIRE: RunFailure(
-        kind=RunFailureKind.DEADLINE,
+        kind=RunFailureKind.APPROVAL_EXPIRED,
         message="The next scheduled run replaced this one.",
     ),
 }

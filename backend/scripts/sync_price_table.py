@@ -684,25 +684,59 @@ def _preserve_unbounded_flags(providers: dict[str, Any], output_dir: Path) -> No
         )
 
 
+def _preserve_retired_models(providers: dict[str, Any], output_dir: Path) -> None:
+    """Keep each vendored model that left the upstream feeds, as it was.
+    Deployments still name such models, and without an entry an OpenAI model
+    loses its responses-API routing, limits and prices. Upstream also drops
+    ids it only renamed (gpt-image-2 kept its dated snapshot), so the status
+    stays what upstream last said."""
+    preserved = 0
+    for provider, section in providers.items():
+        try:
+            vendored_text = (output_dir / f"{provider}.json").read_text()
+        except FileNotFoundError:
+            continue
+        vendored: dict[str, Any] = json.loads(vendored_text)
+        models: dict[str, Any] = section["models"]
+        aliases: dict[str, Any] = section["aliases"]
+        for model_id, entry in (vendored.get("models") or {}).items():
+            if model_id in models or model_id in aliases:
+                continue
+            models[model_id] = entry
+            preserved += 1
+        for alias, target in (vendored.get("aliases") or {}).items():
+            if alias not in aliases and alias not in models and target in models:
+                aliases[alias] = target
+    if preserved:
+        print(
+            f"kept {preserved} models that left the upstream feeds",
+            file=sys.stderr,
+        )
+
+
 def _check_litellm_schema(litellm_map: dict[str, Any]) -> None:
     """litellm entries must carry litellm_provider/mode and token-cost fields —
-    a schema change would silently degrade the merge."""
-    total = tagged = priced = 0
+    a schema change would silently degrade the merge. Only chat entries count
+    toward the token-cost share: image, video and audio entries are priced per
+    image, second or character, and they grow faster than chat entries."""
+    total = tagged = chat = priced = 0
     for entry in litellm_map.values():
         if not isinstance(entry, dict):
             continue
         total += 1
         if entry.get("litellm_provider") and entry.get("mode"):
             tagged += 1
-        if entry.get("input_cost_per_token") is not None:
-            priced += 1
+        if entry.get("mode") in _LITELLM_CHAT_MODES:
+            chat += 1
+            if entry.get("input_cost_per_token") is not None:
+                priced += 1
     assert total > 1000, f"litellm map has only {total} entries — upstream regression?"
     assert tagged / total >= 0.95, (
         f"only {tagged / total:.0%} of litellm entries carry "
         "litellm_provider+mode — upstream renamed or dropped the fields"
     )
-    assert priced / total >= 0.70, (
-        f"only {priced / total:.0%} of litellm entries carry "
+    assert chat and priced / chat >= 0.85, (
+        f"only {priced / max(chat, 1):.0%} of litellm chat entries carry "
         "input_cost_per_token — upstream renamed or dropped the field"
     )
 
@@ -812,6 +846,7 @@ def main() -> int:
         merge_openrouter(providers, openrouter_models)
     else:
         _preserve_unbounded_flags(providers, args.output_dir)
+    _preserve_retired_models(providers, args.output_dir)
 
     table = {
         "schema_version": 2,

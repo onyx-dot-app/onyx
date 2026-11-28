@@ -1,7 +1,7 @@
 """Member routes of integrations: the list with status, the user's on/off
 choice, connect and disconnect, the Always allow choices, the agent catalog
-and the integrations of an agent. The share and publish routes are here too;
-they need Manage actions."""
+and the integrations of an agent. The share routes are here too; they need
+Manage actions. To publish, set the install setting to Available."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -15,7 +15,6 @@ from onyx.integrations.access import (
     agent_integration_ids_for_user,
     check_private,
     integration_shares_view,
-    publish_integration__no_commit,
     set_integration_enabled__no_commit,
     share_integration__no_commit,
 )
@@ -41,7 +40,6 @@ from onyx.server.features.integrations.models import (
     AgentIntegrationOption,
     ConnectionFieldsRequest,
     IntegrationEnableRequest,
-    IntegrationInstallationPolicy,
     IntegrationSharesUpdate,
     IntegrationSharesView,
     MemberIntegration,
@@ -158,26 +156,6 @@ def set_integration_shares(
     db_session.commit()
     reload_craft_sessions(affected, db_session)
     return integration_shares_view(integration, db_session)
-
-
-@router.post("/{integration_id}/publish")
-def publish_integration(
-    integration_id: int,
-    user: User = Depends(_manager),
-    db_session: Session = Depends(get_session),
-) -> IntegrationInstallationPolicy:
-    """Make a private integration Available to the organization. Only an
-    organization-wide action manager does this."""
-    integration = get_manageable_integration(
-        user, integration_id, db_session, lock=True
-    )
-    check_private(integration)
-    affected = publish_integration__no_commit(user, integration, db_session)
-    db_session.commit()
-    reload_craft_sessions(affected, db_session)
-    return IntegrationInstallationPolicy(
-        installation_policy=integration.installation_policy
-    )
 
 
 @router.put("/{integration_id}/connection")

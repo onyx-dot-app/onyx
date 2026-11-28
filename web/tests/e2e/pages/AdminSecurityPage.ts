@@ -93,6 +93,34 @@ export class AdminSecurityPage {
   }
 
   // ---------------------------------------------------------------------------
+  // Audit logs and SIEM
+  // ---------------------------------------------------------------------------
+
+  static readonly AUDIT_SECTION_TITLE = "Audit Logs and SIEM";
+  static readonly AUDIT_DOCS_PATH = "/admins/auditing/audit_logs";
+  // A user-activity category, off by default.
+  static readonly SEARCHES_TOGGLE = "Searches";
+
+  get auditSectionTitle(): Locator {
+    return this.page.getByText(AdminSecurityPage.AUDIT_SECTION_TITLE, {
+      exact: true,
+    });
+  }
+
+  get auditDocsLink(): Locator {
+    return this.page.getByRole("link", { name: "Set up SIEM forwarding" });
+  }
+
+  get auditStatusTitle(): Locator {
+    return this.page.getByText("Audit Stream Status", { exact: true });
+  }
+
+  /** The 24-hour summary text of one row of the audit stream status card. */
+  auditStatusSummary(): Locator {
+    return this.page.getByText(/in the last 24 hours\. Last event/);
+  }
+
+  // ---------------------------------------------------------------------------
   // Chat retention ("Keep Chat History")
   // ---------------------------------------------------------------------------
 

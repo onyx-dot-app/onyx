@@ -15,7 +15,7 @@ from onyx.integrations.models import NeedCounts, PluginNeedState, PluginNeedView
 from onyx.integrations.service import list_member_integrations
 from onyx.server.features.integrations.models import MemberIntegration
 from onyx.skills.models import PluginNeed
-from onyx.utils.url import normalize_mcp_server_url
+from onyx.utils.url import mcp_server_url_problem, normalize_mcp_server_url
 
 
 def need_views(
@@ -31,6 +31,10 @@ def need_views(
 
     views: list[PluginNeedView] = []
     for need in needs:
+        url_problem = mcp_server_url_problem(need.url) if need.url else None
+        if url_problem is not None:
+            # A version saved before a URL rule existed still holds that URL.
+            need = need.model_copy(update={"url": None, "url_problem": url_problem})
         matches = by_url.get(need.url, []) if need.url is not None else []
         if not need.supported:
             state = PluginNeedState.NOT_SUPPORTED

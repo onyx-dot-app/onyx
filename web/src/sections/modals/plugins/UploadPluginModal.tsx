@@ -20,12 +20,14 @@ import {
   inspectPluginUpload,
   inspectSkillBundle,
   savePluginUpload,
+  takenPluginName,
   type PluginUploadResult,
 } from "@/lib/skills/api";
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 import type { SkillCreationDraft } from "@/lib/skills/creationDraft";
 import PluginNeedList from "@/sections/plugins/PluginNeedList";
 import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
+import TakenNameField, { canUseName } from "@/sections/skills/TakenNameField";
 
 type UploadStep =
   | { step: "pick"; bundle: PreparedSkillBundle | null }
@@ -35,6 +37,9 @@ type UploadStep =
       bundle: PreparedSkillBundle;
       preview: PluginUploadPreview;
       saveAsNew: boolean;
+      /** The new plugin name. Asked for once a name is taken. */
+      name: string;
+      takenNames: string[];
     };
 
 interface UploadPluginModalProps {
@@ -66,15 +71,21 @@ function PreviewSection({ title, children }: PreviewSectionProps) {
 interface PluginPreviewProps {
   preview: PluginUploadPreview;
   saveAsNew: boolean;
+  name: string;
+  takenNames: string[];
   busy: boolean;
   onSaveAsNewChange: (saveAsNew: boolean) => void;
+  onNameChange: (name: string) => void;
 }
 
 function PluginPreview({
   preview,
   saveAsNew,
+  name,
+  takenNames,
   busy,
   onSaveAsNewChange,
+  onNameChange,
 }: PluginPreviewProps) {
   const t = useTranslations("plugins.upload");
   const { target, manifest } = preview;
@@ -102,7 +113,7 @@ function PluginPreview({
                 name: target.plugin_name,
                 version: target.version_number,
               })
-            : t("target.newPlugin", { name: target.plugin_name })
+            : t("target.newPlugin", { name: name || target.plugin_name })
         }
         bottomChildren={
           showSaveAsNew ? (
@@ -121,6 +132,14 @@ function PluginPreview({
           ) : undefined
         }
       />
+      {target.kind === "new_plugin" && takenNames.length > 0 && (
+        <TakenNameField
+          value={name}
+          takenNames={takenNames}
+          disabled={busy}
+          onChange={onNameChange}
+        />
+      )}
       {preview.name_conflicts.length > 0 && (
         <MessageCard
           variant="warning"
@@ -242,12 +261,21 @@ function UploadPluginModalContent({
         setState({ step: "skill", bundle });
         return;
       }
-      const preview = await inspectPluginUpload(
-        bundle.file,
+      const preview = await inspectPluginUpload(bundle.file, saveAsNew, {
+        pluginId,
+      });
+      const { target } = preview;
+      setState({
+        step: "plugin",
+        bundle,
+        preview,
         saveAsNew,
-        pluginId
-      );
-      setState({ step: "plugin", bundle, preview, saveAsNew });
+        name: target.plugin_name,
+        takenNames:
+          target.kind === "new_plugin" && target.name_taken
+            ? [target.plugin_name]
+            : [],
+      });
     } catch (caught) {
       setState({ step: "pick", bundle });
       setError(
@@ -281,16 +309,30 @@ function UploadPluginModalContent({
     }
   }
 
-  async function save(bundle: PreparedSkillBundle, saveAsNew: boolean) {
+  async function save(
+    step: Extract<UploadStep, { step: "plugin" }>
+  ): Promise<void> {
     setBusy("save");
     setError(null);
     try {
-      const result = await savePluginUpload(bundle.file, saveAsNew, pluginId);
+      const result = await savePluginUpload(step.bundle.file, step.saveAsNew, {
+        pluginId,
+        name: step.takenNames.length > 0 ? step.name : undefined,
+      });
       onSaved(
         result,
         result.enabled && needsAttention(result.plugin.plugin?.needs ?? [])
       );
     } catch (caught) {
+      const taken = takenPluginName(caught);
+      if (taken !== null && step.preview.target.kind === "new_plugin") {
+        setState({
+          ...step,
+          name: taken,
+          takenNames: [...step.takenNames, taken],
+        });
+        return;
+      }
       setError(
         failure(caught instanceof Error ? caught : null, t("saveFailed"))
       );
@@ -301,6 +343,10 @@ function UploadPluginModalContent({
 
   const bundle = state.bundle;
   const disabled = busy !== null || preparing;
+  const nameBlocked =
+    state.step === "plugin" &&
+    state.takenNames.length > 0 &&
+    !canUseName(state.name, state.takenNames);
 
   return (
     <>
@@ -355,11 +401,14 @@ function UploadPluginModalContent({
           <PluginPreview
             preview={state.preview}
             saveAsNew={state.saveAsNew}
+            name={state.name}
+            takenNames={state.takenNames}
             busy={disabled}
             onSaveAsNewChange={(saveAsNew) => {
               setState({ ...state, saveAsNew });
               void read(state.bundle, saveAsNew);
             }}
+            onNameChange={(name) => setState({ ...state, name })}
           />
         )}
         {error && (
@@ -384,11 +433,8 @@ function UploadPluginModalContent({
         ) : (
           <Button
             icon={SvgUploadCloud}
-            disabled={disabled || state.step !== "plugin"}
-            onClick={() =>
-              state.step === "plugin" &&
-              void save(state.bundle, state.saveAsNew)
-            }
+            disabled={disabled || state.step !== "plugin" || nameBlocked}
+            onClick={() => state.step === "plugin" && void save(state)}
           >
             {busy === "save" ? t("saving") : t("save")}
           </Button>

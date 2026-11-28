@@ -11,7 +11,7 @@ import { getMultiModelChildren } from "@/lib/timeline/chat/message/multiModel";
 import { messageRowId } from "@/lib/chat/rowIds";
 import { MENTION_TRIGGER, placeMentions } from "@/lib/chat/mentions";
 import type { ComposedMention } from "@/lib/chat/types";
-import { readToolQuestions } from "@/lib/chat/toolApprovals";
+import { readToolQuestions } from "@/lib/chat/toolQuestions";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { isNestedPacket } from "@/lib/timeline/chat/packetHelpers";
 

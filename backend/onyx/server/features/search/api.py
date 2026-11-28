@@ -27,7 +27,12 @@ from onyx.auth.permissions import (
 )
 from onyx.configs.chat_configs import DISABLE_POSTGRES_QUERY_TOOL
 from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
-from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
+from onyx.context.search.models import (
+    BaseFilters,
+    PersonaSearchInfo,
+    SearchDocsResponse,
+    TimeRange,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import (
@@ -83,6 +88,13 @@ from onyx.tracing.framework.create import (
     trace,
 )
 from onyx.tracing.framework.spans import SpanError
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    document_id_fields,
+    emit_audit_event,
+)
 from onyx.utils.fleet_query_telemetry import QueryMode, telemetry_query
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -412,6 +424,29 @@ def _run_search(
             )
             raise
         tool_span.span_data.output = tool_response.text
+
+    details = tool_response.details
+    emit_audit_event(
+        AuditAction.SEARCH_QUERY,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        extra={
+            "api": trace_name,
+            "persona_id": request.persona_id,
+            **document_id_fields(
+                "retrieved_document_ids",
+                (
+                    doc.document_id
+                    for doc in (
+                        details.search_docs
+                        if isinstance(details, SearchDocsResponse)
+                        else []
+                    )
+                ),
+            ),
+        },
+        query_text=request.query,
+    )
 
     # Map LLM-facing JSON entries to SearchResults (one per merged section).
     llm_facing_text = tool_response.text

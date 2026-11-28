@@ -183,12 +183,12 @@ covers new files that match it.
 | `web/src/lib/badges/` | editions-and-gating |
 | `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
-| `backend/onyx/tracing/`, `backend/onyx/server/manage/tracing/`, `backend/onyx/db/tracing.py`, `backend/onyx/server/metrics/` | observability |
+| `backend/onyx/tracing/`, `backend/ee/onyx/tracing/`, `backend/onyx/server/manage/tracing/`, `backend/onyx/db/tracing.py`, `backend/onyx/server/metrics/` | observability |
 | `backend/onyx/server/metrics/mcp_server.py` | mcp-server, observability |
 | `backend/onyx/server/metrics/mcp_client.py` | mcp-and-custom-tools, observability |
 | `backend/onyx/db/llm_usage.py`, `backend/onyx/db/usage.py`, `backend/onyx/db/user_usage.py`, `backend/onyx/db/system_usage.py`, `backend/onyx/server/features/usage/` | observability |
 | `backend/ee/onyx/server/analytics/`, `backend/ee/onyx/db/analytics.py`, `backend/ee/onyx/db/usage_export.py` | observability |
-| `backend/onyx/utils/audit.py`, `backend/ee/onyx/server/query_history/`, `backend/ee/onyx/db/query_history.py`, `backend/ee/onyx/server/reporting/`, `backend/ee/onyx/background/celery/tasks/usage_reporting/` | observability |
+| `backend/onyx/utils/audit.py`, `backend/onyx/utils/credential_audit.py`, `backend/ee/onyx/utils/audit.py`, `backend/ee/onyx/utils/credential_audit.py`, `backend/ee/onyx/utils/audit_stats.py`, `backend/ee/onyx/server/security/`, `web/src/views/admin/AuditLogsSection.tsx`, `backend/ee/onyx/server/query_history/`, `backend/ee/onyx/db/query_history.py`, `backend/ee/onyx/server/reporting/`, `backend/ee/onyx/background/celery/tasks/usage_reporting/` | observability |
 | `backend/onyx/db/cost_override.py`, `backend/onyx/llm/cost_overrides.py` | observability, llm-providers |
 | `backend/onyx/utils/telemetry.py`, `backend/onyx/utils/timing.py`, `backend/ee/onyx/utils/telemetry.py`, `backend/ee/onyx/utils/posthog_client.py` | observability |
 | `backend/onyx/utils/fleet_telemetry.py`, `backend/onyx/utils/fleet_query_telemetry.py`, `backend/onyx/utils/fleet_telemetry_collector.py`, `backend/onyx/utils/fleet_telemetry_resources.py`, `backend/onyx/db/fleet_enrollment.py`, `backend/onyx/db/fleet_telemetry.py`, `deployment/fleet-telemetry.md` | fleet-telemetry |

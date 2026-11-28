@@ -50,7 +50,7 @@
         "output": 30.0
       },
       "limit": {
-        "context": 400000,
+        "context": 272000,
         "output": 128000
       },
       "modalities": {
@@ -73,8 +73,8 @@
       "attachment": true,
       "cost": {
         "cache_read": 1.25,
-        "input": 5.0,
-        "output": 10.0
+        "input": 5,
+        "output": 10
       },
       "family": "gpt-image",
       "limit": {
@@ -271,6 +271,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-04-14",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -327,6 +328,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-04-14",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -414,6 +416,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-05-13",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -474,6 +477,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-08-06",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -504,6 +508,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-11-20",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -577,6 +582,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-07-18",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -809,6 +815,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-08-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -866,6 +873,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-08-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -923,6 +931,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-08-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -979,6 +988,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-10-06",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -1085,6 +1095,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-13",
+      "status": "deprecated",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
       "temperature": true,
@@ -1259,6 +1270,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-05",
+      "status": "deprecated",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
       "temperature": true,
@@ -1291,6 +1303,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-05",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -1457,6 +1470,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-03-17",
+      "status": "deprecated",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
       "temperature": true,
@@ -1604,7 +1618,7 @@
       "release_date": "2026-04-23",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "gpt-5.5-2026-04-23": {
@@ -1789,7 +1803,7 @@
       "release_date": "2026-07-09",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "gpt-5.6-cyber": {
@@ -1868,7 +1882,7 @@
       "release_date": "2026-07-09",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "gpt-5.6-sol": {
@@ -1920,7 +1934,7 @@
       "release_date": "2026-07-09",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "gpt-5.6-terra": {
@@ -1972,7 +1986,7 @@
       "release_date": "2026-07-09",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "gpt-6-astra": {
@@ -2022,6 +2036,54 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-04",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gpt-6-astra-healthcare": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1,
+        "context_over_200k": {
+          "cache_read": 2,
+          "input": 20,
+          "output": 75
+        },
+        "input": 10,
+        "output": 50,
+        "tiers": [
+          {
+            "cache_read": 2,
+            "input": 20,
+            "output": 75,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-6 Astra Healthcare",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-24",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -2128,15 +2190,15 @@
       "release_date": "2026-09-22",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "gpt-6-rosalind": {
       "cost": {
-        "cache_read": 1.5,
-        "cache_write": 18.75,
-        "input": 15.0,
-        "output": 75.0
+        "cache_read": 1.0,
+        "cache_write": 12.5,
+        "input": 10.0,
+        "output": 50.0
       },
       "limit": {
         "context": 922000,
@@ -2207,7 +2269,7 @@
       "release_date": "2026-09-22",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "gpt-6.1-sol": {
@@ -2261,6 +2323,54 @@
       "temperature": false,
       "tool_call": true
     },
+    "gpt-6.1-sol-healthcare": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-6.1 Sol Healthcare",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-24",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "gpt-6.1-terra": {
       "attachment": true,
       "cost": {
@@ -2310,6 +2420,237 @@
       "release_date": "2026-10-26",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "gpt-6.2-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "cache_write": 10,
+        "context_over_200k": {
+          "cache_read": 0.8,
+          "cache_write": 20,
+          "input": 16,
+          "output": 60
+        },
+        "input": 8,
+        "output": 40,
+        "tiers": [
+          {
+            "cache_read": 0.8,
+            "cache_write": 20,
+            "input": 16,
+            "output": 60,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT-6.2 Astra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gpt-6.2-astra-healthcare": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "cache_write": 10,
+        "context_over_200k": {
+          "cache_read": 0.8,
+          "cache_write": 20,
+          "input": 16,
+          "output": 60
+        },
+        "input": 8,
+        "output": 40,
+        "tiers": [
+          {
+            "cache_read": 0.8,
+            "cache_write": 20,
+            "input": 16,
+            "output": 60,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-6.2 Astra Healthcare",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-24",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gpt-6.2-astra-law": {
+      "cost": {
+        "cache_read": 0.39999999999999997,
+        "cache_write": 10.0,
+        "input": 8.0,
+        "output": 40.0
+      },
+      "limit": {
+        "context": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-6.2-astra-law",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gpt-6.2-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT-6.2 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gpt-6.2-sol-healthcare": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "GPT-6.2 Sol Healthcare",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-24",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2476,7 +2817,7 @@
       "reasoning": true,
       "release_date": "2026-08-07",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "gpt-daybreak-red-latest": {
@@ -2526,7 +2867,7 @@
         "cache_read": 0.19999999999999998,
         "input": 2.0
       },
-      "family": "gpt-image",
+      "family": "gpt-image-mini",
       "limit": {
         "context": 0,
         "input": 0,
@@ -2555,8 +2896,8 @@
       "attachment": true,
       "cost": {
         "cache_read": 1.25,
-        "input": 5.0,
-        "output": 10.0
+        "input": 5,
+        "output": 10
       },
       "family": "gpt-image",
       "limit": {
@@ -2596,8 +2937,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 1.25,
-        "input": 5,
-        "output": 30
+        "input": 5.0
       },
       "family": "gpt-image",
       "limit": {
@@ -2619,6 +2959,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2026-04-21",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -2685,6 +3026,13 @@
       "mode": "realtime",
       "name": "gpt-live-1"
     },
+    "gpt-live-1.1": {
+      "cost": {
+        "second_input": 0.000833333333333
+      },
+      "mode": "realtime",
+      "name": "gpt-live-1.1"
+    },
     "gpt-live-transcribe": {
       "cost": {
         "second_input": 0.000283333333333
@@ -2732,39 +3080,17 @@
       "name": "gpt-realtime-2"
     },
     "gpt-realtime-2.1": {
-      "attachment": true,
       "cost": {
-        "cache_read": 0.4,
-        "input": 4,
-        "input_audio": 32,
-        "output": 24,
-        "output_audio": 64
+        "cache_read": 0.39999999999999997,
+        "input": 4.0,
+        "output": 24.0
       },
-      "family": "gpt",
       "limit": {
         "context": 128000,
-        "input": 96000,
         "output": 32000
       },
-      "modalities": {
-        "input": [
-          "text",
-          "audio",
-          "image"
-        ],
-        "output": [
-          "text",
-          "audio"
-        ]
-      },
       "mode": "realtime",
-      "name": "GPT-Realtime-2.1",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-07-06",
-      "structured_output": false,
-      "temperature": false,
-      "tool_call": true
+      "name": "gpt-realtime-2.1"
     },
     "gpt-realtime-2.1-mini": {
       "cost": {
@@ -3206,6 +3532,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-04-16",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -3291,6 +3618,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-06-10",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -3362,6 +3690,18 @@
       },
       "mode": "moderation",
       "name": "omni-moderation-2024-09-26"
+    },
+    "omni-moderation-csam-latest": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 0
+      },
+      "mode": "moderation",
+      "name": "omni-moderation-csam-latest"
     },
     "omni-moderation-latest": {
       "cost": {

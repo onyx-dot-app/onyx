@@ -73,7 +73,11 @@ export default function AlwaysAllowList({
         {canSave ? t("description") : t("readOnlyDescription")}
       </Text>
       {data.actions.map((action) => {
-        const asks = canSave && action.effective_admin_policy === "ask";
+        const saved = action.user_policy === "allow";
+        // A saved grant stays visible after the admin stops new grants, so
+        // the user can still turn it off.
+        const asks =
+          (canSave || saved) && action.effective_admin_policy === "ask";
         return (
           <ContentAction
             key={action.key}
@@ -112,8 +116,12 @@ export default function AlwaysAllowList({
                       aria-label={t("switch.label", {
                         name: action.display_name,
                       })}
-                      checked={action.user_policy === "allow"}
-                      disabled={savingKey !== null || action.always_asks}
+                      checked={saved}
+                      disabled={
+                        savingKey !== null ||
+                        action.always_asks ||
+                        (!canSave && !saved)
+                      }
                       onCheckedChange={(checked) =>
                         void change(action, checked)
                       }

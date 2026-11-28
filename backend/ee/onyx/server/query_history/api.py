@@ -50,6 +50,12 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails, ChatSessionsResponse
 from onyx.server.settings.store import load_settings
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import parallel_yield
 from shared_configs.contextvars import get_current_tenant_id
@@ -407,7 +413,7 @@ def get_query_history_export_status(
 @router.get("/admin/query-history/download", tags=PUBLIC_API_TAGS)
 def download_query_history_csv(
     request_id: str,
-    _: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
+    user: User = Depends(require_permission(Permission.READ_QUERY_HISTORY)),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -434,6 +440,13 @@ def download_query_history_csv(
                 f"Failed to read query history file: {str(e)}",
             )
         csv_stream.seek(0)
+        emit_audit_event(
+            AuditAction.EXPORT_QUERY_HISTORY,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="query_history_export",
+            resource_id=request_id,
+        )
         return StreamingResponse(
             iter(csv_stream),
             media_type=FileType.CSV,

@@ -16,11 +16,13 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.db.access import user_can_read_chat_session
 from onyx.db.chat import (
     get_or_create_root_message,
     get_user_artifact_search_candidates,
     get_user_published_file,
     get_user_published_files,
+    rename_chat_artifact,
     save_chat_artifact,
 )
 from onyx.db.enums import ChatSessionSharedStatus
@@ -45,6 +47,7 @@ from onyx.server.features.build.sandbox.models import (
     HarnessSandboxRef,
     session_workspace,
 )
+from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.chat_backend import get_chat_artifact
 from onyx.server.query_and_chat.models import ChatArtifactFile
 from onyx.tools.models import ToolCallException
@@ -998,3 +1001,50 @@ def test_an_update_keeps_a_title_published_after_its_lookup(
         )
         == "New"
     )
+
+
+def test_a_rename_clears_a_title_that_repeated_the_old_name(
+    db_session: Session, owner: User
+) -> None:
+    chat = _chat(db_session, owner)
+    first = _publish(db_session, chat, "/w/report.md", "report.md")
+    second = _publish(db_session, chat, "/w/report.md", "Q3 summary")
+    assert first.artifact_id is not None
+
+    rename_chat_artifact(db_session, first.artifact_id, "summary.md")
+    db_session.commit()
+
+    titles = {
+        row.file_id: row.title
+        for row in db_session.execute(
+            select(ChatArtifactVersion.file_id, ChatArtifactVersion.title).where(
+                ChatArtifactVersion.artifact_id == first.artifact_id
+            )
+        )
+    }
+    assert titles == {first.file_id: None, second.file_id: "Q3 summary"}
+
+
+def test_the_owner_of_a_deleted_chat_cannot_read_it_or_its_files(
+    db_session: Session, owner: User
+) -> None:
+    chat = _chat(db_session, owner)
+    file = _publish(db_session, chat, "/w/report.md")
+    assert user_can_read_chat_session(db_session, chat.id, owner.id)
+
+    chat.deleted = True
+    db_session.commit()
+
+    assert not user_can_read_chat_session(db_session, chat.id, owner.id)
+    with pytest.raises(OnyxError) as error:
+        chat_backend._readable_chat_file_record(file.file_id, owner, db_session)
+    assert error.value.error_code is OnyxErrorCode.NOT_FOUND
+
+
+def test_a_readable_file_whose_record_is_gone_is_not_found(
+    db_session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(chat_backend, "user_can_access_chat_file", lambda *_args: True)
+    with pytest.raises(OnyxError) as error:
+        chat_backend._readable_chat_file_record(str(uuid4()), owner, db_session)
+    assert error.value.error_code is OnyxErrorCode.NOT_FOUND

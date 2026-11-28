@@ -25,6 +25,13 @@ import {
   reasoningText,
 } from "@/lib/timeline/chat/renderers/reasoning/reasoningPreview";
 
+const AWAITING_LABELS = {
+  approval: "header.waitingForApproval.label",
+  answer: "header.waitingForAnswer.label",
+  ownerApproval: "header.waitingForOwnerApproval.label",
+  ownerAnswer: "header.waitingForOwnerAnswer.label",
+} as const satisfies Record<AwaitingUser, string>;
+
 /** Header text for the activity of one step, or null for no tool activity. */
 function stepHeaderText(
   packets: Packet[],
@@ -37,6 +44,8 @@ function stepHeaderText(
   const obj = firstPacket.obj;
   switch (obj.type) {
     case PacketType.SEARCH_TOOL_START: {
+      // SAFETY: a step that starts with a search start packet holds only
+      // search tool packets.
       const searchState = constructCurrentSearchState(
         packets as SearchToolPacket[]
       );
@@ -131,11 +140,7 @@ export function useTimelineHeader(
     const userStopped = stopReason === StopReason.USER_CANCELLED;
     if (awaitingUser) {
       return {
-        headerText: t(
-          awaitingUser === "approval"
-            ? "header.waitingForApproval.label"
-            : "header.waitingForAnswer.label"
-        ),
+        headerText: t(AWAITING_LABELS[awaitingUser]),
         hasPackets,
         userStopped,
       };

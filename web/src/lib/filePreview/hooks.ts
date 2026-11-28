@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import {
   loadChatFilePreview,
   type ChatFilePreviewData,
@@ -53,7 +54,7 @@ export function useChatFilePreview(
       data,
       error,
       isLoading,
-      url: `/api/chat/file/${encodeURIComponent(fileId)}`,
+      url: buildImgUrl(fileId),
       retry: () => void mutate(),
     }),
     [data, error, isLoading, fileId, mutate]

@@ -633,24 +633,36 @@ def test_new_version_with_another_skill_name_is_refused(user: DATestUser) -> Non
     assert len(_state(skill["id"]).versions) == 1
 
 
-def test_second_skill_with_a_used_name_gets_a_free_plugin_name(
+def test_second_skill_with_a_used_name_is_refused_with_the_name(
     user: DATestUser,
 ) -> None:
     name = f"deploy-{uuid4().hex[:8]}"
     first = _upload(user, _bundle({"SKILL.md": _skill_md(name, "First")}), name=name)
-    second = _upload(
-        user,
-        _bundle({"SKILL.md": _skill_md(name, "Second")}),
-        name=name,
-        auto_enable=False,
+    response = client.post(
+        f"{API_SERVER_URL}/skills/custom",
+        files={
+            "auto_enable": (None, "false", None),
+            "bundle": (
+                f"{name}.zip",
+                io.BytesIO(_bundle({"SKILL.md": _skill_md(name, "Second")})),
+                "application/zip",
+            ),
+        },
+        headers=_multipart_headers(user),
     )
 
-    first_state = _state(first["id"])
-    second_state = _state(second["id"])
-    assert first_state.plugin_name == name
-    assert second_state.plugin_name == f"{name}-2"
-    assert second_state.current.skills[0][1] == name
-    assert second_state.marketplace_id == first_state.marketplace_id
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error_code"] == "CONFLICT"
+    assert body["taken_name"] == name
+    assert name in body["detail"]
+    with get_session_with_current_tenant() as db_session:
+        names = db_session.scalars(
+            select(Plugin.name).where(
+                Plugin.marketplace_id == _state(first["id"]).marketplace_id
+            )
+        ).all()
+    assert names == [name]
 
 
 def test_concurrent_first_uploads_share_my_uploads() -> None:

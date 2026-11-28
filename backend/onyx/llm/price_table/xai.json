@@ -538,7 +538,7 @@
       "name": "grok-4.20-multi-agent",
       "reasoning": true,
       "structured_output": true,
-      "tool_call": false
+      "tool_call": true
     },
     "grok-4.20-multi-agent-0309": {
       "attachment": true,
@@ -635,7 +635,7 @@
       "name": "grok-4.20-multi-agent-beta-latest",
       "reasoning": true,
       "structured_output": true,
-      "tool_call": false
+      "tool_call": true
     },
     "grok-4.20-multi-agent-experimental-beta-0304": {
       "cost": {
@@ -660,7 +660,7 @@
       "name": "grok-4.20-multi-agent-experimental-beta-0304",
       "reasoning": true,
       "structured_output": true,
-      "tool_call": false
+      "tool_call": true
     },
     "grok-4.20-multi-agent-experimental-beta-latest": {
       "cost": {
@@ -685,7 +685,7 @@
       "name": "grok-4.20-multi-agent-experimental-beta-latest",
       "reasoning": true,
       "structured_output": true,
-      "tool_call": false
+      "tool_call": true
     },
     "grok-4.20-multi-agent-latest": {
       "cost": {
@@ -710,7 +710,7 @@
       "name": "grok-4.20-multi-agent-latest",
       "reasoning": true,
       "structured_output": true,
-      "tool_call": false
+      "tool_call": true
     },
     "grok-4.20-non-reasoning": {
       "cost": {
@@ -1050,6 +1050,31 @@
       "temperature": true,
       "tool_call": true
     },
+    "grok-4.6-latest": {
+      "cost": {
+        "cache_read": 0.5,
+        "input": 2.0,
+        "output": 6.0
+      },
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.6-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "grok-4.7": {
       "attachment": true,
       "cost": {
@@ -1097,6 +1122,31 @@
       "temperature": true,
       "tool_call": true
     },
+    "grok-4.7-latest": {
+      "cost": {
+        "cache_read": 0.5,
+        "input": 2.0,
+        "output": 6.0
+      },
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.7-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "grok-build-0.1": {
       "attachment": true,
       "cost": {
@@ -1140,6 +1190,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1224,7 +1275,7 @@
       "cost": {
         "image_input": 0.02
       },
-      "family": "grok",
+      "family": "grok-imagine-image",
       "limit": {
         "context": 16000,
         "output": 0
@@ -1262,7 +1313,7 @@
     },
     "grok-imagine-image-pro": {
       "cost": {
-        "image_input": 0.05
+        "image_input": 0.04
       },
       "mode": "image_generation",
       "name": "grok-imagine-image-pro",
@@ -1270,7 +1321,7 @@
     },
     "grok-imagine-image-quality": {
       "cost": {
-        "image_input": 0.05
+        "image_input": 0.04
       },
       "mode": "image_generation",
       "name": "grok-imagine-image-quality",
@@ -1278,7 +1329,7 @@
     },
     "grok-imagine-image-quality-20260403": {
       "cost": {
-        "image_input": 0.05
+        "image_input": 0.04
       },
       "mode": "image_generation",
       "name": "grok-imagine-image-quality-20260403",
@@ -1286,7 +1337,7 @@
     },
     "grok-imagine-image-quality-latest": {
       "cost": {
-        "image_input": 0.05
+        "image_input": 0.04
       },
       "mode": "image_generation",
       "name": "grok-imagine-image-quality-latest",
@@ -1298,7 +1349,7 @@
         "image_input": 0.002,
         "second": 0.05
       },
-      "family": "grok",
+      "family": "grok-imagine-video",
       "limit": {
         "context": 1024,
         "output": 0
@@ -1327,7 +1378,7 @@
         "image_input": 0.01,
         "second": 0.08
       },
-      "family": "grok",
+      "family": "grok-imagine-video",
       "limit": {
         "context": 1024,
         "output": 0
@@ -1364,7 +1415,7 @@
         "image_input": 0.01,
         "second": 0.02
       },
-      "family": "grok",
+      "family": "grok-imagine-video-lite",
       "limit": {
         "context": 1024,
         "output": 0

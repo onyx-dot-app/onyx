@@ -125,6 +125,8 @@ class SectionEnd(BaseObj):
 # The stop reason of a response whose run waits for the user: approval
 # decisions or answers to its questions. It continues in a new stream after them.
 AWAITING_USER = "awaiting_user"
+# A system cancel ended the response while its approval requests waited.
+APPROVAL_EXPIRED = "approval_expired"
 
 
 class OverallStop(BaseObj):

@@ -3,7 +3,7 @@ concurrency:
   # Pushes to main share a group and queue: one run in progress and the
   # newest one pending, so a burst of merges runs at most twice and every
   # run finishes (cancelling would starve main while merges keep landing).
-  group: Run-Integration-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref) || github.run_id }}
+  group: Run-Integration-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 
 on:
@@ -61,6 +61,14 @@ env:
   GITHUB_TEST_USER_2_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_2_EMAIL }}
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   changes:
     # Decides whether the integration test matrix runs. On pull_request
     # we use paths-filter; on push (main, tags) we default to `true` so

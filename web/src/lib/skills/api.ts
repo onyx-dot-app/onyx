@@ -104,27 +104,34 @@ export async function bulkUpdateSkills(
   return result;
 }
 
-/** `pluginId` binds the upload to that plugin: it adds a version to it. */
+interface PluginUploadOptions {
+  /** Binds the upload to that plugin: it adds a version to it. */
+  pluginId?: string;
+  /** Names a new plugin. The manifest name is the default. */
+  name?: string;
+}
+
 function pluginUploadForm(
   bundle: File,
   saveAsNew: boolean,
-  pluginId?: string
+  { pluginId, name }: PluginUploadOptions
 ): FormData {
   const form = new FormData();
   form.append("bundle", bundle);
   form.append("save_as_new", String(saveAsNew));
   if (pluginId) form.append("plugin_id", pluginId);
+  if (name) form.append("name", name);
   return form;
 }
 
 export async function inspectPluginUpload(
   bundle: File,
   saveAsNew: boolean,
-  pluginId?: string
+  options: PluginUploadOptions = {}
 ): Promise<PluginUploadPreview> {
   return skillsFetch<PluginUploadPreview>("/api/skills/plugins/inspect", {
     method: "POST",
-    body: pluginUploadForm(bundle, saveAsNew, pluginId),
+    body: pluginUploadForm(bundle, saveAsNew, options),
   });
 }
 
@@ -139,11 +146,11 @@ export interface PluginUploadResult {
 export async function savePluginUpload(
   bundle: File,
   saveAsNew: boolean,
-  pluginId?: string
+  options: PluginUploadOptions = {}
 ): Promise<PluginUploadResult> {
   return skillsFetch<PluginUploadResult>("/api/skills/plugins", {
     method: "POST",
-    body: pluginUploadForm(bundle, saveAsNew, pluginId),
+    body: pluginUploadForm(bundle, saveAsNew, options),
   });
 }
 
@@ -191,6 +198,12 @@ export function skillNameConflictNames(error: unknown): string[] {
   return Array.isArray(names)
     ? names.filter((name): name is string => typeof name === "string")
     : [];
+}
+
+/** The plugin name that a 409 refused because its marketplace holds it. */
+export function takenPluginName(error: unknown): string | null {
+  if (!(error instanceof FetchError) || error.status !== 409) return null;
+  return error.info?.taken_name ?? null;
 }
 
 export function isSkillVersionStale(error: unknown): boolean {
@@ -307,7 +320,7 @@ export async function updateSkillShares(
 
 export async function transferSkillOwnership(
   skillId: string,
-  payload: { new_owner_user_id: string }
+  payload: { new_owner_user_id: string; name?: string }
 ): Promise<CustomSkill> {
   return skillsFetch<CustomSkill>(
     `/api/skills/custom/${skillId}/transfer-ownership`,

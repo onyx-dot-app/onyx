@@ -145,6 +145,9 @@ export enum StopReason {
    * or answers to questions. The response continues in a new stream after
    * them. */
   AWAITING_USER = "awaiting_user",
+  /** The system ended the response while its approval requests waited, as
+   * when a scheduled run is not approved in time. */
+  APPROVAL_EXPIRED = "approval_expired",
 }
 
 export interface Stop extends BaseObj {
