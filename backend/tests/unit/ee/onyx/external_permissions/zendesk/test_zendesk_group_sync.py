@@ -136,6 +136,8 @@ def test_is_guide_manager() -> None:
         (VIP, set(), set(), set(), set()),
         # Organization tags count for end users; added users skip the filters.
         (PLAIN, {31}, set(), set(), {53}),
+        # Organization filters apply to end users only.
+        (LEAD.model_copy(update={"tags": ["vip"]}), set(), set(), {GROUP}, {50, 52}),
         # Staff segments need staff in one of the groups.
         (GROUP_AGENT, set(), set(), {GROUP}, {52}),
         (GROUP_AGENT, set(), set(), set(), set()),
@@ -245,3 +247,24 @@ def test_a_listing_past_the_limit_fails(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(group_sync, "MAX_LISTED_ITEMS", 3)
     with pytest.raises(RuntimeError, match="most it holds in memory"):
         _groups(_connector("articles"))
+
+
+def test_an_individual_only_segment_holds_only_its_users() -> None:
+    segment = ZendeskUserSegment(
+        id=54, user_type="signed_in_users", added_user_ids=[PLAIN.id]
+    )
+    assert in_segment(PLAIN, segment, set(), set(), set())
+    assert not in_segment(VIP, segment, {30}, {"partner"}, set())
+    assert not in_segment(LEAD, segment, set(), set(), {GROUP})
+
+
+def test_the_membership_limit_counts_memberships(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One user in many organizations still counts each membership."""
+    import ee.onyx.external_permissions.zendesk.group_sync as group_sync
+
+    monkeypatch.setattr(group_sync, "MAX_LISTED_ITEMS", 2)
+    pages = [[ZendeskMembership(user_id=1, container_id=org) for org in (1, 2, 3)]]
+    with pytest.raises(RuntimeError, match="most it holds in memory"):
+        group_sync._memberships(pages, group_sync._Deadline(), "memberships")

@@ -160,11 +160,13 @@ def _memberships(
 ) -> dict[int, set[int]]:
     """Each user's containers (groups or organizations)."""
     containers: dict[int, set[int]] = defaultdict(set)
+    count: int = 0
     for page in pages:
         deadline.check(step)
         for membership in page:
             containers[membership.user_id].add(membership.container_id)
-        _check_size(len(containers), step)
+        count += len(page)
+        _check_size(count, step)
     return containers
 
 
@@ -222,6 +224,12 @@ def in_segment(
     count as the user's own for end users."""
     if user.id in segment.added_user_ids:
         return True
+    has_filters: bool = bool(
+        segment.tags or segment.or_tags or segment.organization_ids or segment.group_ids
+    )
+    if segment.added_user_ids and not has_filters:
+        # An individual-only segment holds only the users it names.
+        return False
     if segment.user_type == "staff" and not user.is_staff:
         return False
     if segment.user_type not in ("staff", "signed_in_users"):
@@ -231,8 +239,10 @@ def in_segment(
         return False
     if segment.or_tags and not set(segment.or_tags) & tags:
         return False
+    # Organizations restrict end users only; Zendesk ignores them for agents.
     if (
         segment.organization_ids
+        and not user.is_staff
         and not set(segment.organization_ids) & organization_ids
     ):
         return False
