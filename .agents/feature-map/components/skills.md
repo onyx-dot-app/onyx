@@ -963,8 +963,10 @@ the app from the same rule
     plugin on (`PUT /skills/{id}/enabled`, bulk enable, a new upload, and a
     new version of a plugin the user has on) turns
     on each needed integration in `turn_on` with a connected status, through
-    `integrations/access.py:set_integration_enabled__no_commit`, and reloads
-    the user's Craft sessions when one changed.
+    `integrations/plugin_needs.py:turn_on_needed_integrations__no_commit`, and
+    reloads the user's Craft sessions when one changed. Bulk enable does this
+    one time for all the enabled plugins. An integration that the user lost
+    access to after the read is skipped, so the enable does not fail.
     The on/off switch and the name order stay per plugin: a plugin that
     loses any skill name does not load.
 26. `write-skill-limit` **A user's own write, other than a turn-off, never
