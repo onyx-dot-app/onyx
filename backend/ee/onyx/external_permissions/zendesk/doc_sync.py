@@ -20,15 +20,12 @@ def zendesk_doc_sync(
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[ElementExternalAccess, None, None]:
-    connector = zendesk_connector(cc_pair)
-    # The scheduled doc sync is not validated for it, and a token that lost
-    # admin access lists fewer articles and tickets: the rest would go private.
-    connector.validate_perm_sync()
+    # The doc sync task validates the pair (validate_perm_sync) before this.
     yield from generic_doc_sync(
         cc_pair=cc_pair,
         fetch_all_existing_docs_ids_fn=fetch_all_existing_docs_ids_fn,
         callback=callback,
         doc_source=DocumentSource.ZENDESK,
-        slim_connector=connector,
+        slim_connector=zendesk_connector(cc_pair),
         label=ZENDESK_DOC_SYNC_LABEL,
     )

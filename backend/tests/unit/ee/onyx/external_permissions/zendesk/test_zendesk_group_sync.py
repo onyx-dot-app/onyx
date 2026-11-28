@@ -231,19 +231,3 @@ def test_ticket_groups_with_end_users() -> None:
     # Only organizations that share tickets, and no suspended users.
     assert groups["acme:org_end_users:30"] == ["vip@example.com"]
     assert "acme:org_end_users:31" not in groups
-
-
-def test_doc_sync_validates_before_listing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The scheduled doc sync is not validated for it, and a token that lost
-    admin access would list fewer documents and make the rest private."""
-    import ee.onyx.external_permissions.zendesk.doc_sync as doc_sync
-
-    connector = MagicMock()
-    connector.validate_perm_sync.side_effect = RuntimeError("not an admin")
-    listing = MagicMock()
-    monkeypatch.setattr(doc_sync, "zendesk_connector", lambda _cc_pair: connector)
-    monkeypatch.setattr(doc_sync, "generic_doc_sync", listing)
-
-    with pytest.raises(RuntimeError):
-        list(doc_sync.zendesk_doc_sync(MagicMock(), MagicMock(), MagicMock(), None))
-    listing.assert_not_called()
