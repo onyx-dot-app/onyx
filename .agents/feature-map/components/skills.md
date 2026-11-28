@@ -907,9 +907,11 @@ the app from the same rule
     `mcpServers`. It refuses a plugin with no skill and no MCP server. A zip
     with only a SKILL.md stays a skill upload. A need stores the normalized
     URL (`utils/url.py:normalize_mcp_server_url`) and no integration id.
-    Each viewer sees that URL, so a URL with a credential (user info or a
-    query value such as `api_key`), a `${VAR}` or a bad scheme is dropped;
-    `url_problem` keeps the reason (`mcp_server_url_problem`) for the UI.
+    Each viewer sees that URL, so a URL with a credential (user info, or a
+    query or fragment value such as `api_key`), a `${VAR}` or a bad scheme is
+    dropped; `url_problem` keeps the reason (`mcp_server_url_problem`) for the
+    UI. `need_views` checks a saved URL again, so a version saved before a
+    rule existed does not show it.
     `integrations/plugin_needs.py:need_views` matches it at read time against
     the integrations of `integrations_for_needs`, so a private integration
     the user cannot see is `not_added`. `integrations_for_needs` adds the
