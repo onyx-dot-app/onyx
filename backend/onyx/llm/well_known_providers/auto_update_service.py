@@ -213,7 +213,14 @@ def _replace_unoffered_chat_default(
     if offered is None or chat_default.name in offered:
         return
     for provider in providers:
-        candidates = offered_by_provider.get(provider.id)
+        offered_here = offered_by_provider.get(provider.id, set())
+        # Only a chat model can be the chat default.
+        candidates = {
+            model.name
+            for model in provider.model_configurations
+            if model.name in offered_here
+            and LLMModelFlowType.CHAT in model.llm_model_flow_types
+        }
         if not candidates:
             continue
         replacement = playground_default_model(

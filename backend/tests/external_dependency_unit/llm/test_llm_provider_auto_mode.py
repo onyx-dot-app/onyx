@@ -520,3 +520,73 @@ def test_playground_sync_leaves_a_provider_on_the_tenants_own_key_alone(
         "gpt-a": True,
         "gpt-pricey": True,
     }
+
+
+@pytest.mark.usefixtures("restore_chat_default")
+def test_playground_sync_replaces_a_chat_default_only_with_a_chat_model(
+    db_session: Session, provider_name: str
+) -> None:
+    """The other provider offers an image model and a chat model. The image
+    model cannot be a chat default, so the chat model is chosen and the sync
+    does not fail."""
+    other_name = f"{provider_name}-other"
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-pricey": True},
+    )
+    other = _create_provider(
+        db_session,
+        other_name,
+        LlmProviderNames.ANTHROPIC,
+        is_auto_mode=True,
+        models={"a-image-model": True, "claude-cheap": True},
+    )
+    try:
+        image_model = next(
+            mc for mc in other.model_configurations if mc.name == "a-image-model"
+        )
+        for flow in list(image_model.llm_model_flows):
+            db_session.delete(flow)
+        db_session.commit()
+        db_session.expire_all()
+        update_default_model(
+            db_session=db_session,
+            provider_id=provider.id,
+            model="gpt-pricey",
+            flow_type=LLMModelFlowType.CHAT,
+        )
+        catalogs = {
+            LlmProviderNames.OPENAI: ["gpt-pricey"],
+            LlmProviderNames.ANTHROPIC: ["a-image-model", "claude-cheap"],
+        }
+        with patch(_CATALOG_PATH, side_effect=lambda name: catalogs[name]):
+            sync_auto_update_providers(db_session)
+        with (
+            patch(_CATALOG_PATH, side_effect=lambda name: catalogs[name]),
+            patch(f"{_SERVICE}.IS_PLAYGROUND", True),
+            patch(f"{_SERVICE}.is_onyx_managed_api_key", return_value=True),
+            patch(
+                f"{_SERVICE}.is_offered_on_playground",
+                side_effect=lambda _provider, name, _rec: name != "gpt-pricey",
+            ),
+            patch(
+                f"{_SERVICE}.playground_default_model",
+                side_effect=lambda _provider, _rec, candidates: (
+                    min(candidates) if candidates else None
+                ),
+            ),
+        ):
+            sync_auto_update_providers(db_session)
+
+        default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        assert default_model is not None
+        assert (default_model.llm_provider_id, default_model.name) == (
+            other.id,
+            "claude-cheap",
+        )
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, other_name)
