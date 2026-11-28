@@ -28,7 +28,7 @@ _RECORD_QUERY = re.compile(
 )
 _SUBQUERY = re.compile(
     r"\(SELECT (?P<fields>[^()]+) FROM (?P<rel>\w+) "
-    r"(?P<selection>ORDER BY [^()]+? LIMIT 10|WHERE Id IN \((?P<ids>[^()]*)\))\)"
+    r"(?P<selection>(?:ORDER BY [^()]+? )?LIMIT 10|WHERE Id IN \((?P<ids>[^()]*)\))\)"
 )
 
 
@@ -143,7 +143,7 @@ class TestChildQueryPlanning:
         windowed: dict[str, set[str]] = {}
         for query in plan.window_queries:
             for match in _assert_query_shape(query):
-                assert match["selection"].startswith("ORDER BY")
+                assert match["selection"].endswith("LIMIT 10")
                 windowed[match["rel"]] = set(
                     match["fields"].split(SOQL_FIELD_SEPARATOR)
                 )
@@ -205,6 +205,11 @@ class TestChildQueryPlanning:
             ),
             # queryable but unsortable date fields never reach ORDER BY
             ({ID_FIELD, "Name"}, f"ORDER BY {ID_FIELD} DESC NULLS LAST LIMIT 10"),
+            # nor does an unsortable Id, even as the tiebreaker
+            ({CREATED_FIELD}, f"ORDER BY {CREATED_FIELD} DESC NULLS LAST LIMIT 10"),
+            # an object that sorts by nothing gets the window unordered
+            ({"Name"}, "LIMIT 10"),
+            (set(), "LIMIT 10"),
         ],
     )
     def test_window_orders_by_sortable_recency_with_id_tiebreaker(
