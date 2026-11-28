@@ -1744,7 +1744,9 @@ def test_claude_models_get_edit_and_write_and_others_apply_patch(
 def test_the_browser_setting_turns_the_browser_tools_off(
     monkeypatch: pytest.MonkeyPatch, chat: SandboxChat
 ) -> None:
-    monkeypatch.setattr(process_message, "load_browser_enabled", lambda: False)
+    monkeypatch.setattr(
+        process_message, "load_browser_enabled", lambda **_kwargs: False
+    )
     llm = NamedChatLLM([Delta(content="Ready.")], model_name="gpt-5.1")
     chat.send(llm)
 

@@ -520,7 +520,9 @@ agents/tool_execution.py:ToolBatch.decide_call   (direct calls, and program call
   -> coordinator ToolApprovals = chat/run_store.py:ChatRunStore.request_approval
      -> tools/interface.py:Tool.approval_details(arguments), before any
         database work: None -> run; else the card's headline and payload
-        (default: the tool's display name and the call's arguments)
+        (default: the tool's display name and the call's arguments); a
+        details action_id replaces the scope's key for this call, so its
+        session grant covers only that key (the Chrome site approvals)
      -> chat/tool_approvals.py:open_tool_approval
         session grant (action_now_blocked is false) -> run
         else ApprovalRequest row (headline, payload)

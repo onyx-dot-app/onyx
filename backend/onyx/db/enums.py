@@ -495,6 +495,11 @@ class DefaultAppMode(str, PyEnum):
     SEARCH = "SEARCH"
 
 
+class DefaultBrowser(str, PyEnum):
+    SANDBOX = "SANDBOX"
+    CHROME = "CHROME"
+
+
 class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"

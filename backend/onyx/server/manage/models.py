@@ -12,6 +12,7 @@ from onyx.context.search.models import CCPairAccessMode, SavedSearchSettings
 from onyx.db.enums import (
     AccountType,
     DefaultAppMode,
+    DefaultBrowser,
     InterfaceFont,
     MotionPreference,
     PopupDismissal,
@@ -160,6 +161,7 @@ class UserPreferences(BaseModel):
     language: str | None = None
     chat_background: str | None = None
     default_app_mode: DefaultAppMode
+    default_browser: DefaultBrowser
     interface_font: InterfaceFont
     response_font: ResponseFont
     motion: MotionPreference
@@ -203,6 +205,7 @@ class UserPreferences(BaseModel):
             language=preferences.language,
             chat_background=preferences.chat_background,
             default_app_mode=preferences.default_app_mode,
+            default_browser=preferences.default_browser,
             interface_font=preferences.interface_font,
             response_font=preferences.response_font,
             motion=preferences.motion,
@@ -406,6 +409,10 @@ class AppearanceRequest(BaseModel):
 
 class DefaultAppModeRequest(BaseModel):
     default_app_mode: DefaultAppMode
+
+
+class DefaultBrowserRequest(BaseModel):
+    default_browser: DefaultBrowser
 
 
 class ChatBackgroundRequest(BaseModel):

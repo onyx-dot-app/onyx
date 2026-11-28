@@ -54,6 +54,7 @@ covers new files that match it.
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/onyx/server/query_and_chat/chat_browser.py` | craft-sandboxes, code-execution |
 | `backend/onyx/server/query_and_chat/command_approvals.py` | craft-external-apps |
+| `backend/onyx/server/query_and_chat/chrome_browser.py`, `backend/onyx/browser_extension/` | code-execution, desktop-widget-extensions |
 | `backend/onyx/secondary_llm_flows/chat_session_naming.py` | chat-persistence |
 | `backend/onyx/chat/session_naming.py` | chat-persistence, core-chat-loop |
 | `backend/onyx/secondary_llm_flows/memory_update.py` | chat-preferences |

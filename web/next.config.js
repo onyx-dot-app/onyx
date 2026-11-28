@@ -97,6 +97,13 @@ const nextConfig = {
           process.env.INTERNAL_URL || "http://localhost:8080"
         }/chat/sessions/:sessionId/browser/ws`,
       },
+      // The Onyx Chrome extension's socket; a single-use token authenticates it.
+      {
+        source: "/api/chat/browser/extension/ws",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/chat/browser/extension/ws`,
+      },
       {
         source: "/ph_ingest/static/:path*",
         destination: "https://us-assets.i.posthog.com/static/:path*",

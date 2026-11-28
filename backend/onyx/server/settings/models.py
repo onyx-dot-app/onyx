@@ -142,6 +142,9 @@ class Settings(BaseModel):
     # Workspace-wide switch for the chat browser: the agent's browser tools
     # in the chat VM and the live view of its tabs. Default on.
     browser_enabled: bool = True
+    # With browser_enabled, chats can also drive the user's own Chrome
+    # through the Onyx extension, in the tabs that the user shares.
+    chrome_browser_enabled: bool = True
 
     # Who can publish skills to the organization. Organization-wide skill
     # managers always publish at once.
