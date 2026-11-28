@@ -1014,3 +1014,22 @@ def test_stuck_dispose_fails_fast_after_bounded_attempts() -> None:
 
     assert sandbox_manager.dispose_opencode_instance.call_count == max_attempts + 1
     assert store == {}
+
+
+def test_playground_falls_back_to_the_default_its_price_rule_picks() -> None:
+    """With no configured default, Craft uses the provider's default. On the
+    playground that is the price rule's default, not the recommended one."""
+    provider = _provider(
+        1, "anthropic", [_model("claude-opus-5"), _model("claude-sonnet-5")]
+    )
+    with (
+        patch.object(llm_config, "IS_PLAYGROUND", True),
+        patch.object(
+            llm_config, "playground_default_model", return_value="claude-sonnet-5"
+        ),
+    ):
+        assert llm_config._select_gateway_default([provider], None) == (
+            1,
+            "claude-sonnet-5",
+        )
+    assert llm_config._select_gateway_default([provider], None) == (1, "claude-opus-5")

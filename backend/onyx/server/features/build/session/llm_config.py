@@ -2,6 +2,8 @@ from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.llm.playground_models import playground_default_model
+from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.llm_provider_options import (
     get_recommendations,
 )
@@ -20,6 +22,7 @@ from onyx.server.gateway.model_catalog import (
 )
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import IS_PLAYGROUND
 
 logger = setup_logger()
 
@@ -106,6 +109,17 @@ def _matching_visible_model(
     return None
 
 
+def _recommended_default_name(
+    provider: str, recommendations: LLMRecommendations
+) -> str | None:
+    """A provider's recommended default, or on the playground the default its
+    price rule picks."""
+    if IS_PLAYGROUND:
+        return playground_default_model(provider, recommendations)
+    default_model = recommendations.get_default_model(provider)
+    return default_model.name if default_model is not None else None
+
+
 def _select_gateway_default(
     providers: list[LLMProviderView],
     selection: AgentSelection | None,
@@ -139,9 +153,9 @@ def _select_gateway_default(
         visible = _visible_models_by_name(provider)
         if not visible:
             continue
-        default_model = recommendations.get_default_model(provider.provider)
-        if default_model is not None and default_model.name in visible:
-            return provider.id, default_model.name
+        default_name = _recommended_default_name(provider.provider, recommendations)
+        if default_name is not None and default_name in visible:
+            return provider.id, default_name
         if fallback is None:
             fallback = (provider.id, visible[0])
     return fallback

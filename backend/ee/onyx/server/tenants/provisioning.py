@@ -66,6 +66,10 @@ from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.playground_models import (
+    is_offered_on_playground,
+    playground_default_model,
+)
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import (
     ANTHROPIC_PROVIDER_NAME,
@@ -452,12 +456,35 @@ def _build_model_configuration_upsert_requests(
     return [
         ModelConfigurationUpsertRequest(
             name=model_configuration.name,
-            is_visible=model_configuration.is_visible,
+            # The playground shows only the models its price rule offers.
+            is_visible=(
+                is_offered_on_playground(
+                    provider_name, model_configuration.name, recommendations
+                )
+                if IS_PLAYGROUND
+                else model_configuration.is_visible
+            ),
             max_input_tokens=model_configuration.max_input_tokens,
             supports_image_input=model_configuration.supports_image_input,
         )
         for model_configuration in model_configurations
     ]
+
+
+def _default_model_name(
+    provider_name: str, recommendations: LLMRecommendations, fallback: str
+) -> str:
+    """The model a new tenant's provider defaults to: the recommended default,
+    or on the playground the default its price rule picks."""
+    if IS_PLAYGROUND:
+        playground_default = playground_default_model(provider_name, recommendations)
+        if playground_default is not None:
+            return playground_default
+    default_model = recommendations.get_default_model(provider_name)
+    if default_model is None:
+        logger.error("No default model found for %s in recommendations", provider_name)
+        return fallback
+    return default_model.name
 
 
 def configure_default_api_keys(db_session: Session) -> None:
@@ -496,13 +523,8 @@ def configure_default_api_keys(db_session: Session) -> None:
 
     # Configure OpenAI provider
     if OPENAI_DEFAULT_API_KEY and AUTO_PROVISION_DEFAULT_LLM_PROVIDERS:
-        default_model = recommendations.get_default_model(OPENAI_PROVIDER_NAME)
-        if default_model is None:
-            logger.error(
-                "No default model found for %s in recommendations", OPENAI_PROVIDER_NAME
-            )
-        default_model_name = (
-            default_model.name if default_model else DEFAULT_OPENAI_MODEL
+        default_model_name = _default_model_name(
+            OPENAI_PROVIDER_NAME, recommendations, DEFAULT_OPENAI_MODEL
         )
 
         openai_provider = LLMProviderUpsertRequest(
@@ -532,13 +554,9 @@ def configure_default_api_keys(db_session: Session) -> None:
 
     # Configure Anthropic provider
     if ANTHROPIC_DEFAULT_API_KEY and AUTO_PROVISION_DEFAULT_LLM_PROVIDERS:
-        default_model = recommendations.get_default_model(ANTHROPIC_PROVIDER_NAME)
-        if default_model is None:
-            logger.error(
-                "No default model found for %s in recommendations",
-                ANTHROPIC_PROVIDER_NAME,
-            )
-        default_model_name = default_model.name if default_model else "claude-sonnet-5"
+        default_model_name = _default_model_name(
+            ANTHROPIC_PROVIDER_NAME, recommendations, "claude-sonnet-5"
+        )
 
         anthropic_provider = LLMProviderUpsertRequest(
             name="Anthropic",
@@ -557,15 +575,13 @@ def configure_default_api_keys(db_session: Session) -> None:
             "(ANTHROPIC_DEFAULT_API_KEY unset or AUTO_PROVISION_DEFAULT_LLM_PROVIDERS=false)"
         )
 
-    # Configure Vertex AI provider
-    if VERTEXAI_DEFAULT_CREDENTIALS:
-        default_model = recommendations.get_default_model(VERTEXAI_PROVIDER_NAME)
-        if default_model is None:
-            logger.error(
-                "No default model found for %s in recommendations",
-                VERTEXAI_PROVIDER_NAME,
-            )
-        default_model_name = default_model.name if default_model else "gemini-2.5-pro"
+    # Configure Vertex AI provider. Not on the playground: Vertex calls use
+    # credentials, not an API key, so their cost is not counted toward the
+    # playground's spend limit.
+    if VERTEXAI_DEFAULT_CREDENTIALS and not IS_PLAYGROUND:
+        default_model_name = _default_model_name(
+            VERTEXAI_PROVIDER_NAME, recommendations, "gemini-2.5-pro"
+        )
 
         # Vertex AI uses custom_config for credentials and location
         custom_config = {
@@ -586,18 +602,15 @@ def configure_default_api_keys(db_session: Session) -> None:
         _upsert(vertexai_provider, default_model_name)
     else:
         logger.info(
-            "VERTEXAI_DEFAULT_CREDENTIALS not set, skipping Vertex AI provider configuration"
+            "Skipping Vertex AI provider configuration "
+            "(VERTEXAI_DEFAULT_CREDENTIALS unset, or this is the playground)"
         )
 
     # Configure OpenRouter provider
     if OPENROUTER_DEFAULT_API_KEY and AUTO_PROVISION_DEFAULT_LLM_PROVIDERS:
-        default_model = recommendations.get_default_model(OPENROUTER_PROVIDER_NAME)
-        if default_model is None:
-            logger.error(
-                "No default model found for %s in recommendations",
-                OPENROUTER_PROVIDER_NAME,
-            )
-        default_model_name = default_model.name if default_model else "z-ai/glm-4.7"
+        default_model_name = _default_model_name(
+            OPENROUTER_PROVIDER_NAME, recommendations, "z-ai/glm-4.7"
+        )
 
         # For OpenRouter, we use the visible models from recommendations as model_configurations
         # since OpenRouter models are dynamic (fetched from their API)
@@ -605,7 +618,13 @@ def configure_default_api_keys(db_session: Session) -> None:
         model_configurations = [
             ModelConfigurationUpsertRequest(
                 name=model.name,
-                is_visible=True,
+                is_visible=(
+                    is_offered_on_playground(
+                        OPENROUTER_PROVIDER_NAME, model.name, recommendations
+                    )
+                    if IS_PLAYGROUND
+                    else True
+                ),
                 max_input_tokens=None,
                 display_name=model.display_name,
             )

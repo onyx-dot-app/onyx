@@ -1753,10 +1753,12 @@ def sync_auto_mode_models(
     released_model_names: list[str],
     retired_model_names: set[str],
     display_names: dict[str, str] | None = None,
+    hidden_model_names: frozenset[str] = frozenset(),
 ) -> int:
     """Apply a lab's model releases and retirements to an auto-update provider.
 
-    Released models the provider does not have yet are added and selected.
+    Released models the provider does not have yet are added and selected,
+    except those in ``hidden_model_names``, which are added hidden.
     Retired models are removed, unless they hold a default or back an image
     generation config. A retired model an agent or contextual RAG uses is
     hidden instead. The admin's selection of every other model and all
@@ -1783,7 +1785,7 @@ def sync_auto_mode_models(
             supported_flows=list(
                 _model_protocol_flows(provider.provider, model_name, None)
             ),
-            is_visible=True,
+            is_visible=model_name not in hidden_model_names,
             max_input_tokens=None,
             display_name=(display_names or {}).get(model_name),
         )

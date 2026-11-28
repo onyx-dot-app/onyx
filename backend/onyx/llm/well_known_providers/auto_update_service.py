@@ -14,9 +14,10 @@ from onyx.db.models import LLMProvider
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.constants import AUTO_UPDATE_PROVIDERS
+from onyx.llm.playground_models import is_offered_on_playground
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import ONYX_AIRGAPPED
+from shared_configs.configs import IS_PLAYGROUND, ONYX_AIRGAPPED
 
 logger = setup_logger()
 
@@ -113,12 +114,26 @@ def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
             for model in recommendations.get_visible_models(provider.provider)
             if model.display_name
         }
+        released_model_names = [name for name in catalog if name not in seen]
+        # The playground shows only the models its price rule offers.
+        hidden_model_names = (
+            frozenset(
+                name
+                for name in released_model_names
+                if not is_offered_on_playground(
+                    provider.provider, name, recommendations
+                )
+            )
+            if IS_PLAYGROUND
+            else frozenset()
+        )
         changes = sync_auto_mode_models(
             db_session=db_session,
             provider=provider,
-            released_model_names=[name for name in catalog if name not in seen],
+            released_model_names=released_model_names,
             retired_model_names=seen - set(catalog),
             display_names=display_names,
+            hidden_model_names=hidden_model_names,
         )
         kv_store.store(_seen_catalog_key(provider.id), catalog)
         if changes:

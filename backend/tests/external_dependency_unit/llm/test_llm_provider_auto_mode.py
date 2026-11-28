@@ -279,3 +279,31 @@ def test_aggregators_do_not_get_auto_update(
 
     assert str(provider.id) not in results
     assert _visibility(db_session, provider_name) == {"z-ai/glm-5.3": True}
+
+
+def test_playground_sync_hides_released_models_its_price_rule_does_not_offer(
+    db_session: Session, provider_name: str
+) -> None:
+    _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-a": True},
+    )
+    _sync_with_catalog(db_session, ["gpt-a"])
+
+    with (
+        patch("onyx.llm.well_known_providers.auto_update_service.IS_PLAYGROUND", True),
+        patch(
+            "onyx.llm.well_known_providers.auto_update_service.is_offered_on_playground",
+            side_effect=lambda _provider, name, _rec: name == "gpt-new-cheap",
+        ),
+    ):
+        _sync_with_catalog(db_session, ["gpt-a", "gpt-new-cheap", "gpt-new-pricey"])
+
+    assert _visibility(db_session, provider_name) == {
+        "gpt-a": True,
+        "gpt-new-cheap": True,
+        "gpt-new-pricey": False,
+    }
