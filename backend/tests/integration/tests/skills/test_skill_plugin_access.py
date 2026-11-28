@@ -547,6 +547,12 @@ def test_transfer_keeps_a_published_plugin_published(owner: DATestUser) -> None:
 # --- Delete ------------------------------------------------------------------
 
 
+PUBLISHED_DELETE_REFUSAL = (
+    "This skill is published to the organization. Only an "
+    "organization-wide skill manager can delete it."
+)
+
+
 def test_only_a_manager_can_delete_a_published_skill(
     owner: DATestUser, admin_user: DATestUser
 ) -> None:
@@ -558,10 +564,10 @@ def test_only_a_manager_can_delete_a_published_skill(
 
     response = _delete(owner, single.id)
     assert response.status_code == 403
-    assert "Only an admin" in response.json()["detail"]
+    assert response.json()["detail"] == PUBLISHED_DELETE_REFUSAL
     result = _bulk(owner, {"action": "delete", "skill_ids": [str(bulk.id)]})
     assert result.succeeded == []
-    assert "Only an admin" in result.failed[0].detail
+    assert result.failed[0].detail == PUBLISHED_DELETE_REFUSAL
     assert _plugin_or_none(single.id) is not None
     assert _plugin_or_none(bulk.id) is not None
 

@@ -862,10 +862,7 @@ def set_skill_enabled_for_user(
     lock_user_skill_preferences(user.id, db_session)
     skill = fetch_skill(skill_id, user=user, db_session=db_session)
     if skill is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "Skill is not visible.",
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
     def checked_conflicts() -> list[UUID]:
         """Refuse the switch, or return the skills it turns off."""
@@ -1437,7 +1434,8 @@ def delete_skill_for_user__no_commit(
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "This skill is published to the organization. Only an admin can delete it."
+            "This skill is published to the organization. Only an "
+            "organization-wide skill manager can delete it."
             if published
             else "Only an organization-wide skill manager can delete a required skill.",
         )

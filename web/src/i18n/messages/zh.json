@@ -17405,7 +17405,7 @@
         },
         "publishWarning": {
           "title": "发布后无法撤销",
-          "description": "保存后，组织中的所有人都可以使用此技能。您无法再将其设为私有。只有管理员可以删除它。",
+          "description": "保存后，组织中的所有人都可以使用此技能。您无法再将其设为私有。只有组织级技能管理员可以删除它。",
           "reviewDescription": "在管理员批准请求之前，技能保持私有。批准后，您无法再将其设为私有。"
         },
         "reviewRequestedToast": {
@@ -17436,7 +17436,7 @@
             "description": "已发布。组织中的所有人都可以使用此插件。"
           },
           "publishWarning": {
-            "description": "保存后，组织中的所有人都可以使用此插件。您无法再将其设为私有。只有管理员可以删除它。",
+            "description": "保存后，组织中的所有人都可以使用此插件。您无法再将其设为私有。只有组织级技能管理员可以删除它。",
             "reviewDescription": "在管理员批准请求之前，插件保持私有。批准后，您无法再将其设为私有。"
           },
           "publishOff": {
@@ -17622,6 +17622,8 @@
       "deleteFailure": "{count, plural, one {# 个技能未能删除} other {# 个技能未能删除}}",
       "deleteTitle": "{count, plural, one {删除 # 个技能？} other {删除 # 个技能？}}",
       "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选技能。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选技能。此操作无法撤销。}}",
+      "deleteOneTitle": "删除 {name}？",
+      "deleteOneDescription": "这会为所有有访问权限的人删除此技能。此操作无法撤销。",
       "shareTitle": "{count, plural, one {更新 # 个技能的访问权限} other {更新 # 个技能的访问权限}}",
       "shareDescription": "将这些更改应用于每个所选技能。未更改的设置将保留当前值。",
       "unchanged": "保持不变",
@@ -17631,7 +17633,7 @@
       "moreActions": "更多操作",
       "publishWarning": {
         "title": "发布后无法撤销",
-        "description": "应用后，组织中的所有人都可以使用所选技能。已发布的技能无法再设为私有。只有管理员可以删除它们。"
+        "description": "应用后，组织中的所有人都可以使用所选技能。已发布的技能无法再设为私有。只有组织级技能管理员可以删除它们。"
       },
       "skipped": "{count, plural, other {已跳过 # 个你无法开启或关闭的技能}}"
     },
@@ -18149,12 +18151,14 @@
       "deleteFailure": "{count, plural, one {# 个插件未能删除} other {# 个插件未能删除}}",
       "deleteTitle": "{count, plural, one {删除 # 个插件？} other {删除 # 个插件？}}",
       "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选插件。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选插件。此操作无法撤销。}}",
+      "deleteOneTitle": "删除 {name}？",
+      "deleteOneDescription": "这会为所有有访问权限的人删除此插件。此操作无法撤销。",
       "shareTitle": "{count, plural, one {更新 # 个插件的访问权限} other {更新 # 个插件的访问权限}}",
       "shareDescription": "将这些更改应用于每个所选插件。未更改的设置将保留当前值。",
       "addAccessDescription": "将这些人员和群组添加到每个所选插件。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
       "apply": "{count, plural, one {应用于 # 个插件} other {应用于 # 个插件}}",
       "publishWarning": {
-        "description": "应用后，组织中的所有人都可以使用所选插件。已发布的插件无法再设为私有。只有管理员可以删除它们。"
+        "description": "应用后，组织中的所有人都可以使用所选插件。已发布的插件无法再设为私有。只有组织级技能管理员可以删除它们。"
       },
       "skipped": "{count, plural, other {已跳过 # 个你无法开启或关闭的插件}}"
     }
