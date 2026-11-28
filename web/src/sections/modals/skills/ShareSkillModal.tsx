@@ -141,10 +141,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     includeApiKeys: false,
   });
   // A group share change needs the skill-manager permission for the group.
-  const { data: shareableGroupsData, error: groupsError } = useShareableGroups(
-    true,
-    Permission.MANAGE_PLUGINS
-  );
+  const {
+    data: shareableGroupsData,
+    error: groupsError,
+    refreshShareableGroups,
+  } = useShareableGroups(true, Permission.MANAGE_PLUGINS);
   const manageableGroupIds = useMemo(
     () => new Set((shareableGroupsData ?? []).map((group) => group.id)),
     [shareableGroupsData]
@@ -733,14 +734,27 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 })}
 
                 {groupsError && effectiveState.groupShares.length > 0 ? (
-                  <Text
-                    as="p"
-                    font="secondary-body"
-                    color="text-03"
-                    role="alert"
+                  <Section
+                    flexDirection="row"
+                    justifyContent="between"
+                    gap={2}
+                    height="auto"
                   >
-                    {t("share.groupsLoadFailed")}
-                  </Text>
+                    <Text
+                      as="p"
+                      font="secondary-body"
+                      color="text-03"
+                      role="alert"
+                    >
+                      {t("share.groupsLoadFailed")}
+                    </Text>
+                    <Button
+                      prominence="secondary"
+                      onClick={() => void refreshShareableGroups()}
+                    >
+                      {t("share.groupsRetry")}
+                    </Button>
+                  </Section>
                 ) : canEditShares && groupSharesLocked ? (
                   <Text as="p" font="secondary-body" color="text-03">
                     {t("share.groupSharesLocked")}

@@ -53,9 +53,14 @@ jest.mock("@/hooks/useShareableUsers", () => ({
 }));
 let mockGroups: { id: number; name: string }[] = [];
 let mockGroupsError: Error | undefined;
+const mockRefreshGroups = jest.fn();
 jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
-  default: () => ({ data: mockGroups, error: mockGroupsError }),
+  default: () => ({
+    data: mockGroups,
+    error: mockGroupsError,
+    refreshShareableGroups: mockRefreshGroups,
+  }),
 }));
 const mockTransferSkillOwnership = jest.fn();
 jest.mock("@/lib/skills/api", () => ({
@@ -78,6 +83,7 @@ describe("ShareSkillModal", () => {
     mockUsers = [];
     mockTransferSkillOwnership.mockReset();
     mockGroupsError = undefined;
+    mockRefreshGroups.mockReset();
     mockIsAdmin = true;
     mockPublishing = "OPEN";
     mockSharing = undefined;
@@ -485,6 +491,8 @@ describe("ShareSkillModal", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Onyx could not load your groups"
     );
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mockRefreshGroups).toHaveBeenCalledTimes(1);
   });
 
   it("lets a non-admin editor with organization-wide manage:plugins publish", async () => {
