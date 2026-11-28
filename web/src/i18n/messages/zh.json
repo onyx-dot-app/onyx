@@ -225,6 +225,9 @@
       },
       "addMemory": {
         "label": "添加到记忆"
+      },
+      "browser": {
+        "label": "浏览器"
       }
     },
     "toolsPopover": {
@@ -297,6 +300,9 @@
         },
         "webSearch": {
           "description": "在网络上搜索最新信息。"
+        },
+        "browser": {
+          "description": "浏览网站并在页面上执行操作。"
         }
       }
     },
@@ -10959,6 +10965,10 @@
         "codeInterpreter": {
           "description": "生成并运行代码。",
           "title": "代码解释器"
+        },
+        "browser": {
+          "description": "浏览网站并在页面上执行操作。",
+          "title": "浏览器"
         },
         "description": "此智能体可使用的工具和能力。",
         "imageGeneration": {

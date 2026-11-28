@@ -225,6 +225,9 @@
       },
       "addMemory": {
         "label": "Adicionar à memória"
+      },
+      "browser": {
+        "label": "Navegador"
       }
     },
     "toolsPopover": {
@@ -297,6 +300,9 @@
         },
         "webSearch": {
           "description": "Pesquise na web informações atualizadas."
+        },
+        "browser": {
+          "description": "Navegue em sites e aja nas páginas."
         }
       }
     },
@@ -10959,6 +10965,10 @@
         "codeInterpreter": {
           "description": "Gere e execute código.",
           "title": "Interpretador de código"
+        },
+        "browser": {
+          "description": "Navegue em sites e aja nas páginas.",
+          "title": "Navegador"
         },
         "description": "Ferramentas e capacidades disponíveis para este agente usar.",
         "imageGeneration": {

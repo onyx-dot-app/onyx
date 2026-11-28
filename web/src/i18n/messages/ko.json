@@ -225,6 +225,9 @@
       },
       "addMemory": {
         "label": "메모리에 추가"
+      },
+      "browser": {
+        "label": "브라우저"
       }
     },
     "toolsPopover": {
@@ -297,6 +300,9 @@
         },
         "webSearch": {
           "description": "웹에서 최신 정보를 검색합니다."
+        },
+        "browser": {
+          "description": "웹사이트를 탐색하고 페이지에서 작업합니다."
         }
       }
     },
@@ -10959,6 +10965,10 @@
         "codeInterpreter": {
           "description": "코드를 생성하고 실행합니다.",
           "title": "코드 인터프리터"
+        },
+        "browser": {
+          "description": "웹사이트를 탐색하고 페이지에서 작업합니다.",
+          "title": "브라우저"
         },
         "description": "이 에이전트가 사용할 수 있는 도구와 기능입니다.",
         "imageGeneration": {

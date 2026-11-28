@@ -406,18 +406,6 @@ export default function ChatPreferencesPage() {
                 />
               </InputHorizontal>
               <InputHorizontal
-                title={t("browser.title")}
-                description={t("browser.description")}
-                withLabel
-              >
-                <InputSwitch
-                  checked={s.browser_enabled ?? true}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ browser_enabled: checked });
-                  }}
-                />
-              </InputHorizontal>
-              <InputHorizontal
                 title={t("autoScroll.title")}
                 description={t("autoScroll.description")}
                 withLabel
@@ -597,132 +585,149 @@ export default function ChatPreferencesPage() {
                     </Section>
                   )}
                 </Section>
-
-                {/* Actions & Tools */}
-                <Collapsible
-                  title={t("tools.title")}
-                  description={t("tools.description")}
-                >
-                  <Section gap={6} alignItems="stretch">
-                    <Section gap={2} alignItems="stretch">
-                      {vectorDbEnabled && searchTool && (
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.internalSearch.title")}
-                            description={t("tools.internalSearch.description")}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={isToolEnabled(searchTool.id)}
-                              onCheckedChange={(checked) =>
-                                void toggleTool(searchTool.id, checked)
-                              }
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      )}
-
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.imageGeneration.title")}
-                          description={t("tools.imageGeneration.description")}
-                          disabled={!imageGenTool}
-                          disabledTooltip={t(
-                            "tools.imageGeneration.disabledTooltip"
-                          )}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={
-                              imageGenTool
-                                ? isToolEnabled(imageGenTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              imageGenTool &&
-                              void toggleTool(imageGenTool.id, checked)
-                            }
-                          />
-                        </InputHorizontal>
-                      </Card>
-
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.webSearch.title")}
-                          description={t("tools.webSearch.description")}
-                          disabled={!webSearchTool}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={
-                              webSearchTool
-                                ? isToolEnabled(webSearchTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              webSearchTool &&
-                              void toggleTool(webSearchTool.id, checked)
-                            }
-                          />
-                        </InputHorizontal>
-                      </Card>
-
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.openUrl.title")}
-                          description={t("tools.openUrl.description")}
-                          disabled={!openURLTool}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={
-                              openURLTool
-                                ? isToolEnabled(openURLTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              openURLTool &&
-                              void toggleTool(openURLTool.id, checked)
-                            }
-                          />
-                        </InputHorizontal>
-                      </Card>
-
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.codeInterpreter.title")}
-                          description={t("tools.codeInterpreter.description")}
-                          disabled={!codeInterpreterTool}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={
-                              codeInterpreterTool
-                                ? isToolEnabled(codeInterpreterTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              codeInterpreterTool &&
-                              void toggleTool(codeInterpreterTool.id, checked)
-                            }
-                          />
-                        </InputHorizontal>
-                      </Card>
-                    </Section>
-
-                    <MessageCard
-                      variant="info"
-                      title={markdown(
-                        t("tools.pluginsNote", {
-                          url: ADMIN_ROUTES.INTEGRATIONS.path,
-                        })
-                      )}
-                    />
-                  </Section>
-                </Collapsible>
               </Section>
             </div>
           </Disabled>
+
+          {/* Actions & Tools */}
+          <Collapsible
+            title={t("tools.title")}
+            description={t("tools.description")}
+          >
+            <Section gap={6} alignItems="stretch">
+              <Section gap={2} alignItems="stretch">
+                <Disabled disabled={s.disable_default_assistant ?? false}>
+                  <Section gap={2} alignItems="stretch">
+                    {vectorDbEnabled && searchTool && (
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.internalSearch.title")}
+                          description={t("tools.internalSearch.description")}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={isToolEnabled(searchTool.id)}
+                            onCheckedChange={(checked) =>
+                              void toggleTool(searchTool.id, checked)
+                            }
+                          />
+                        </InputHorizontal>
+                      </Card>
+                    )}
+
+                    <Card border="solid" rounding={4}>
+                      <InputHorizontal
+                        title={t("tools.imageGeneration.title")}
+                        description={t("tools.imageGeneration.description")}
+                        disabled={!imageGenTool}
+                        disabledTooltip={t(
+                          "tools.imageGeneration.disabledTooltip"
+                        )}
+                        withLabel
+                      >
+                        <InputSwitch
+                          checked={
+                            imageGenTool
+                              ? isToolEnabled(imageGenTool.id)
+                              : false
+                          }
+                          onCheckedChange={(checked) =>
+                            imageGenTool &&
+                            void toggleTool(imageGenTool.id, checked)
+                          }
+                        />
+                      </InputHorizontal>
+                    </Card>
+
+                    <Card border="solid" rounding={4}>
+                      <InputHorizontal
+                        title={t("tools.webSearch.title")}
+                        description={t("tools.webSearch.description")}
+                        disabled={!webSearchTool}
+                        withLabel
+                      >
+                        <InputSwitch
+                          checked={
+                            webSearchTool
+                              ? isToolEnabled(webSearchTool.id)
+                              : false
+                          }
+                          onCheckedChange={(checked) =>
+                            webSearchTool &&
+                            void toggleTool(webSearchTool.id, checked)
+                          }
+                        />
+                      </InputHorizontal>
+                    </Card>
+
+                    <Card border="solid" rounding={4}>
+                      <InputHorizontal
+                        title={t("tools.openUrl.title")}
+                        description={t("tools.openUrl.description")}
+                        disabled={!openURLTool}
+                        withLabel
+                      >
+                        <InputSwitch
+                          checked={
+                            openURLTool ? isToolEnabled(openURLTool.id) : false
+                          }
+                          onCheckedChange={(checked) =>
+                            openURLTool &&
+                            void toggleTool(openURLTool.id, checked)
+                          }
+                        />
+                      </InputHorizontal>
+                    </Card>
+
+                    <Card border="solid" rounding={4}>
+                      <InputHorizontal
+                        title={t("tools.codeInterpreter.title")}
+                        description={t("tools.codeInterpreter.description")}
+                        disabled={!codeInterpreterTool}
+                        withLabel
+                      >
+                        <InputSwitch
+                          checked={
+                            codeInterpreterTool
+                              ? isToolEnabled(codeInterpreterTool.id)
+                              : false
+                          }
+                          onCheckedChange={(checked) =>
+                            codeInterpreterTool &&
+                            void toggleTool(codeInterpreterTool.id, checked)
+                          }
+                        />
+                      </InputHorizontal>
+                    </Card>
+                  </Section>
+                </Disabled>
+
+                <Card border="solid" rounding={4}>
+                  <InputHorizontal
+                    title={t("browser.title")}
+                    description={t("browser.description")}
+                    withLabel
+                  >
+                    <InputSwitch
+                      checked={s.browser_enabled ?? true}
+                      onCheckedChange={(checked) => {
+                        void saveSettings({ browser_enabled: checked });
+                      }}
+                    />
+                  </InputHorizontal>
+                </Card>
+              </Section>
+
+              <MessageCard
+                variant="info"
+                title={markdown(
+                  t("tools.pluginsNote", {
+                    url: ADMIN_ROUTES.INTEGRATIONS.path,
+                  })
+                )}
+              />
+            </Section>
+          </Collapsible>
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
 

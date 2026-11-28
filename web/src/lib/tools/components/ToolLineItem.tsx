@@ -16,6 +16,7 @@ import { hasPermission } from "@/lib/permissions/utils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
 import {
+  BROWSER_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
@@ -78,6 +79,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         ),
         [WEB_SEARCH_TOOL_ID]: t("toolsPopover.tooltips.webSearch.description"),
         [PYTHON_TOOL_ID]: t("toolsPopover.tooltips.python.description"),
+        [BROWSER_TOOL_ID]: t("toolsPopover.tooltips.browser.description"),
       },
       defaultDescription: t("toolsPopover.tooltips.default.description"),
       configure: t("toolsPopover.tooltips.configureSuffix.text"),

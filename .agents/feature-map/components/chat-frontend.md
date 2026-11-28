@@ -308,8 +308,10 @@
   and six connects in a row that do not open stop with a retry. A
   page's download goes to the sandbox's `downloads/`, not to Files: its toast
   downloads it from `/api/chat/sessions/{id}/browser/downloads/{name}`. The
-  admin switch is "Browser" on the chat preferences page
-  (`browser_enabled`).
+  admin switch is "Browser" in the Actions & Tools section of the chat
+  preferences page (`browser_enabled`). The chat's actions popover lists the
+  Browser built-in tool (`BrowserTool`), which turns the browser tools off or
+  on for the chat.
 - **A chat has a right panel, with a toggle at the far end of its header**
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the

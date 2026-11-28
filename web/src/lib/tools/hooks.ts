@@ -26,6 +26,7 @@ import {
 import { useUser } from "@/providers/UserProvider";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
+  BROWSER_TOOL_ID,
   FILE_READER_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   KNOWLEDGE_GRAPH_TOOL_ID,
@@ -1255,6 +1256,7 @@ export function useBuiltInToolNames(): Record<string, string> {
       [PYTHON_TOOL_ID]: t("toolNames.codeInterpreter.label"),
       [FILE_READER_TOOL_ID]: t("toolNames.fileReader.label"),
       [MEMORY_TOOL_ID]: t("toolNames.addMemory.label"),
+      [BROWSER_TOOL_ID]: t("toolNames.browser.label"),
     }),
     [t]
   );

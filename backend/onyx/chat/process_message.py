@@ -160,6 +160,10 @@ from onyx.tools.constants import (
     SEARCH_TOOL_ID,
 )
 from onyx.tools.models import CapabilityEntry, SearchToolUsage
+from onyx.tools.tool_implementations.sandbox.browser_tool import (
+    BrowserTool,
+    offers_browser,
+)
 from onyx.tools.tool_implementations.skills.skill_tools import SKILL_READ_SHAPES
 from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
@@ -565,7 +569,13 @@ def prepare_chat_turn(
                 and len(selected_models) == 1
                 and not new_msg_req.deep_research
             )
-            browser_tools = sandbox_tools and load_browser_enabled()
+            # The browser tools need the agent's Browser tool, on in the
+            # chat's tool options.
+            browser_tools = (
+                sandbox_tools
+                and load_browser_enabled()
+                and offers_browser(chat_session.persona.tools, new_msg_req.tool_options)
+            )
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn
             # that is not deep research. Its run parks while it waits. An
@@ -929,6 +939,13 @@ def prepare_chat_turn(
                 and tool.enabled
                 for tool in tool_configuration.tools
             )
+        ):
+            preferred_tool = None
+        # No built tool has the Browser row's id: pinning it only keeps it on.
+        if isinstance(preferred_tool, CapabilityEntry) and any(
+            tool.id == preferred_tool.tool_id
+            and tool.in_code_tool_id == BrowserTool.__name__
+            for tool in tool_configuration.tools
         ):
             preferred_tool = None
         # Temporary history is saved after the work that can reject the turn.

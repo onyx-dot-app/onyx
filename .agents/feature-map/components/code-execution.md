@@ -81,7 +81,10 @@
   each version as
   `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
   the output panel.
-  While the admin setting `browser_enabled` is on, the model also gets the
+  While the admin setting `browser_enabled` is on, and the agent has the
+  Browser built-in tool (`BrowserTool`: the upgrade gives it to every
+  agent, and the agent editor turns it off or on) that the
+  chat's tool options allow, the model also gets the
   browser tools (`browser_open`, `browser_navigate`, `browser_snapshot`,
   `browser_act`, `browser_wait_for`, `browser_evaluate`, `browser_status`,
   `browser_dialog`), which drive the chat's own tabs in the VM's one Chrome;
@@ -340,7 +343,9 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         sandbox tools) with ChatTurnSetup.browser_tools (the
                                         browser_enabled setting, read once in
                                         prepare_chat_turn, off when the settings
-                                        cannot be read); the token estimate counts
+                                        cannot be read, and browser_tool.offers_browser:
+                                        the agent's BrowserTool row, allowed by the
+                                        tool options); the token estimate counts
                                         their descriptions too
                                         (calculate_reserved_tokens browser_tools)
   browser_tools.py (SEQUENTIAL, one     each call is one HarnessSandbox.browser_call (one Dial

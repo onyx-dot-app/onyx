@@ -225,6 +225,9 @@
       },
       "addMemory": {
         "label": "Add Memory"
+      },
+      "browser": {
+        "label": "Browser"
       }
     },
     "toolsPopover": {
@@ -297,6 +300,9 @@
         },
         "webSearch": {
           "description": "Search the web for up-to-date information."
+        },
+        "browser": {
+          "description": "Browse websites and act on pages."
         }
       }
     },
@@ -10959,6 +10965,10 @@
         "codeInterpreter": {
           "description": "Generate and run code.",
           "title": "Code Interpreter"
+        },
+        "browser": {
+          "description": "Browse websites and act on pages.",
+          "title": "Browser"
         },
         "description": "Tools and capabilities available for this agent to use.",
         "imageGeneration": {

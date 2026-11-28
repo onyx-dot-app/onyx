@@ -225,6 +225,9 @@
       },
       "addMemory": {
         "label": "Erinnerung hinzufügen"
+      },
+      "browser": {
+        "label": "Browser"
       }
     },
     "toolsPopover": {
@@ -297,6 +300,9 @@
         },
         "webSearch": {
           "description": "Durchsucht das Web nach aktuellen Informationen."
+        },
+        "browser": {
+          "description": "Websites durchsuchen und auf Seiten handeln."
         }
       }
     },
@@ -10959,6 +10965,10 @@
         "codeInterpreter": {
           "description": "Generieren und führen Sie Code aus.",
           "title": "Code-Interpreter"
+        },
+        "browser": {
+          "description": "Websites durchsuchen und auf Seiten handeln.",
+          "title": "Browser"
         },
         "description": "Tools und Fähigkeiten, die dieser Agent nutzen kann.",
         "imageGeneration": {

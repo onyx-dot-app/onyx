@@ -3,6 +3,7 @@ import {
   SvgGlobe,
   SvgImage,
   SvgLink,
+  SvgMonitor,
   SvgSearch,
   SvgTerminal,
 } from "@opal/icons";
@@ -20,6 +21,7 @@ export const OPEN_URL_TOOL_ID = "OpenURLTool";
 export const FILE_READER_TOOL_ID = "FileReaderTool";
 export const KNOWLEDGE_GRAPH_TOOL_ID = "KnowledgeGraphTool";
 export const MEMORY_TOOL_ID = "MemoryTool";
+export const BROWSER_TOOL_ID = "BrowserTool";
 
 // Icon mappings for system tools
 export const SYSTEM_TOOL_ICONS: Record<
@@ -31,6 +33,7 @@ export const SYSTEM_TOOL_ICONS: Record<
   [IMAGE_GENERATION_TOOL_ID]: SvgImage,
   [PYTHON_TOOL_ID]: SvgTerminal,
   [OPEN_URL_TOOL_ID]: SvgLink,
+  [BROWSER_TOOL_ID]: SvgMonitor,
 };
 
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

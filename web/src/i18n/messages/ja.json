@@ -225,6 +225,9 @@
       },
       "addMemory": {
         "label": "メモリに追加"
+      },
+      "browser": {
+        "label": "ブラウザ"
       }
     },
     "toolsPopover": {
@@ -297,6 +300,9 @@
         },
         "webSearch": {
           "description": "最新情報をウェブで検索します。"
+        },
+        "browser": {
+          "description": "ウェブサイトを閲覧し、ページを操作します。"
         }
       }
     },
@@ -10959,6 +10965,10 @@
         "codeInterpreter": {
           "description": "コードを生成して実行します。",
           "title": "コードインタープリター"
+        },
+        "browser": {
+          "description": "ウェブサイトを閲覧し、ページを操作します。",
+          "title": "ブラウザ"
         },
         "description": "このエージェントが使用できるツールと機能です。",
         "imageGeneration": {
