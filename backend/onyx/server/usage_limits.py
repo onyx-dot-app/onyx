@@ -231,7 +231,9 @@ def tenant_limit_override_fn(tenant_id: str, usage_type: UsageType) -> int | Non
 
 
 # When each tenant was last warned about a missing trial start, so the warning
-# appears at most once an hour per tenant.
+# appears at most once an hour per tenant in each process. Kept in memory on
+# purpose: a few duplicate log lines across processes cost less than a shared
+# cache write on every period lookup.
 _TRIAL_START_WARNING_INTERVAL_SECONDS = 3600
 _trial_start_warned_at: dict[str, float] = {}
 

@@ -171,7 +171,7 @@ is no longer read or written ([TECH-DEBT](../TECH-DEBT.md)).
   missing, a limit with a length uses calendar periods of that length (the
   calendar week for 7 days), and a whole-trial limit counts in one period that
   never ends, so it cannot reset weekly. A warning is
-  logged at most once an hour per tenant. Until the control plane serves the
+  logged at most once an hour per tenant in each process. Until the control plane serves the
   trial start, that is every tenant ([TECH-DEBT](../TECH-DEBT.md)).
 
   The check (before an action) and `record_usage` (after it) both call

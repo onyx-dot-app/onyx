@@ -68,7 +68,7 @@ link here from **Known issues** and do not restate the entry.
   is cached for 60 seconds, and those limits fall back. LLM cost uses the
   calendar week, so it resets every Monday. Chunks count in one period that
   never ends, so the whole-trial allowance never resets. A warning is logged at
-  most once an hour per tenant.
+  most once an hour per tenant in each process.
 - **Why:** The control plane work is separate (ENG-4468 for `trial_start`,
   ENG-4755 for the overrides).
 - **Where:** `backend/ee/onyx/server/tenants/usage_limit_cache.py`, read through
