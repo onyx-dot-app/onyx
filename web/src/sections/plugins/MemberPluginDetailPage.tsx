@@ -27,6 +27,7 @@ import {
 } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
+import { skillIcon } from "@/sections/customize/skillIcon";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import {
   memberPluginEntries,
@@ -489,7 +490,7 @@ export default function MemberPluginDetailPage({
   return (
     <CustomizeDetailLayout
       back={<BackLink to={listHref} label={tabCopy("plugins")} />}
-      icon={SvgBlocks}
+      icon={entry?.skills[0] ? skillIcon(entry.skills[0]) : SvgBlocks}
       title={entry?.name ?? t("title")}
       description={entry?.description ?? undefined}
       loading={loading || skillOnlyId !== undefined}
