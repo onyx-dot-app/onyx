@@ -499,6 +499,10 @@ class FileStoreType(str, Enum):
 # artifact's (ChatArtifact).
 CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
 
+# Display name of each image the chat image tool saves. Code interpreter
+# outputs share FileOrigin.CHAT_IMAGE_GEN but keep their own file names.
+GENERATED_IMAGE_DISPLAY_NAME = "GeneratedImage"
+
 
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"

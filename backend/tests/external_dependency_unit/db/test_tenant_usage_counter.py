@@ -1,6 +1,8 @@
-"""Reads and adds on tenant_usage_counter against a real Postgres: which
-periods share a row, exact sums, and adds from many sessions at once."""
+"""Usage reads and adds against a real Postgres: which tenant_usage_counter
+periods share a row, exact sums, adds from many sessions at once, and the
+per-user count of images the chat image tool saved."""
 
+import base64
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -10,18 +12,23 @@ import pytest
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from onyx.db.chat import create_chat_session__no_commit
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import WindowAnchor
-from onyx.db.models import TenantUsageCounter
+from onyx.db.models import ChatSession, TenantUsageCounter, User
 from onyx.db.usage import (
     UsageLimitExceededError,
     UsagePeriod,
     UsageType,
     check_usage_limit,
+    count_generated_images,
     get_usage,
     increment_usage,
 )
+from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.utils import save_chat_output_file, save_files
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 @pytest.fixture
@@ -181,3 +188,79 @@ def test_concurrent_adds_are_not_lost(db_session: Session, start: datetime) -> N
 
     assert get_usage(db_session, UsageType.API_CALLS, week) == writers * adds_each
     assert _rows(db_session, start) == 1
+
+
+# The PNG signature is enough for the saved file's type.
+_PNG = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16).decode()
+
+
+@pytest.fixture
+def users(
+    db_session: Session,
+    initialize_file_store: None,  # noqa: ARG001
+) -> Generator[tuple[User, User, list[str]], None, None]:
+    """Two users and the IDs of the files a test saves for them."""
+    owner = create_test_user(db_session, "image-owner", assign_default_group=False)
+    other = create_test_user(db_session, "image-other", assign_default_group=False)
+    file_ids: list[str] = []
+    yield owner, other, file_ids
+    db_session.rollback()
+    for file_id in file_ids:
+        get_default_file_store().delete_file(file_id, error_on_missing=False)
+    for user in (owner, other):
+        for session in db_session.query(ChatSession).filter_by(user_id=user.id):
+            db_session.delete(session)
+    db_session.commit()
+    delete_test_user(db_session, owner, other)
+
+
+def _save_images(file_ids: list[str], session: ChatSession, count: int) -> None:
+    """Save images the way the image tool does after generating them."""
+    file_ids.extend(
+        save_files(urls=[], base64_files=[_PNG] * count, chat_session_id=session.id)
+    )
+
+
+def test_counts_the_images_saved_in_the_users_own_sessions(
+    db_session: Session, users: tuple[User, User, list[str]]
+) -> None:
+    owner, other, file_ids = users
+    first = create_chat_session__no_commit(db_session, None, owner.id, None)
+    second = create_chat_session__no_commit(db_session, None, owner.id, None)
+    others = create_chat_session__no_commit(db_session, None, other.id, None)
+    db_session.commit()
+    _save_images(file_ids, first, 2)
+    _save_images(file_ids, second, 1)
+    _save_images(file_ids, others, 1)
+    # A code interpreter output shares the origin but is not a generated image.
+    file_ids.append(
+        save_chat_output_file(
+            b"x,y",
+            display_name="chart.csv",
+            file_type="text/csv",
+            chat_session_id=second.id,
+        )
+    )
+
+    assert count_generated_images(db_session, owner.id) == 3
+    assert count_generated_images(db_session, other.id) == 1
+
+
+def test_a_chat_marked_deleted_still_counts(
+    db_session: Session, users: tuple[User, User, list[str]]
+) -> None:
+    owner, _, file_ids = users
+    session = create_chat_session__no_commit(db_session, None, owner.id, None)
+    db_session.commit()
+    _save_images(file_ids, session, 2)
+    session.deleted = True
+    db_session.commit()
+
+    assert count_generated_images(db_session, owner.id) == 2
+
+
+def test_a_user_without_images_counts_zero(
+    db_session: Session, users: tuple[User, User, list[str]]
+) -> None:
+    owner, _, _ = users
+    assert count_generated_images(db_session, owner.id) == 0

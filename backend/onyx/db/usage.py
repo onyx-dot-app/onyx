@@ -7,14 +7,25 @@ must use the same period, or they read and write different rows.
 """
 
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, String, cast, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import (
+    CHAT_SESSION_ID_FILE_METADATA_KEY,
+    GENERATED_IMAGE_DISPLAY_NAME,
+    FileOrigin,
+)
 from onyx.db.enums import UsageType, WindowAnchor
-from onyx.db.models import TENANT_USAGE_COUNTER_PERIOD_END_KEY, TenantUsageCounter
+from onyx.db.models import (
+    TENANT_USAGE_COUNTER_PERIOD_END_KEY,
+    ChatSession,
+    FileRecord,
+    TenantUsageCounter,
+)
 from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
@@ -161,3 +172,28 @@ def check_usage_limit(
             current=current_value + pending_amount,
             limit=float(limit),
         )
+
+
+def count_generated_images(db_session: Session, user_id: UUID) -> int:
+    """How many images the chat image tool generated for this user, across all
+    of the user's chat sessions. The tool saves one file per image, only after
+    the image is generated, so a failed or cancelled call counts as none. The
+    file is saved during the call, so a later call already sees it; calls
+    running at the same time do not see each other, which the image limit
+    accepts (`ImageGenerationTool._check_image_limit`). A deleted
+    chat still counts while chats are only marked deleted, the default
+    (HARD_DELETE_CHATS off); the playground ignores a request for a hard
+    delete for this reason (`chat_backend._hard_delete_for_request`)."""
+    users_sessions = select(cast(ChatSession.id, String)).where(
+        ChatSession.user_id == user_id
+    )
+    total = db_session.scalar(
+        select(func.count(FileRecord.file_id)).where(
+            FileRecord.file_origin == FileOrigin.CHAT_IMAGE_GEN,
+            FileRecord.display_name == GENERATED_IMAGE_DISPLAY_NAME,
+            FileRecord.file_metadata[CHAT_SESSION_ID_FILE_METADATA_KEY].astext.in_(
+                users_sessions
+            ),
+        )
+    )
+    return int(total or 0)

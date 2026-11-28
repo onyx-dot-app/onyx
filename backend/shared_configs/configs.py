@@ -333,6 +333,10 @@ USAGE_LIMIT_LLM_COST_CENTS_PLAYGROUND = int(
 USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND = int(
     os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND", "400000")
 )
+# Images each user may generate in chat for the whole trial.
+USAGE_LIMIT_IMAGE_GENERATIONS_PER_USER_PLAYGROUND = int(
+    os.environ.get("USAGE_LIMIT_IMAGE_GENERATIONS_PER_USER_PLAYGROUND", "5")
+)
 
 # Playground model price limits, in USD per million output tokens (used only
 # when IS_PLAYGROUND). The playground offers a recommended model only if it costs
