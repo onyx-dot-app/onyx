@@ -56,6 +56,7 @@ from onyx.server.tenant_usage_limits import (
 from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import (
     IS_PLAYGROUND,
@@ -547,7 +548,7 @@ def _refusal_detail(
     thread and API clients. It names no date and shows no number: it says in
     words when the limit opens again."""
     if policy.name is LimitPolicyName.PLAYGROUND:
-        return _playground_refusal_detail(usage_type, e)
+        return _playground_refusal_detail(usage_type)
     user_type = "trial" if policy.name is LimitPolicyName.CLOUD_TRIAL else "paid"
     if usage_type == UsageType.LLM_COST:
         return (
@@ -578,9 +579,7 @@ def _refusal_detail(
     )
 
 
-def _playground_refusal_detail(
-    usage_type: UsageType, e: UsageLimitExceededError
-) -> str:
+def _playground_refusal_detail(usage_type: UsageType) -> str:
     """Playground plan, section 13, "The messages when a limit fires". Each
     carries "talk to sales"; the banner adds that it is a playground limit and
     that the user's own Onyx has none. No numbers: the plan shows none."""
@@ -598,7 +597,7 @@ def _playground_refusal_detail(
         )
     if usage_type == UsageType.IMAGE_GENERATIONS:
         return (
-            f"You have used your {int(e.limit)} images for this trial. "
+            "You have used your image allowance for this trial. "
             "Talk to sales to raise the limit."
         )
     return (
@@ -651,9 +650,32 @@ def _record_refusal(
     time this tenant, or this user for a per-user limit, is refused in the
     period. The second counts who hit a limit without counting retries, which
     the watch and tune work (ENG-4756) reads. The 429 itself is logged by the
-    error handler, so there is no log line here."""
+    error handler, so there is no log line here. The events go out in a
+    background thread: sending one flushes to PostHog, and the refused request
+    should not wait for that."""
     if policy.name is not LimitPolicyName.PLAYGROUND:
         return
+    run_in_background(
+        _send_refusal_events,
+        usage_type,
+        allowance,
+        policy,
+        tenant_id,
+        user_id,
+        e,
+        reset_at,
+    )
+
+
+def _send_refusal_events(
+    usage_type: UsageType,
+    allowance: Allowance,
+    policy: LimitPolicy,
+    tenant_id: str,
+    user_id: UUID | None,
+    e: UsageLimitExceededError,
+    reset_at: datetime | None,
+) -> None:
     properties: dict[str, Any] = {
         "policy": policy.name.value,
         "limit_type": usage_type.value,

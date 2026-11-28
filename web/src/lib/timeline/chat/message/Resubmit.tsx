@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
-import { Button } from "@opal/components";
-import { CopyButton } from "@opal/components";
+import { Button, CopyButton, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
 import {
   PLAYGROUND_LIMIT_POLICY,
@@ -137,20 +137,22 @@ function RateLimitBanner({
             <span>{t("rateLimitBanner.otherModels.text")}</span>
           )}
           {playground && (
-            <span>
-              {t.rich("rateLimitBanner.playground.text", {
-                link: (chunks) => (
-                  <a
-                    href={CONTACT_SALES_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    {chunks}
-                  </a>
-                ),
-              })}
-            </span>
+            <Text as="p" font="secondary-body" color="inherit">
+              {richNodes(
+                t.rich("rateLimitBanner.playground.text", {
+                  link: (chunks) => (
+                    <a
+                      href={CONTACT_SALES_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                    >
+                      {chunks}
+                    </a>
+                  ),
+                })
+              )}
+            </Text>
           )}
           {resetLine && (
             <span className="text-xs text-muted-foreground">{resetLine}</span>

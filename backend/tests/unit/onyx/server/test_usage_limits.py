@@ -667,8 +667,7 @@ class TestImageGenerationsPerUser:
             patch.object(usage_limits, "IS_PLAYGROUND", True),
             patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
             patch.object(usage_limits, "tenant_limit_override_fn", return_value=None),
-            patch.object(usage_limits, "mt_cloud_telemetry"),
-            patch.object(usage_limits, "get_cache_backend"),
+            patch.object(usage_limits, "run_in_background"),
             patch.object(
                 usage_limits.tenant_usage_db,
                 "count_generated_images",
@@ -688,7 +687,7 @@ class TestImageGenerationsPerUser:
                 with pytest.raises(OnyxError) as exc_info:
                     call()
                 assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
-                assert f"used your {limit} images" in exc_info.value.detail
+                assert "used your image allowance" in exc_info.value.detail
             else:
                 call()
         count.assert_called_once_with(ANY, _USER)
@@ -740,7 +739,8 @@ class TestPlaygroundRefusals:
     @pytest.fixture
     def refused(self) -> Generator[tuple[MagicMock, MagicMock], None, None]:
         """A playground tenant with nothing overridden. Yields the analytics
-        and cache mocks; the cache says the first refusal is the first."""
+        and cache mocks; the cache says the first refusal is the first. The
+        background thread runs inline, so the events are visible at once."""
         cache = MagicMock()
         cache.set_if_absent.side_effect = [True, False, False]
         with (
@@ -750,6 +750,11 @@ class TestPlaygroundRefusals:
             patch.object(usage_limits, "tenant_trial_start_fn", return_value=None),
             patch.object(usage_limits, "mt_cloud_telemetry") as telemetry,
             patch.object(usage_limits, "get_cache_backend", return_value=cache),
+            patch.object(
+                usage_limits,
+                "run_in_background",
+                side_effect=lambda func, *args: func(*args),
+            ),
         ):
             yield telemetry, cache
 
@@ -846,6 +851,21 @@ class TestPlaygroundRefusals:
         )
         # A whole-trial limit never resets, so the key outlives the trial.
         assert cache.set_if_absent.call_args.kwargs["ex"] == 30 * 24 * 3600
+
+    def test_the_refusal_does_not_wait_for_the_events(self) -> None:
+        """Sending an event flushes to PostHog, so it runs in the background."""
+        with (
+            patch.object(usage_limits, "IS_PLAYGROUND", True),
+            patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
+            patch.object(usage_limits, "tenant_limit_override_fn", return_value=None),
+            patch.object(usage_limits, "tenant_trial_start_fn", return_value=None),
+            patch.object(usage_limits, "mt_cloud_telemetry") as telemetry,
+            patch.object(usage_limits, "run_in_background") as background,
+        ):
+            self._refuse(UsageType.LLM_COST, _trial_week())
+        telemetry.assert_not_called()
+        background.assert_called_once()
+        assert background.call_args.args[0] is usage_limits._send_refusal_events
 
     def test_a_cache_outage_keeps_the_refusal(
         self, refused: tuple[MagicMock, MagicMock]
