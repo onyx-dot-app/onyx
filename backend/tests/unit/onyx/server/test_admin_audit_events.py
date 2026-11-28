@@ -21,6 +21,9 @@ from onyx.server.api_key.api import (
 from onyx.server.manage.llm.api import delete_llm_provider
 from tests.utils.audit import audit_events
 
+# Audit emission is an EE feature.
+pytestmark = pytest.mark.usefixtures("enable_ee")
+
 
 @patch("onyx.server.api_key.api.insert_api_key")
 def test_create_api_key_emits_event(

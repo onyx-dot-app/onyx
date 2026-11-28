@@ -15,6 +15,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from onyx.auth.users import UserManager
 from tests.utils.audit import audit_events
 
+# Audit emission is an EE feature.
+pytestmark = pytest.mark.usefixtures("enable_ee")
+
 
 @pytest.mark.asyncio
 @patch("onyx.auth.users.mt_cloud_identify_user")
