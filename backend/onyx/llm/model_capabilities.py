@@ -611,9 +611,7 @@ def openai_chat_tools_require_reasoning_none(model_name: str) -> bool:
 
 
 # Bedrock's Converse rejects temperature at any value for GPT-5+
-# ("us.openai.gpt-6-sol") and takes their effort as reasoning.effort. LiteLLM
-# turns reasoning_effort into Anthropic thinking there: it only special-cases
-# gpt-oss and Nova.
+# ("us.openai.gpt-6-sol") and takes their effort as reasoning.effort.
 _BEDROCK_OPENAI_GPT_MIN_VERSION = (5, 0)
 
 
