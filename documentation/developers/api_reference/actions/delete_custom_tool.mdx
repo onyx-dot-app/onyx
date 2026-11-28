@@ -1,0 +1,14 @@
+---
+title: "Delete Custom Tool"
+openapi: "DELETE /admin/tool/custom/{tool_id}"
+---
+
+<Warning>
+  This route is deprecated. A later release removes it. Use the integrations API (`/admin/integrations`) instead.
+  In Terraform, use the `onyx_integration` resource.
+</Warning>
+
+<Info>
+  **Required permission:** Manage Actions (`manage:actions`), or Admin (`admin`).
+  A **Group Manager** can also call this. Their scope comes from the agents shared with the groups they manage.
+</Info>

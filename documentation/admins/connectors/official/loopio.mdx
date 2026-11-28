@@ -1,0 +1,61 @@
+---
+title: "Loopio"
+description: "Access RFP responses and content from Loopio"
+---
+
+## How it works
+
+The Loopio connector indexes the Library entries in your Loopio account. Each Library entry becomes one document.
+The document text contains the answer and the related questions. The first question is the document title.
+
+You can index the whole Library or one Stack. Loopio content is re-indexed every **24** hours by default.
+You can change **Refresh Every** under **Schedule** when you create the connector.
+
+## Setting up
+
+### Authorization
+
+The connector uses a Loopio API client (client credentials). A Loopio administrator creates the client.
+
+<Steps>
+  <Step title="Create an API client">
+    In Loopio, open **Settings → Integrations → API** and create a new API client.
+    Follow the [Loopio API guide](https://developer.loopio.com/docs/getting-started) for details.
+  </Step>
+
+  <Step title="Record the credentials">
+    Note the **Client ID** and **Client Secret**. Loopio shows the secret only once.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create a credential">
+    Go to **Admin Panel → Connectors** and select **Loopio**. Select **New Loopio Account** and enter:
+    - **Loopio Subdomain**: the first part of your Loopio URL. For `acme.loopio.com`, enter `acme`.
+    - **Loopio Client ID**: the client ID from above.
+    - **Loopio Client Token**: the client secret from above.
+
+    Select **Create**.
+  </Step>
+
+  <Step title="Choose a Stack (optional)">
+    In **Loopio Stack Name**, enter the exact name of one Stack to index only that Stack.
+    Leave the field empty to index the whole Library.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** needs the Business or Enterprise tier on Onyx Cloud, or the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Start indexing">
+    Select **Create Connector** to start indexing.
+  </Step>
+</Steps>
+
+<Note>
+  The Loopio connector indexes only Library entries. It does not index Projects or RFP documents.
+  It does not support **Sync with Loopio** (permission sync).
+</Note>
