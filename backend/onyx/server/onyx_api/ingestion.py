@@ -194,11 +194,7 @@ def upsert_ingestion_doc(
     # connector indexing does. Cloud does not count them yet.
     count_chunks = IS_PLAYGROUND and USAGE_LIMITS_ENABLED
     if count_chunks:
-        check_usage_and_raise(
-            db_session=db_session,
-            usage_type=UsageType.CHUNKS_INDEXED,
-            tenant_id=tenant_id,
-        )
+        _check_chunk_limit(db_session, tenant_id)
 
     # Index into the primary and, while one is building, the secondary index.
     # Embedder, index and settings id of each write come from the same settings
@@ -260,6 +256,17 @@ def upsert_ingestion_doc(
     return IngestionResult(
         document_id=document.id,
         already_existed=indexing_pipeline_result.new_docs == 0,
+    )
+
+
+def _check_chunk_limit(db_session: Session, tenant_id: str) -> None:
+    """Refuse the document if the tenant's chunk allowance is used up. At least
+    one chunk is about to be added, so a tenant exactly at the limit refuses."""
+    check_usage_and_raise(
+        db_session=db_session,
+        usage_type=UsageType.CHUNKS_INDEXED,
+        tenant_id=tenant_id,
+        pending_amount=1,
     )
 
 
