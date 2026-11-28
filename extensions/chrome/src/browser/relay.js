@@ -224,7 +224,13 @@ let streamChanges = Promise.resolve();
 function refreshStream() {
   const run = streamChanges.then(async () => {
     const grant = await getGrant();
-    const wanted = grant && Date.now() < screencastUntil ? (grant.current ?? null) : null;
+    let wanted = grant && Date.now() < screencastUntil ? (grant.current ?? null) : null;
+    // Attaching shows Chrome's debugging bar, so a tab on a site that the
+    // user has not allowed yet is not streamed.
+    if (wanted !== null) {
+      const tab = await chrome.tabs.get(wanted).catch(() => null);
+      if (!tab || !driver.isShared(grant, tab.url ?? "")) wanted = null;
+    }
     if (wanted === streamingTab) return;
     if (streamingTab !== null) await driver.stopScreencast(streamingTab);
     streamingTab = null;
@@ -288,6 +294,8 @@ async function runCommand(message) {
       await setGrant(updated);
       return updated;
     });
+    // A site allowed just now can start the preview.
+    void refreshStream();
     if (!grant)
       throw new driver.OperationError(
         "no_grant",
@@ -556,7 +564,9 @@ driver.onControlChange(async (tabId) => {
 export async function onTabUpdated(tabId, changeInfo) {
   if (!changeInfo.url && !changeInfo.title) return;
   const grant = await getGrant();
-  if (grant?.tabs.includes(tabId)) await reportGrant();
+  if (!grant?.tabs.includes(tabId)) return;
+  if (changeInfo.url && tabId === grant.current) void refreshStream();
+  await reportGrant();
 }
 
 /** The side panel of a window closed: its chat loses access. */
