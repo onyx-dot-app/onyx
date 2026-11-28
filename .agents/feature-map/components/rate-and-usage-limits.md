@@ -180,6 +180,14 @@ is no longer read or written ([TECH-DEBT](../TECH-DEBT.md)).
 - **Adding usage.** Every place that adds usage calls `record_usage`. It uses the
   cloud trial policy's windows and does no billing lookup, so both cloud plans
   must use the same windows. This is checked when the module loads.
+- **Per-user counts.** A `DERIVED` allowance counts rows that already exist
+  instead of a counter, and a `USER` scope counts one user; the check then needs
+  `user_id`. The playground allows each user
+  `USAGE_LIMIT_IMAGE_GENERATIONS_PER_USER_PLAYGROUND` chat images for the whole
+  trial, counted from the `generated_images` of their tool calls
+  (`backend/onyx/db/usage.py:count_generated_images`). A usage type no plan in
+  force limits returns before any lookup (`is_usage_type_limited`), so cloud does
+  no work for it.
 - **Playground cache.** `backend/ee/onyx/server/tenants/usage_limit_cache.py`
   keeps each playground tenant's trial start and overrides. The control plane
   owns them; the data plane only caches them, like the billing cache: a miss

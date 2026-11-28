@@ -317,6 +317,7 @@ def _construct_tools_impl(
                         chat_session_id=_require_chat_session_id(
                             custom_tool_config, ImageGenerationTool.__name__
                         ),
+                        user_id=user.id,
                     )
                 )
 

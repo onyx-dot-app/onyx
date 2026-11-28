@@ -7,6 +7,7 @@ must use the same period, or they read and write different rows.
 """
 
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from sqlalchemy import ColumnElement, func, select
@@ -14,7 +15,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import UsageType, WindowAnchor
-from onyx.db.models import TENANT_USAGE_COUNTER_PERIOD_END_KEY, TenantUsageCounter
+from onyx.db.models import (
+    TENANT_USAGE_COUNTER_PERIOD_END_KEY,
+    ChatSession,
+    TenantUsageCounter,
+    ToolCall,
+)
 from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
@@ -161,3 +167,24 @@ def check_usage_limit(
             current=current_value + pending_amount,
             limit=float(limit),
         )
+
+
+def count_generated_images(db_session: Session, user_id: UUID) -> int:
+    """How many images the chat image tool generated for this user, across all
+    of the user's chat sessions. Each tool call stores its images, so a failed
+    call counts as none. A deleted chat still counts while chats are only
+    marked deleted, the default (HARD_DELETE_CHATS off)."""
+    total = db_session.scalar(
+        select(
+            func.coalesce(
+                func.sum(func.jsonb_array_length(ToolCall.generated_images)), 0
+            )
+        )
+        .join(ChatSession, ChatSession.id == ToolCall.chat_session_id)
+        .where(
+            ChatSession.user_id == user_id,
+            # Other tools store JSON null here, which IS NOT NULL does not skip.
+            func.jsonb_typeof(ToolCall.generated_images) == "array",
+        )
+    )
+    return int(total or 0)

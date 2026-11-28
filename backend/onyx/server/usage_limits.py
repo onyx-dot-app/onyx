@@ -17,6 +17,7 @@ A tenant override replaces the plan's value. It is not added to it.
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -58,6 +59,7 @@ from shared_configs.configs import (
     USAGE_LIMIT_CHUNKS_INDEXED_PAID,
     USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND,
     USAGE_LIMIT_CHUNKS_INDEXED_TRIAL,
+    USAGE_LIMIT_IMAGE_GENERATIONS_PER_USER_PLAYGROUND,
     USAGE_LIMIT_LLM_COST_CENTS_PAID,
     USAGE_LIMIT_LLM_COST_CENTS_PLAYGROUND,
     USAGE_LIMIT_LLM_COST_CENTS_TRIAL,
@@ -167,8 +169,31 @@ PLAYGROUND = LimitPolicy(
         UsageType.CHUNKS_INDEXED: _tenant_counter(
             USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND, WHOLE_TRIAL
         ),
+        # Per user, for the whole trial: a derived count has no window, and a
+        # playground tenant exists only for its trial.
+        UsageType.IMAGE_GENERATIONS: Allowance(
+            limit=USAGE_LIMIT_IMAGE_GENERATIONS_PER_USER_PLAYGROUND,
+            scope=LimitScope.USER,
+            measure=LimitMeasure.DERIVED,
+        ),
     },
 )
+
+
+# Usage types cloud limits. Any other type is not checked on cloud at all.
+_CLOUD_LIMITED_USAGE_TYPES = frozenset(CLOUD_TRIAL.allowances) | frozenset(
+    CLOUD_PAID.allowances
+)
+
+
+def is_usage_type_limited(usage_type: UsageType) -> bool:
+    """Whether any plan in force limits this usage type. Needs no lookup, so a
+    caller can skip opening a session for a type nothing limits."""
+    if not is_usage_limits_enabled():
+        return False
+    if IS_PLAYGROUND:
+        return usage_type in PLAYGROUND.allowances
+    return usage_type in _CLOUD_LIMITED_USAGE_TYPES
 
 
 def _require_cloud_plans_share_windows() -> None:
@@ -306,6 +331,9 @@ def record_usage(
 ) -> None:
     """Add usage to the row for the current period. The caller commits."""
     allowance = _INCREMENT_POLICY.allowances.get(usage_type)
+    if allowance is not None and allowance.measure == LimitMeasure.DERIVED:
+        # A derived count reads rows that already exist; nothing to add.
+        return
     period = None
     if (
         allowance is not None
@@ -468,9 +496,19 @@ def _measure_and_check(
     limit: int,
     pending_amount: float | int,
     tenant_id: str,
+    user_id: UUID | None,
 ) -> None:
     """Read the current usage. Raise ``UsageLimitExceededError`` if usage plus
     ``pending_amount`` is more than ``limit``."""
+    if allowance.measure == LimitMeasure.DERIVED:
+        used = _derived_usage(db_session, usage_type, user_id)
+        if used + pending_amount > limit:
+            raise UsageLimitExceededError(
+                usage_type=usage_type,
+                current=used + pending_amount,
+                limit=float(limit),
+            )
+        return
     if allowance.measure == LimitMeasure.COUNTER:
         if allowance.window is None:
             raise RuntimeError(f"The {usage_type.value} counter has no period set")
@@ -485,10 +523,26 @@ def _measure_and_check(
     raise NotImplementedError(f"No measurement for {allowance.measure}")
 
 
+def _derived_usage(
+    db_session: Session, usage_type: UsageType, user_id: UUID | None
+) -> int:
+    """The current usage of a derived limit, counted from existing rows."""
+    if usage_type == UsageType.IMAGE_GENERATIONS:
+        if user_id is None:
+            raise RuntimeError("A per-user image count needs the user")
+        return tenant_usage_db.count_generated_images(db_session, user_id)
+    raise NotImplementedError(f"No derived count for {usage_type.value}")
+
+
 def _refusal_detail(
     usage_type: UsageType, is_trial: bool, e: UsageLimitExceededError
 ) -> str:
     user_type = "trial" if is_trial else "paid"
+    if usage_type == UsageType.IMAGE_GENERATIONS:
+        return (
+            f"You have used your {int(e.limit)} images for this trial. "
+            "Talk to sales to raise the limit."
+        )
     if usage_type == UsageType.LLM_COST:
         return (
             f"LLM usage limit exceeded for {user_type} account. "
@@ -523,6 +577,7 @@ def check_usage_and_raise(
     usage_type: UsageType,
     tenant_id: str,
     pending_amount: float | int = 0,
+    user_id: UUID | None = None,
 ) -> None:
     """
     The one enforcement path. Resolves the limit's allowed value, reads its
@@ -534,17 +589,23 @@ def check_usage_and_raise(
         usage_type: Type of usage to check
         tenant_id: The tenant ID for trial detection
         pending_amount: Amount about to be used
+        user_id: The user, for a limit that counts each user's own usage
 
     Raises:
         HTTPException: 429 Too Many Requests if limit exceeded
     """
-    if not is_usage_limits_enabled():
+    # A type no plan in force limits needs no billing lookup or query.
+    if not is_usage_type_limited(usage_type):
         return
 
     # Playground tenants have no billing plan, so do not look it up.
     is_trial = True if IS_PLAYGROUND else is_tenant_on_trial_fn(tenant_id)
     allowance = policy_for_plan(is_trial).allowances.get(usage_type)
     if allowance is None:
+        return
+    if allowance.scope == LimitScope.USER and user_id is None:
+        # Nobody to count for, such as a bot with no Onyx user. The tenant's
+        # spend limit still applies.
         return
     limit = get_limit_for_usage_type(usage_type, is_trial, tenant_id)
     logger.debug("Checking usage limit for %s.%s: %s", usage_type, is_trial, limit)
@@ -555,7 +616,13 @@ def check_usage_and_raise(
 
     try:
         _measure_and_check(
-            db_session, usage_type, allowance, limit, pending_amount, tenant_id
+            db_session,
+            usage_type,
+            allowance,
+            limit,
+            pending_amount,
+            tenant_id,
+            user_id,
         )
     except UsageLimitExceededError as e:
         raise OnyxError(

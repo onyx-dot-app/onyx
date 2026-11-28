@@ -99,6 +99,8 @@ class LimitScope(str, Enum):
     """Whose usage a limit counts."""
 
     TENANT = "tenant"
+    # Each user's own usage. The check needs the user.
+    USER = "user"
 
 
 class LimitMeasure(str, Enum):
@@ -108,6 +110,9 @@ class LimitMeasure(str, Enum):
     # call can pass the line; callers that need an exact stop pass the amount
     # they are about to use as ``pending_amount``.
     COUNTER = "counter"
+    # A count of rows that already exist, such as the images a user's chats
+    # generated. Nothing is added after a call: the rows are the usage.
+    DERIVED = "derived"
 
 
 class LimitWindow(BaseModel):
@@ -157,9 +162,15 @@ class Allowance(BaseModel):
     override_field: TenantUsageLimitKeys | None = None
 
     @model_validator(mode="after")
-    def _counter_has_window(self) -> "Allowance":
-        if self.measure == LimitMeasure.COUNTER and self.window is None:
-            raise ValueError("A counter allowance needs a window")
+    def _measure_fits_window_and_scope(self) -> "Allowance":
+        if self.measure == LimitMeasure.COUNTER:
+            if self.window is None:
+                raise ValueError("A counter allowance needs a window")
+            if self.scope == LimitScope.USER:
+                raise ValueError("A counter counts a whole tenant, not one user")
+        if self.measure == LimitMeasure.DERIVED and self.window is not None:
+            # A derived count covers all rows: on the playground, the trial.
+            raise ValueError("A derived allowance cannot have a window yet")
         return self
 
 

@@ -2,7 +2,9 @@
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from unittest.mock import ANY, MagicMock, patch
+from uuid import UUID
 
 import pytest
 
@@ -39,14 +41,24 @@ from onyx.server.usage_limits import (
 _TENANT = "tenant_test"
 
 
+# Cloud limits these. Image generations are limited on the playground only.
+_CLOUD_TYPES = {
+    UsageType.LLM_COST,
+    UsageType.CHUNKS_INDEXED,
+    UsageType.API_CALLS,
+    UsageType.NON_STREAMING_API_CALLS,
+}
+
+
 class TestPolicies:
     @pytest.mark.parametrize(
         "policy", [CLOUD_TRIAL, CLOUD_PAID], ids=lambda p: p.name.value
     )
-    def test_cloud_policies_cover_every_type_as_weekly_tenant_counters(
+    def test_cloud_policies_cover_their_types_as_weekly_tenant_counters(
         self, policy: LimitPolicy
     ) -> None:
-        for usage_type in UsageType:
+        assert set(policy.allowances) == _CLOUD_TYPES
+        for usage_type in _CLOUD_TYPES:
             allowance = policy.allowances[usage_type]
             assert allowance.scope == LimitScope.TENANT
             assert allowance.measure == LimitMeasure.COUNTER
@@ -54,7 +66,7 @@ class TestPolicies:
             assert allowance.override_field is not None
 
     def test_override_fields_name_the_plan(self) -> None:
-        for usage_type in UsageType:
+        for usage_type in _CLOUD_TYPES:
             trial = CLOUD_TRIAL.allowances[usage_type].override_field
             paid = CLOUD_PAID.allowances[usage_type].override_field
             assert trial is not None and trial.value.endswith("_trial")
@@ -546,3 +558,113 @@ class TestMissingTrialStartWarning:
             period_for(TENANT_WEEK, "t1", _START)
         warned = [c.args[1] for c in log.warning.call_args_list]
         assert warned == ["t1", "t2", "t1"]
+
+
+_USER = UUID("00000000-0000-0000-0000-000000000001")
+
+
+class TestImageGenerationsPerUser:
+    """The playground allows each user 5 chat images for the whole trial,
+    counted from the images their chats already generated."""
+
+    def test_the_playground_limits_images_per_user_by_counting_rows(self) -> None:
+        allowance = PLAYGROUND.allowances[UsageType.IMAGE_GENERATIONS]
+        assert allowance.scope == LimitScope.USER
+        assert allowance.measure == LimitMeasure.DERIVED
+        assert allowance.window is None
+        assert UsageType.IMAGE_GENERATIONS not in CLOUD_TRIAL.allowances
+        assert UsageType.IMAGE_GENERATIONS not in CLOUD_PAID.allowances
+
+    def test_a_counter_cannot_count_one_user(self) -> None:
+        with pytest.raises(ValueError):
+            Allowance(limit=5, scope=LimitScope.USER, window=CALENDAR_WEEK)
+
+    def test_a_derived_count_cannot_have_a_window_yet(self) -> None:
+        with pytest.raises(ValueError):
+            Allowance(limit=5, measure=LimitMeasure.DERIVED, window=CALENDAR_WEEK)
+
+    @pytest.mark.parametrize(
+        ("playground", "enabled", "limited"),
+        [(True, True, True), (False, True, False), (True, False, False)],
+    )
+    def test_only_the_playground_limits_images(
+        self, playground: bool, enabled: bool, limited: bool
+    ) -> None:
+        with (
+            patch.object(usage_limits, "IS_PLAYGROUND", playground),
+            patch.object(usage_limits, "USAGE_LIMITS_ENABLED", enabled),
+        ):
+            assert (
+                usage_limits.is_usage_type_limited(UsageType.IMAGE_GENERATIONS)
+                is limited
+            )
+
+    @pytest.mark.parametrize(("used", "refused"), [(4, False), (5, True)])
+    def test_refuses_the_image_after_the_fifth(self, used: int, refused: bool) -> None:
+        with (
+            patch.object(usage_limits, "IS_PLAYGROUND", True),
+            patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
+            patch.object(usage_limits, "tenant_limit_override_fn", return_value=None),
+            patch.object(
+                usage_limits.tenant_usage_db,
+                "count_generated_images",
+                return_value=used,
+            ) as count,
+        ):
+            limit = PLAYGROUND.allowances[UsageType.IMAGE_GENERATIONS].limit
+            call = partial(
+                check_usage_and_raise,
+                MagicMock(),
+                UsageType.IMAGE_GENERATIONS,
+                "t",
+                pending_amount=1,
+                user_id=_USER,
+            )
+            if refused and used >= limit:
+                with pytest.raises(OnyxError) as exc_info:
+                    call()
+                assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
+                assert f"used your {limit} images" in exc_info.value.detail
+            else:
+                call()
+        count.assert_called_once_with(ANY, _USER)
+
+    def test_a_request_without_a_user_is_not_counted(self) -> None:
+        with (
+            patch.object(usage_limits, "IS_PLAYGROUND", True),
+            patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
+            patch.object(
+                usage_limits.tenant_usage_db, "count_generated_images"
+            ) as count,
+        ):
+            check_usage_and_raise(
+                MagicMock(), UsageType.IMAGE_GENERATIONS, "t", pending_amount=1
+            )
+        count.assert_not_called()
+
+    def test_cloud_neither_looks_up_billing_nor_counts(self) -> None:
+        with (
+            patch.object(usage_limits, "IS_PLAYGROUND", False),
+            patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
+            patch.object(usage_limits, "is_tenant_on_trial_fn") as billing,
+            patch.object(
+                usage_limits.tenant_usage_db, "count_generated_images"
+            ) as count,
+        ):
+            check_usage_and_raise(
+                MagicMock(),
+                UsageType.IMAGE_GENERATIONS,
+                "t",
+                pending_amount=1,
+                user_id=_USER,
+            )
+        billing.assert_not_called()
+        count.assert_not_called()
+
+    def test_adding_usage_writes_nothing_for_a_derived_count(self) -> None:
+        with (
+            patch.object(usage_limits, "_INCREMENT_POLICY", PLAYGROUND),
+            patch.object(usage_limits.tenant_usage_db, "increment_usage") as add,
+        ):
+            record_usage(MagicMock(), UsageType.IMAGE_GENERATIONS, 1, "t")
+        add.assert_not_called()

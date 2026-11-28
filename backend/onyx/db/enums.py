@@ -1216,6 +1216,8 @@ class UsageType(str, PyEnum):
     CHUNKS_INDEXED = "chunks_indexed"
     API_CALLS = "api_calls"
     NON_STREAMING_API_CALLS = "non_streaming_api_calls"
+    # Images the chat image tool generated for one user.
+    IMAGE_GENERATIONS = "image_generations"
 
 
 class WindowAnchor(str, PyEnum):

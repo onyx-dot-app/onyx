@@ -10,9 +10,10 @@ don't re-validate against an allow-list in the tool itself.
 
 import contextvars
 import threading
+from collections.abc import Generator
 from typing import cast
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -20,12 +21,16 @@ from pydantic import JsonValue
 
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation
-from onyx.image_gen.interfaces import ImageShape
+from onyx.db.enums import UsageType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.image_gen.interfaces import ImageGenerationProviderCredentials, ImageShape
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import AssistantMessage, ToolCall
 from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.tool_implementations.images import image_generation_tool as module
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -287,3 +292,65 @@ def test_image_schema_accepts_null_defaults_and_rejects_invalid_shape() -> None:
     arguments = {"prompt": "test", "shape": None, "reference_image_file_ids": None}
     validator.validate(arguments)
     assert not validator.is_valid({**arguments, "shape": "unsupported"})
+
+
+# The playground's per-user image limit, checked before the tool generates.
+
+_USER = UUID("00000000-0000-0000-0000-000000000001")
+
+
+def _limited_tool(user_id: UUID | None, num_imgs: int = 2) -> ImageGenerationTool:
+    with patch.object(module, "get_image_generation_provider"):
+        return ImageGenerationTool(
+            image_generation_credentials=ImageGenerationProviderCredentials(),
+            tool_id=1,
+            chat_session_id=uuid4(),
+            num_imgs=num_imgs,
+            user_id=user_id,
+        )
+
+
+@pytest.fixture
+def limit_session() -> Generator[MagicMock, None, None]:
+    with patch.object(module, "get_session_with_current_tenant") as session:
+        session.return_value.__enter__.return_value = MagicMock()
+        yield session
+
+
+@pytest.mark.usefixtures("limit_session")
+def test_checks_the_images_about_to_be_made_for_the_user() -> None:
+    with (
+        patch.object(module, "is_usage_type_limited", return_value=True),
+        patch.object(module, "get_current_tenant_id", return_value="t"),
+        patch.object(module, "check_usage_and_raise") as check,
+    ):
+        _limited_tool(_USER, num_imgs=2)._check_image_limit()
+    assert check.call_args.kwargs["usage_type"] == UsageType.IMAGE_GENERATIONS
+    assert check.call_args.kwargs["pending_amount"] == 2
+    assert check.call_args.kwargs["user_id"] == _USER
+
+
+@pytest.mark.usefixtures("limit_session")
+def test_a_refusal_becomes_the_tools_answer() -> None:
+    refusal = OnyxError(OnyxErrorCode.RATE_LIMITED, "You have used your 5 images.")
+    with (
+        patch.object(module, "is_usage_type_limited", return_value=True),
+        patch.object(module, "get_current_tenant_id", return_value="t"),
+        patch.object(module, "check_usage_and_raise", side_effect=refusal),
+        pytest.raises(ToolCallException) as exc_info,
+    ):
+        _limited_tool(_USER)._check_image_limit()
+    assert exc_info.value.llm_facing_message == "You have used your 5 images."
+
+
+@pytest.mark.parametrize(("user_id", "limited"), [(None, True), (_USER, False)])
+def test_skips_without_a_user_or_a_limit(
+    limit_session: MagicMock, user_id: UUID | None, limited: bool
+) -> None:
+    with (
+        patch.object(module, "is_usage_type_limited", return_value=limited),
+        patch.object(module, "check_usage_and_raise") as check,
+    ):
+        _limited_tool(user_id)._check_image_limit()
+    check.assert_not_called()
+    limit_session.assert_not_called()

@@ -1,5 +1,6 @@
-"""Reads and adds on tenant_usage_counter against a real Postgres: which
-periods share a row, exact sums, and adds from many sessions at once."""
+"""Usage reads and adds against a real Postgres: which tenant_usage_counter
+periods share a row, exact sums, adds from many sessions at once, and the
+per-user count of images the chat image tool generated."""
 
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
@@ -10,18 +11,21 @@ import pytest
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from onyx.db.chat import create_chat_session__no_commit
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import WindowAnchor
-from onyx.db.models import TenantUsageCounter
+from onyx.db.models import ChatSession, TenantUsageCounter, ToolCall, User
 from onyx.db.usage import (
     UsageLimitExceededError,
     UsagePeriod,
     UsageType,
     check_usage_limit,
+    count_generated_images,
     get_usage,
     increment_usage,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 @pytest.fixture
@@ -181,3 +185,65 @@ def test_concurrent_adds_are_not_lost(db_session: Session, start: datetime) -> N
 
     assert get_usage(db_session, UsageType.API_CALLS, week) == writers * adds_each
     assert _rows(db_session, start) == 1
+
+
+def _image(file_id: str) -> dict[str, str]:
+    return {
+        "file_id": file_id,
+        "url": f"/api/chat/file/{file_id}",
+        "revised_prompt": "",
+    }
+
+
+def _tool_call(
+    db_session: Session, session: ChatSession, images: list[dict[str, str]] | None
+) -> None:
+    db_session.add(
+        ToolCall(
+            chat_session_id=session.id,
+            turn_number=0,
+            tool_call_id=f"call-{len(images or [])}",
+            tool_call_arguments={},
+            tool_call_tokens=0,
+            generated_images=images,
+        )
+    )
+
+
+@pytest.fixture
+def users(db_session: Session) -> Generator[tuple[User, User], None, None]:
+    owner = create_test_user(db_session, "image-owner", assign_default_group=False)
+    other = create_test_user(db_session, "image-other", assign_default_group=False)
+    yield owner, other
+    db_session.rollback()
+    for user in (owner, other):
+        for session in db_session.query(ChatSession).filter_by(user_id=user.id):
+            db_session.delete(session)
+    db_session.commit()
+    delete_test_user(db_session, owner, other)
+
+
+def test_counts_the_images_of_the_users_own_sessions(
+    db_session: Session, users: tuple[User, User]
+) -> None:
+    owner, other = users
+    first = create_chat_session__no_commit(db_session, None, owner.id, None)
+    second = create_chat_session__no_commit(db_session, None, owner.id, None)
+    others = create_chat_session__no_commit(db_session, None, other.id, None)
+    db_session.flush()
+    _tool_call(db_session, first, [_image("a"), _image("b")])
+    _tool_call(db_session, second, [_image("c")])
+    _tool_call(db_session, second, None)  # another tool, or a failed image call
+    _tool_call(db_session, second, [])
+    _tool_call(db_session, others, [_image("d")])
+    db_session.commit()
+
+    assert count_generated_images(db_session, owner.id) == 3
+    assert count_generated_images(db_session, other.id) == 1
+
+
+def test_a_user_without_images_counts_zero(
+    db_session: Session, users: tuple[User, User]
+) -> None:
+    owner, _ = users
+    assert count_generated_images(db_session, owner.id) == 0

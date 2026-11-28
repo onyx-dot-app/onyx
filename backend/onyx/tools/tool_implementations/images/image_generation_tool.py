@@ -10,6 +10,9 @@ from typing_extensions import override
 
 from onyx.agents.tools import ToolInvocation
 from onyx.configs.app_configs import IMAGE_MODEL_NAME, IMAGE_MODEL_PROVIDER
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import UsageType
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.utils import (
     build_frontend_file_url,
@@ -30,6 +33,7 @@ from onyx.image_gen.interfaces import (
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.tool_prompts import GENERATE_IMAGE_DESCRIPTION
+from onyx.server.usage_limits import check_usage_and_raise, is_usage_type_limited
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
@@ -53,6 +57,7 @@ from onyx.tools.tool_implementations.images.models import (
 )
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -74,9 +79,12 @@ class ImageGenerationTool(Tool):
         model: str = IMAGE_MODEL_NAME,
         provider: str = IMAGE_MODEL_PROVIDER,
         num_imgs: int = 1,
+        user_id: UUID | None = None,
     ) -> None:
         self.model = model
         self._chat_session_id = chat_session_id
+        # The user whose images count toward the playground's per-user limit.
+        self._user_id = user_id
         self.provider = provider
         self.num_imgs = num_imgs
 
@@ -252,7 +260,31 @@ class ImageGenerationTool(Tool):
 
         return reference_images
 
+    def _check_image_limit(self) -> None:
+        """On the playground, refuse once the user has used their trial images.
+        The refusal goes back to the model as the tool's answer, so it tells
+        the user instead of the turn failing."""
+        if self._user_id is None or not is_usage_type_limited(
+            UsageType.IMAGE_GENERATIONS
+        ):
+            return
+        with get_session_with_current_tenant() as db_session:
+            try:
+                check_usage_and_raise(
+                    db_session=db_session,
+                    usage_type=UsageType.IMAGE_GENERATIONS,
+                    tenant_id=get_current_tenant_id(),
+                    pending_amount=self.num_imgs,
+                    user_id=self._user_id,
+                )
+            except OnyxError as error:
+                raise ToolCallException(
+                    message=f"Image limit reached: {error.detail}",
+                    llm_facing_message=error.detail,
+                ) from error
+
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        self._check_image_limit()
         arguments = parse_tool_arguments(ImageGenerationArguments, invocation.arguments)
         prompt = arguments.prompt
         shape = arguments.shape
