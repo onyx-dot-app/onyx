@@ -45,7 +45,14 @@ def _cancels(concurrency: Any) -> bool:
 
 
 def problems(name: str, workflow: dict[Any, Any]) -> list[str]:
-    if "pull_request" not in _triggers(workflow) or name in EXEMPT:
+    triggers = _triggers(workflow)
+    # A caller of a reusable workflow must grant every permission its jobs
+    # request, so a callable workflow cannot request actions: write for the
+    # cancel job without widening each caller's token. It keeps built-in
+    # cancellation.
+    if "pull_request" not in triggers or "workflow_call" in triggers:
+        return []
+    if name in EXEMPT:
         return []
     jobs = workflow.get("jobs") or {}
     found = [

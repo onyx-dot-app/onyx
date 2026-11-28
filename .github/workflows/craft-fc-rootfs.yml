@@ -18,7 +18,7 @@
 # before the push. An unignored critical stops it.
 name: Craft Firecracker Rootfs
 concurrency:
-  group: Craft-FC-Rootfs-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.ref }}
+  group: Craft-FC-Rootfs-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
@@ -60,14 +60,6 @@ env:
   ROOTFS_DIR: deployment/craft-fc/rootfs
 
 jobs:
-  cancel-superseded:
-    # Keeps only the newest run for a same-repo PR (see the called workflow).
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    permissions:
-      actions: write
-      contents: read
-    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
-
   check-image:
     runs-on:
       - runs-on

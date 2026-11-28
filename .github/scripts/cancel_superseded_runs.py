@@ -17,9 +17,9 @@ Errors only print a warning: an uncancelled older run wastes runner time, but
 its checks do not count.
 """
 
+import http.client
 import json
 import os
-import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -106,7 +106,7 @@ def main() -> None:
             "&per_page=100",
             token,
         )
-    except (urllib.error.URLError, KeyError, ValueError) as error:
+    except (OSError, http.client.HTTPException, KeyError, ValueError) as error:
         print(f"::warning::Could not list runs, so none were cancelled: {error}")
         return
 
@@ -122,7 +122,7 @@ def main() -> None:
         print(f"Cancelling run {cancel_id}")
         try:
             _request("POST", f"/repos/{repo}/actions/runs/{cancel_id}/cancel", token)
-        except urllib.error.URLError as error:
+        except (OSError, http.client.HTTPException) as error:
             # 409 means the run finished after the listing.
             print(f"::warning::Could not cancel run {cancel_id}: {error}")
 

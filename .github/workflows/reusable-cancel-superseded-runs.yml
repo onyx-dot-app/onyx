@@ -20,6 +20,8 @@
 ###          uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
 ###
 ### Fork PRs get a read-only token, so they keep the concurrency group's cancel.
+### A workflow that other workflows also call (workflow_call) keeps it too:
+### every caller would have to grant actions: write.
 
 name: Cancel Superseded Runs (reusable)
 
