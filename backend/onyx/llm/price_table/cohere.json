@@ -7,6 +7,7 @@
         "input": 0.5,
         "output": 1.5
       },
+      "family": "aya",
       "limit": {
         "context": 128000,
         "output": 4000
@@ -29,6 +30,7 @@
     },
     "c4ai-aya-vision-32b": {
       "attachment": true,
+      "family": "aya-vision",
       "limit": {
         "context": 16000,
         "output": 4000
@@ -80,10 +82,10 @@
     "command-a-plus-05-2026": {
       "attachment": true,
       "cost": {
-        "input": 2.5,
-        "output": 10
+        "input": 0,
+        "output": 0
       },
-      "family": "command-a",
+      "family": "command-a-plus",
       "limit": {
         "context": 128000,
         "output": 64000
@@ -220,7 +222,7 @@
         "input": 2.5,
         "output": 10
       },
-      "family": "command-r",
+      "family": "command-r-plus",
       "limit": {
         "context": 128000,
         "output": 4000
@@ -379,7 +381,34 @@
         "input": 0,
         "output": 0
       },
-      "family": "north",
+      "family": "north-mini",
+      "limit": {
+        "context": 256000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "North Mini Code",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-09",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "north-mini-code-1.0": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "north-mini",
       "limit": {
         "context": 256000,
         "output": 64000
@@ -406,7 +435,34 @@
         "input": 0,
         "output": 0
       },
-      "family": "north",
+      "family": "north-small",
+      "limit": {
+        "context": 32768,
+        "output": 16000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "North Small Translate",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-09-09",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": false
+    },
+    "north-small-translate-1.0": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "north-small",
       "limit": {
         "context": 32768,
         "output": 16000
@@ -517,6 +573,7 @@
     },
     "tiny-aya-earth": {
       "attachment": false,
+      "family": "aya-tiny",
       "limit": {
         "context": 8000,
         "output": 8000
@@ -539,6 +596,7 @@
     },
     "tiny-aya-fire": {
       "attachment": false,
+      "family": "aya-tiny",
       "limit": {
         "context": 8000,
         "output": 8000
@@ -561,6 +619,7 @@
     },
     "tiny-aya-global": {
       "attachment": false,
+      "family": "aya-tiny",
       "limit": {
         "context": 8000,
         "output": 8000
@@ -583,6 +642,7 @@
     },
     "tiny-aya-water": {
       "attachment": false,
+      "family": "aya-tiny",
       "limit": {
         "context": 8000,
         "output": 8000

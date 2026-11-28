@@ -623,6 +623,34 @@ async def test_ask_denied_blocks(
     assert spy.dispatched == []
 
 
+@pytest.mark.asyncio
+async def test_ask_rejected_by_policy_returns_policy_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rejection that the policy wrote (integration removed or action now
+    blocked mid-wait) is not reported to the sandbox as the user's."""
+    resolver = StubResolver(
+        sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
+    )
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.REJECTED)
+    monkeypatch.setattr(
+        gate.action_approval,
+        "get_action_approval",
+        lambda _db, _id: MagicMock(
+            session_id=UUID(_TAG_UUID),
+            decision=ApprovalDecision.REJECTED,
+            decided_via=ApprovalDecidedVia.POLICY,
+        ),
+    )
+    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.POLICY_DENIED)
+    assert spy.dispatched == []
+
+
 class _BlockingPersist:
     """A `_persist_approval_row` that holds until the test releases it."""
 

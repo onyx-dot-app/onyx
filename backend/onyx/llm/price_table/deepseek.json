@@ -199,7 +199,7 @@
         "output": 1.98,
         "reasoning": 1.98
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-pro",
       "limit": {
         "context": 1048576,
         "output": 393216

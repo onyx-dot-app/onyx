@@ -723,8 +723,8 @@ def _is_credential_query_key(key: str) -> bool:
 
 def mcp_server_url_problem(url: str) -> McpUrlProblem | None:
     """Why an MCP server URL cannot be a match key. Each viewer of a plugin
-    sees the key, so a URL with a credential (user info or a query value such
-    as ``api_key``) is refused."""
+    sees the key, so a URL with a credential (user info, or a query or
+    fragment value such as ``api_key``) is refused."""
     if "${" in url:
         return "variable"
     try:
@@ -736,7 +736,8 @@ def mcp_server_url_problem(url: str) -> McpUrlProblem | None:
         return "invalid"
     if "@" in parts.netloc or any(
         _is_credential_query_key(key)
-        for key, _ in parse_qsl(parts.query, keep_blank_values=True)
+        for part in (parts.query, parts.fragment)
+        for key, _ in parse_qsl(part, keep_blank_values=True)
     ):
         return "credential"
     return None

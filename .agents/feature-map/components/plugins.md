@@ -25,6 +25,8 @@ Group or user restriction needs EE.
   and suggested MCP servers in one grid, with or without Craft, where a suggested MCP server replaces
   the preset of its service
   ([TECH-DEBT.md](../TECH-DEBT.md#linear-and-notion-presets-hidden-from-the-catalog)).
+  The modal leaves out a preset whose `preset_id` is in `GET /admin/integrations`,
+  because a built-in app has only one app row.
   Each opens the two-step
   add modal: a name and a URL, then the detected sign-in, which posts to
   `POST /admin/integrations`. `/admin/integrations/new` and
@@ -63,7 +65,8 @@ Group or user restriction needs EE.
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill count, Turn on and a
-  row menu (Turn on/off, Share). Its Add menu has Upload plugin and Add
+  row menu (Turn on/off, Share). A row opens on a single click only, as on
+  Skills (`openOnSingleClick`). Its Add menu has Upload plugin and Add
   marketplace, with no Create a skill. The list leaves out skill-kind entries (one
   SKILL.md at the bundle root; they are on Skills), and an admin's list
   leaves out the plugins that are not `member_visible`. The plugin page
@@ -83,7 +86,7 @@ Group or user restriction needs EE.
   Source column carries the group (marketplace, owner, Organization library).
   Rows the admin owns or edits (`lib/skills/sharing.ts:canManageSkill`) can be
   selected; the others show a disabled checkbox. The selection gets the Admin
-  Skills bulk actions (`sections/skills/useSkillBulkActions.tsx`: Share,
+  Skills bulk actions (`sections/skills/usePluginBulkActions.tsx`: Share,
   Enable for me, Disable for me, Delete with a confirm that lists the
   plugins, all through `POST /skills/bulk`), with plugin copy
   (`plugins.bulk`). Share takes the row menu's rule (`canShareSkill`: never
@@ -111,7 +114,8 @@ Group or user restriction needs EE.
   integration (`access.can_manage`) gets a "..." menu with Share
   (`sections/plugins/ShareIntegrationModal.tsx`: specific people, groups in
   EE, no permission picker, `PUT /integrations/{id}/access`) and Publish to Org
-  (`POST /integrations/{id}/publish`, off without global manage:actions). A row opens
+  (`PUT /admin/integrations/{id}/installation-policy` with `AVAILABLE`, off
+  without global manage:actions). A row opens
   `/app/customize/integrations/[id]` (`sections/customize/CustomizeIntegrationPage.tsx`):
   the connection status, Connect or Disconnect (also while turned off, for the
   user's own connection) and the "..." menu in the header, then Overview (type,
@@ -204,7 +208,7 @@ matched integration from `GET /integrations`, so a row follows a switch or a
 sign-in at once, and `needAction` maps the state to one action (Turn on,
 Connect, Add for your team with `newIntegrationHref` filling the add modal, or
 the "Ask an admin" note; other states have only the badge). `lib/plugins/directory.ts:pluginSwitch` gives its switch
-(`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:useSkillEnablement`,
+(`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:usePluginEnablement`,
 so a skill name conflict asks to switch in `SkillSwitchModal`); when the response leaves a supported need not
 on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integration row carries `access`; its
 `installation_policy` is the user's own setting (group settings and shares

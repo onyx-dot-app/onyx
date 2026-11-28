@@ -17,6 +17,7 @@ from onyx.skills.bundle import (
     normalize_custom_bundle,
     normalize_stored_bundle,
     open_bundle_zip,
+    rename_bundle_skill_md,
 )
 from onyx.skills.metadata import frontmatter_for_jsonb, parse_skill_document
 from onyx.skills.models import (
@@ -60,6 +61,7 @@ def ingest_skill_bundle(
     file_store: FileStore,
     *,
     expected_name: str | None = None,
+    public_name: str | None = None,
     upload_limits: bool = True,
 ) -> IngestedBundle:
     """Validate, parse, hash, and store a custom skill bundle.
@@ -68,7 +70,8 @@ def ingest_skill_bundle(
     use their frontmatter ``name`` as canonical identity and are stored as ZIPs.
 
     Pass ``expected_name`` to keep an existing row's identity when replacing a
-    bundle. On creation, both ZIPs and standalone files use the validated
+    bundle. A renamed skill passes its new ``public_name`` too: an upload
+    with that name is stored under ``expected_name``. On creation, both ZIPs and standalone files use the validated
     frontmatter name; the upload filename is not an identity source.
 
     Prefer ``ingested_skill_bundle`` when the stored blob should be cleaned up
@@ -94,19 +97,27 @@ def ingest_skill_bundle(
     )
     name = document.metadata.name
     description = document.metadata.description
+    bundle_content = normalized.content
     if expected_name is not None and name != expected_name:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Replacement SKILL.md frontmatter field 'name' must remain "
-            f"'{expected_name}'",
-        )
+        if name != public_name:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Replacement SKILL.md frontmatter field 'name' must remain "
+                f"'{public_name or expected_name}'",
+            )
+        bundle_content = rename_bundle_skill_md(bundle_content, expected_name)
+        with open_bundle_zip(bundle_content) as bundle_zip:
+            raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
+        check_skill_md_size(raw_skill_md)
+        document = parse_skill_document(raw_skill_md)
+        name = expected_name
     if name in BUILT_IN_SKILLS:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"skill name '{name}' is reserved",
         )
     content = store_version_content(
-        normalized.content,
+        bundle_content,
         display_name=f"{name}.zip",
         skills=[
             PluginSkillContent(
@@ -120,7 +131,7 @@ def ingest_skill_bundle(
     return IngestedBundle(
         canonical_name=name,
         bundle_file_id=content.bundle_file_id,
-        bundle_sha256=compute_bundle_sha256(normalized.content),
+        bundle_sha256=compute_bundle_sha256(bundle_content),
         description=description,
         content=content,
     )
@@ -182,6 +193,7 @@ def ingested_skill_bundle(
     file_store: FileStore,
     *,
     expected_name: str | None = None,
+    public_name: str | None = None,
     upload_limits: bool = True,
 ) -> Iterator[IngestedBundle]:
     ingested = ingest_skill_bundle(
@@ -189,6 +201,7 @@ def ingested_skill_bundle(
         filename,
         file_store,
         expected_name=expected_name,
+        public_name=public_name,
         upload_limits=upload_limits,
     )
     try:

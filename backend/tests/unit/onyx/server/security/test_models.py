@@ -18,6 +18,7 @@ from onyx.server.security.models import (
     _operator_locked,
     _tenant_editable,
 )
+from onyx.utils.audit import DEFAULT_AUDIT_EVENT_CATEGORIES
 
 _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "user_directory_admin_only": False,
@@ -28,6 +29,8 @@ _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "incognito_record_mode": IncognitoRecordMode.USAGE_ONLY,
     "allow_connector_group_restrictions": False,
     "allow_connector_check_findings": True,
+    "audit_event_categories": DEFAULT_AUDIT_EVENT_CATEGORIES,
+    "audit_include_query_text": False,
     "ssrf_protection_level": SSRFProtectionLevel.VALIDATE_LLM,
     "mask_credential_prefix": True,
     "llm_custom_config_env_injection": True,

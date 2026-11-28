@@ -67,6 +67,39 @@
       "temperature": false,
       "tool_call": true
     },
+    "claude-fable-5-2": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 10,
+        "cache_write_above_1hr": 16.0,
+        "input": 8,
+        "output": 40
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Fable 5.2",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-09",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "claude-haiku-4-5": {
       "attachment": true,
       "cost": {
@@ -234,6 +267,62 @@
       "structured_output": true,
       "tool_call": true
     },
+    "claude-mythos-5-2": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "cache_write": 10.0,
+        "cache_write_above_1hr": 16.0,
+        "input": 8.0,
+        "output": 40.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-mythos-5-2",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "claude-mythos-preview": {
+      "cost": {
+        "cache_read": 1.0,
+        "cache_write": 12.5,
+        "cache_write_above_1hr": 20.0,
+        "input": 10.0,
+        "output": 50.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-mythos-preview",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "claude-opus-4-5": {
       "attachment": true,
       "cost": {
@@ -263,6 +352,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -296,6 +386,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -550,6 +641,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -583,6 +675,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

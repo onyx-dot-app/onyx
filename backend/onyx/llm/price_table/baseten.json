@@ -1,6 +1,17 @@
 {
   "aliases": {},
   "models": {
+    "decision-models/baseten-bison-latest": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768
+      },
+      "mode": "decisions",
+      "name": "decision-models/baseten-bison-latest"
+    },
     "decision-models/baseten-elephant-9b-latest": {
       "cost": {
         "input": 0.035,
@@ -11,6 +22,17 @@
       },
       "mode": "decisions",
       "name": "decision-models/baseten-elephant-9b-latest"
+    },
+    "decision-models/baseten-groundhog-latest": {
+      "cost": {
+        "input": 0.035,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 16384
+      },
+      "mode": "decisions",
+      "name": "decision-models/baseten-groundhog-latest"
     },
     "decision-models/baseten-joey-2b-latest": {
       "cost": {
@@ -70,7 +92,7 @@
         "input": 1.32,
         "output": 3.96
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-pro",
       "limit": {
         "context": 1048576,
         "output": 262144
@@ -102,7 +124,7 @@
       "family": "deepseek-flash",
       "limit": {
         "context": 1048576,
-        "output": 32768
+        "output": 262144
       },
       "modalities": {
         "input": [
@@ -192,7 +214,7 @@
       "family": "deepseek-flash",
       "limit": {
         "context": 1048576,
-        "output": 32768
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -212,6 +234,35 @@
       "temperature": false,
       "tool_call": true
     },
+    "meta-models/muse-spark-open": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.25,
+        "output": 4.25
+      },
+      "family": "muse-spark",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Muse Spark Open",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "temperature": true,
+      "tool_call": true
+    },
     "moonshotai/Kimi-K3": {
       "attachment": true,
       "cost": {
@@ -219,7 +270,7 @@
         "input": 3,
         "output": 15
       },
-      "family": "kimi-k3",
+      "family": "kimi",
       "limit": {
         "context": 1048576,
         "output": 262144
@@ -249,10 +300,10 @@
         "input": 2,
         "output": 10
       },
-      "family": "kimi-k3",
+      "family": "kimi-pro",
       "limit": {
-        "context": 1000000,
-        "output": 262144
+        "context": 1048576,
+        "output": 1048576
       },
       "modalities": {
         "input": [
@@ -279,7 +330,7 @@
         "input": 0.6,
         "output": 2.4
       },
-      "family": "nemotron",
+      "family": "nemotron-ultra",
       "limit": {
         "context": 202800,
         "output": 202800
@@ -297,6 +348,36 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-04",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.04,
+        "input": 0.2,
+        "output": 0.5
+      },
+      "family": "nemotron-super",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Nemotron 3.5 Super VL",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -326,6 +407,35 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-05",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "reflection/Beam-1.0": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.04,
+        "input": 0.4,
+        "output": 1.2
+      },
+      "family": "beam",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Beam",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-05",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

@@ -43,6 +43,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_built_in_skill_row,
     make_group,
+    make_org_marketplace,
     make_skill,
     make_user,
     set_current_version_validity,
@@ -112,7 +113,12 @@ def test_new_skill_is_enabled_only_when_name_is_available(
     user = make_user(db_session)
     name = f"auto-enable-{uuid4().hex[:8]}"
     first_skill = make_skill(db_session, name=name, is_public=True)
-    second_skill = make_skill(db_session, name=name, is_public=True)
+    second_skill = make_skill(
+        db_session,
+        name=name,
+        is_public=True,
+        marketplace_id=make_org_marketplace(db_session),
+    )
 
     assert enable_new_skill_if_name_available__no_commit(
         first_skill, user.id, db_session
@@ -327,7 +333,12 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
     second_user = make_user(db_session)
     name = f"shared-name-{uuid4().hex[:8]}"
     first_skill = make_skill(db_session, name=name, is_public=True)
-    second_skill = make_skill(db_session, name=name, is_public=True)
+    second_skill = make_skill(
+        db_session,
+        name=name,
+        is_public=True,
+        marketplace_id=make_org_marketplace(db_session),
+    )
 
     set_skill_enabled_for_user(
         skill_id=first_skill.id,
@@ -558,7 +569,12 @@ def test_automatic_skill_name_conflicts(db_session: Session) -> None:
     user = make_user(db_session)
     name = f"policy-conflict-{uuid4().hex[:8]}"
     optional = make_skill(db_session, name=name, is_public=True)
-    automatic = make_skill(db_session, name=name, is_public=True)
+    automatic = make_skill(
+        db_session,
+        name=name,
+        is_public=True,
+        marketplace_id=make_org_marketplace(db_session),
+    )
     # Of two published skills with one name, the older one runs.
     set_plugin_created_at(db_session, optional.id, datetime(2025, 1, 1, tzinfo=UTC))
     set_skill_enabled_for_user(
@@ -639,7 +655,12 @@ def test_replacing_default_skill_remembers_opt_out(db_session: Session) -> None:
     user = make_user(db_session)
     name = f"default-replace-{uuid4().hex[:8]}"
     default = make_skill(db_session, name=name, is_public=True)
-    other = make_skill(db_session, name=name, is_public=True)
+    other = make_skill(
+        db_session,
+        name=name,
+        is_public=True,
+        marketplace_id=make_org_marketplace(db_session),
+    )
     set_skill_installation_policy(default, PluginInstallationPolicy.DEFAULT, db_session)
     with pytest.raises(OnyxError):
         set_skill_enabled_for_user(
@@ -714,7 +735,12 @@ def test_replacement_clears_effective_default_and_keeps_hidden_choice(
         skill_id=previous.id, enabled=True, user=user, db_session=db_session
     )
     default = make_skill(db_session, name=previous.name, is_public=True)
-    replacement = make_skill(db_session, name=previous.name, is_public=True)
+    replacement = make_skill(
+        db_session,
+        name=previous.name,
+        is_public=True,
+        marketplace_id=make_org_marketplace(db_session),
+    )
     set_skill_installation_policy(default, PluginInstallationPolicy.DEFAULT, db_session)
     replace_skill_shares(
         skill=previous, user_shares={}, group_shares={}, db_session=db_session
@@ -764,7 +790,12 @@ def test_same_name_switch_locks_plugins_in_id_order(db_session: Session) -> None
     user = make_user(db_session)
     name = f"lock-order-{uuid4().hex[:8]}"
     lower, higher = sorted(
-        (make_skill(db_session, name=name, is_public=True) for _ in range(2)),
+        (
+            make_skill(
+                db_session, name=name, is_public=True, marketplace_id=marketplace_id
+            )
+            for marketplace_id in (None, make_org_marketplace(db_session))
+        ),
         key=lambda skill: skill.id,
     )
     set_skill_enabled_for_user(
@@ -880,7 +911,12 @@ def test_opposite_same_name_switches_do_not_deadlock(db_session: Session) -> Non
     other_user = make_user(db_session)
     name = f"opposite-{uuid4().hex[:8]}"
     lower, higher = sorted(
-        (make_skill(db_session, name=name, is_public=True) for _ in range(2)),
+        (
+            make_skill(
+                db_session, name=name, is_public=True, marketplace_id=marketplace_id
+            )
+            for marketplace_id in (None, make_org_marketplace(db_session))
+        ),
         key=lambda skill: skill.id,
     )
     set_skill_enabled_for_user(

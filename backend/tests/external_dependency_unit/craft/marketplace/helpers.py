@@ -78,6 +78,7 @@ def make_marketplace(
         login_user_id=login.id,
         default_installation_policy=default,
         db_session=db_session,
+        default_branch="main",
     )
     db_session.commit()
     marketplace_ids.append(marketplace.id)

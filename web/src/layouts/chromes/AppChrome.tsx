@@ -67,7 +67,7 @@ interface ChatTitleProps {
 /** The chat's title; with a subagent open, `chat / subagent`, as T3 Code. */
 function ChatTitle({ sessionId, title }: ChatTitleProps) {
   const { shownId } = useSubagentNavigation();
-  const { agents } = useChatSubagents(sessionId, false);
+  const { agents } = useChatSubagents(sessionId);
   const agent = shownId
     ? agents.find((candidate) => candidate.id === shownId)
     : undefined;

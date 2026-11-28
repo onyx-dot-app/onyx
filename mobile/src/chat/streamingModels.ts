@@ -368,6 +368,10 @@ export interface ToolApprovalRequest extends BaseObj {
   can_approve_for_chat?: boolean;
   // The subagent that asks; null or absent for the root agent's own request.
   agent_name?: string | null;
+  // True for a VM command's request: the wider approval covers the rest of the command.
+  can_approve_for_command?: boolean;
+  app_name?: string | null;
+  expires_at?: string | null;
 }
 
 export interface ToolApprovalResolved extends BaseObj {

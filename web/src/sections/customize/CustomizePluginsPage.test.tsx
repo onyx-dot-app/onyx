@@ -1,5 +1,6 @@
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import {
+  fireEvent,
   render,
   screen,
   setupUser,
@@ -100,6 +101,35 @@ test("a plugin that is off because another plugin holds its skill name says so",
   expect(
     await screen.findByText(/Off: company-kit uses the same skill name/)
   ).toBeInTheDocument();
+});
+
+test("the second click of a double-click on Turn on does not open the plugin", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins");
+  const off = plugin("kit", "my-kit", { enabled: false });
+  let enabled = false;
+  mockFetch({
+    "/api/skills": () => ({ builtins: [], customs: [{ ...off, enabled }] }),
+    "PUT /api/skills/kit/enabled": () => {
+      enabled = true;
+      return { ...off, enabled };
+    },
+  });
+  render(<CustomizePluginsPage />);
+
+  await setupUser().click(
+    await screen.findByRole("button", { name: "Turn on" })
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "Turn on" })
+    ).not.toBeInTheDocument()
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Open my-kit" }), {
+    detail: 2,
+  });
+
+  expect(window.location.pathname).toBe("/app/customize/plugins");
 });
 
 test("with no plugins and no marketplaces, one empty state offers upload and add marketplace", async () => {

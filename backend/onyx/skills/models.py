@@ -271,6 +271,8 @@ class ChatSkill(BaseModel):
     version_id: UUID
     path: str = ""
     built_in_skill_id: str | None = None
+    # The plugin of a custom skill. None for a built-in.
+    plugin_id: UUID | None = None
 
     @field_validator("description")
     @classmethod

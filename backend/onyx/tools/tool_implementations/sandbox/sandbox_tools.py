@@ -738,7 +738,7 @@ class ApplyPatchTool(_FileTool):
                         if changed
                         else "No file changed."
                     )
-                    raise ToolCallException(message, message) from error
+                    raise tool_error(message) from error
                 changed.append(path)
         changes = [
             ApplyPatchFileChange(
@@ -1079,7 +1079,7 @@ class LoadSkillTool(SandboxTool):
         try:
             skill = load_chat_skill_files(self._turn.user_id, arguments.name)
         except SkillLoadError as e:
-            raise ToolCallException(message=str(e), llm_facing_message=str(e)) from e
+            raise tool_error(str(e)) from e
         self._turn.sandbox.install_skill(
             self._turn.start_call(), arguments.name, skill.version, skill.files
         )

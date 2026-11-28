@@ -88,6 +88,7 @@ import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import UnseenMarker from "@/refresh-components/UnseenMarker";
+import type { IconProps } from "@opal/types";
 import {
   useUnviewedChatScheduledTaskCount,
   useUnviewedScheduledTaskCount,
@@ -110,6 +111,21 @@ import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
+/** The Scheduled Tasks icon with the unread marker, for the folded sidebar,
+ * which hides the tab's right side. */
+function ScheduledTasksUnseenIcon(props: IconProps) {
+  const t = useTranslations("scheduledTasks");
+  return (
+    <span className="relative inline-block">
+      <SvgClock {...props} />
+      <UnseenMarker
+        label={t("unviewedResults")}
+        className="absolute -top-0.5 -end-0.5"
+      />
+    </span>
+  );
+}
+
 function buildVisibleAgents(
   pinnedAgents: MinimalAgent[],
   activeAgent: MinimalAgent | undefined
@@ -710,7 +726,11 @@ export default function AppSidebar() {
           )}
           <div data-testid="AppSidebar/scheduled-tasks">
             <SidebarTab
-              icon={SvgClock}
+              icon={
+                folded && unviewedChatTaskCount > 0
+                  ? ScheduledTasksUnseenIcon
+                  : SvgClock
+              }
               {...navigation.linkTo(SCHEDULED_TASKS_PATH, { scroll: false })}
               selected={activeSidebarTab.isScheduledTasks()}
               rightChildren={

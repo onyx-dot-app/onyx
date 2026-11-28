@@ -206,21 +206,23 @@ def test_create_skill_rejects_reserved_name(admin_user: DATestUser) -> None:
     )
 
 
-def test_create_skill_allows_disabled_duplicate_name(admin_user: DATestUser) -> None:
+def test_create_skill_refuses_a_name_in_my_uploads(admin_user: DATestUser) -> None:
     name = f"duplicate-{uuid4().hex[:8]}"
 
     first = SkillManager.create_custom(admin_user, name=name)
-    second = SkillManager.create_custom(admin_user, name=name, auto_enable=False)
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        SkillManager.create_custom(admin_user, name=name, auto_enable=False)
 
-    assert first.id != second.id
-    assert first.enabled is True
-    assert second.enabled is False
-    matching = [
-        skill
+    response = exc_info.value.response
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "CONFLICT"
+    assert response.json()["taken_name"] == name
+    listed = [
+        skill.id
         for skill in SkillManager.list_all(admin_user).customs
         if skill.name == name
     ]
-    assert {skill.id for skill in matching} == {first.id, second.id}
+    assert listed == [first.id]
 
 
 def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import (
@@ -205,6 +205,17 @@ class PersonaUpsertRequest(BaseModel):
     task_prompt: str
     datetime_aware: bool
 
+    @field_validator("integrations")
+    @classmethod
+    def _one_link_for_each_integration(
+        cls, value: list[PersonaIntegrationLink] | None
+    ) -> list[PersonaIntegrationLink] | None:
+        if value is not None:
+            ids = [link.integration_id for link in value]
+            if len(ids) != len(set(ids)):
+                raise ValueError("Each integration can appear only one time.")
+        return value
+
 
 class MinimalPersonaSnapshot(BaseModel):
     """Minimal persona model optimized for ChatPage.tsx - only includes fields actually used"""
@@ -288,7 +299,7 @@ class MinimalPersonaSnapshot(BaseModel):
             name=persona.name,
             description=persona.description,
             tools=[
-                ToolSnapshot.from_model(tool)
+                ToolSnapshot.from_model(tool, with_headers=False)
                 for tool in persona.tools
                 if should_expose_tool_to_fe(tool)
             ],
@@ -380,7 +391,7 @@ class PersonaSnapshot(BaseModel):
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
             tools=[
-                ToolSnapshot.from_model(tool)
+                ToolSnapshot.from_model(tool, with_headers=False)
                 for tool in persona.tools
                 if should_expose_tool_to_fe(tool)
             ],
@@ -464,7 +475,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             public_permission=persona.public_permission,
             sharing_status=derive_persona_sharing_status(persona),
             tools=[
-                ToolSnapshot.from_model(tool)
+                ToolSnapshot.from_model(tool, with_headers=False)
                 for tool in persona.tools
                 if should_expose_tool_to_fe(tool)
             ],

@@ -13,7 +13,7 @@
 # https://kind.sigs.k8s.io/docs/user/local-registry/
 name: Craft Kubernetes Integration Tests
 concurrency:
-  group: Craft-K8s-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: Craft-K8s-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.ref }}
   cancel-in-progress: true
 
 on:
@@ -84,6 +84,14 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   changes:
     # Gates the expensive test job. On pull_request we use
     # paths-filter; on schedule / push (tags) / workflow_dispatch the filter is

@@ -81,7 +81,6 @@
 1 backend/tests/integration/tests/craft/k8s/test_bun_node_modules_dedup.py
 1 backend/tests/integration/tests/craft/k8s/test_cleanup_recovery.py
 1 backend/tests/integration/tests/craft/k8s/test_messages_api_k8s.py
-1 backend/tests/integration/tests/craft/test_scheduled_tasks_api.py
 1 backend/tests/integration/tests/craft/webapp_preview.py
 1 backend/tests/integration/tests/index_attempt/test_index_attempt_pagination.py
 1 backend/tests/integration/tests/indexing/test_connector_edit_perm_sync.py

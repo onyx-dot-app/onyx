@@ -7,6 +7,7 @@
         "input": 0,
         "output": 0
       },
+      "family": "allam",
       "limit": {
         "context": 4096,
         "output": 4096
@@ -28,7 +29,7 @@
     },
     "canopylabs/orpheus-arabic-saudi": {
       "attachment": false,
-      "family": "canopylabs",
+      "family": "orpheus",
       "limit": {
         "context": 4000,
         "output": 50000
@@ -52,7 +53,7 @@
     },
     "canopylabs/orpheus-v1-english": {
       "attachment": false,
-      "family": "canopylabs",
+      "family": "orpheus",
       "limit": {
         "context": 4000,
         "output": 50000
@@ -134,7 +135,7 @@
         "input": 0.03,
         "output": 0.03
       },
-      "family": "llama",
+      "family": "llama-prompt-guard",
       "limit": {
         "context": 512,
         "output": 512
@@ -162,7 +163,7 @@
         "input": 0.04,
         "output": 0.04
       },
-      "family": "llama",
+      "family": "llama-prompt-guard",
       "limit": {
         "context": 512,
         "output": 512
@@ -249,7 +250,7 @@
         "input": 0.075,
         "output": 0.3
       },
-      "family": "gpt-oss",
+      "family": "gpt-oss-safeguard",
       "limit": {
         "context": 131072,
         "output": 65536

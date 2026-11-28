@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import type { CustomSkill } from "@/lib/skills/types";
-import { useSkillBulkActions } from "@/sections/skills/useSkillBulkActions";
+import { usePluginBulkActions } from "@/sections/skills/usePluginBulkActions";
 
 const mockSharingDraftStarted = jest.fn();
 let mockSharingOpen = false;
@@ -23,7 +23,7 @@ const target = customFixture({
 });
 
 function Harness({ items }: { items: CustomSkill[] }) {
-  const bulk = useSkillBulkActions({
+  const bulk = usePluginBulkActions({
     items,
     noun: "plugin",
     enablement: {

@@ -250,8 +250,3 @@ export async function updateIntegrationShares(
   const res = await request(SWR_KEYS.integrationAccess(id), "PUT", body);
   return res.json();
 }
-
-/** Makes a private integration Available to the organization. */
-export async function publishIntegration(id: number): Promise<void> {
-  await request(`${SWR_KEYS.integration(id)}/publish`, "POST");
-}

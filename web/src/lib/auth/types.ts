@@ -6,6 +6,26 @@ export enum SessionEndReason {
   UNRECOGNIZED = "SESSION_UNRECOGNIZED",
 }
 
+// Error details of the magic link routes that the sign-in page turns into its
+// own message (`backend/onyx/auth/magic_link.py` and the playground hooks).
+export enum MagicLinkRefusal {
+  USE_SSO = "MAGIC_LINK_USE_SSO",
+  INVALID = "MAGIC_LINK_INVALID",
+  WRONG_EMAIL = "MAGIC_LINK_WRONG_EMAIL",
+  PLAYGROUND_FREE_MAIL = "PLAYGROUND_FREE_MAIL",
+}
+
+// Answer of POST /auth/magic-link/redeem.
+export type MagicLinkRedeemed =
+  // The session cookie is set.
+  | { state: "signed_in"; next_url: string; team_choice_token: null }
+  // Playground: a team from the domain has a running trial. Redeeming
+  // `team_choice_token` starts a new team; joining needs no call.
+  | { state: "team_choice"; next_url: null; team_choice_token: string }
+  // Opened in another browser than the one that asked for it. Redeem again
+  // with the address the link went to; the token is still unused.
+  | { state: "confirm_email"; next_url: null; team_choice_token: null };
+
 // Error body of the fastapi-users routes (`fastapi_users.router.common.ErrorModel`).
 // The register and reset-password routes send an object when the password is
 // invalid.
@@ -36,6 +56,9 @@ export interface AuthTypeMetadata {
   oauthEnabled: boolean;
   // Admin kill switch (single-tenant). False hides password login and signup.
   passwordAuthEnabled: boolean;
+  // "Get a link by email" is on, mail is configured and SSO is not the only
+  // way in. On multi-tenant it takes the password form's place.
+  magicLinkEnabled: boolean;
   // Enabled DB-backed SSO providers, one login button each. Empty on cloud
   // and when no provider rows exist.
   ssoProviders?: SSOProviderOption[];

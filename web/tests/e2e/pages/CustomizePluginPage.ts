@@ -54,6 +54,12 @@ export class CustomizePluginPage {
     expect((await response).ok()).toBeTruthy();
   }
 
+  async expectSaveDisabled(): Promise<void> {
+    await expect(
+      this.uploadDialog.getByRole("button", { name: "Save", exact: true })
+    ).toBeDisabled();
+  }
+
   async saveUpload(): Promise<string> {
     const response = this.page.waitForResponse(
       (candidate) =>

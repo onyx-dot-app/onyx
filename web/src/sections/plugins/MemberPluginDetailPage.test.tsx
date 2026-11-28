@@ -12,6 +12,7 @@ import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import { mockFetch } from "@tests/setup/integrationTestUtils";
 
 const PLUGIN_ID = "11111111-1111-4111-8111-111111111111";
+const NOT_FOUND = "This plugin is not available to you.";
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -53,6 +54,27 @@ test("a plugin that is one skill opens the skill page", async () => {
   expect(
     screen.queryByRole("tab", { name: /^Skills/ })
   ).not.toBeInTheDocument();
+});
+
+test("the member page does not open a plugin that members cannot see", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  mockFetch({
+    "/api/skills": {
+      builtins: [],
+      customs: [
+        customFixture({
+          id: PLUGIN_ID,
+          name: "private-kit",
+          kind: "plugin",
+          member_visible: false,
+        }),
+      ],
+    },
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(await screen.findByText(NOT_FOUND)).toBeInTheDocument();
+  expect(screen.queryByText("private-kit")).not.toBeInTheDocument();
 });
 
 test("an uploaded plugin lists its needs and turning it on shows the ones not on", async () => {
@@ -248,6 +270,49 @@ test("turning on a plugin refreshes the integration rows it turned on", async ()
   await user.click(screen.getByRole("switch", { name: "Use review-kit" }));
 
   await waitFor(() => expect(within(row).getByText("On")).toBeInTheDocument());
+});
+
+test("the turn-on dialog lists only the integrations that are not on", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const need = (name: string, state: PluginNeed["state"]): PluginNeed => ({
+    kind: "mcp",
+    name,
+    url: `https://example.com/${name}`,
+    transport: "http",
+    url_problem: null,
+    supported: true,
+    state,
+    integration_id: null,
+  });
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    enabled: false,
+    kind: "plugin",
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+      ],
+      needs: [need("search", "on"), need("docs", "not_added")],
+    },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/integrations": [],
+    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: { ...plugin, enabled: true },
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  await user.click(
+    await screen.findByRole("switch", { name: "Use review-kit" })
+  );
+
+  const dialog = await screen.findByRole("dialog");
+  expect(await within(dialog).findByLabelText("docs")).toBeInTheDocument();
+  expect(within(dialog).queryByLabelText("search")).not.toBeInTheDocument();
 });
 
 test("the owner shares, uploads a new version and deletes the plugin from its page", async () => {
@@ -532,4 +597,63 @@ test("the overview says which plugin holds the skill name of an off plugin", asy
   expect(
     await screen.findByText("Off: company-kit uses the same skill name")
   ).toBeVisible();
+});
+
+describe("a plugin deleted in another tab", () => {
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    enabled: true,
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+
+  function mockDeletedAfterLoad(route: string) {
+    let deleted = false;
+    mockFetch({
+      "/api/skills": () => ({
+        builtins: [],
+        customs: deleted ? [] : [{ ...plugin, plugin: null }],
+      }),
+      [`/api/skills/${PLUGIN_ID}`]: plugin,
+      [route]: () => {
+        deleted = true;
+        return new Response(
+          JSON.stringify({ detail: "Skill is not visible." }),
+          { status: 404 }
+        );
+      },
+    });
+  }
+
+  beforeEach(() =>
+    window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`)
+  );
+
+  test("a switch that gets a 404 shows the not-found state", async () => {
+    mockDeletedAfterLoad(`PUT /api/skills/${PLUGIN_ID}/enabled`);
+    const user = setupUser();
+    render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+    await user.click(
+      await screen.findByRole("switch", { name: "Use review-kit" })
+    );
+
+    expect(
+      await screen.findByText("This plugin is not available to you.")
+    ).toBeInTheDocument();
+  });
+
+  test("Share that gets a 404 shows the not-found state", async () => {
+    mockDeletedAfterLoad(`/api/skills/custom/${PLUGIN_ID}/share`);
+    const user = setupUser();
+    render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+    await user.click(await screen.findByRole("button", { name: "Share" }));
+
+    expect(
+      await screen.findByText("This plugin is not available to you.")
+    ).toBeInTheDocument();
+  });
 });

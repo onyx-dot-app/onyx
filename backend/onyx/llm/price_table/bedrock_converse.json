@@ -78,11 +78,11 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.0825,
-        "cache_write": 0.33,
+        "cache_write": 0,
         "input": 0.33,
         "output": 2.75
       },
-      "family": "nova",
+      "family": "nova-lite",
       "limit": {
         "context": 1000000,
         "output": 65535
@@ -145,7 +145,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.015,
-        "cache_write": 0.06,
+        "cache_write": 0,
         "input": 0.06,
         "output": 0.24
       },
@@ -176,7 +176,7 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.00875,
-        "cache_write": 0.035,
+        "cache_write": 0,
         "input": 0.035,
         "output": 0.14
       },
@@ -204,7 +204,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.2,
-        "cache_write": 0.8,
+        "cache_write": 0,
         "input": 0.8,
         "output": 3.2
       },
@@ -317,10 +317,10 @@
     "anthropic.claude-fable-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 1,
-        "cache_write": 12.5,
-        "input": 10,
-        "output": 50
+        "cache_read": 1.1,
+        "cache_write": 13.75,
+        "input": 11,
+        "output": 55
       },
       "family": "claude-fable",
       "limit": {
@@ -348,10 +348,10 @@
     "anthropic.claude-fable-5-1": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.25,
-        "cache_write": 12.5,
-        "input": 10,
-        "output": 50
+        "cache_read": 0.275,
+        "cache_write": 13.75,
+        "input": 11,
+        "output": 55
       },
       "family": "claude-fable",
       "limit": {
@@ -376,13 +376,44 @@
       "temperature": false,
       "tool_call": true
     },
+    "anthropic.claude-fable-5-2": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 11,
+        "input": 8.8,
+        "output": 44
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5.2",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-09",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "anthropic.claude-haiku-4-5-20251001-v1:0": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.1,
-        "cache_write": 1.25,
-        "input": 1,
-        "output": 5
+        "cache_read": 0.11,
+        "cache_write": 1.375,
+        "input": 1.1,
+        "output": 5.5
       },
       "family": "claude-haiku",
       "limit": {
@@ -410,16 +441,16 @@
     "anthropic.claude-haiku-5-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.01,
-        "cache_write": 0.125,
-        "input": 0.1,
-        "output": 0.5,
+        "cache_read": 0.011,
+        "cache_write": 0.1375,
+        "input": 0.11,
+        "output": 0.55,
         "tiers": [
           {
-            "cache_read": 0.05,
-            "cache_write": 0.625,
-            "input": 0.5,
-            "output": 2.5,
+            "cache_read": 0.055,
+            "cache_write": 0.6875,
+            "input": 0.55,
+            "output": 2.75,
             "tier": {
               "size": 100000,
               "type": "context"
@@ -484,10 +515,10 @@
     "anthropic.claude-opus-4-5-20251101-v1:0": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.5,
-        "cache_write": 6.25,
-        "input": 5,
-        "output": 25
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
       },
       "family": "claude-opus",
       "limit": {
@@ -508,6 +539,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -546,10 +578,10 @@
     "anthropic.claude-opus-4-7": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.5,
-        "cache_write": 6.25,
-        "input": 5,
-        "output": 25
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
       },
       "family": "claude-opus",
       "limit": {
@@ -577,10 +609,10 @@
     "anthropic.claude-opus-4-8": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.5,
-        "cache_write": 6.25,
-        "input": 5,
-        "output": 25
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
       },
       "family": "claude-opus",
       "limit": {
@@ -608,10 +640,10 @@
     "anthropic.claude-opus-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.5,
-        "cache_write": 6.25,
-        "input": 5,
-        "output": 25
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
       },
       "family": "claude-opus",
       "limit": {
@@ -639,10 +671,10 @@
     "anthropic.claude-opus-5-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
-        "cache_write": 5,
-        "input": 4,
-        "output": 20
+        "cache_read": 0.22,
+        "cache_write": 5.5,
+        "input": 4.4,
+        "output": 22
       },
       "family": "claude-opus",
       "limit": {
@@ -670,10 +702,10 @@
     "anthropic.claude-sonnet-4-5-20250929-v1:0": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.3,
-        "cache_write": 3.75,
-        "input": 3,
-        "output": 15
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
       },
       "family": "claude-sonnet",
       "limit": {
@@ -733,10 +765,10 @@
     "anthropic.claude-sonnet-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
-        "cache_write": 2.5,
-        "input": 2,
-        "output": 10
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
       },
       "family": "claude-sonnet",
       "limit": {
@@ -764,10 +796,10 @@
     "anthropic.claude-sonnet-5-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.1,
-        "cache_write": 2.5,
-        "input": 2,
-        "output": 10
+        "cache_read": 0.11,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
       },
       "family": "claude-sonnet",
       "limit": {
@@ -791,6 +823,30 @@
       "structured_output": true,
       "temperature": false,
       "tool_call": true
+    },
+    "ap-northeast-1/amazon.nova-2-5-sonic": {
+      "cost": {
+        "input": 0.396,
+        "output": 3.311
+      },
+      "limit": {
+        "context": 256000,
+        "output": 64000
+      },
+      "mode": "realtime",
+      "name": "ap-northeast-1/amazon.nova-2-5-sonic"
+    },
+    "ap-northeast-1/amazon.nova-2-sonic-v1:0": {
+      "cost": {
+        "input": 0.396,
+        "output": 3.311
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 64000
+      },
+      "mode": "realtime",
+      "name": "ap-northeast-1/amazon.nova-2-sonic-v1:0"
     },
     "apac.amazon.nova-lite-v1:0": {
       "attachment": true,
@@ -1302,6 +1358,80 @@
       "temperature": true,
       "tool_call": true
     },
+    "ca.anthropic.claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.011,
+        "cache_write": 0.1375,
+        "input": 0.11,
+        "output": 0.55,
+        "tiers": [
+          {
+            "cache_read": 0.055,
+            "cache_write": 0.6875,
+            "input": 0.55,
+            "output": 2.75,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5 (Canada)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "ca.anthropic.claude-sonnet-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5.5 (Canada)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "cohere.embed-english-v3": {
       "cost": {
         "input": 0.09999999999999999,
@@ -1353,7 +1483,7 @@
         "input": 1.35,
         "output": 5.4
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-r",
       "limit": {
         "context": 128000,
         "output": 32768
@@ -1429,6 +1559,30 @@
       "temperature": true,
       "tool_call": true
     },
+    "eu-north-1/amazon.nova-2-5-sonic": {
+      "cost": {
+        "input": 0.363,
+        "output": 2.992
+      },
+      "limit": {
+        "context": 256000,
+        "output": 64000
+      },
+      "mode": "realtime",
+      "name": "eu-north-1/amazon.nova-2-5-sonic"
+    },
+    "eu-north-1/amazon.nova-2-sonic-v1:0": {
+      "cost": {
+        "input": 0.363,
+        "output": 2.992
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 64000
+      },
+      "mode": "realtime",
+      "name": "eu-north-1/amazon.nova-2-sonic-v1:0"
+    },
     "eu.amazon.nova-2-lite-v1:0": {
       "attachment": true,
       "cost": {
@@ -1437,7 +1591,7 @@
         "input": 0.374,
         "output": 3.157
       },
-      "family": "nova",
+      "family": "nova-lite",
       "limit": {
         "context": 1000000,
         "output": 65535
@@ -1581,6 +1735,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-09",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -1686,6 +1841,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2001,13 +2157,24 @@
       "temperature": false,
       "tool_call": true
     },
+    "eu.cohere.embed-v4:0": {
+      "cost": {
+        "input": 0.12,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 128000
+      },
+      "mode": "embedding",
+      "name": "eu.cohere.embed-v4:0"
+    },
     "eu.mistral.pixtral-large-2502-v1:0": {
       "attachment": true,
       "cost": {
         "input": 2,
         "output": 6
       },
-      "family": "pixtral",
+      "family": "pixtral-large",
       "limit": {
         "context": 128000,
         "output": 8192
@@ -2055,11 +2222,11 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.075,
-        "cache_write": 0.3,
+        "cache_write": 0,
         "input": 0.3,
         "output": 2.5
       },
-      "family": "nova",
+      "family": "nova-lite",
       "limit": {
         "context": 1000000,
         "output": 65535
@@ -2141,6 +2308,37 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-01",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.anthropic.claude-fable-5-2": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 10,
+        "input": 8,
+        "output": 40
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5.2 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-09",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -2246,6 +2444,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2580,7 +2779,7 @@
         "input": 3,
         "output": 15
       },
-      "family": "kimi-k3",
+      "family": "kimi",
       "limit": {
         "context": 1048576,
         "output": 128000
@@ -2598,6 +2797,36 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.moonshotai.kimi-k3.1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 5,
+        "input": 4,
+        "output": 20
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro Highspeed (Global)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -2648,7 +2877,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "global.openai.gpt-5.6-sol": {
@@ -2697,7 +2926,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "global.openai.gpt-5.6-terra": {
@@ -2746,7 +2975,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "global.openai.gpt-6-astra": {
@@ -2844,7 +3073,7 @@
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "global.openai.gpt-6-sol": {
@@ -2893,7 +3122,7 @@
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "global.openai.gpt-6.1-sol": {
@@ -2991,6 +3220,104 @@
       "reasoning": true,
       "release_date": "2026-10-26",
       "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.openai.gpt-6.2-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "cache_write": 10,
+        "context_over_200k": {
+          "cache_read": 0.8,
+          "cache_write": 20,
+          "input": 16,
+          "output": 60
+        },
+        "input": 8,
+        "output": 40,
+        "tiers": [
+          {
+            "cache_read": 0.8,
+            "cache_write": 20,
+            "input": 16,
+            "output": 60,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.2 Astra (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "global.openai.gpt-6.2-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.2 Sol (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -3038,8 +3365,7 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
           "text"
@@ -3354,6 +3680,66 @@
       "temperature": false,
       "tool_call": true
     },
+    "in.moonshotai.kimi-k3": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.33,
+        "cache_write": 4.125,
+        "input": 3.3,
+        "output": 16.5
+      },
+      "family": "kimi",
+      "limit": {
+        "context": 1048576,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3 (India)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "in.moonshotai.kimi-k3.1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 5.5,
+        "input": 4.4,
+        "output": 22
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro Highspeed (India)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "in.openai.gpt-5.6-luna": {
       "attachment": true,
       "cost": {
@@ -3389,19 +3775,19 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.6 Luna (India)",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "in.openai.gpt-5.6-terra": {
@@ -3439,19 +3825,19 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.6 Terra (India)",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "jp.amazon.nova-2-lite-v1:0": {
@@ -3462,7 +3848,7 @@
         "input": 0.396,
         "output": 3.311
       },
-      "family": "nova",
+      "family": "nova-lite",
       "limit": {
         "context": 1000000,
         "output": 65535
@@ -3649,6 +4035,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -3774,6 +4161,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -3948,7 +4336,7 @@
         "input": 0.3,
         "output": 1.2
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 204608,
         "output": 128000
@@ -3976,7 +4364,7 @@
         "input": 0.3,
         "output": 1.2
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 196608,
         "output": 131072
@@ -4004,7 +4392,7 @@
         "input": 0.3,
         "output": 1.2
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 196608,
         "output": 98304
@@ -4059,7 +4447,7 @@
         "input": 0.5,
         "output": 1.5
       },
-      "family": "magistral",
+      "family": "magistral-small",
       "limit": {
         "context": 128000,
         "output": 40000
@@ -4199,7 +4587,7 @@
         "input": 2,
         "output": 6
       },
-      "family": "pixtral",
+      "family": "pixtral-large",
       "limit": {
         "context": 128000,
         "output": 8192
@@ -4227,7 +4615,7 @@
         "input": 0.04,
         "output": 0.04
       },
-      "family": "voxtral",
+      "family": "voxtral-mini",
       "limit": {
         "context": 32768,
         "output": 4096
@@ -4256,7 +4644,7 @@
         "input": 0.1,
         "output": 0.3
       },
-      "family": "voxtral",
+      "family": "voxtral-small",
       "limit": {
         "context": 32768,
         "output": 8192
@@ -4285,7 +4673,7 @@
         "input": 0.6,
         "output": 2.5
       },
-      "family": "kimi-thinking",
+      "family": "kimi",
       "limit": {
         "context": 262144,
         "output": 16000
@@ -4313,7 +4701,7 @@
         "input": 0.6,
         "output": 3
       },
-      "family": "kimi-k2",
+      "family": "kimi",
       "limit": {
         "context": 262144,
         "output": 16384
@@ -4342,7 +4730,7 @@
         "input": 0.2,
         "output": 0.6
       },
-      "family": "nemotron",
+      "family": "nemotron-nano",
       "limit": {
         "context": 131072,
         "output": 8192
@@ -4371,7 +4759,7 @@
         "input": 0.06,
         "output": 0.24
       },
-      "family": "nemotron",
+      "family": "nemotron-nano",
       "limit": {
         "context": 262144,
         "output": 8192
@@ -4398,7 +4786,7 @@
         "input": 0.06,
         "output": 0.23
       },
-      "family": "nemotron",
+      "family": "nemotron-nano",
       "limit": {
         "context": 131072,
         "output": 8192
@@ -4426,7 +4814,7 @@
         "input": 0.15,
         "output": 0.65
       },
-      "family": "nemotron",
+      "family": "nemotron-super",
       "limit": {
         "context": 262144,
         "output": 131072
@@ -4456,7 +4844,7 @@
       },
       "family": "gpt",
       "limit": {
-        "context": 1000000,
+        "context": 1050000,
         "output": 128000
       },
       "modalities": {
@@ -4486,7 +4874,7 @@
       },
       "family": "gpt",
       "limit": {
-        "context": 1000000,
+        "context": 1050000,
         "output": 128000
       },
       "modalities": {
@@ -4504,7 +4892,7 @@
       "reasoning": true,
       "release_date": "2026-04-23",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "openai.gpt-5.6-luna": {
@@ -4554,7 +4942,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "openai.gpt-5.6-sol": {
@@ -4604,7 +4992,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "openai.gpt-5.6-terra": {
@@ -4654,7 +5042,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "openai.gpt-6-astra": {
@@ -4754,7 +5142,7 @@
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "openai.gpt-6-sol": {
@@ -4804,7 +5192,7 @@
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "openai.gpt-6.1-sol": {
@@ -4903,6 +5291,104 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai.gpt-6.2-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.44,
+        "cache_write": 11,
+        "context_over_200k": {
+          "cache_read": 0.88,
+          "cache_write": 22,
+          "input": 17.6,
+          "output": 66
+        },
+        "input": 8.8,
+        "output": 44,
+        "tiers": [
+          {
+            "cache_read": 0.88,
+            "cache_write": 22,
+            "input": 17.6,
+            "output": 66,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.2 Astra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-6.2-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.22,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 16.5
+        },
+        "input": 2.2,
+        "output": 11,
+        "tiers": [
+          {
+            "cache_read": 0.22,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 16.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.2 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -5021,7 +5507,7 @@
         "input": 0.15,
         "output": 0.6
       },
-      "family": "gpt-oss",
+      "family": "gpt-oss-safeguard",
       "limit": {
         "context": 128000,
         "output": 16384
@@ -5048,7 +5534,7 @@
         "input": 0.07,
         "output": 0.2
       },
-      "family": "gpt-oss",
+      "family": "gpt-oss-safeguard",
       "limit": {
         "context": 128000,
         "output": 16384
@@ -5129,7 +5615,7 @@
         "input": 0.15,
         "output": 0.6
       },
-      "family": "qwen",
+      "family": "qwen-coder",
       "limit": {
         "context": 262144,
         "output": 131072
@@ -5157,7 +5643,7 @@
         "input": 0.45,
         "output": 1.8
       },
-      "family": "qwen",
+      "family": "qwen-coder",
       "limit": {
         "context": 131072,
         "output": 65536
@@ -5185,7 +5671,7 @@
         "input": 0.5,
         "output": 1.2
       },
-      "family": "qwen",
+      "family": "qwen-coder",
       "limit": {
         "context": 262144,
         "output": 65536
@@ -5239,7 +5725,7 @@
         "input": 0.53,
         "output": 2.66
       },
-      "family": "qwen",
+      "family": "qwen-vl",
       "limit": {
         "context": 262144,
         "output": 262000
@@ -5583,15 +6069,39 @@
       "temperature": true,
       "tool_call": true
     },
+    "us-west-2/amazon.nova-2-5-sonic": {
+      "cost": {
+        "input": 0.319,
+        "output": 2.6510000000000002
+      },
+      "limit": {
+        "context": 256000,
+        "output": 64000
+      },
+      "mode": "realtime",
+      "name": "us-west-2/amazon.nova-2-5-sonic"
+    },
+    "us-west-2/amazon.nova-2-sonic-v1:0": {
+      "cost": {
+        "input": 0.319,
+        "output": 2.6510000000000002
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 64000
+      },
+      "mode": "realtime",
+      "name": "us-west-2/amazon.nova-2-sonic-v1:0"
+    },
     "us.amazon.nova-2-lite-v1:0": {
       "attachment": true,
       "cost": {
         "cache_read": 0.0825,
-        "cache_write": 0.33,
+        "cache_write": 0,
         "input": 0.33,
         "output": 2.75
       },
-      "family": "nova",
+      "family": "nova-lite",
       "limit": {
         "context": 1000000,
         "output": 65535
@@ -5630,7 +6140,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.015,
-        "cache_write": 0.06,
+        "cache_write": 0,
         "input": 0.06,
         "output": 0.24
       },
@@ -5662,7 +6172,7 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.00875,
-        "cache_write": 0.035,
+        "cache_write": 0,
         "input": 0.035,
         "output": 0.14
       },
@@ -5724,7 +6234,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.2,
-        "cache_write": 0.8,
+        "cache_write": 0,
         "input": 0.8,
         "output": 3.2
       },
@@ -5810,6 +6320,37 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-01",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.anthropic.claude-fable-5-2": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 11,
+        "input": 8.8,
+        "output": 44
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Fable 5.2 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-09",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -5946,6 +6487,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -6278,7 +6820,7 @@
         "input": 1.35,
         "output": 5.4
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-r",
       "limit": {
         "context": 128000,
         "output": 32768
@@ -6450,7 +6992,7 @@
         "input": 2,
         "output": 6
       },
-      "family": "pixtral",
+      "family": "pixtral-large",
       "limit": {
         "context": 128000,
         "output": 8192
@@ -6480,7 +7022,7 @@
         "input": 3.3,
         "output": 16.5
       },
-      "family": "kimi-k3",
+      "family": "kimi",
       "limit": {
         "context": 1048576,
         "output": 128000
@@ -6498,6 +7040,36 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.moonshotai.kimi-k3.1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 5.5,
+        "input": 4.4,
+        "output": 22
+      },
+      "family": "kimi-pro",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro Highspeed (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -6548,7 +7120,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "us.openai.gpt-5.6-sol": {
@@ -6597,7 +7169,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "us.openai.gpt-5.6-terra": {
@@ -6646,7 +7218,7 @@
       "reasoning": true,
       "release_date": "2026-07-09",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "us.openai.gpt-6-astra": {
@@ -6744,7 +7316,7 @@
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "us.openai.gpt-6-sol": {
@@ -6793,7 +7365,7 @@
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
-      "temperature": false,
+      "temperature": true,
       "tool_call": true
     },
     "us.openai.gpt-6.1-sol": {
@@ -6890,6 +7462,104 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.openai.gpt-6.2-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.44,
+        "cache_write": 11,
+        "context_over_200k": {
+          "cache_read": 0.88,
+          "cache_write": 22,
+          "input": 17.6,
+          "output": 66
+        },
+        "input": 8.8,
+        "output": 44,
+        "tiers": [
+          {
+            "cache_read": 0.88,
+            "cache_write": 22,
+            "input": 17.6,
+            "output": 66,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.2 Astra (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.openai.gpt-6.2-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.22,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 16.5
+        },
+        "input": 2.2,
+        "output": 11,
+        "tiers": [
+          {
+            "cache_read": 0.22,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 16.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.2 Sol (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -7147,8 +7817,7 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
           "text"
@@ -7190,6 +7859,34 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "writer.palmyra-vision-7b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "palmyra-vision",
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Palmyra Vision 7B",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-03-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": false
     },
     "writer.palmyra-x4-v1:0": {
       "attachment": false,
