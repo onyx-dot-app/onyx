@@ -12,9 +12,12 @@ If the control plane cannot be read (it is down, or it does not have the
 endpoint), an empty value is cached for 60 seconds instead of the usual hour.
 During those 60 seconds:
 - the tenant has no overrides, so each limit uses the normal playground amount;
-- the tenant has no trial start, so its periods use the calendar week;
-- checks read the cached empty value, so the control plane is asked at most
-  once a minute per tenant, not on every request.
+- the tenant has no trial start, so a limit with a length uses calendar
+  periods of that length, and a whole-trial limit counts in one period that
+  never ends;
+- checks read the cached empty value, so the control plane is asked about once
+  a minute per tenant, not on every request. Requests that miss at the same
+  moment, before the empty value is stored, can each ask once.
 
 A sales raise is pushed by the control plane and written here at once, so it
 does not wait for the cache to expire. A refill after a miss never overwrites
