@@ -61,6 +61,17 @@ def _check_cleanup_lease(lock: CacheLock, deadline: float) -> None:
     lock.extend(SESSION_FLOW_LOCK_LEASE_SECONDS)
 
 
+def _safe_get_sandbox_manager() -> SandboxManager | None:
+    try:
+        return get_sandbox_manager()
+    except RuntimeError as e:
+        task_logger.debug(
+            "Sandbox manager unavailable, skipping cleanup_idle_sandboxes_task: %s",
+            e,
+        )
+        return None
+
+
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
     soft_time_limit=TIMEOUT_SECONDS,
@@ -75,6 +86,8 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     sweep, plus runtime removal, for every tenant that owns a live runtime,
     including tenants this fanout skips.
     """
+    if _safe_get_sandbox_manager() is None:
+        return
     _sweep_tenant_sandboxes(
         tenant_id, time.monotonic() + TIMEOUT_SECONDS, reconcile_resources=False
     )
@@ -147,7 +160,9 @@ def reconcile_sandbox_runtimes_task(
         return
 
     deadline = time.monotonic() + TIMEOUT_SECONDS
-    sandbox_manager = get_sandbox_manager()
+    sandbox_manager = _safe_get_sandbox_manager()
+    if sandbox_manager is None:
+        return
     # Resources created before tenant labels appear only in a tenant's own
     # inventory, so a single-tenant deployment always sweeps its tenant.
     always_swept = set() if MULTI_TENANT else {POSTGRES_DEFAULT_SCHEMA}
