@@ -1,6 +1,5 @@
 """Every route authorizes before any GitHub call."""
 
-from collections.abc import Callable
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
@@ -46,7 +45,11 @@ from onyx.server.features.skill.marketplace_models import (
 )
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.marketplace.compare import entry_result
-from onyx.skills.marketplace.models import MarketplaceEntryResult, ReadyPlugin
+from onyx.skills.marketplace.models import (
+    GitHubMarketplaceConfig,
+    MarketplaceEntryResult,
+    ReadyPlugin,
+)
 from onyx.skills.marketplace.provider import (
     GitHubMarketplaceAdapter,
     marketplace_config,
@@ -57,7 +60,12 @@ from onyx.skills.marketplace.sync import (
     request_marketplace_sync,
 )
 from onyx.skills.push import push_skills_and_commit
-from onyx.utils.github import GitHubRevision, GitHubSource, resolve_github_revision
+from onyx.utils.github import (
+    GitHubRevision,
+    GitHubSource,
+    github_default_branch,
+    resolve_github_revision,
+)
 
 router = APIRouter(prefix="/marketplaces")
 
@@ -101,14 +109,12 @@ def _authorized_marketplace(
 
 
 def _summary(
-    marketplace: Marketplace, plugin_count: int, manager: bool, db_session: Session
+    marketplace: Marketplace,
+    plugin_count: int,
+    login_email: str | None,
+    manager: bool,
 ) -> MarketplaceSummary:
     config = marketplace_config(marketplace)
-    login = (
-        fetch_user_by_id(db_session, marketplace.login_user_id)
-        if marketplace.login_user_id is not None
-        else None
-    )
     return MarketplaceSummary(
         id=marketplace.id,
         name=marketplace.name,
@@ -127,8 +133,8 @@ def _summary(
         ),
         can_manage=marketplace.owner_user_id is not None or manager,
         login_user=(
-            MinimalUserSnapshot(id=login.id, email=login.email)
-            if login is not None
+            MinimalUserSnapshot(id=marketplace.login_user_id, email=login_email)
+            if marketplace.login_user_id is not None and login_email is not None
             else None
         ),
         plugin_count=plugin_count,
@@ -151,8 +157,18 @@ def _detail(
         MarketplaceEntryResult.model_validate(item)
         for item in marketplace.last_sync_result or []
     ]
+    login = (
+        fetch_user_by_id(db_session, marketplace.login_user_id)
+        if marketplace.login_user_id is not None
+        else None
+    )
     return MarketplaceDetail(
-        **_summary(marketplace, len(plugins), manager, db_session).model_dump(),
+        **_summary(
+            marketplace,
+            len(plugins),
+            login.email if login is not None else None,
+            manager,
+        ).model_dump(),
         login_has_github=marketplace.login_user_id is not None
         and github_authorization_for(marketplace.login_user_id, db_session) is not None,
         entries=[
@@ -180,13 +196,23 @@ def _request_sync(
     request_marketplace_sync(marketplace_id, background_tasks)
 
 
-def _tree_resolver(
-    authorization: str | None,
-) -> Callable[[GitHubSource], GitHubRevision]:
+def _source_config(
+    request: MarketplaceSourceRequest, authorization: str | None
+) -> tuple[GitHubMarketplaceConfig, str]:
+    """The source, and the repository's default branch. A ref that names the
+    default branch is stored as no ref, so that ``owner/repo`` and
+    ``.../tree/main`` are one source."""
+
     def resolve(source: GitHubSource) -> GitHubRevision:
         return resolve_github_revision(source, authorization)
 
-    return resolve
+    config = request.to_config(resolve)
+    default_branch = github_default_branch(
+        GitHubSource(owner=config.owner, repo=config.repo), authorization
+    )
+    if config.ref and config.ref == default_branch:
+        config = config.model_copy(update={"ref": None})
+    return config, default_branch
 
 
 @router.post("/preview")
@@ -198,12 +224,14 @@ def preview_marketplace(
     authorization = github_authorization_for(user.id, db_session)
     # End the read transaction before the GitHub calls.
     db_session.commit()
-    config = request.to_config(_tree_resolver(authorization))
+    config, default_branch = _source_config(request, authorization)
     read = read_marketplace_repository(
         GitHubMarketplaceAdapter(config, authorization), config.folder
     )
     integrations = integrations_for_needs(user, db_session)
-    added_personal, added_company = source_added_for(config, user.id, db_session)
+    added_personal, added_company = source_added_for(
+        config, user.id, db_session, default_branch
+    )
     entries: list[MarketplacePreviewEntry] = []
     for entry in read.entries:
         result = entry_result(entry)
@@ -261,8 +289,8 @@ def create_marketplace(
 ) -> MarketplaceDetail:
     manager = _is_manager(user, http_request)
     _authorize_scope(request.scope, manager)
-    config = request.to_config(
-        _tree_resolver(github_authorization_for(user.id, db_session))
+    config, default_branch = _source_config(
+        request, github_authorization_for(user.id, db_session)
     )
     policy = request.default_installation_policy
     if request.scope == MarketplaceScope.PERSONAL and policy is not None:
@@ -277,6 +305,7 @@ def create_marketplace(
         login_user_id=user.id,
         default_installation_policy=policy or PluginInstallationPolicy.AVAILABLE,
         db_session=db_session,
+        default_branch=default_branch,
     )
     marketplace_id = marketplace.id
     _request_sync(marketplace_id, background_tasks, db_session)
@@ -296,8 +325,8 @@ def list_marketplaces(
     manager = _is_manager(user, http_request)
     return MarketplaceList(
         marketplaces=[
-            _summary(marketplace, plugin_count, manager, db_session)
-            for marketplace, plugin_count in list_github_marketplaces(
+            _summary(marketplace, plugin_count, login_email, manager)
+            for marketplace, plugin_count, login_email in list_github_marketplaces(
                 user.id, db_session
             )
         ]

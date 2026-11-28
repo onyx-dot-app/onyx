@@ -115,7 +115,10 @@ class FakeGitHub:
             return self._response(404)
         if len(parts) == 3:
             return self._response(
-                200, json.dumps({"full_name": f"{owner}/{repo}"}).encode()
+                200,
+                json.dumps(
+                    {"full_name": f"{owner}/{repo}", "default_branch": "main"}
+                ).encode(),
             )
         kind = parts[3]
         if kind == "commits":

@@ -19,7 +19,9 @@
   tag Off, Required, Pending review or Unpublished changes, the date, Turn
   on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
   skill (`/app/customize/skills/new`); GitHub skills come in through a
-  marketplace ([[#github-marketplaces]]). A custom skill
+  marketplace ([[#github-marketplaces]]). A row opens on
+  a single click only, so the second click of a double-click on Turn on does
+  not open it (`sections/customize/CustomizeList.tsx:openOnSingleClick`). A custom skill
   opens at `/app/customize/skills/[id]`; a built-in opens a preview. A custom
   skill's icon is a themed glyph picked from its name and description
   (`sections/customize/skillIcon.tsx`). The Admin Panel lists custom skills
@@ -107,7 +109,7 @@
   Installed by default or Not available; never Required) and **Sharing** (off:
   only organization-wide managers add user or group shares).
 - **Bulk management.** **Admin Panel → Skills** and **Admin Panel → Plugins**
-  ([[plugins]]) support selection of custom skills (`lib/skills/hooks.ts:useSkillBulkSelection`, UI in `sections/skills/useSkillBulkActions.tsx`), bulk access and installation changes,
+  ([[plugins]]) support selection of custom skills (`lib/skills/hooks.ts:usePluginBulkSelection`, UI in `sections/skills/usePluginBulkActions.tsx`), bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
@@ -963,8 +965,10 @@ the app from the same rule
     plugin on (`PUT /skills/{id}/enabled`, bulk enable, a new upload, and a
     new version of a plugin the user has on) turns
     on each needed integration in `turn_on` with a connected status, through
-    `integrations/access.py:set_integration_enabled__no_commit`, and reloads
-    the user's Craft sessions when one changed.
+    `integrations/plugin_needs.py:turn_on_needed_integrations__no_commit`, and
+    reloads the user's Craft sessions when one changed. Bulk enable does this
+    one time for all the enabled plugins. An integration that the user lost
+    access to after the read is skipped, so the enable does not fail.
     The on/off switch and the name order stay per plugin: a plugin that
     loses any skill name does not load.
 26. `write-skill-limit` **A user's own write, other than a turn-off, never
@@ -1062,7 +1066,12 @@ the app from the same rule
     error (`reset_at`), and a 422 for a ref that names no commit counts as
     not found. The preview says when the caller or the company already has
     the source (`db/marketplace.py:source_added_for`). `GitHubMarketplaceConfig` lowercases owner and repo, so the
-    unique indexes catch a duplicate that differs only in case. Every JSON
+    unique indexes catch a duplicate that differs only in case. Preview and
+    create read the default branch first
+    (`server/features/skill/marketplace_api.py:_source_config`) and fail when
+    GitHub does not give it. A ref that names the default branch is stored as
+    no ref, and `db/marketplace.py:_same_source` also matches a row saved with
+    the default branch as its ref. Every JSON
     read in `skills/marketplace/reader.py` turns a `RecursionError` into a
     blocked entry or a failed read. Replace login needs no GitHub
     connection: the new login reads a public repository without one. The Celery task

@@ -28,13 +28,13 @@ import {
   type SkillStatusFilter,
 } from "@/lib/customize/skills";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { deleteUserSkill } from "@/lib/skills/api";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 import {
   useChatBuiltInSkillIds,
-  useSkillEnablement,
-  type SkillEnablement,
-  useRefreshSkillLists,
+  usePluginDelete,
+  usePluginEnablement,
+  type PluginEnablement,
+  useRefreshPluginLists,
 } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
 import { needsAttention } from "@/lib/plugins/needs";
@@ -46,6 +46,7 @@ import {
   CustomizeEmpty,
   CustomizeGroup,
   CustomizeRowActions,
+  openOnSingleClick,
   StatusFilter,
 } from "@/sections/customize/CustomizeList";
 import { skillIcon } from "@/sections/customize/skillIcon";
@@ -68,7 +69,7 @@ function canEdit(skill: Skill): boolean {
 interface SkillRowProps {
   skill: Skill;
   group: SkillGroup;
-  enablement: SkillEnablement;
+  enablement: PluginEnablement;
   onOpen: (skill: Skill) => void;
   onShare: (skill: Skill) => void;
   onRemove: (skill: Skill) => void;
@@ -189,11 +190,11 @@ function SkillRow({
                   : undefined
       }
       aria-label={t("open", { name: skill.name })}
-      onClick={() => onOpen(skill)}
+      onClick={openOnSingleClick(() => onOpen(skill))}
       rightChildren={
         <CustomizeRowActions
           turnOn={
-            !enabled && skill.can_toggle
+            (!enabled || busy) && skill.can_toggle
               ? {
                   label: t("menu.turnOn"),
                   disabled: busy,
@@ -216,7 +217,7 @@ export default function CustomizeSkillsPage() {
   const locale = useLocale();
   const navigation = useNavigation();
   const { user, isAdmin } = useUser();
-  const revalidate = useRefreshSkillLists();
+  const revalidate = useRefreshPluginLists();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
   );
@@ -225,14 +226,14 @@ export default function CustomizeSkillsPage() {
   const [status, setStatus] = useState<SkillStatusFilter>("all");
   const removeModal = useCreateModal();
   const [removeTarget, setRemoveTarget] = useState<Skill | null>(null);
-  const [removing, setRemoving] = useState(false);
+  const deletion = usePluginDelete({ noun: "skill" });
   const [shareTarget, setShareTarget] = useState<Skill | null>(null);
   const [preview, setPreview] = useState<Skill | null>(null);
 
   const chatBuiltInIds = useChatBuiltInSkillIds();
   const all = data ? visibleSkills(data, chatBuiltInIds) : [];
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
-  const enablement = useSkillEnablement(all, refresh, (skill) => {
+  const enablement = usePluginEnablement(all, refresh, (skill) => {
     if (needsAttention(skill.plugin?.needs ?? [])) setTurnedOn(skill);
   });
   const groups = data
@@ -255,24 +256,8 @@ export default function CustomizeSkillsPage() {
   }
 
   async function remove(): Promise<void> {
-    if (!removeTarget || removing) return;
-    setRemoving(true);
-    try {
-      await deleteUserSkill(removeTarget.id);
-      revalidate();
+    if (removeTarget && (await deletion.remove(removeTarget)))
       removeModal.toggle(false);
-      toast.success(
-        skillCopy("editor.toasts.deleted", { name: removeTarget.name })
-      );
-    } catch (failure) {
-      toast.error(
-        failure instanceof Error
-          ? failure.message
-          : skillCopy("editor.toasts.deleteFailed")
-      );
-    } finally {
-      setRemoving(false);
-    }
   }
 
   const controls = (
@@ -385,12 +370,12 @@ export default function CustomizeSkillsPage() {
             entityName={removeTarget.name}
             additionalDetails={skillCopy("editor.delete.description")}
             actionButtonText={skillCopy(
-              removing
+              deletion.deleting
                 ? "editor.deleteModal.pendingLabel"
                 : "editor.deleteModal.label"
             )}
             onClose={() => {
-              if (!removing) removeModal.toggle(false);
+              if (!deletion.deleting) removeModal.toggle(false);
             }}
             onSubmit={() => void remove()}
           />

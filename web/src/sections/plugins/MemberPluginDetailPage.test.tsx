@@ -272,6 +272,49 @@ test("turning on a plugin refreshes the integration rows it turned on", async ()
   await waitFor(() => expect(within(row).getByText("On")).toBeInTheDocument());
 });
 
+test("the turn-on dialog lists only the integrations that are not on", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const need = (name: string, state: PluginNeed["state"]): PluginNeed => ({
+    kind: "mcp",
+    name,
+    url: `https://example.com/${name}`,
+    transport: "http",
+    url_problem: null,
+    supported: true,
+    state,
+    integration_id: null,
+  });
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    enabled: false,
+    kind: "plugin",
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+      ],
+      needs: [need("search", "on"), need("docs", "not_added")],
+    },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/integrations": [],
+    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: { ...plugin, enabled: true },
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  await user.click(
+    await screen.findByRole("switch", { name: "Use review-kit" })
+  );
+
+  const dialog = await screen.findByRole("dialog");
+  expect(await within(dialog).findByLabelText("docs")).toBeInTheDocument();
+  expect(within(dialog).queryByLabelText("search")).not.toBeInTheDocument();
+});
+
 test("the owner shares, uploads a new version and deletes the plugin from its page", async () => {
   window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
   const plugin = customFixture({

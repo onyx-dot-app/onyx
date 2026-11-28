@@ -3,6 +3,7 @@
 page_title: "onyx_custom_tool Resource - terraform-provider-onyx"
 subcategory: ""
 description: |-
+  Deprecated: use onyx_integration with openapi_document.
   A custom action: an external HTTP API, described by an OpenAPI schema, that assistants can call.
   Attach one to an assistant through tool_ids on onyx_agent.
   ~> Deleting an action detaches it from every agent that uses it, including agents Terraform does not manage. Onyx does not refuse the delete or warn about it.
@@ -10,6 +11,8 @@ description: |-
 ---
 
 # onyx_custom_tool (Resource)
+
+**Deprecated:** use `onyx_integration` with `openapi_document`.
 
 A custom action: an external HTTP API, described by an OpenAPI schema, that assistants can call.
 

@@ -6,6 +6,7 @@ import AddIntegrationModal, {
 import messages from "@/i18n/messages/en.json";
 import {
   makeDetail,
+  makeIntegration,
   mockFetch,
   requestBody,
 } from "@tests/setup/integrationTestUtils";
@@ -437,9 +438,30 @@ describe("Catalog", () => {
     );
   });
 
+  test("leaves out a preset that is already added", async () => {
+    mockFetch({
+      "/api/admin/integrations/presets": [
+        GITHUB_PRESET,
+        { ...GITHUB_PRESET, id: "zendesk", name: "Zendesk" },
+      ],
+      "/api/admin/integrations": [
+        makeIntegration({ shape: "preset", preset_id: "github" }),
+      ],
+    });
+    open({ kind: "catalog" });
+
+    expect(
+      await screen.findByRole("button", { name: "Zendesk" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "GitHub" })
+    ).not.toBeInTheDocument();
+  });
+
   test("a different tile resets the owner; the same tile keeps it", async () => {
     mockProbe.mockResolvedValue(OAUTH_PROBE);
     mockFetch({
+      "/api/admin/integrations": [],
       "/api/admin/integrations/presets": [
         GITHUB_PRESET,
         { ...GITHUB_PRESET, id: "LINEAR", name: "Linear" },
@@ -473,7 +495,10 @@ describe("Catalog", () => {
 
   test("a tile left while detecting does not reuse another tile's setup", async () => {
     mockProbe.mockReturnValue(new Promise(() => undefined));
-    mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
+    mockFetch({
+      "/api/admin/integrations/presets": [GITHUB_PRESET],
+      "/api/admin/integrations": [],
+    });
     const { user } = open({ kind: "catalog" });
     await user.click(await screen.findByRole("button", { name: "GitHub" }));
     await user.click(screen.getByRole("button", { name: add.back }));
@@ -495,7 +520,10 @@ describe("Catalog", () => {
         reason: "connection_failed",
       })
       .mockResolvedValueOnce(OAUTH_PROBE);
-    mockFetch({ "/api/admin/integrations/presets": [] });
+    mockFetch({
+      "/api/admin/integrations/presets": [],
+      "/api/admin/integrations": [],
+    });
     const { user } = open({ kind: "catalog" });
     await user.click(await screen.findByRole("button", { name: "Notion" }));
     await waitFor(() => expect(mockProbe).toHaveBeenCalledTimes(1));
@@ -508,7 +536,10 @@ describe("Catalog", () => {
   });
 
   test("the same tile again keeps the entered credentials", async () => {
-    mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
+    mockFetch({
+      "/api/admin/integrations/presets": [GITHUB_PRESET],
+      "/api/admin/integrations": [],
+    });
     const { user } = open({ kind: "catalog" });
     await user.click(await screen.findByRole("button", { name: "GitHub" }));
     await user.type(
@@ -525,7 +556,10 @@ describe("Catalog", () => {
   });
 
   test("a preset shows its setup steps, callback URL and scopes beside the fields", async () => {
-    mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
+    mockFetch({
+      "/api/admin/integrations/presets": [GITHUB_PRESET],
+      "/api/admin/integrations": [],
+    });
     const { user } = open({ kind: "catalog" });
     const tile = await screen.findByRole("button", { name: "GitHub" });
     expect(tile).toHaveTextContent(copy.shape.preset);
@@ -560,7 +594,10 @@ describe("Catalog", () => {
   });
 
   test("a preset with one method hides the method and scopes in Advanced", async () => {
-    mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
+    mockFetch({
+      "/api/admin/integrations/presets": [GITHUB_PRESET],
+      "/api/admin/integrations": [],
+    });
     const { user } = open({ kind: "catalog" });
     await user.click(await screen.findByRole("button", { name: "GitHub" }));
     await user.click(
@@ -580,6 +617,7 @@ describe("Catalog", () => {
 
   test("offers only no sign-in for a preset with no sign-in method", async () => {
     mockFetch({
+      "/api/admin/integrations": [],
       "/api/admin/integrations/presets": [
         {
           id: "public",
@@ -605,8 +643,27 @@ describe("Catalog", () => {
     ).toEqual([copy.signIn.mode.none]);
   });
 
+  test("a failed integrations list withholds the presets and keeps suggested servers", async () => {
+    mockFetch({
+      "/api/admin/integrations/presets": [
+        { ...GITHUB_PRESET, id: "zendesk", name: "Zendesk" },
+      ],
+      "/api/admin/integrations": () => new Response(null, { status: 500 }),
+    });
+    open({ kind: "catalog" });
+
+    expect(await screen.findByText(add.preset.loadFailed)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Atlassian" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Zendesk" })
+    ).not.toBeInTheDocument();
+  });
+
   test("one grid by name, with a hosted MCP server in place of its preset", async () => {
     mockFetch({
+      "/api/admin/integrations": [],
       "/api/admin/integrations/presets": [
         GITHUB_PRESET,
         { ...GITHUB_PRESET, id: "LINEAR", name: "Linear" },
@@ -631,6 +688,7 @@ describe("Catalog", () => {
   test("a suggested server tile checks the server with its name filled", async () => {
     mockProbe.mockResolvedValue(OAUTH_PROBE);
     mockFetch({
+      "/api/admin/integrations": [],
       "/api/admin/integrations/presets": [
         { ...GITHUB_PRESET, id: "LINEAR", name: "Linear" },
       ],

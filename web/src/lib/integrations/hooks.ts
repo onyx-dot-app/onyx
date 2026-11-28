@@ -14,9 +14,9 @@ import type {
   MemberIntegration,
 } from "@/lib/integrations/types";
 
-export function useAdminIntegrations() {
+export function useAdminIntegrations(enabled = true) {
   return useSWR<AdminIntegration[], Error>(
-    SWR_KEYS.adminIntegrations,
+    enabled ? SWR_KEYS.adminIntegrations : null,
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError }
   );
