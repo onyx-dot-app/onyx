@@ -176,6 +176,25 @@ def test_explicit_v6_backend_tags_win_over_a_pre_v6_app_version(
     assert _configmap(docs)["SANDBOX_RUNTIME"] == "pod"
 
 
+@pytest.mark.parametrize("tag", ["latest", "latest-dev"])
+def test_explicit_latest_backend_tags_take_the_app_version(
+    tmp_path: Path, tag: str
+) -> None:
+    latest_tags = [
+        *_REGISTRATION,
+        "--set-string",
+        f"api.image.tag={tag}",
+        "--set-string",
+        f"celery_shared.image.tag={tag}",
+    ]
+    docs = _docs(_render_published(tmp_path, "v5.2.0", latest_tags))
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == "pod"
+
+    pinned = [*latest_tags, "--set-string", "global.version=v6.0.0"]
+    docs = _docs(_render_published(tmp_path / "pinned", "v5.2.0", pinned))
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == "pod"
+
+
 @pytest.mark.parametrize(
     ("app_version", "runtime"), [("v5.2.0", "pod"), ("v6.0.0", "auto")]
 )

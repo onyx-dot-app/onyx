@@ -309,21 +309,23 @@ Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
 
 {{/*
 "true" when the Onyx images are a release before v6.0.0: global.version,
-or an api or celery_shared image tag that overrides it. For "latest"
-(onyx.craftAppVersionIsLatest), the chart appVersion stands in for each of
-the two images that has no tag of its own.
+or an api or celery_shared image tag that overrides it. A "latest" or
+"latest-dev" tag, also one that an image takes from global.version
+(onyx.craftAppVersionIsLatest), is the chart appVersion.
 */}}
 {{- define "onyx.craftPreV6App" -}}
+{{- $app := toString .Chart.AppVersion -}}
 {{- $api := toString (dig "image" "tag" "" (.Values.api | default dict)) -}}
 {{- $celery := toString (dig "image" "tag" "" (.Values.celery_shared | default dict)) -}}
-{{- $candidates := list (toString (.Values.global.version | default "")) $api $celery -}}
+{{- $tags := list (toString (.Values.global.version | default "")) $api $celery -}}
 {{- if include "onyx.craftAppVersionIsLatest" . -}}
-{{- $app := toString .Chart.AppVersion -}}
-{{- $candidates = list ($api | default $app) ($celery | default $app) -}}
+{{- $tags = list ($api | default "latest") ($celery | default "latest") -}}
 {{- end -}}
 {{- $old := false -}}
-{{- range $candidates -}}
-{{- if include "onyx.craftPreV6Version" . -}}{{- $old = true -}}{{- end -}}
+{{- range $tags -}}
+{{- $v := . -}}
+{{- if eq (trimSuffix "-dev" $v) "latest" -}}{{- $v = $app -}}{{- end -}}
+{{- if include "onyx.craftPreV6Version" $v -}}{{- $old = true -}}{{- end -}}
 {{- end -}}
 {{- if $old -}}true{{- end -}}
 {{- end }}
