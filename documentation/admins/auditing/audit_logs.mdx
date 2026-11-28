@@ -76,8 +76,13 @@ the audit JSON body itself is identical either way.
 
 ## Choose what Onyx records
 
-An admin chooses the event categories with the `audit_event_categories` field of `PUT /api/admin/security`.
-This setting needs an Enterprise license.
+An admin chooses the event categories in **Admin Panel > Security & Hardening > Audit Logs and SIEM**,
+or with the `audit_event_categories` field of `PUT /api/admin/security`. This setting needs an Enterprise license.
+
+<img
+
+className="rounded-image" src="/assets/admins/auditing/audit_logs_section.webp" alt="The Audit Logs and SIEM section:
+the audit stream status, the audit event switches, and the user activity switches" />
 
 | Category | Actions | Default |
 |---|---|---|
@@ -98,7 +103,8 @@ is always recorded as `settings.security_settings_change`.
 
 User activity events record metadata: ids, the agent, the model, tool names, and document ids.
 They do not record what the user typed or what the answer said.
-To add the user's query text to `chat.message_send` and `search.query`, set `audit_include_query_text` to `true`.
+To add the user's query text to `chat.message_send` and `search.query`,
+turn on **Include Query Text** (`audit_include_query_text`).
 Onyx adds the text only when the query history setting is **normal**.
 When query history is **anonymized** or **disabled**, events never include query text. Answer text is never recorded.
 
@@ -230,7 +236,8 @@ source = '. = parse_json!(.message)'
 
 ## Check that Onyx writes events
 
-`GET /api/admin/security/audit-status` returns what Onyx wrote for your workspace:
+**Admin Panel > Security & Hardening > Audit Logs and SIEM** shows what Onyx wrote for your workspace.
+`GET /api/admin/security/audit-status` returns the same data:
 
 - `enabled`: the license includes the audit stream.
 - `log_format`: the `LOG_FORMAT` of the API server. Use `json`.

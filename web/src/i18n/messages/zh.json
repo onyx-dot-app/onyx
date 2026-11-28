@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "审计日志与 SIEM",
+          "description": "Onyx 将审计事件以 JSON 行的形式写入其日志。您的日志采集器会将其发送到您的 SIEM。[设置 SIEM 转发]({url})。"
+        },
+        "status": {
+          "title": "审计流状态",
+          "description": "Onyx 写入的事件。Onyx 无法看到您的日志采集器或 SIEM，因此请确认事件已到达那里。",
+          "loadFailed": {
+            "title": "无法加载审计流状态",
+            "description": "请重新加载页面后重试。"
+          },
+          "notEnabled": {
+            "title": "Onyx 未写入审计事件",
+            "description": "审计流需要 Enterprise 许可证。"
+          },
+          "logFormat": {
+            "title": "使用 JSON 日志",
+            "description": "日志格式为 {logFormat}。请设置 LOG_FORMAT=json，以便您的日志采集器能解析每条日志记录。"
+          },
+          "noEvents": "暂无事件",
+          "eventSummary": "过去 24 小时内有 {count, plural, one {# 个事件} other {# 个事件}}。最后一个事件 {lastEvent}。",
+          "eventCount": "过去 24 小时内有 {count, plural, one {# 个事件} other {# 个事件}}。",
+          "classes": {
+            "authentication": "身份验证",
+            "account_change": "账户变更",
+            "user_access_management": "用户访问管理",
+            "group_management": "组管理",
+            "api_activity": "API 活动",
+            "credential_access": "凭据访问"
+          }
+        },
+        "auditEvents": {
+          "title": "审计事件",
+          "description": "安全与管理变更。默认开启。"
+        },
+        "userActivity": {
+          "title": "用户活动",
+          "description": "每个用户的操作，用于事件调查。默认关闭，可能产生大量事件。"
+        },
+        "categories": {
+          "authentication": {
+            "title": "身份验证",
+            "description": "登录、登录失败、退出登录和密码重置。"
+          },
+          "user_and_group_management": {
+            "title": "用户和组管理",
+            "description": "用户、角色和组的变更，以及 MCP 客户端的批准。"
+          },
+          "configuration": {
+            "title": "配置变更",
+            "description": "设置、连接器、凭据、智能体、文档集、API 密钥和访问令牌的变更。"
+          },
+          "credential_access": {
+            "title": "凭据访问",
+            "description": "已存储凭据的解密。对于同一凭据和用户，Onyx 可能不会记录 10 分钟内的重复解密。"
+          },
+          "data_export": {
+            "title": "数据导出",
+            "description": "查询历史、使用情况报告和日志导出的下载。"
+          },
+          "chat": {
+            "title": "聊天消息",
+            "description": "每条聊天回答，包括智能体、模型、工具以及用户看到的文档。"
+          },
+          "search": {
+            "title": "搜索",
+            "description": "来自搜索页面、API 或 MCP 客户端的每次搜索，以及找到的文档。"
+          },
+          "llm_gateway": {
+            "title": "LLM 网关请求",
+            "description": "通过 LLM 网关的每次调用，包括模型和令牌数。"
+          },
+          "file_download": {
+            "title": "文件下载",
+            "description": "用户下载的每个聊天文件。"
+          }
+        },
+        "queryText": {
+          "title": "包含查询文本",
+          "description": "将用户输入的内容添加到聊天和搜索事件中。仅当查询历史为正常时才会添加。"
+        }
       }
     },
     "serviceAccounts": {

@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "Registros de auditoría y SIEM",
+          "description": "Onyx escribe eventos de auditoría como líneas JSON en sus registros. Su recopilador de registros los envía a su SIEM. [Configurar el reenvío al SIEM]({url})."
+        },
+        "status": {
+          "title": "Estado del flujo de auditoría",
+          "description": "Los eventos que escribió Onyx. Onyx no puede ver su recopilador de registros ni su SIEM, así que confirme que los eventos llegan allí.",
+          "loadFailed": {
+            "title": "No se pudo cargar el estado del flujo de auditoría",
+            "description": "Vuelva a cargar la página para intentarlo de nuevo."
+          },
+          "notEnabled": {
+            "title": "Onyx no escribe eventos de auditoría",
+            "description": "El flujo de auditoría requiere una licencia Enterprise."
+          },
+          "logFormat": {
+            "title": "Use registros JSON",
+            "description": "El formato de registro es {logFormat}. Establezca LOG_FORMAT=json para que su recopilador de registros pueda analizar cada registro."
+          },
+          "noEvents": "Aún no hay eventos",
+          "eventSummary": "{count, plural, one {# evento} other {# eventos}} en las últimas 24 horas. Último evento {lastEvent}.",
+          "eventCount": "{count, plural, one {# evento} other {# eventos}} en las últimas 24 horas.",
+          "classes": {
+            "authentication": "Autenticación",
+            "account_change": "Cambios de cuenta",
+            "user_access_management": "Gestión del acceso de usuarios",
+            "group_management": "Gestión de grupos",
+            "api_activity": "Actividad de la API",
+            "credential_access": "Acceso a credenciales"
+          }
+        },
+        "auditEvents": {
+          "title": "Eventos de auditoría",
+          "description": "Cambios de seguridad y administración. Están activados de forma predeterminada."
+        },
+        "userActivity": {
+          "title": "Actividad de los usuarios",
+          "description": "Lo que hizo cada usuario, para investigar incidentes. Están desactivados de forma predeterminada y pueden generar muchos eventos."
+        },
+        "categories": {
+          "authentication": {
+            "title": "Autenticación",
+            "description": "Inicios de sesión, inicios de sesión fallidos, cierres de sesión y restablecimientos de contraseña."
+          },
+          "user_and_group_management": {
+            "title": "Gestión de usuarios y grupos",
+            "description": "Cambios de usuarios, roles y grupos, y aprobaciones de clientes MCP."
+          },
+          "configuration": {
+            "title": "Cambios de configuración",
+            "description": "Cambios en la configuración, los conectores, las credenciales, los agentes, los conjuntos de documentos, las claves de API y los tokens de acceso."
+          },
+          "credential_access": {
+            "title": "Acceso a credenciales",
+            "description": "Descifrados de credenciales almacenadas. Onyx puede omitir una repetición para la misma credencial y el mismo usuario en un plazo de 10 minutos."
+          },
+          "data_export": {
+            "title": "Exportaciones de datos",
+            "description": "Descargas del historial de consultas, informes de uso y exportaciones de registros."
+          },
+          "chat": {
+            "title": "Mensajes de chat",
+            "description": "Cada respuesta del chat, con el agente, el modelo, las herramientas y los documentos que vio el usuario."
+          },
+          "search": {
+            "title": "Búsquedas",
+            "description": "Cada búsqueda desde la página de búsqueda, la API o un cliente MCP, con los documentos que encontró."
+          },
+          "llm_gateway": {
+            "title": "Solicitudes a la pasarela de LLM",
+            "description": "Cada llamada a través de la pasarela de LLM, con el modelo y el número de tokens."
+          },
+          "file_download": {
+            "title": "Descargas de archivos",
+            "description": "Cada archivo del chat que descarga un usuario."
+          }
+        },
+        "queryText": {
+          "title": "Incluir el texto de la consulta",
+          "description": "Agrega lo que escribió el usuario a los eventos de chat y búsqueda. Onyx lo agrega solo cuando el historial de consultas es normal."
+        }
       }
     },
     "serviceAccounts": {
