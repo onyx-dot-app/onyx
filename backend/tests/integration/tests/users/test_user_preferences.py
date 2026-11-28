@@ -29,6 +29,7 @@ DEFAULT_PREFERENCES: dict[str, Any] = {
     "language": None,
     "chat_background": None,
     "default_app_mode": "CHAT",
+    "default_browser": "SANDBOX",
     "interface_font": "default",
     "response_font": "match",
     "motion": "system",
@@ -107,6 +108,7 @@ def test_every_setting_round_trips(
     _patch(user, "/user/language", {"language": "de"})
     _patch(user, "/user/chat-background", {"chat_background": "aurora"})
     _patch(user, "/user/default-app-mode", {"default_app_mode": "SEARCH"})
+    _patch(user, "/user/default-browser", {"default_browser": "CHROME"})
     _patch(
         user,
         "/user/appearance",
@@ -149,6 +151,7 @@ def test_every_setting_round_trips(
         "language": "de",
         "chat_background": "aurora",
         "default_app_mode": "SEARCH",
+        "default_browser": "CHROME",
         "interface_font": "atkinson",
         "response_font": "default",
         "motion": "reduced",

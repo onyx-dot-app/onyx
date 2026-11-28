@@ -1634,7 +1634,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             tool_name=call.name,
             details=details,
             arguments=tool_arguments_for_display(call),
-            scope=scope,
+            scope=(
+                scope
+                if details.action_id is None
+                else scope.model_copy(update={"action_id": details.action_id})
+            ),
         )
         if isinstance(pending, PendingToolInput):
             self._approval_opened = True

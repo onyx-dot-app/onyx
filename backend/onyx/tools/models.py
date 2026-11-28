@@ -394,6 +394,8 @@ class ToolApprovalDetails(BaseModel):
     display_name: str
     # None shows the call's arguments.
     payload: dict[str, JsonValue] | None = None
+    # Per-call action key that replaces the scope's, e.g. one site.
+    action_id: str | None = None
 
 
 class ChatFile(BaseModel):

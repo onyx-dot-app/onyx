@@ -3,10 +3,11 @@ extension). The relay logic is in `onyx/browser_extension/relay.py`.
 
 - POST /chat/browser/extension/token: a single-use token for the socket.
 - WS /chat/browser/extension/ws: the extension's one socket. It sends a
-  hello, then pings, command results and grant reports; it gets commands,
-  grant requests and grant ends.
-- GET/POST/DELETE /chat/sessions/{id}/browser/chrome: the chat's state, a
-  request to share tabs (the extension asks the user), and a stop.
+  hello, then pings, command results and tab reports; it gets binds,
+  commands and grant ends.
+- GET/DELETE /chat/sessions/{id}/browser/chrome: the chat's state and a stop.
+  The turn binds the chat (`process_message.py`); the user approves sites in
+  the chat.
 """
 
 import asyncio
@@ -32,10 +33,10 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.models import (
     ChromeBrowserState,
+    ChromeGrantView,
     CommandResultMessage,
     ExtensionHello,
     ExtensionTokenResponse,
-    GrantDenied,
     GrantEnded,
     GrantReportMessage,
 )
@@ -89,38 +90,21 @@ def get_chrome_browser_state(
     _owned_chat_title(chat_session_id, user)
     tenant_id = get_current_tenant_id()
     grant = relay.load_grant(tenant_id, chat_session_id, user.id)
-    request = relay.load_chat_request(tenant_id, chat_session_id, user.id)
     return ChromeBrowserState(
         installations=list(relay.connected_installations(tenant_id, user.id)),
-        request=None if grant is not None or request is None else request.state,
-        grant=grant,
+        grant=None
+        if grant is None
+        else ChromeGrantView(
+            tabs=grant.tabs,
+            current=grant.current,
+            origins=sorted(
+                relay.session_origins(tenant_id, chat_session_id)
+                | set(grant.once_origins)
+            ),
+            expires_at=grant.expires_at,
+            side_panel=grant.side_panel,
+        ),
     )
-
-
-@router.post("/sessions/{chat_session_id}/browser/chrome")
-def request_chrome_browser(
-    chat_session_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-) -> ChromeBrowserState:
-    """Ask the user's Chrome to show its consent window for this chat."""
-    _check_enabled(user)
-    title = _owned_chat_title(chat_session_id, user)
-    tenant_id = get_current_tenant_id()
-    chosen = next(iter(relay.connected_installations(tenant_id, user.id)), None)
-    if chosen is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "Chrome with the Onyx extension is not connected.",
-        )
-    relay.request_grant(
-        tenant_id,
-        user.id,
-        chat_session_id,
-        chosen,
-        chat_title=title,
-        account=user.email,
-    )
-    return get_chrome_browser_state(chat_session_id, user)
 
 
 @router.delete("/sessions/{chat_session_id}/browser/chrome")
@@ -256,16 +240,6 @@ async def _read(
                             "type": "grant_saved" if grant else "end_grant",
                             "chat_session_id": str(report.chat_session_id),
                         }
-                    )
-                case "grant_denied":
-                    denied = GrantDenied.model_validate(message)
-                    await asyncio.to_thread(
-                        relay.deny_request,
-                        tenant_id,
-                        user.id,
-                        presence.installation_id,
-                        denied.chat_session_id,
-                        denied.request_id,
                     )
                 case "grant_ended":
                     ended = GrantEnded.model_validate(message)

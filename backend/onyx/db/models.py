@@ -98,6 +98,7 @@ from onyx.db.enums import (
     ConnectorEventType,
     ConnectorManageRole,
     DefaultAppMode,
+    DefaultBrowser,
     ExternalAppType,
     GatedAppKind,
     GrantSource,
@@ -628,6 +629,13 @@ class UserPreferences(Base):
         nullable=False,
         default=DefaultAppMode.CHAT,
         server_default=DefaultAppMode.CHAT.value,
+    )
+    # The browser that chat's browser tools use: the sandbox's or the user's Chrome.
+    default_browser: Mapped[DefaultBrowser] = mapped_column(
+        Enum(DefaultBrowser, native_enum=False),
+        nullable=False,
+        default=DefaultBrowser.SANDBOX,
+        server_default=DefaultBrowser.SANDBOX.value,
     )
     interface_font: Mapped[InterfaceFont] = mapped_column(
         Enum(

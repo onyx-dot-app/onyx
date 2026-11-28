@@ -14,7 +14,11 @@ from sqlalchemy.orm import Session
 from onyx.agents.compaction import is_input_context
 from onyx.agents.models import RunStatus
 from onyx.auth.permissions import has_global_permission
-from onyx.browser_extension.relay import load_grant
+from onyx.browser_extension.relay import (
+    bind_chat,
+    connected_installations,
+    load_grant,
+)
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import (
@@ -99,7 +103,12 @@ from onyx.db.chat_inputs import (
 )
 from onyx.db.document_set import require_document_set_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import HookPoint, Permission, record_mode_persists_content
+from onyx.db.enums import (
+    DefaultBrowser,
+    HookPoint,
+    Permission,
+    record_mode_persists_content,
+)
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatSession, User
 from onyx.db.skill import list_chat_skills
@@ -567,18 +576,68 @@ def prepare_chat_turn(
                 and not new_msg_req.deep_research
             )
             sandbox_tools = HARNESS_SANDBOX_ENABLED and owned_turn
-            # The browser tools drive the user's own Chrome while the user
-            # shares tabs with this chat (browser_extension/relay.py), else
-            # the sandbox's browser. Chrome needs no sandbox; the same owner
-            # rules hold.
+            # The browser tools drive the user's own Chrome (browser_extension/
+            # relay.py) or the sandbox's browser. The extension's side panel
+            # uses only Chrome and binds the chat to its window; a chat that
+            # holds a Chrome grant keeps it; else the user's default browser
+            # decides. Chrome needs no sandbox; the same owner rules hold.
             browser_target: BrowserTarget | None = None
-            if (
-                owned_turn
-                and load_browser_enabled(chrome=True)
-                and load_grant(get_current_tenant_id(), chat_session.id, user.id)
-                is not None
+            tenant_id = get_current_tenant_id()
+            chrome_ok = owned_turn and load_browser_enabled(chrome=True)
+            installations = (
+                connected_installations(tenant_id, user.id) if chrome_ok else []
+            )
+            chrome_context = new_msg_req.chrome_context
+            from_extension = new_msg_req.origin == MessageOrigin.CHROME_EXTENSION
+            panel_presence = (
+                next(
+                    (
+                        presence
+                        for presence in installations
+                        if presence.installation_id == chrome_context.installation_id
+                    ),
+                    None,
+                )
+                if chrome_context is not None and from_extension
+                else None
+            )
+            chat_title = chat_session.description or "Untitled chat"
+            if chrome_context is not None and panel_presence is not None:
+                bind_chat(
+                    tenant_id,
+                    user.id,
+                    chat_session.id,
+                    panel_presence,
+                    chat_title=chat_title,
+                    window_id=chrome_context.window_id,
+                    tab_id=chrome_context.tab_id,
+                    side_panel=True,
+                )
+                browser_target = BrowserTarget.CHROME
+            elif (
+                chrome_ok
+                and load_grant(tenant_id, chat_session.id, user.id) is not None
             ):
                 browser_target = BrowserTarget.CHROME
+            elif (
+                chrome_ok
+                and preferences.default_browser == DefaultBrowser.CHROME
+                and installations
+            ):
+                bind_chat(
+                    tenant_id,
+                    user.id,
+                    chat_session.id,
+                    installations[0],
+                    chat_title=chat_title,
+                    window_id=None,
+                    tab_id=None,
+                    side_panel=False,
+                )
+                browser_target = BrowserTarget.CHROME
+            elif from_extension:
+                # Extension surfaces use only the user's Chrome.
+                browser_target = None
             elif sandbox_tools and load_browser_enabled():
                 browser_target = BrowserTarget.SANDBOX
             # The root agent can ask the user questions where approval

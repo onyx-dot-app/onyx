@@ -4,16 +4,17 @@ integration test client.
 """
 
 import json
-import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from starlette.testclient import TestClient, WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
+from onyx.browser_extension import relay
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -71,31 +72,45 @@ def _state(user: DATestUser, chat_id: str) -> dict:
     return response.json()
 
 
-def _request(user: DATestUser, chat_id: str) -> None:
-    client.post(
-        f"{API_SERVER_URL}/chat/sessions/{chat_id}/browser/chrome",
-        json={},
-        headers=user.headers,
-    ).raise_for_status()
+def _bind(user: DATestUser, chat_id: str, tab_id: int = 7) -> None:
+    """What a turn from the extension's side panel does."""
+    presence = relay.connected_installations(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, UUID(user.id)
+    )[0]
+    relay.bind_chat(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        UUID(user.id),
+        UUID(chat_id),
+        presence,
+        chat_title="Chat",
+        window_id=3,
+        tab_id=tab_id,
+        side_panel=True,
+    )
 
 
-def _grant_report(chat_id: str, request_id: str | None) -> str:
+def _tab_report(chat_id: str, tab_id: str = "7") -> str:
     return json.dumps(
         {
             "type": "grant",
             "grant": {
                 "chat_session_id": chat_id,
-                "request_id": request_id,
-                "tabs": [{"id": "7", "title": "Wiki", "url": "https://wiki.example/"}],
-                "origins": ["https://wiki.example"],
-                "expires_at": time.time() + 600,
+                "tabs": [
+                    {
+                        "id": tab_id,
+                        "title": "Wiki",
+                        "url": "https://wiki.example/",
+                        "origin": "https://wiki.example",
+                    }
+                ],
+                "current": tab_id,
             },
         }
     )
 
 
 def test_a_token_opens_one_socket(user_factory: Callable[[], DATestUser]) -> None:
-    # Its own user: another test's socket cannot take its share requests.
+    # Its own user: another test's socket cannot take its binds.
     user = user_factory()
     token = _token(user)
     with _connect(token) as socket:
@@ -107,8 +122,9 @@ def test_a_token_opens_one_socket(user_factory: Callable[[], DATestUser]) -> Non
             socket.receive_text()
 
 
-def test_share_approve_and_stop(user_factory: Callable[[], DATestUser]) -> None:
-    # Its own user: another test's socket cannot take its share requests.
+def test_a_side_panel_bind_reaches_the_extension_and_stops(
+    user_factory: Callable[[], DATestUser],
+) -> None:
     user = user_factory()
     chat_id = str(ChatSessionManager.create(user_performing_action=user).id)
     with _extension(user) as socket:
@@ -116,21 +132,19 @@ def test_share_approve_and_stop(user_factory: Callable[[], DATestUser]) -> None:
         assert any(i["label"] == "Test Chrome" for i in state["installations"])
         assert state["grant"] is None
 
-        _request(user, chat_id)
-        request = _next(socket, "grant_request")
-        assert request["chat_session_id"] == chat_id
-        assert _state(user, chat_id)["request"] == "pending"
+        _bind(user, chat_id)
+        bind = _next(socket, "bind")
+        assert bind["chat_session_id"] == chat_id
+        assert bind["window_id"] == 3 and bind["tab_id"] == 7
+        assert bind["side_panel"] is True
 
-        # A report for a request that this installation never got is refused.
-        socket.send_text(_grant_report(chat_id, uuid4().hex))
-        assert _next(socket, "end_grant")["chat_session_id"] == chat_id
-        assert _state(user, chat_id)["grant"] is None
-
-        socket.send_text(_grant_report(chat_id, request["request_id"]))
+        socket.send_text(_tab_report(chat_id))
         assert _next(socket, "grant_saved")["chat_session_id"] == chat_id
         grant = _state(user, chat_id)["grant"]
-        assert grant["origins"] == ["https://wiki.example"]
-        assert grant["tabs"][0]["title"] == "Wiki"
+        assert grant["side_panel"] is True
+        assert grant["current"] == "7"
+        assert grant["origins"] == []
+        assert grant["tabs"][0]["origin"] == "https://wiki.example"
 
         # A stop in Onyx ends the grant and tells the extension.
         client.delete(
@@ -141,32 +155,25 @@ def test_share_approve_and_stop(user_factory: Callable[[], DATestUser]) -> None:
         assert _state(user, chat_id)["grant"] is None
 
 
-def test_deny_and_a_stop_in_the_extension(
+def test_a_report_without_a_grant_ends_the_extensions_grant(
     user_factory: Callable[[], DATestUser],
 ) -> None:
-    # Its own user: another test's socket cannot take its share requests.
     user = user_factory()
     chat_id = str(ChatSessionManager.create(user_performing_action=user).id)
     with _extension(user) as socket:
-        _request(user, chat_id)
-        request = _next(socket, "grant_request")
-        socket.send_text(
-            json.dumps(
-                {
-                    "type": "grant_denied",
-                    "chat_session_id": chat_id,
-                    "request_id": request["request_id"],
-                }
-            )
-        )
-        socket.send_text(json.dumps({"type": "ping"}))
-        _next(socket, "pong")
-        assert _state(user, chat_id)["request"] == "denied"
+        socket.send_text(_tab_report(chat_id))
+        assert _next(socket, "end_grant")["chat_session_id"] == chat_id
+        assert _state(user, chat_id)["grant"] is None
 
-        _request(user, chat_id)
-        request = _next(socket, "grant_request")
-        socket.send_text(_grant_report(chat_id, request["request_id"]))
-        _next(socket, "grant_saved")
+
+def test_a_stop_in_the_extension_ends_the_grant(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    user = user_factory()
+    chat_id = str(ChatSessionManager.create(user_performing_action=user).id)
+    with _extension(user) as socket:
+        _bind(user, chat_id)
+        _next(socket, "bind")
         socket.send_text(
             json.dumps({"type": "grant_ended", "chat_session_id": chat_id})
         )
@@ -178,27 +185,42 @@ def test_deny_and_a_stop_in_the_extension(
 def test_one_installation_serves_one_chat(
     user_factory: Callable[[], DATestUser],
 ) -> None:
-    # Its own user: another test's socket cannot take its share requests.
     user = user_factory()
     first = str(ChatSessionManager.create(user_performing_action=user).id)
     second = str(ChatSessionManager.create(user_performing_action=user).id)
     with _extension(user) as socket:
         for chat_id in (first, second):
-            _request(user, chat_id)
-            request = _next(socket, "grant_request")
-            socket.send_text(_grant_report(chat_id, request["request_id"]))
-            _next(socket, "grant_saved")
+            _bind(user, chat_id)
+            _next(socket, "bind")
         assert _state(user, first)["grant"] is None
         assert _state(user, second)["grant"] is not None
 
 
-def test_another_user_cannot_read_or_share_the_chat(
+def test_the_default_browser_preference_round_trips(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    user = user_factory()
+
+    def preference() -> str:
+        me = client.get(f"{API_SERVER_URL}/me", headers=user.headers)
+        me.raise_for_status()
+        return me.json()["preferences"]["default_browser"]
+
+    assert preference() == "SANDBOX"
+    client.patch(
+        f"{API_SERVER_URL}/user/default-browser",
+        json={"default_browser": "CHROME"},
+        headers=user.headers,
+    ).raise_for_status()
+    assert preference() == "CHROME"
+
+
+def test_another_user_cannot_read_the_chat(
     admin_user: DATestUser, basic_user: DATestUser
 ) -> None:
     chat_id = str(ChatSessionManager.create(user_performing_action=admin_user).id)
-    response = client.post(
+    response = client.get(
         f"{API_SERVER_URL}/chat/sessions/{chat_id}/browser/chrome",
-        json={},
         headers=basic_user.headers,
     )
     assert response.status_code == 404

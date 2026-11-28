@@ -12,6 +12,7 @@ from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.enums import (
     AccountType,
     DefaultAppMode,
+    DefaultBrowser,
     InterfaceFont,
     MotionPreference,
     PopupDismissal,
@@ -126,6 +127,7 @@ class UserPreferenceValues(TypedDict, total=False):
     language: str | None
     chat_background: str | None
     default_app_mode: DefaultAppMode
+    default_browser: DefaultBrowser
     interface_font: InterfaceFont
     response_font: ResponseFont
     motion: MotionPreference

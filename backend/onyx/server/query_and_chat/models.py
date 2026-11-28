@@ -9,8 +9,8 @@ from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.browser_extension.models import (
     CommandResult,
     GrantReport,
+    GrantTab,
     Installation,
-    SharedTabs,
 )
 from onyx.chat.mention_models import Mentions, RecordedMention
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
@@ -144,6 +144,15 @@ class ChatFeedbackRequest(BaseModel):
 
 # NOTE: This model is used for the core flow of the Onyx application, any changes to it should be reviewed and approved by an
 # experienced team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
+class ChromeContext(BaseModel):
+    """Where the Onyx extension's side panel sends a message from: its
+    installation, window and active tab."""
+
+    installation_id: UUID
+    window_id: int
+    tab_id: int
+
+
 class SendMessageRequest(BaseModel):
     message: str
 
@@ -177,6 +186,10 @@ class SendMessageRequest(BaseModel):
 
     # Origin of the message for telemetry tracking
     origin: MessageOrigin = MessageOrigin.UNSET
+
+    # Set only by the extension's side panel (origin `chrome_extension`); the
+    # turn binds the chat to that window of the user's Chrome.
+    chrome_context: ChromeContext | None = None
 
     accepts_follow_ups: bool = Field(
         default=False,
@@ -668,18 +681,22 @@ class GrantReportMessage(BaseModel):
     grant: GrantReport
 
 
-class GrantDenied(BaseModel):
-    type: Literal["grant_denied"]
-    chat_session_id: UUID
-    request_id: str = Field(max_length=64)
-
-
 class GrantEnded(BaseModel):
     type: Literal["grant_ended"]
     chat_session_id: UUID
 
 
+class ChromeGrantView(BaseModel):
+    """The chat's Chrome access as the web app sees it."""
+
+    tabs: list[GrantTab]
+    current: str | None
+    # The sites that the chat may use now.
+    origins: list[str]
+    expires_at: float
+    side_panel: bool
+
+
 class ChromeBrowserState(BaseModel):
     installations: list[Installation]
-    request: Literal["pending", "denied"] | None
-    grant: SharedTabs | None
+    grant: ChromeGrantView | None

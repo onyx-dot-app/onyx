@@ -1112,6 +1112,7 @@ def construct_chat_tools(
                 tenant_id=get_current_tenant_id(),
                 user_id=user.id,
                 chat_session_id=setup.chat_session_id,
+                response_id=setup.responses[response_index].message_id,
             )
         elif setup.browser_target is BrowserTarget.SANDBOX and turn is not None:
             browser = SandboxBrowser(turn)

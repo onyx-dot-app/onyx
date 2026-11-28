@@ -40,7 +40,13 @@ from onyx.tools.interface import (
     parse_tool_arguments,
     tool_definition_from_arguments,
 )
-from onyx.tools.models import CodeModeExposure, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    ToolApprovalDetails,
+    ToolApprovalScope,
+    ToolCallException,
+    ToolContext,
+)
 from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.sandbox.errors import (
     sandbox_errors_as_tool_errors,
@@ -67,6 +73,13 @@ _CALL_MARGIN_SECONDS = 15.0
 # Largest result text that the model gets.
 BROWSER_RESULT_MAX_CHARS = 80_000
 
+# The user's Chrome asks once per site; the call's details name the site's
+# action (ChromeBrowser.site_approval). A turn that runs without asking builds
+# the tools without it (chat/execution.py).
+CHROME_SITE_APPROVAL = ToolApprovalScope(
+    integration_id=None, action_id="onyx:chrome.site"
+)
+
 _INTERRUPTED_BROWSER_MESSAGE = (
     "The call was interrupted before it returned and was not run again. "
     "Check the page with browser_status or browser_snapshot before you retry."
@@ -85,6 +98,15 @@ class BrowserBackend(abc.ABC):
         """The result of one call. Raises ToolCallException with a message
         for the model when the browser refuses or does not answer."""
         raise NotImplementedError
+
+    def site_approval(
+        self,
+        method: str,  # noqa: ARG002
+        params: dict[str, JsonValue],  # noqa: ARG002
+    ) -> ToolApprovalDetails | None:
+        """The approval card of a call that acts on a site that the user has
+        not allowed yet, or None when the call needs none."""
+        return None
 
 
 class SandboxBrowser(BrowserBackend):
@@ -150,6 +172,8 @@ class BrowserTool[ArgumentsT: BrowserArguments](Tool):
 
     def __init__(self, backend: BrowserBackend) -> None:
         self._backend = backend
+        if backend.target is BrowserTarget.CHROME:
+            self.approval = CHROME_SITE_APPROVAL
         if not self.RUNS_AGAIN:
             self.interrupted_result = ToolResult(
                 content=_INTERRUPTED_BROWSER_MESSAGE, is_error=True
@@ -203,6 +227,16 @@ class BrowserTool[ArgumentsT: BrowserArguments](Tool):
             mode="json", by_alias=True, exclude_none=True
         )
         return params, wait_ms
+
+    def approval_details(
+        self, arguments: dict[str, JsonValue]
+    ) -> ToolApprovalDetails | None:
+        try:
+            parsed = parse_tool_arguments(self.ARGUMENTS, arguments)
+        except ToolCallException:
+            return None
+        params, _ = self._params(parsed)
+        return self._backend.site_approval(self.METHOD, params)
 
     def _content(self, result: dict[str, JsonValue]) -> str:
         return json.dumps(result, ensure_ascii=False, separators=(",", ":"))

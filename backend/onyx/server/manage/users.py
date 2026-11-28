@@ -126,6 +126,7 @@ from onyx.server.manage.models import (
     BulkInviteResponse,
     ChatBackgroundRequest,
     DefaultAppModeRequest,
+    DefaultBrowserRequest,
     EmailInviteStatus,
     LanguageRequest,
     MemoryItem,
@@ -1460,6 +1461,18 @@ def update_user_default_app_mode_api(
 ) -> None:
     upsert_user_preferences__no_commit(
         db_session, user.id, default_app_mode=request.default_app_mode
+    )
+    db_session.commit()
+
+
+@router.patch("/user/default-browser")
+def update_user_default_browser_api(
+    request: DefaultBrowserRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    upsert_user_preferences__no_commit(
+        db_session, user.id, default_browser=request.default_browser
     )
     db_session.commit()
 

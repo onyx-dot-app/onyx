@@ -29,39 +29,39 @@ class GrantTab(BaseModel):
     id: str = Field(max_length=50)
     title: str = Field(default="", max_length=500)
     url: str = Field(default="", max_length=2048)
+    # `scheme://host[:port]`; empty when unknown
+    origin: str = Field(default="", max_length=300)
     # "human" while the user's own input holds the tab
     controller: Literal["agent", "human"] = "agent"
 
 
-class SharedTabs(BaseModel):
-    """What the user shared with one chat, as the web app sees it."""
+class ChromeGrant(BaseModel):
+    """The access of one installation to one chat. The allowed sites are not
+    stored: they are the chat's session approvals plus `once_origins`."""
 
+    user_id: UUID
+    installation_id: UUID
+    chat_session_id: UUID
+    chat_title: str = Field(max_length=500)
     tabs: list[GrantTab] = Field(max_length=50)
-    origins: list[str] = Field(max_length=50)
+    current: str | None = None
     expires_at: float
+    # True when the extension's side panel started the binding; the extension
+    # ends it when the panel closes.
+    side_panel: bool
+    window_id: int | None = None
+    # Sites that "Approve once" allowed, for the response with this id.
+    once_origins: list[str] = Field(default_factory=list, max_length=50)
+    once_response_id: int | None = None
 
 
-class ChromeGrant(SharedTabs):
-    user_id: UUID
-    installation_id: UUID
+class GrantReport(BaseModel):
+    """A grant's tabs as the extension reports them after a bind and after
+    each change."""
+
     chat_session_id: UUID
-
-
-class GrantReport(SharedTabs):
-    """A grant as the extension reports it: on approval (with the request)
-    and after each change of its tabs."""
-
-    chat_session_id: UUID
-    request_id: str | None = None
-
-
-class GrantRequest(BaseModel):
-    """The chat's one share request; a newer request replaces it."""
-
-    request_id: str
-    user_id: UUID
-    installation_id: UUID
-    state: Literal["pending", "denied"]
+    tabs: list[GrantTab] = Field(max_length=50)
+    current: str | None = None
 
 
 class CommandError(BaseModel):

@@ -13,17 +13,20 @@ server, so the two meet in the cache:
   dropped, never run, and the list expires when nothing reads it.
 - Results: the socket's server pushes the answer onto `result:{command_id}`;
   the turn waits on it with a bounded poll and checks its cancel signal.
-- Grants: the user shares tabs and sites with one chat in the extension. The
-  extension and the server both keep the grant, and both check it. One
-  installation serves one chat at a time; a new grant ends the old one.
-  Grant changes of a chat run under the chat's lock, so a late tab report
-  cannot bring back a grant that Stop ended.
+- Grants: a turn binds a chat to one installation (`bind_chat`) and the
+  extension answers with its tabs. The user approves sites in the Onyx chat,
+  never in the extension; each command carries the sites that the chat may
+  use now, and the extension enforces them. One installation serves one chat
+  at a time; a new binding ends the old one. Grant changes of a chat run
+  under the chat's lock, so a late tab report cannot bring back a grant that
+  Stop ended.
 
 Everything here lives in the cache with a TTL. Chat history is the record.
 """
 
 import json
 import time
+from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, JsonValue, ValidationError
@@ -32,12 +35,15 @@ from onyx.browser_extension.models import (
     ChromeGrant,
     CommandResult,
     GrantReport,
-    GrantRequest,
+    GrantTab,
     Presence,
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
+from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.integration_policy import get_session_granted_actions
 from onyx.llm.cancellation import current_cancellation
+from onyx.tools.models import ToolApprovalDetails
 from onyx.tools.tool_implementations.sandbox.browser_tools import BrowserBackend
 from onyx.tools.tool_implementations.sandbox.errors import tool_error
 from onyx.tools.tool_implementations.sandbox.models import BrowserTarget
@@ -73,10 +79,6 @@ def commands_key(user_id: UUID, installation_id: UUID, connection_id: str) -> st
 
 def _result_key(command_id: str) -> str:
     return f"{_PREFIX}:result:{command_id}"
-
-
-def _request_key(chat_session_id: UUID) -> str:
-    return f"{_PREFIX}:request:{chat_session_id}"
 
 
 def _cancelled_key(command_id: str) -> str:
@@ -264,177 +266,134 @@ def load_grant(
     return grant
 
 
-def request_grant(
+def bind_chat(
     tenant_id: str,
     user_id: UUID,
     chat_session_id: UUID,
     presence: Presence,
     *,
     chat_title: str,
-    account: str,
-) -> GrantRequest:
-    """Ask the installation's connection to show its consent window for the
-    chat."""
+    window_id: int | None,
+    tab_id: int | None,
+    side_panel: bool,
+) -> ChromeGrant:
+    """Bind the chat to the installation and tell its extension. A chat with
+    a grant on another installation loses it; the installation's grant of
+    another chat ends without a message, since the extension replaces it on
+    the bind. A new bind of the same installation keeps its tabs and sites."""
     cache = _cache(tenant_id)
-    request = GrantRequest(
-        request_id=uuid4().hex,
-        user_id=user_id,
-        installation_id=presence.installation_id,
-        state="pending",
-    )
-    cache.set(
-        _request_key(chat_session_id), request.model_dump_json(), ex=REQUEST_SECONDS
-    )
+    installation_id = presence.installation_id
+    now = time.time()
+    expires_at = now + MAX_GRANT_SECONDS
+    with cache.lock(_grant_lock_key(chat_session_id), timeout=_GRANT_LOCK_SECONDS):
+        existing = _load(cache, _grant_key(chat_session_id), ChromeGrant)
+        if existing is not None and existing.user_id != user_id:
+            existing = None
+        if existing is not None and existing.installation_id != installation_id:
+            _end_grant(cache, user_id, chat_session_id, notify=True)
+            existing = None
+        # The installation's own lock (always taken after a chat's) keeps two
+        # chats' binds from both keeping the installation.
+        with cache.lock(
+            _installation_lock_key(user_id, installation_id),
+            timeout=_GRANT_LOCK_SECONDS,
+        ):
+            _drop_other_chat(cache, user_id, installation_id, chat_session_id)
+            tabs = existing.tabs if existing is not None else []
+            current = existing.current if existing is not None else None
+            if tab_id is not None:
+                current = str(tab_id)
+                if not any(tab.id == current for tab in tabs):
+                    tabs = [*tabs, GrantTab(id=current)]
+            grant = ChromeGrant(
+                user_id=user_id,
+                installation_id=installation_id,
+                chat_session_id=chat_session_id,
+                chat_title=chat_title[:500],
+                tabs=tabs,
+                current=current,
+                expires_at=expires_at,
+                side_panel=side_panel,
+                window_id=window_id,
+                once_origins=existing.once_origins if existing is not None else [],
+                once_response_id=(
+                    existing.once_response_id if existing is not None else None
+                ),
+            )
+            ttl = max(1, int(expires_at - now))
+            cache.set(_grant_key(chat_session_id), grant.model_dump_json(), ex=ttl)
+            cache.set(
+                _installation_grant_key(user_id, installation_id),
+                str(chat_session_id),
+                ex=ttl,
+            )
     _send(
         cache,
         user_id,
         presence,
         {
-            "type": "grant_request",
-            "request_id": request.request_id,
+            "type": "bind",
             "chat_session_id": str(chat_session_id),
-            "chat_title": chat_title,
-            "account": account,
+            "chat_title": grant.chat_title,
+            "window_id": window_id,
+            "tab_id": tab_id,
+            "side_panel": side_panel,
+            "expires_at": expires_at,
         },
-        time.time() + REQUEST_SECONDS,
+        now + REQUEST_SECONDS,
     )
-    return request
+    return grant
 
 
-def load_chat_request(
-    tenant_id: str, chat_session_id: UUID, user_id: UUID
-) -> GrantRequest | None:
-    request = _load(_cache(tenant_id), _request_key(chat_session_id), GrantRequest)
-    if request is None or request.user_id != user_id:
-        return None
-    return request
-
-
-def _pending_request(
-    cache: CacheBackend,
-    user_id: UUID,
-    installation_id: UUID,
-    chat_session_id: UUID,
-    request_id: str,
-) -> GrantRequest | None:
-    """The chat's request when it is this installation's pending one."""
-    request = _load(cache, _request_key(chat_session_id), GrantRequest)
-    if (
-        request is None
-        or request.request_id != request_id
-        or request.state != "pending"
-        or request.user_id != user_id
-        or request.installation_id != installation_id
-    ):
-        return None
-    return request
-
-
-def deny_request(
-    tenant_id: str,
-    user_id: UUID,
-    installation_id: UUID,
-    chat_session_id: UUID,
-    request_id: str,
+def _drop_other_chat(
+    cache: CacheBackend, user_id: UUID, installation_id: UUID, chat_session_id: UUID
 ) -> None:
-    cache = _cache(tenant_id)
-    request = _pending_request(
-        cache, user_id, installation_id, chat_session_id, request_id
-    )
-    if request is None:
+    """Delete the keys of this installation's grant of another chat."""
+    previous = cache.get(_installation_grant_key(user_id, installation_id))
+    if previous is None or previous.decode() == str(chat_session_id):
         return
-    request.state = "denied"
-    cache.set(
-        _request_key(chat_session_id), request.model_dump_json(), ex=REQUEST_SECONDS
-    )
+    previous_key = _grant_key(UUID(previous.decode()))
+    previous_raw = cache.get(previous_key)
+    previous_grant = _load(cache, previous_key, ChromeGrant)
+    # Only while that grant is still this installation's: compare and
+    # delete, since another installation may take that chat meanwhile.
+    if (
+        previous_raw is not None
+        and previous_grant is not None
+        and previous_grant.installation_id == installation_id
+    ):
+        cache.delete_if_value(previous_key, previous_raw)
+
+
+def _store_grant(cache: CacheBackend, grant: ChromeGrant, now: float) -> None:
+    ttl = max(1, int(grant.expires_at - now))
+    cache.set(_grant_key(grant.chat_session_id), grant.model_dump_json(), ex=ttl)
 
 
 def save_grant(
     tenant_id: str, user_id: UUID, installation_id: UUID, report: GrantReport
 ) -> ChromeGrant | None:
-    """Store an approved or changed grant. An approval must answer this
-    installation's pending request for the chat; a change must be of this
-    installation's grant. Returns None when neither holds."""
+    """Store the tabs that the extension reports for a grant that this
+    installation holds. Returns None when it holds none (the extension then
+    ends its own)."""
     cache = _cache(tenant_id)
     chat_session_id = report.chat_session_id
     with cache.lock(_grant_lock_key(chat_session_id), timeout=_GRANT_LOCK_SECONDS):
-        existing = _load(cache, _grant_key(chat_session_id), ChromeGrant)
-        holds_grant = (
-            existing is not None
-            and existing.user_id == user_id
-            and existing.installation_id == installation_id
-        )
-        pending = report.request_id is not None and (
-            _pending_request(
-                cache, user_id, installation_id, chat_session_id, report.request_id
-            )
-            is not None
-        )
-        # An approval sent again (a tab change or a reconnect before the
-        # ack) is a change of the grant that it made.
-        if pending:
-            cache.delete(_request_key(chat_session_id))
-        elif not holds_grant:
-            return None
+        grant = _load(cache, _grant_key(chat_session_id), ChromeGrant)
         now = time.time()
-        expires_at = min(report.expires_at, now + MAX_GRANT_SECONDS)
-        if expires_at <= now or not report.tabs:
+        if (
+            grant is None
+            or grant.user_id != user_id
+            or grant.installation_id != installation_id
+        ):
+            return None
+        if grant.expires_at <= now:
             _end_grant(cache, user_id, chat_session_id, notify=False)
             return None
-        # One installation serves one chat: a new grant ends the one before.
-        # The installation's own lock (always taken after a chat's) keeps two
-        # chats' approvals from both keeping a grant.
-        with cache.lock(
-            _installation_lock_key(user_id, installation_id),
-            timeout=_GRANT_LOCK_SECONDS,
-        ):
-            return _replace_installation_grant(
-                cache, user_id, installation_id, report, existing, expires_at, now
-            )
-
-
-def _replace_installation_grant(
-    cache: CacheBackend,
-    user_id: UUID,
-    installation_id: UUID,
-    report: GrantReport,
-    existing: ChromeGrant | None,
-    expires_at: float,
-    now: float,
-) -> ChromeGrant:
-    chat_session_id = report.chat_session_id
-    installation_key = _installation_grant_key(user_id, installation_id)
-    previous = cache.get(installation_key)
-    if previous is not None and previous.decode() != str(chat_session_id):
-        previous_key = _grant_key(UUID(previous.decode()))
-        previous_raw = cache.get(previous_key)
-        previous_grant = _load(cache, previous_key, ChromeGrant)
-        # Only while that grant is still this installation's: compare and
-        # delete, since another installation may take that chat meanwhile.
-        if (
-            previous_raw is not None
-            and previous_grant is not None
-            and previous_grant.installation_id == installation_id
-        ):
-            cache.delete_if_value(previous_key, previous_raw)
-    # A chat moved from another installation leaves that one free.
-    if existing is not None and existing.installation_id != installation_id:
-        cache.delete_if_value(
-            _installation_grant_key(user_id, existing.installation_id),
-            str(chat_session_id).encode(),
-        )
-    grant = ChromeGrant(
-        user_id=user_id,
-        installation_id=installation_id,
-        chat_session_id=chat_session_id,
-        tabs=report.tabs,
-        origins=report.origins,
-        expires_at=expires_at,
-    )
-    ttl = max(1, int(expires_at - now))
-    cache.set(_grant_key(chat_session_id), grant.model_dump_json(), ex=ttl)
-    cache.set(installation_key, str(chat_session_id), ex=ttl)
-    return grant
+        grant.tabs = report.tabs
+        grant.current = report.current
+        _store_grant(cache, grant, now)
+        return grant
 
 
 def end_grant(
@@ -445,18 +404,13 @@ def end_grant(
     notify: bool,
     installation_id: UUID | None = None,
 ) -> None:
-    """End the chat's grant and its open share request. `notify` also tells
+    """End the chat's grant. `notify` also tells
     the extension, for a stop from Onyx; a stop in the extension already
     ended it there, and passes its `installation_id`, so it ends only a grant
     that it holds. An extension that is not connected learns of the end when
     it reports its grant on reconnect."""
     cache = _cache(tenant_id)
     with cache.lock(_grant_lock_key(chat_session_id), timeout=_GRANT_LOCK_SECONDS):
-        if installation_id is None:
-            # A stop from Onyx also ends a request still waiting for consent.
-            request = _load(cache, _request_key(chat_session_id), GrantRequest)
-            if request is not None and request.user_id == user_id:
-                cache.delete(_request_key(chat_session_id))
         _end_grant(
             cache,
             user_id,
@@ -498,9 +452,10 @@ def _end_grant(
 # ---- the tools' backend ----
 
 NO_GRANT_MESSAGE = (
-    "The user's Chrome is no longer shared with this chat. Ask the user to "
-    "share a tab again from the chat's browser panel."
+    "The user's Chrome is no longer connected to this chat: the user stopped "
+    "it or closed the side panel."
 )
+SITE_ACTION_PREFIX = "onyx:chrome.site:"
 NOT_CONNECTED_MESSAGE = (
     "The user's Chrome is not connected to Onyx. Ask the user to open Chrome "
     "with the Onyx extension signed in."
@@ -517,10 +472,58 @@ class ChromeBrowser(BrowserBackend):
 
     target = BrowserTarget.CHROME
 
-    def __init__(self, *, tenant_id: str, user_id: UUID, chat_session_id: UUID) -> None:
+    def __init__(
+        self,
+        *,
+        tenant_id: str,
+        user_id: UUID,
+        chat_session_id: UUID,
+        response_id: int,
+    ) -> None:
         self._tenant_id = tenant_id
         self._user_id = user_id
         self._chat_session_id = chat_session_id
+        self._response_id = response_id
+
+    def _allowed_origins(self, grant: ChromeGrant) -> set[str]:
+        """The sites that the chat may use now: the ones that "Approve for
+        this chat" allowed, and the ones that "Approve once" allowed in this
+        response."""
+        allowed = session_origins(self._tenant_id, self._chat_session_id)
+        if grant.once_response_id == self._response_id:
+            allowed.update(grant.once_origins)
+        return allowed
+
+    def site_approval(
+        self, method: str, params: dict[str, JsonValue]
+    ) -> ToolApprovalDetails | None:
+        grant = load_grant(self._tenant_id, self._chat_session_id, self._user_id)
+        if grant is None:
+            return None
+        origin = _target_origin(method, params, grant)
+        if origin is None or origin in self._allowed_origins(grant):
+            return None
+        return ToolApprovalDetails(
+            display_name=f"Use {urlsplit(origin).netloc} in your Chrome",
+            payload={"site": origin},
+            action_id=f"{SITE_ACTION_PREFIX}{origin}",
+        )
+
+    def _record_once(self, origin: str) -> None:
+        """Keep a site that this response's call used without a chat approval."""
+        cache = _cache(self._tenant_id)
+        with cache.lock(
+            _grant_lock_key(self._chat_session_id), timeout=_GRANT_LOCK_SECONDS
+        ):
+            grant = _load(cache, _grant_key(self._chat_session_id), ChromeGrant)
+            if grant is None:
+                return
+            if grant.once_response_id != self._response_id:
+                grant.once_origins = []
+                grant.once_response_id = self._response_id
+            if origin not in grant.once_origins:
+                grant.once_origins.append(origin)
+            _store_grant(cache, grant, time.time())
 
     def call(
         self, method: str, params: dict[str, JsonValue], *, timeout_seconds: float
@@ -536,6 +539,13 @@ class ChromeBrowser(BrowserBackend):
         presence = _connection(cache, self._user_id, grant.installation_id)
         if presence is None:
             raise tool_error(NOT_CONNECTED_MESSAGE)
+        origin = _target_origin(method, params, grant)
+        allowed = self._allowed_origins(grant)
+        if origin is not None and origin not in allowed:
+            # The call got here, so the user approved it once, or approvals
+            # are off.
+            self._record_once(origin)
+            allowed.add(origin)
         command_id = uuid4().hex
         deadline = time.time() + timeout_seconds
         cancellation = current_cancellation()
@@ -552,6 +562,7 @@ class ChromeBrowser(BrowserBackend):
                 "chat_session_id": str(self._chat_session_id),
                 "method": method,
                 "params": params,
+                "origins": sorted(allowed),
             },
             deadline,
         )
@@ -573,6 +584,48 @@ class ChromeBrowser(BrowserBackend):
             if current is None or current.connection_id != presence.connection_id:
                 raise tool_error(LOST_MESSAGE)
         raise tool_error(LOST_MESSAGE)
+
+
+def session_origins(tenant_id: str, chat_session_id: UUID) -> set[str]:
+    """The sites that "Approve for this chat" allowed in the chat."""
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        actions = get_session_granted_actions(db_session, chat_session_id, None)
+    return {
+        action.removeprefix(SITE_ACTION_PREFIX)
+        for action in actions
+        if action.startswith(SITE_ACTION_PREFIX)
+    }
+
+
+def normalize_origin(url: str) -> str | None:
+    """`scheme://host[:port]` of a URL, lowercase; a bare host is https. None
+    for other schemes and for text that is no URL."""
+    text = url.strip()
+    if "://" not in text:
+        text = f"https://{text}"
+    try:
+        parts = urlsplit(text)
+        port = parts.port
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return None
+    return f"{parts.scheme}://{parts.hostname}" + (f":{port}" if port else "")
+
+
+def _target_origin(
+    method: str, params: dict[str, JsonValue], grant: ChromeGrant
+) -> str | None:
+    """The site that a call acts on, or None when it is not known."""
+    url = params.get("url")
+    if method in ("open", "navigate") and isinstance(url, str):
+        return normalize_origin(url)
+    tab = params.get("tab")
+    tab_id = tab if isinstance(tab, str) else grant.current
+    for known in grant.tabs:
+        if known.id == tab_id:
+            return known.origin or None
+    return None
 
 
 def _answer(raw: bytes) -> dict[str, JsonValue]:
