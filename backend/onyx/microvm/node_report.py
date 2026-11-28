@@ -21,12 +21,7 @@ import hmac
 import time
 from collections.abc import Callable
 
-from onyx.cache.interface import (
-    CacheBackend,
-    CacheLock,
-    CacheLockAcquisitionError,
-    CacheLockLostError,
-)
+from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
 from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentConfigError,
@@ -36,7 +31,6 @@ from onyx.microvm.models import NodeInfo, NodeStateReport, NodeStateReportResult
 from onyx.microvm.reconcile import reconcile_node
 from onyx.microvm.registry import (
     claim_node_report_token,
-    get_node_registration_key,
     get_registered_node,
     node_report_lease,
     record_node_info,
@@ -160,7 +154,6 @@ def _read_node_info(
     client_factory: HostAgentClientFactory,
     node_id: str,
     address: str,
-    key_id: str | None,
 ) -> NodeInfo | None:
     """The node's `NodeInfo` from its agent, recorded for the sandbox tools
     check. None when the read fails; the last record then stays."""
@@ -171,14 +164,7 @@ def _read_node_info(
     except HostAgentError as e:
         logger.warning("sandbox_fc_node_info_read_failed node=%s error=%s", node_id, e)
         return None
-    try:
-        recorded = record_node_info(
-            shared_cache, node_id, info, address=address, key_id=key_id
-        )
-    except CacheLockAcquisitionError:
-        recorded = False
-    if not recorded:
-        logger.info("sandbox_fc_node_info_not_recorded node=%s", node_id)
+    record_node_info(shared_cache, node_id, info)
     return info
 
 
@@ -197,7 +183,6 @@ def reconcile_node_report(
     node = get_registered_node(shared_cache, report.node_id)
     if node is None:
         raise NodeNotRegisteredError(report.node_id)
-    key_id = get_node_registration_key(shared_cache, node.node_id)
     # Placement counts a node whose reports stop as dead.
     record_node_report(shared_cache, node.node_id, now)
     # Deferred: the harness sandbox imports this package. Built before the
@@ -213,9 +198,7 @@ def reconcile_node_report(
         return NodeStateReportResult(reconciled=False)
     deadline = time.monotonic() + NODE_REPORT_DEADLINE_SECONDS
     try:
-        info = _read_node_info(
-            shared_cache, client_factory, node.node_id, node.address, key_id
-        )
+        info = _read_node_info(shared_cache, client_factory, node.node_id, node.address)
         # The drain state is recorded for background stops. A failed read
         # counts as not draining and keeps the last record.
         draining = checkpointer.supported and info is not None and info.draining
