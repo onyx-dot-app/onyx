@@ -28,4 +28,13 @@ describe("HealthBanner", () => {
       screen.getByText(/the backend is currently unavailable/i)
     ).toBeInTheDocument();
   });
+
+  it("ignores a single failed check after the backend has answered", () => {
+    mockUseSWR.mockReturnValue({
+      data: { success: true },
+      error: new TypeError("Load failed"),
+    });
+    const { container } = render(<HealthBanner />);
+    expect(container.firstChild).toBeNull();
+  });
 });
