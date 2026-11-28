@@ -63,7 +63,7 @@ def _patch(
 
 def _bulk(user: DATestUser, body: dict[str, Any]) -> SkillBulkResponse:
     response = client.post(
-        f"{API_SERVER_URL}/skills/bulk", json=body, headers=user.headers
+        f"{API_SERVER_URL}/plugins/bulk", json=body, headers=user.headers
     )
     response.raise_for_status()
     return SkillBulkResponse.model_validate(response.json())
@@ -283,7 +283,7 @@ def test_create_public_with_a_used_name_is_refused(owner: DATestUser) -> None:
     headers = dict(owner.headers)
     headers.pop("Content-Type", None)
     response = client.post(
-        f"{API_SERVER_URL}/skills/custom/batch",
+        f"{API_SERVER_URL}/plugins/skill-bundles",
         headers=headers,
         files=[
             ("bundles", (f"{name}.zip", build_minimal_bundle(name), "application/zip"))
@@ -297,7 +297,7 @@ def test_create_public_with_a_used_name_is_refused(owner: DATestUser) -> None:
     assert f"'{name}'" in refused["reason"]
 
     editor = client.post(
-        f"{API_SERVER_URL}/skills/custom/editor",
+        f"{API_SERVER_URL}/plugins/editor",
         headers=headers,
         files={
             "name": (None, name, None),

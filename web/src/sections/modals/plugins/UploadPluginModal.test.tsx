@@ -255,7 +255,7 @@ test("a bad zip shows the reason from the server", async () => {
 
 test("a zip with a skill and no plugin.json continues as a skill", async () => {
   const fetchMock = mockFetch({
-    "POST /api/skills/custom/bundle/inspect": {
+    "POST /api/plugins/skill-bundle/inspect": {
       name: "notes",
       description: "Take notes.",
       instructions_markdown: "Take notes.",

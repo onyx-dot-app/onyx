@@ -308,16 +308,16 @@ export const SWR_KEYS = {
   assistantPreferences: "/api/user/assistant/preferences",
 
   // ── Skills ────────────────────────────────────────────────────────────────
-  userSkills: "/api/skills",
-  chatSkills: "/api/skills/chat",
-  userSkill: (skillId: string) => `/api/skills/${skillId}`,
-  userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  userSkills: "/api/plugins",
+  chatSkills: "/api/plugins/chat-skills",
+  userSkill: (skillId: string) => `/api/plugins/${skillId}`,
+  userSkillPreview: (skillId: string) => `/api/plugins/${skillId}/preview`,
   pluginSkill: (pluginId: string, path: string) =>
     `/api/plugins/${pluginId}/skill?path=${encodeURIComponent(path)}`,
   pluginSharing: (pluginId: string) => `/api/plugins/${pluginId}/share`,
   editablePlugin: (pluginId: string) => `/api/plugins/${pluginId}/edit`,
   pluginReviewRequests: "/api/plugins/review-requests",
-  skillLimitUsers: "/api/skills/users-over-limit",
+  skillLimitUsers: "/api/plugins/users-over-limit",
   organizationLibraryDefaultAccess:
     "/api/plugins/organization-library/default-access",
   pluginVersions: (pluginId: string) => `/api/plugins/${pluginId}/versions`,

@@ -1,6 +1,6 @@
 """Personal (user-level) skill API tests (HTTP boundary).
 
-Covers the user-facing ``POST /skills/custom``,
+Covers the user-facing ``POST /plugins/skill-bundle``,
 ``PUT /plugins/{id}/bundle``, and ``DELETE /plugins/{id}``
 endpoints: ownership/visibility rules, reserved names, duplicate names,
 promotion to org-wide, and admin disable as a reversible mute.
@@ -55,7 +55,7 @@ def test_create_personal_skill_visibility(
     assert name not in _user_custom_names(other_basic_user)
 
     response = client.get(
-        f"{API_SERVER_URL}/skills/{skill.id}",
+        f"{API_SERVER_URL}/plugins/{skill.id}",
         headers=other_basic_user.headers,
     )
     assert response.status_code == 404

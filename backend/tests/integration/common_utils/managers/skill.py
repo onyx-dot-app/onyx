@@ -217,7 +217,7 @@ class SkillManager:
                 "application/octet-stream",
             )
         response = client.post(
-            f"{API_SERVER_URL}/skills/custom/editor",
+            f"{API_SERVER_URL}/plugins/editor",
             files=files,
             headers=headers,
         )
@@ -244,7 +244,7 @@ class SkillManager:
         headers.pop("Content-Type", None)
 
         response = client.post(
-            f"{API_SERVER_URL}/skills/custom",
+            f"{API_SERVER_URL}/plugins/skill-bundle",
             files={
                 "auto_enable": (None, str(auto_enable).lower(), None),
                 "bundle": (
@@ -396,7 +396,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillsList:
         response = client.get(
-            f"{API_SERVER_URL}/skills",
+            f"{API_SERVER_URL}/plugins",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -407,7 +407,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillsList:
         response = client.get(
-            f"{API_SERVER_URL}/skills",
+            f"{API_SERVER_URL}/plugins",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -421,7 +421,7 @@ class SkillManager:
         replace_conflict: bool = False,
     ) -> SkillResponse:
         response = client.put(
-            f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+            f"{API_SERVER_URL}/plugins/{skill.id}/enabled",
             json={"enabled": enabled, "replace_conflict": replace_conflict},
             headers=user_performing_action.headers,
         )
@@ -434,7 +434,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillResponse:
         response = client.get(
-            f"{API_SERVER_URL}/skills/{skill_id}",
+            f"{API_SERVER_URL}/plugins/{skill_id}",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -446,7 +446,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillPreviewResponse:
         response = client.get(
-            f"{API_SERVER_URL}/skills/{skill_id}/preview",
+            f"{API_SERVER_URL}/plugins/{skill_id}/preview",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -536,7 +536,7 @@ class SkillManager:
         headers.pop("Content-Type", None)
 
         response = client.post(
-            f"{API_SERVER_URL}/skills/custom",
+            f"{API_SERVER_URL}/plugins/skill-bundle",
             files={
                 "auto_enable": (None, str(auto_enable).lower(), None),
                 "bundle": (

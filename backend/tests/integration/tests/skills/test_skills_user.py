@@ -1,7 +1,7 @@
 """User skill API tests (HTTP boundary).
 
-These tests live at the user-facing HTTP boundary for ``/skills`` and
-``/skills/{id}``. They verify visibility rules (public, private,
+These tests live at the user-facing HTTP boundary for ``/plugins`` and
+``/plugins/{id}``. They verify visibility rules (public, private,
 group shares, disabled), the id lookup contract, and the admin-only delete
 guard.
 
@@ -42,7 +42,7 @@ def test_get_skills_returns_builtins_plus_accessible_customs(
     assert native_builtin.can_toggle is False
 
     response = client.put(
-        f"{API_SERVER_URL}/skills/{native_builtin.id}/enabled",
+        f"{API_SERVER_URL}/plugins/{native_builtin.id}/enabled",
         json={"enabled": False},
         headers=basic_user.headers,
     )
@@ -117,7 +117,7 @@ def test_get_skill_by_id_404_when_not_visible(
     skill = SkillManager.create_custom(admin_user, name=name, is_public=False)
 
     response = client.get(
-        f"{API_SERVER_URL}/skills/{skill.id}",
+        f"{API_SERVER_URL}/plugins/{skill.id}",
         headers=basic_user.headers,
     )
     assert response.status_code == 404
@@ -139,7 +139,7 @@ def test_non_owner_cannot_delete_skill(
 # ---------------------------------------------------------------------------
 # Notes on coverage shifted to ``test_skills_admin.py``
 # ---------------------------------------------------------------------------
-# - Create behavior is covered by the single user-facing ``POST /skills/custom``
+# - Create behavior is covered by the single user-facing ``POST /plugins/skill-bundle``
 #   path in ``test_skills_personal.py`` and ``test_skills_admin.py``.
 # - Disabled skill admin-side behaviour is covered by the admin patch and
 #   unified list flow in ``test_skills_admin.py``.

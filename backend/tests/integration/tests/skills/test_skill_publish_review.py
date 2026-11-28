@@ -100,7 +100,7 @@ def test_off_refuses_every_publish_path(
     headers.pop("Content-Type", None)
     _assert_refused_off(
         client.post(
-            f"{API_SERVER_URL}/skills/custom/editor",
+            f"{API_SERVER_URL}/plugins/editor",
             files={
                 "name": (None, f"off-{uuid4().hex[:8]}", None),
                 "description": (None, "Refused", None),
@@ -111,7 +111,7 @@ def test_off_refuses_every_publish_path(
         )
     )
     bulk = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         json={
             "skill_ids": [str(skill.id)],
             "action": "share",

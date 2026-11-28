@@ -42,7 +42,7 @@ def _bulk_share(
     user: DATestUser, skill_ids: list[UUID], sharing: dict[str, Any]
 ) -> SkillBulkResponse:
     response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         json={
             "action": "share",
             "skill_ids": [str(skill_id) for skill_id in skill_ids],

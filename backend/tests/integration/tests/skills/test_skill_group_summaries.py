@@ -167,7 +167,7 @@ def test_group_settings_from_the_share_dialog(
 
     # Group settings are set one skill at a time; the bulk dialog has none.
     response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         json={
             "action": "share",
             "skill_ids": [str(first.id), str(second.id)],

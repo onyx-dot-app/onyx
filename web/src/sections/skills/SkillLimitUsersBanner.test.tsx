@@ -47,7 +47,7 @@ describe("SkillLimitUsersBanner", () => {
     expect(
       await screen.findByText("2 users are past the skill limit")
     ).toBeInTheDocument();
-    expect(mockFetch).toHaveBeenCalledWith("/api/skills/users-over-limit");
+    expect(mockFetch).toHaveBeenCalledWith("/api/plugins/users-over-limit");
     expect(
       screen.getByText(
         "Group settings and shares can put a user past 500 MB or 5,000 files of skills. Some of their skills may then not load. Change group settings, or ask users to turn off skills."

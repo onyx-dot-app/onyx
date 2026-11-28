@@ -241,7 +241,7 @@ def test_group_required_skill_permissions_through_the_api(
     member_view = SkillManager.get_for_user(skill.id, member)
     assert member_view.enabled and not member_view.can_toggle
     turned_off = client.put(
-        f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+        f"{API_SERVER_URL}/plugins/{skill.id}/enabled",
         json={"enabled": False},
         headers=member.headers,
     )

@@ -83,7 +83,7 @@ def _upload(
     user: DATestUser, bundle: bytes, *, name: str, auto_enable: bool = True
 ) -> dict[str, Any]:
     response = client.post(
-        f"{API_SERVER_URL}/skills/custom",
+        f"{API_SERVER_URL}/plugins/skill-bundle",
         files={
             "auto_enable": (None, str(auto_enable).lower(), None),
             "bundle": (f"{name}.zip", io.BytesIO(bundle), "application/zip"),
@@ -106,7 +106,7 @@ def _create_from_editor(
     if public:
         files["sharing"] = (None, json.dumps({"public_permission": "VIEWER"}), None)
     response = client.post(
-        f"{API_SERVER_URL}/skills/custom/editor",
+        f"{API_SERVER_URL}/plugins/editor",
         files=files,
         headers=_multipart_headers(user),
     )
@@ -314,7 +314,7 @@ def test_editor_and_batch_create_make_plugins(user: DATestUser) -> None:
 
     names = [f"batch-{uuid4().hex[:8]}" for _ in range(2)]
     response = client.post(
-        f"{API_SERVER_URL}/skills/custom/batch",
+        f"{API_SERVER_URL}/plugins/skill-bundles",
         files=[
             (
                 "bundles",
@@ -468,7 +468,7 @@ def test_response_version_id_matches_the_fields_it_shows(user: DATestUser) -> No
 
 def _instructions_seen_by(viewer: DATestUser, skill_id: str) -> str:
     response = client.get(
-        f"{API_SERVER_URL}/skills/{skill_id}/preview", headers=viewer.headers
+        f"{API_SERVER_URL}/plugins/{skill_id}/preview", headers=viewer.headers
     )
     response.raise_for_status()
     return response.json()["instructions_markdown"]
@@ -529,14 +529,14 @@ def test_skill_md_over_limit_is_refused(user: DATestUser) -> None:
     large_bundle = _bundle({"SKILL.md": _skill_md(name, "Large", large_body)})
 
     upload = client.post(
-        f"{API_SERVER_URL}/skills/custom",
+        f"{API_SERVER_URL}/plugins/skill-bundle",
         files={"bundle": (f"{name}.zip", io.BytesIO(large_bundle), "application/zip")},
         headers=_multipart_headers(user),
     )
     _assert_skill_md_refused(upload)
 
     batch = client.post(
-        f"{API_SERVER_URL}/skills/custom/batch",
+        f"{API_SERVER_URL}/plugins/skill-bundles",
         files=[
             ("bundles", (f"{name}.zip", io.BytesIO(large_bundle), "application/zip"))
         ],
@@ -561,7 +561,7 @@ def test_skill_md_with_nul_is_refused(user: DATestUser) -> None:
     nul_bundle = _bundle({"SKILL.md": _skill_md(name, "Nul", "Before\x00after.")})
 
     upload = client.post(
-        f"{API_SERVER_URL}/skills/custom",
+        f"{API_SERVER_URL}/plugins/skill-bundle",
         files={"bundle": (f"{name}.zip", io.BytesIO(nul_bundle), "application/zip")},
         headers=_multipart_headers(user),
     )
@@ -639,7 +639,7 @@ def test_second_skill_with_a_used_name_is_refused_with_the_name(
     name = f"deploy-{uuid4().hex[:8]}"
     first = _upload(user, _bundle({"SKILL.md": _skill_md(name, "First")}), name=name)
     response = client.post(
-        f"{API_SERVER_URL}/skills/custom",
+        f"{API_SERVER_URL}/plugins/skill-bundle",
         files={
             "auto_enable": (None, "false", None),
             "bundle": (

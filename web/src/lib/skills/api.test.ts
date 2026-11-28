@@ -26,7 +26,7 @@ describe("skills API", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]![0]).toBe("/api/skills/custom/editor");
+    expect(fetchMock.mock.calls[0]![0]).toBe("/api/plugins/editor");
     expect(
       (fetchMock.mock.calls[0]![1]!.body as FormData).get("auto_enable")
     ).toBe("false");
@@ -74,7 +74,7 @@ describe("skills API", () => {
       failed: [{ skill_id: "skill-500", detail: "Connection lost" }],
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenLastCalledWith("/api/skills/bulk", {
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/plugins/bulk", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -966,8 +966,9 @@ describe("`@` skill mentions", () => {
       .mockImplementation(async () => new Response(JSON.stringify(skills)));
     try {
       const skillFetches = () =>
-        fetchSpy.mock.calls.filter(([url]) => url === "/api/skills/chat")
-          .length;
+        fetchSpy.mock.calls.filter(
+          ([url]) => url === "/api/plugins/chat-skills"
+        ).length;
       render(<Composer />);
       await waitFor(() => expect(skillFetches()).toBe(1));
 

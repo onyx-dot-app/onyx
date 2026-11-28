@@ -24,7 +24,7 @@ export async function createSkill(
   instructions: string,
   options: { publish?: boolean } = {}
 ): Promise<CreatedSkill> {
-  const res = await request.post("/api/skills/custom/editor", {
+  const res = await request.post("/api/plugins/editor", {
     multipart: {
       name,
       description: skillDescription(name),

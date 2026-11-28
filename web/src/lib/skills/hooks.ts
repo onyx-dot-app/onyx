@@ -91,7 +91,7 @@ export interface ChatSkillEntries {
   onInputFocus: () => void;
 }
 
-/** The skills that the user's chat agents get (`GET /api/skills/chat`).
+/** The skills that the user's chat agents get (`GET /api/plugins/chat-skills`).
  * Skill changes made in this app fetch them again (`lib/skills/cache.ts`).
  * Changes from elsewhere show after the chat input or the window gains focus,
  * at most once a minute. */

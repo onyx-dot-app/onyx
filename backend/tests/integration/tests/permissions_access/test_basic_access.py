@@ -37,7 +37,7 @@ ENDPOINTS: list[Endpoint] = [
     ("GET", "/notifications", None),
     ("GET", "/search-settings/get-all-search-settings", None),
     ("GET", "/user/pats", None),
-    ("GET", "/skills", None),
+    ("GET", "/plugins", None),
     ("GET", "/user/projects", None),
     ("GET", "/persona/labels", None),
     ("GET", "/tool", None),

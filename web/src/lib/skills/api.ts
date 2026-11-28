@@ -61,7 +61,7 @@ export async function uploadSkillBundles(
   const form = new FormData();
   for (const bundle of bundles) form.append("bundles", bundle);
   if (sharing) form.append("sharing", JSON.stringify(sharing));
-  return skillsFetch<GitHubSkillsImportResult>("/api/skills/custom/batch", {
+  return skillsFetch<GitHubSkillsImportResult>("/api/plugins/skill-bundles", {
     method: "POST",
     body: form,
   });
@@ -87,7 +87,7 @@ export async function bulkUpdateSkills(
   for (let offset = 0; offset < request.skill_ids.length; offset += batchSize) {
     const skill_ids = request.skill_ids.slice(offset, offset + batchSize);
     try {
-      const batch = await skillsFetch<BulkSkillResult>("/api/skills/bulk", {
+      const batch = await skillsFetch<BulkSkillResult>("/api/plugins/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...request, skill_ids }),
@@ -167,7 +167,7 @@ export async function createCustomSkillFromEditor(
   if (input.sharing) form.append("sharing", JSON.stringify(input.sharing));
   if (upload) form.append("upload", upload);
 
-  return skillsFetch<SkillEditableDetail>("/api/skills/custom/editor", {
+  return skillsFetch<SkillEditableDetail>("/api/plugins/editor", {
     method: "POST",
     body: form,
   });
@@ -220,7 +220,7 @@ export async function setSkillEnabled(
   enabled: boolean,
   replaceConflict = false
 ): Promise<Skill> {
-  return skillsFetch<Skill>(`/api/skills/${skillId}/enabled`, {
+  return skillsFetch<Skill>(`/api/plugins/${skillId}/enabled`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled, replace_conflict: replaceConflict }),
@@ -267,7 +267,7 @@ export async function inspectSkillBundle(
 ): Promise<SkillBundleContents> {
   const form = new FormData();
   form.append("upload", upload);
-  return skillsFetch<SkillBundleContents>("/api/skills/custom/bundle/inspect", {
+  return skillsFetch<SkillBundleContents>("/api/plugins/skill-bundle/inspect", {
     method: "POST",
     body: form,
   });

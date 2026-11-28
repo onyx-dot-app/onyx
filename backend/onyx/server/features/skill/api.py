@@ -160,7 +160,6 @@ from onyx.skills.push import (
     push_skills_and_commit,
 )
 
-user_router = APIRouter(prefix="/skills")
 plugin_router = APIRouter(prefix="/plugins")
 
 _BUNDLE_CLEANUP = "skill bundle cleanup"
@@ -375,7 +374,7 @@ def _replace_skill_bundle_from_editor(
     return _editable_skill_response(skill, user, db_session, created_version_id)
 
 
-@user_router.get("")
+@plugin_router.get("")
 def list_skills_for_current_user(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -384,7 +383,7 @@ def list_skills_for_current_user(
     return skills_list_response_for_user(rows, user, db_session)
 
 
-@user_router.get("/chat")
+@plugin_router.get("/chat-skills")
 def list_chat_skills_for_current_user(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -394,7 +393,7 @@ def list_chat_skills_for_current_user(
     return list_chat_skills(db_session, user, with_sandbox=HARNESS_SANDBOX_ENABLED)
 
 
-@user_router.post("/bulk")
+@plugin_router.post("/bulk")
 def bulk_update_skills(
     request: Annotated[
         SkillBulkShareRequest | SkillBulkActionRequest,
@@ -444,7 +443,7 @@ def bulk_update_skills(
     return SkillBulkResponse(succeeded=succeeded, failed=failed)
 
 
-@user_router.put("/{skill_id}/enabled")
+@plugin_router.put("/{skill_id}/enabled")
 def set_skill_enabled_for_current_user(
     skill_id: UUID,
     request: SkillEnableRequest,
@@ -518,7 +517,7 @@ def set_organization_library_default_access(
     )
 
 
-@user_router.get("/users-over-limit")
+@plugin_router.get("/users-over-limit")
 def list_users_over_skill_limit(
     _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
     db_session: Session = Depends(get_session),
@@ -532,7 +531,7 @@ def list_users_over_skill_limit(
     )
 
 
-@user_router.get("/{skill_id}")
+@plugin_router.get("/{skill_id}")
 def fetch_skill_for_current_user(
     skill_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -544,7 +543,7 @@ def fetch_skill_for_current_user(
     )
 
 
-@user_router.get("/{skill_id}/preview")
+@plugin_router.get("/{skill_id}/preview")
 def preview_skill_for_current_user(
     skill_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -578,7 +577,7 @@ def read_plugin_skill_for_current_user(
     )
 
 
-@user_router.post("/custom")
+@plugin_router.post("/skill-bundle")
 def create_custom_skill(
     bundle: UploadFile = File(...),
     auto_enable: Annotated[bool, Form()] = True,
@@ -607,7 +606,7 @@ def create_custom_skill(
     )
 
 
-@user_router.post("/custom/batch")
+@plugin_router.post("/skill-bundles")
 def create_custom_skills_batch(
     bundles: Annotated[list[UploadFile], File()],
     auto_enable: Annotated[bool, Form()] = True,
@@ -810,7 +809,7 @@ def save_plugin_upload(
     )
 
 
-@user_router.post("/custom/editor")
+@plugin_router.post("/editor")
 def create_custom_skill_from_editor(
     name: Annotated[str, Form(min_length=1)],
     description: Annotated[str, Form(min_length=1)],
@@ -889,7 +888,7 @@ def fetch_custom_skill_for_edit(
     return _editable_skill_response(skill, user, db_session)
 
 
-@user_router.post("/custom/bundle/inspect")
+@plugin_router.post("/skill-bundle/inspect")
 def inspect_custom_skill_bundle_upload(
     upload: UploadFile = File(...),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001

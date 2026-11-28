@@ -88,7 +88,7 @@ def _multipart_headers(user: DATestUser) -> dict[str, str]:
 
 def _upload(user: DATestUser, bundle: bytes, name: str) -> httpx.Response:
     return client.post(
-        f"{API_SERVER_URL}/skills/custom",
+        f"{API_SERVER_URL}/plugins/skill-bundle",
         files={
             "auto_enable": (None, "true", None),
             "bundle": (f"{name}.zip", io.BytesIO(bundle), "application/zip"),
@@ -164,7 +164,7 @@ def _batch_upload(
     if sharing is not None:
         files.append(("sharing", (None, json.dumps(sharing), None)))
     response = client.post(
-        f"{API_SERVER_URL}/skills/custom/batch",
+        f"{API_SERVER_URL}/plugins/skill-bundles",
         files=files,
         headers=_multipart_headers(user),
     )
@@ -228,7 +228,7 @@ def test_toggle_on_refused_with_usage() -> None:
     _fill(user, free_bytes=1 * _MB, free_files=100)
 
     response = client.put(
-        f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+        f"{API_SERVER_URL}/plugins/{skill.id}/enabled",
         json={"enabled": True},
         headers=user.headers,
     )
@@ -253,7 +253,7 @@ def test_admin_change_past_the_limit_is_not_refused(admin_user: DATestUser) -> N
     ).raise_for_status()
     assert skill.name in _custom_names(full)
     over = client.get(
-        f"{API_SERVER_URL}/skills/users-over-limit", headers=admin_user.headers
+        f"{API_SERVER_URL}/plugins/users-over-limit", headers=admin_user.headers
     )
     over.raise_for_status()
     assert full.id in {user["user_id"] for user in over.json()["users"]}
@@ -293,7 +293,7 @@ def test_already_over_user_is_not_refused() -> None:
     _fill(over, free_bytes=-1 * _MB, free_files=100)
 
     response = client.put(
-        f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+        f"{API_SERVER_URL}/plugins/{skill.id}/enabled",
         json={"enabled": True},
         headers=over.headers,
     )

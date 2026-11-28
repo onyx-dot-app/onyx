@@ -31,7 +31,7 @@ def test_bulk_organization_sharing_updates_every_selected_skill(
     skills = [SkillManager.create_custom(admin_user) for _ in range(3)]
     selected_ids = {skill.id for skill in skills}
     response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         headers=admin_user.headers,
         json={
             "skill_ids": [str(skill.id) for skill in skills],
@@ -60,7 +60,7 @@ def test_bulk_failure_does_not_undo_other_skills(
     own_skill = SkillManager.create_custom(basic_user)
     other_skill = SkillManager.create_custom(admin_user)
     response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         headers=basic_user.headers,
         json={
             "skill_ids": [str(own_skill.id), str(other_skill.id)],
@@ -92,7 +92,7 @@ def test_bulk_failure_after_write_rolls_back_only_that_skill(
 
     def share(skill_ids: list[str]) -> SkillBulkResponse:
         response = client.post(
-            f"{API_SERVER_URL}/skills/bulk",
+            f"{API_SERVER_URL}/plugins/bulk",
             headers=admin_user.headers,
             json={
                 "skill_ids": skill_ids,
@@ -107,7 +107,7 @@ def test_bulk_failure_after_write_rolls_back_only_that_skill(
         return SkillBulkResponse.model_validate(response.json())
 
     taken_share = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         headers=basic_user.headers,
         json={
             "skill_ids": [str(taken.id)],
@@ -136,7 +136,7 @@ def test_bulk_toggle_changes_only_current_users_preferences(
     skills = [SkillManager.create_custom(admin_user, is_public=True) for _ in range(2)]
     for action, expected in [("enable", True), ("disable", False)]:
         response = client.post(
-            f"{API_SERVER_URL}/skills/bulk",
+            f"{API_SERVER_URL}/plugins/bulk",
             headers=basic_user.headers,
             json={"skill_ids": [str(skill.id) for skill in skills], "action": action},
         )
@@ -155,7 +155,7 @@ def test_batch_upload_shares_at_creation_and_reports_invalid_bundles(
     headers = dict(admin_user.headers)
     headers.pop("Content-Type", None)
     response = client.post(
-        f"{API_SERVER_URL}/skills/custom/batch",
+        f"{API_SERVER_URL}/plugins/skill-bundles",
         headers=headers,
         files=[
             ("bundles", (f"{name}.zip", build_minimal_bundle(name), "application/zip"))
@@ -192,7 +192,7 @@ def test_bulk_sharing_keeps_existing_direct_access(
     )
     new_user = UserManager.create()
     response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         headers=admin_user.headers,
         json={
             "skill_ids": [str(skill.id)],
@@ -220,7 +220,7 @@ def test_bulk_delete_preserves_required_skill_for_non_admin(
     required_skill = SkillManager.create_custom(basic_user)
     ordinary_skill = SkillManager.create_custom(basic_user)
     policy_response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         headers=admin_user.headers,
         json={
             "skill_ids": [str(required_skill.id)],
@@ -231,7 +231,7 @@ def test_bulk_delete_preserves_required_skill_for_non_admin(
     policy_response.raise_for_status()
     assert SkillBulkResponse.model_validate(policy_response.json()).failed == []
     response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         headers=basic_user.headers,
         json={
             "skill_ids": [str(required_skill.id), str(ordinary_skill.id)],
@@ -247,6 +247,6 @@ def test_bulk_delete_preserves_required_skill_for_non_admin(
         == "REQUIRED"
     )
     missing = client.get(
-        f"{API_SERVER_URL}/skills/{ordinary_skill.id}", headers=basic_user.headers
+        f"{API_SERVER_URL}/plugins/{ordinary_skill.id}", headers=basic_user.headers
     )
     assert missing.status_code == 404

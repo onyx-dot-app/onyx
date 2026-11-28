@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const inspectPath = "/api/skills/custom/bundle/inspect";
+const inspectPath = "/api/plugins/skill-bundle/inspect";
 const instructions = "End of uploaded instructions.";
 const skillMd = Buffer.from(
   "---\nname: proxy-upload-regression\ndescription: Upload forwarding regression\n---\n\n" +

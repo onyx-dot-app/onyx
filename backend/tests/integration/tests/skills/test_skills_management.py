@@ -20,7 +20,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 def _assert_skill_hidden(skill_id: object, user: DATestUser) -> None:
     response = client.get(
-        f"{API_SERVER_URL}/skills/{skill_id}",
+        f"{API_SERVER_URL}/plugins/{skill_id}",
         headers=user.headers,
     )
     assert response.status_code == 404

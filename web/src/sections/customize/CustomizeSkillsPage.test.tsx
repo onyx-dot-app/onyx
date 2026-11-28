@@ -40,8 +40,8 @@ const off = customFixture({
 function open(chatSkills: ChatSkill[] = []) {
   window.history.replaceState(null, "", "/app/customize/skills");
   const fetchMock = mockFetch({
-    "/api/skills/chat": chatSkills,
-    "/api/skills": {
+    "/api/plugins/chat-skills": chatSkills,
+    "/api/plugins": {
       builtins: [builtinFixture({ id: "pptx", name: "pptx" })],
       customs: [
         off,
@@ -53,7 +53,7 @@ function open(chatSkills: ChatSkill[] = []) {
         }),
       ],
     },
-    "PUT /api/skills/off-skill/enabled": { ...off, enabled: true },
+    "PUT /api/plugins/off-skill/enabled": { ...off, enabled: true },
   });
   render(<CustomizeSkillsPage />);
   return fetchMock;
@@ -101,14 +101,14 @@ test("Turn on enables a skill that is off", async () => {
     within(mine).getByRole("button", { name: copy.menu.turnOn })
   );
   expect(
-    requestBody(fetchMock, "PUT", "/api/skills/off-skill/enabled")
+    requestBody(fetchMock, "PUT", "/api/plugins/off-skill/enabled")
   ).toEqual({ enabled: true, replace_conflict: false });
 });
 
 test("a synced skill names its marketplace and whether it is personal", async () => {
   window.history.replaceState(null, "", "/app/customize/skills");
   mockFetch({
-    "/api/skills": {
+    "/api/plugins": {
       builtins: [],
       customs: [
         customFixture({

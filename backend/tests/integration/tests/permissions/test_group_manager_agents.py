@@ -230,7 +230,7 @@ def test_manager_skill_list_is_scoped(env: _ScopedEnv) -> None:
         env.admin, is_public=False, group_ids=[env.other_group.id]
     )
     resp = call_endpoint(
-        "GET", "/skills", None, env.manager.headers, env.manager.cookies
+        "GET", "/plugins", None, env.manager.headers, env.manager.cookies
     )
     assert resp.status_code == 200, resp.text
     custom_ids = {c["id"] for c in resp.json()["customs"]}

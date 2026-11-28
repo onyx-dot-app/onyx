@@ -102,7 +102,7 @@ def test_invalid_skill_is_manageable_but_not_toggleable(
     assert invalid_skill.can_toggle is False
 
     response = client.put(
-        f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+        f"{API_SERVER_URL}/plugins/{skill.id}/enabled",
         json={"enabled": False},
         headers=admin_user.headers,
     )
