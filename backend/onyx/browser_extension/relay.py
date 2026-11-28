@@ -610,13 +610,20 @@ def normalize_origin(url: str) -> str | None:
         return None
     if parts.scheme not in ("http", "https") or not parts.hostname:
         return None
-    return f"{parts.scheme}://{parts.hostname}" + (f":{port}" if port else "")
+    # As a browser names the origin: no port when it is the scheme's default.
+    default_port = 443 if parts.scheme == "https" else 80
+    return f"{parts.scheme}://{parts.hostname}" + (
+        f":{port}" if port and port != default_port else ""
+    )
 
 
 def _target_origin(
     method: str, params: dict[str, JsonValue], grant: ChromeGrant
 ) -> str | None:
-    """The site that a call acts on, or None when it is not known."""
+    """The site that a call acts on, or None when it is not known. A status
+    call reads no page."""
+    if method == "status":
+        return None
     url = params.get("url")
     if method in ("open", "navigate") and isinstance(url, str):
         return normalize_origin(url)

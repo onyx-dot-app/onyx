@@ -468,8 +468,17 @@ def test_an_unknown_origin_needs_no_approval() -> None:
     browser = _browser(user_id, chat_id)
     assert browser.site_approval("act", {"tab": "9", "action": "click"}) is None
     assert browser.site_approval("open", {"url": "ftp://files.example"}) is None
-    assert browser.site_approval("status", {}) is not None
-    assert _browser(user_id, uuid4()).site_approval("status", {}) is None
+    # A status call reads no page, so it never asks.
+    assert browser.site_approval("status", {}) is None
+    assert (
+        _browser(user_id, uuid4()).site_approval("open", {"url": "a.example"}) is None
+    )
+
+
+def test_an_origin_drops_the_default_port() -> None:
+    assert relay.normalize_origin("https://a.example:443/x") == "https://a.example"
+    assert relay.normalize_origin("http://a.example:80") == "http://a.example"
+    assert relay.normalize_origin("http://a.example:8080") == "http://a.example:8080"
 
 
 def test_a_call_records_its_site_and_sends_the_allowed_sites() -> None:
