@@ -1,21 +1,21 @@
-"""Usage limits enforcement for cloud deployments.
+"""Usage limits for tenants that use Onyx's own LLM keys.
 
-A ``LimitPolicy`` is everything one plan allows: for each usage type, an
-``Allowance`` that says how much, over what window, whose usage counts, where
-the usage is read from, and which field of cloud's override record can replace
-the amount for one tenant. Every one of those can differ between policies.
-Cloud has two policies, trial and paid; the plan is picked per tenant.
+Each plan has a policy. A policy has one allowance per limit: how much is
+allowed, and over what period. Cloud has two plans, trial and paid. The
+playground has one plan for every tenant.
 
-``check_usage_and_raise`` is the one enforcement path; the entry points call it
-or ``check_llm_cost_limit_for_provider``.
+``check_usage_and_raise`` checks a limit. ``record_usage`` adds usage.
 
-An override is an absolute value that replaces the policy's amount, never an
-amount added to it. A value of ``NO_LIMIT`` (-1) means unlimited, 0 means
-nothing is allowed (the trial API-call default), and an unset override means
-"use the policy". A usage type a policy does not list is unlimited under it.
+Limit values:
+- -1 (``NO_LIMIT``) means no limit.
+- 0 means nothing is allowed.
+- A limit that a plan does not list is not limited on that plan.
+
+A tenant override replaces the plan's value. It is not added to it.
 """
 
 from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -25,7 +25,14 @@ from onyx.configs.app_configs import (
     OPENAI_DEFAULT_API_KEY,
     OPENROUTER_DEFAULT_API_KEY,
 )
-from onyx.db.usage import UsageLimitExceededError, UsageType, check_usage_limit
+from onyx.db import usage as tenant_usage_db
+from onyx.db.usage import (
+    UsageLimitExceededError,
+    UsagePeriod,
+    UsageType,
+    check_usage_limit,
+    current_calendar_period,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import (
@@ -41,14 +48,18 @@ from onyx.server.tenant_usage_limits import (
     TenantUsageLimitKeys,
     TenantUsageLimitOverrides,
 )
+from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import (
+    IS_PLAYGROUND,
     USAGE_LIMIT_API_CALLS_PAID,
     USAGE_LIMIT_API_CALLS_TRIAL,
     USAGE_LIMIT_CHUNKS_INDEXED_PAID,
+    USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND,
     USAGE_LIMIT_CHUNKS_INDEXED_TRIAL,
     USAGE_LIMIT_LLM_COST_CENTS_PAID,
+    USAGE_LIMIT_LLM_COST_CENTS_PLAYGROUND,
     USAGE_LIMIT_LLM_COST_CENTS_TRIAL,
     USAGE_LIMIT_NON_STREAMING_CALLS_PAID,
     USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL,
@@ -73,10 +84,14 @@ for key in [
         _ONYX_MANAGED_API_KEYS.add(key)
 
 
-# Cloud's window today: the calendar week.
+# Calendar week, Monday 00:00 UTC. The same for all tenants. Used by cloud.
 CALENDAR_WEEK = LimitWindow(
     anchor=WindowAnchor.CALENDAR, length_seconds=USAGE_LIMIT_WINDOW_SECONDS
 )
+# 7 days at a time, starting from the tenant's trial start.
+TENANT_WEEK = LimitWindow(anchor=WindowAnchor.TENANT_START, length_seconds=7 * 86400)
+# The whole trial. Never resets.
+WHOLE_TRIAL = LimitWindow(anchor=WindowAnchor.TENANT_START)
 
 
 def _weekly_tenant_counter(
@@ -91,8 +106,17 @@ def _weekly_tenant_counter(
     )
 
 
-# One line per limited usage type. Adding a limit to a plan is one line here;
-# removing it is deleting the line.
+def _tenant_counter(limit: int, window: LimitWindow) -> Allowance:
+    return Allowance(
+        limit=limit,
+        scope=LimitScope.TENANT,
+        measure=LimitMeasure.COUNTER,
+        window=window,
+    )
+
+
+# One line per limit. To add a limit to a plan, add a line. To remove it,
+# delete the line.
 CLOUD_TRIAL = LimitPolicy(
     name=LimitPolicyName.CLOUD_TRIAL,
     allowances={
@@ -132,36 +156,107 @@ CLOUD_PAID = LimitPolicy(
 )
 
 
-# TEMPORARY GUARD, replaced in the next PR of this stack (ENG-4479).
-# An allowance declares its window, but check_usage_limit and increment_usage in
-# onyx.db.usage do not read it yet: they always use the current CALENDAR_WEEK row.
-# A counter on any other window would be counted in the wrong row with no error,
-# so it is refused here until the counter takes its period from the
-# allowance on both the check and the increment side.
-def _counter_window_supported(allowance: Allowance) -> bool:
-    """The usage counter reads and writes only the current calendar period,
-    so a counter allowance must use exactly that window."""
-    return (
-        allowance.measure != LimitMeasure.COUNTER or allowance.window == CALENDAR_WEEK
-    )
+# Every playground tenant gets this plan. API calls are not limited here,
+# because messages sent with personal tokens count as messages.
+PLAYGROUND = LimitPolicy(
+    name=LimitPolicyName.PLAYGROUND,
+    allowances={
+        UsageType.LLM_COST: _tenant_counter(
+            USAGE_LIMIT_LLM_COST_CENTS_PLAYGROUND, TENANT_WEEK
+        ),
+        UsageType.CHUNKS_INDEXED: _tenant_counter(
+            USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND, WHOLE_TRIAL
+        ),
+    },
+)
 
 
-def _require_supported_windows(*policies: LimitPolicy) -> None:
-    for policy in policies:
-        for usage_type, allowance in policy.allowances.items():
-            if not _counter_window_supported(allowance):
-                raise ValueError(
-                    f"{policy.name.value}: {usage_type.value} uses a window the "
-                    "usage counter cannot read or write"
-                )
+def _require_cloud_plans_share_windows() -> None:
+    """``record_usage`` does not know if a cloud tenant is on trial or paid, so
+    it uses the trial plan's periods. This is only correct if both cloud plans
+    use the same period for each limit. Stop at startup if they do not."""
+    for usage_type in set(CLOUD_TRIAL.allowances) | set(CLOUD_PAID.allowances):
+        trial = CLOUD_TRIAL.allowances.get(usage_type)
+        paid = CLOUD_PAID.allowances.get(usage_type)
+        if (trial and trial.window) != (paid and paid.window):
+            raise ValueError(
+                f"Cloud trial and paid must use the same period for {usage_type.value}"
+            )
 
 
-_require_supported_windows(CLOUD_TRIAL, CLOUD_PAID)
+_require_cloud_plans_share_windows()
 
 
 def policy_for_plan(is_trial: bool) -> LimitPolicy:
-    """The policy a cloud tenant is held to, by its billing status."""
+    """The plan for a tenant. On the playground, always ``PLAYGROUND``."""
+    if IS_PLAYGROUND:
+        return PLAYGROUND
     return CLOUD_TRIAL if is_trial else CLOUD_PAID
+
+
+# The plan whose periods ``record_usage`` uses. On cloud, the trial plan: trial
+# and paid use the same periods, so we do not need to look up which one the
+# tenant is on.
+_INCREMENT_POLICY = PLAYGROUND if IS_PLAYGROUND else CLOUD_TRIAL
+
+
+def tenant_trial_start(tenant_id: str) -> datetime | None:  # noqa: ARG001
+    """When the tenant's trial started. Periods that count from the trial start
+    begin here.
+
+    Always None for now. The next PR in this stack reads the real date from the
+    control plane. Until then, those periods use the calendar week instead.
+    """
+    return None
+
+
+def period_for(
+    window: LimitWindow, tenant_id: str, now: datetime | None = None
+) -> UsagePeriod:
+    """The current period for this window. Checking and adding usage both use
+    this, so they always read and write the same row."""
+    now = now or datetime.now(timezone.utc)
+    if window.anchor == WindowAnchor.CALENDAR:
+        if window.length_seconds is None:
+            raise RuntimeError("A calendar period needs a length")
+        start = get_window_start(now, window.length_seconds)
+        return UsagePeriod(
+            anchor=WindowAnchor.CALENDAR,
+            start=start,
+            end=start + timedelta(seconds=window.length_seconds),
+        )
+
+    trial_start = tenant_trial_start(tenant_id)
+    if trial_start is None or trial_start.utcoffset() is None or trial_start > now:
+        # No usable trial start: use the calendar week. Expected until the next
+        # PR in this stack supplies the date, so nothing is logged here yet.
+        return current_calendar_period(now)
+    if window.length_seconds is None:
+        return UsagePeriod(anchor=WindowAnchor.TENANT_START, start=trial_start)
+    period_length = timedelta(seconds=window.length_seconds)
+    full_periods_passed = (now - trial_start) // period_length
+    start = trial_start + full_periods_passed * period_length
+    return UsagePeriod(
+        anchor=WindowAnchor.TENANT_START, start=start, end=start + period_length
+    )
+
+
+def record_usage(
+    db_session: Session,
+    usage_type: UsageType,
+    amount: float | int,
+    tenant_id: str,
+) -> None:
+    """Add usage to the row for the current period. The caller commits."""
+    allowance = _INCREMENT_POLICY.allowances.get(usage_type)
+    period = None
+    if (
+        allowance is not None
+        and allowance.measure == LimitMeasure.COUNTER
+        and allowance.window is not None
+    ):
+        period = period_for(allowance.window, tenant_id)
+    tenant_usage_db.increment_usage(db_session, usage_type, amount, period)
 
 
 """
@@ -247,6 +342,7 @@ def get_limit_for_usage_type(
     allowance = policy.allowances.get(usage_type)
     if allowance is None:
         return NO_LIMIT
+    # Playground overrides arrive in the next PR. Until then, the plan value applies.
     if tenant_id and allowance.override_field is not None:
         field_name = allowance.override_field.value
         override = _get_tenant_override(tenant_id, field_name)
@@ -301,21 +397,19 @@ def _measure_and_check(
     allowance: Allowance,
     limit: int,
     pending_amount: float | int,
+    tenant_id: str,
 ) -> None:
-    """Read the usage the allowance points at and raise
-    ``UsageLimitExceededError`` when usage plus ``pending_amount`` is over
-    ``limit``."""
-    # Temporary, see _counter_window_supported.
-    if not _counter_window_supported(allowance):
-        raise RuntimeError(
-            f"Bug: {usage_type.value} uses a window the usage counter cannot read"
-        )
+    """Read the current usage. Raise ``UsageLimitExceededError`` if usage plus
+    ``pending_amount`` is more than ``limit``."""
     if allowance.measure == LimitMeasure.COUNTER:
+        if allowance.window is None:
+            raise RuntimeError(f"The {usage_type.value} counter has no period set")
         check_usage_limit(
             db_session=db_session,
             usage_type=usage_type,
             limit=limit,
             pending_amount=pending_amount,
+            period=period_for(allowance.window, tenant_id),
         )
         return
     raise NotImplementedError(f"No measurement for {allowance.measure}")
@@ -377,7 +471,8 @@ def check_usage_and_raise(
     if not is_usage_limits_enabled():
         return
 
-    is_trial = is_tenant_on_trial_fn(tenant_id)
+    # Playground tenants have no billing plan, so do not look it up.
+    is_trial = True if IS_PLAYGROUND else is_tenant_on_trial_fn(tenant_id)
     allowance = policy_for_plan(is_trial).allowances.get(usage_type)
     if allowance is None:
         return
@@ -389,7 +484,9 @@ def check_usage_and_raise(
         return
 
     try:
-        _measure_and_check(db_session, usage_type, allowance, limit, pending_amount)
+        _measure_and_check(
+            db_session, usage_type, allowance, limit, pending_amount, tenant_id
+        )
     except UsageLimitExceededError as e:
         raise OnyxError(
             OnyxErrorCode.RATE_LIMITED, _refusal_detail(usage_type, is_trial, e)

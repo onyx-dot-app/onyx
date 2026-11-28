@@ -324,3 +324,12 @@ USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL = int(
 USAGE_LIMIT_NON_STREAMING_CALLS_PAID = int(
     os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_PAID", "160")
 )
+
+# Playground amounts (used only when IS_PLAYGROUND). Cost is per 7 days from the
+# tenant's trial start; chunks are for the whole trial.
+USAGE_LIMIT_LLM_COST_CENTS_PLAYGROUND = int(
+    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_PLAYGROUND", "5000")  # $50.00
+)
+USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND = int(
+    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_PLAYGROUND", "400000")
+)

@@ -139,23 +139,52 @@ card replace keeps a current reset and its baselines on the new row for the
 same bucket (`backend/ee/onyx/db/token_limit.py:replace_card_token_rate_limits`).
 
 **Tenant usage limits.** These are synchronous counters on `tenant_usage_counter`,
-one row per usage type per period (`backend/onyx/db/usage.py`). A period has
-a start, an end (none for a period that never ends) and what it follows
-(`WindowAnchor`). An add is one upsert statement, so concurrent adds are not
-lost. The old `tenant_usage` table is no longer read or written
-([TECH-DEBT](../TECH-DEBT.md)).
-`backend/onyx/server/usage_limits.py` holds one `LimitPolicy` per plan
-(`CLOUD_TRIAL`, `CLOUD_PAID`). A policy lists an `Allowance` per usage type: the
-amount, its window, whose usage counts, where the usage is read from, and the
-override-record field that replaces the amount for one tenant. Each of these can
-differ between policies, and a usage type a policy does not list is unlimited
-under it. The types are in `backend/onyx/server/models.py`. A counter allowance
-must use `CALENDAR_WEEK`, the only window the counter reads and writes for now
-([TECH-DEBT](../TECH-DEBT.md)); another window fails at import. Each check picks the plan from the trial status, reads a per-tenant
-override from the control plane
-(`backend/ee/onyx/server/tenant_usage_limits.py`, refreshed every 24 h), then
-falls back to the policy's amount. An override is an absolute value, not an
-amount added to the policy. Checks run before the increment, so the
+one row per usage type per period (`backend/onyx/db/usage.py`). An add is one
+upsert statement, so concurrent adds are not lost. The old `tenant_usage` table
+is no longer read or written ([TECH-DEBT](../TECH-DEBT.md)).
+
+- **Policies.** Each plan has one `LimitPolicy` in
+  `backend/onyx/server/usage_limits.py`: `CLOUD_TRIAL` and `CLOUD_PAID` on cloud,
+  and `PLAYGROUND` when `IS_PLAYGROUND` is set. The playground skips the billing
+  lookup. The types are in `backend/onyx/server/models.py`.
+- **Allowances.** A policy has one `Allowance` per limit: the amount, the window,
+  whose usage counts, where the usage is read from, and the override field that
+  can replace the amount. If a policy has no allowance for a usage type, that
+  usage type is not limited on that plan.
+- **Periods (windows).** Each `tenant_usage_counter` row holds a tenant's usage
+  of one usage type for one period: a start, an end (none for a period that
+  never ends) and what it follows (`WindowAnchor`). A new period gets a new row
+  that starts at zero; that is how a limit resets. Changing an allowance's
+  window therefore starts its count again. Each allowance's window says which period it uses:
+  - `CALENDAR`: the calendar week, Monday 00:00 UTC to the next Monday, the same
+    for every tenant. Used by cloud. A tenant that signs up on Wednesday is in the
+    week that started on Monday.
+  - `TENANT_START` with a length: periods start at this tenant's trial start. With
+    7 days and a trial that started Wednesday 14:07, the periods run Wednesday
+    14:07 to the next Wednesday 14:07, and so on. Used by the playground for LLM
+    cost.
+  - `TENANT_START` with no length: one period for the whole trial. Used by the
+    playground for chunks.
+
+  `TENANT_START` periods need the tenant's trial start, from
+  `tenant_trial_start`. It does not supply one yet, so today these periods use
+  the calendar week instead, the same as `CALENDAR`: playground cost and chunks
+  both reset every Monday until the trial start is read from the control plane
+  ([TECH-DEBT](../TECH-DEBT.md)).
+
+  The check (before an action) and `record_usage` (after it) both call
+  `period_for` to find the current period, so they always read and write the
+  same row.
+- **Adding usage.** Every place that adds usage calls `record_usage`. It uses the
+  cloud trial policy's windows and does no billing lookup, so both cloud plans
+  must use the same windows. This is checked when the module loads.
+- **Overrides.** On cloud, each check finds the plan from the trial status and
+  reads the tenant's override from the control plane
+  (`backend/ee/onyx/server/tenant_usage_limits.py`, refreshed every 24 h). If
+  there is no override, the policy's amount applies. An override replaces the
+  amount. It is not added to it.
+
+Checks run before the increment, so the
 rejected request is not counted. Docprocessing increments
 `UsageType.CHUNKS_INDEXED` after each batch, and a failed increment does not fail
 indexing. LLM enrichment at indexing (contextual RAG and image summarization)

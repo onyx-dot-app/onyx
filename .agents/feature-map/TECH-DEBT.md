@@ -59,20 +59,18 @@ link here from **Known issues** and do not restate the entry.
   handling in these files and `ApiShape.URL_PATTERN`.
 - **Owner:** rohoswagger. **Added:** 2026-11-24.
 
-## Usage-limit counters accept only `CALENDAR_WEEK`
+## Playground trial-start periods use the calendar week
 
-- **What:** A counter allowance on any window other than `CALENDAR_WEEK` is
-  refused at import and again before each check.
-- **Why:** An allowance declares its window, but the usage counter does not
-  read it yet: the check and the increment always use the current
-  calendar-week period. Another window would be counted in the wrong row with no
-  error.
-- **Where:** `backend/onyx/server/usage_limits.py:_counter_window_supported`,
-  called by `_require_supported_windows` and `_measure_and_check`.
-- **Ends when:** The next PR of the ENG-4479 stack passes the allowance's
-  period to `check_usage_limit` and `increment_usage`. Then the guard
-  checks only that the counter supports the window's anchor.
-- **Owner:** Subash-Mohan. **Added:** 2026-11-25.
+- **What:** `tenant_trial_start` returns nothing, so playground limits that
+  count from the trial start (LLM cost per 7 days, chunks for the whole trial)
+  use the calendar week instead. Both reset every Monday.
+- **Why:** The trial start comes from the control plane through a per-tenant
+  cache, which the next PR of the ENG-4479 stack adds.
+- **Where:** `backend/onyx/server/usage_limits.py:tenant_trial_start`, used by
+  `period_for`.
+- **Ends when:** `tenant_trial_start` reads the cached `trial_start`. That PR
+  also adds a per-tenant warning when the trial start is missing.
+- **Owner:** Subash-Mohan. **Added:** 2026-11-27.
 
 ## The old `tenant_usage` table is kept for one release
 

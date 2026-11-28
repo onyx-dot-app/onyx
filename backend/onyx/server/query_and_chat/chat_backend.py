@@ -175,7 +175,7 @@ from onyx.db.question_request import (
     get_response_question_requests,
     resolve_question_requests__no_commit,
 )
-from onyx.db.usage import UsageType, increment_usage
+from onyx.db.usage import UsageType
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -272,6 +272,7 @@ from onyx.server.query_and_chat.token_limit import (
 from onyx.server.usage_limits import (
     check_usage_and_raise,
     is_usage_limits_enabled,
+    record_usage,
 )
 from onyx.server.utils import get_json_line
 from onyx.tools.models import ToolOptions
@@ -1102,10 +1103,11 @@ def handle_send_chat_message(
                     tenant_id=tenant_id,
                     pending_amount=1,
                 )
-                increment_usage(
+                record_usage(
                     db_session=usage_db_session,
                     usage_type=UsageType.NON_STREAMING_API_CALLS,
                     amount=1,
+                    tenant_id=tenant_id,
                 )
                 usage_db_session.commit()
 
