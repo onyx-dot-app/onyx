@@ -1,0 +1,267 @@
+---
+title: "OpenAPI"
+description: "Turn a REST API with an OpenAPI schema into tools for Chat and custom agents"
+icon: "code"
+---
+
+An OpenAPI plugin connects Onyx to a REST API. You import an [OpenAPI](https://swagger.io/specification/) schema,
+or you type one line for each endpoint, and Onyx turns each operation into a tool.
+Agents read the operation descriptions and parameters to decide when and how to call the API.
+
+OpenAPI plugins work in default Chat, in custom agents, and in Craft. Craft has no tools for them.
+It sends HTTP requests to the base URL from its sandbox.
+The sandbox proxy adds the credentials and applies the policy of the action that each request matches.
+
+Users with the **Manage Actions** permission can add and edit OpenAPI plugins.
+Only full admins can change default Chat availability.
+
+Use an OpenAPI plugin for internal services, such as a ticket system or an inventory API, when no MCP server exists.
+
+## Add an OpenAPI plugin
+
+<Steps>
+  <Step title="Select a custom API">
+    Go to **Admin Panel → Integrations**, click **Add**, then select **Custom API**.
+  </Step>
+
+  <Step title="Enter a name and a URL">
+    Enter a **Name** and a **URL**, then click **Continue**. The URL can be one of these:
+
+    - The URL of an OpenAPI schema in JSON or YAML. Onyx imports it. A relative server URL in the schema
+    starts from the schema URL.
+    - A GraphQL endpoint. See [GraphQL APIs](#graphql-apis).
+    - The base URL of a REST API with no schema.
+
+    Onyx loads a schema URL or a GraphQL schema at the [SSRF
+    Protection](/admins/advanced_configs/security_hardening#ssrf-protection) level: by default it blocks private,
+    loopback, and link-local addresses. For an API on a private host,
+    upload the schema file or select **Allow Private Network**.
+
+    To use a schema file, click **Upload a spec file** and select a JSON or YAML file.
+    If the schema does not give one full server URL, enter the base URL of the API in **URL**. If you do not,
+    Onyx stays on this step and shows "Add the URL of the API. The spec does not give one." Onyx shows what it found,
+    for example "REST API, 12 endpoints".
+
+    If the schema has no server URL, more than one, or one that does not use http or https,
+    Onyx shows a **Base URL** field. It also shows the field for an uploaded schema with a URL in **URL**.
+    Make sure that it is the URL that Onyx must call, or enter a different one.
+
+    An imported schema must be OpenAPI 3. Onyx skips each operation that a tool cannot call:
+
+    - An operation with no `operationId`. Onyx uses it as the tool name.
+    - An operation with no `summary` or `description`. The agent reads it to know when to use the tool.
+    - An operation with a request body that is not `application/json`, for example a file upload.
+    - An operation with a method other than `GET`, `POST`, `PUT`, `PATCH` or `DELETE`.
+
+    Onyx shows the number of skipped operations, for example "REST API, 18 endpoints.
+    1 skipped." Open **Skipped endpoints** to see each one and the reason. If the schema is not OpenAPI 3,
+    or no operation is left, Onyx shows the error under the URL.
+    If the URL is not an OpenAPI schema or a GraphQL endpoint, Onyx treats it as a REST API with no schema.
+    If Onyx cannot reach the URL, it shows a warning with the reason. For example, the server does not answer,
+    answers with an error such as HTTP 404, or SSRF Protection blocks the URL. Check the URL,
+    or continue and add the API as a REST API with no schema. If the URL answers the OpenAPI check with more than 5 MB,
+    Onyx cannot check it for a schema and shows a warning. Continue and add the API as a REST API with no schema,
+    or upload a smaller schema file. If a GraphQL endpoint answers with a schema larger than 5 MB, Onyx shows an error.
+    Upload a smaller SDL file instead.
+
+    For an API with no schema, Onyx asks for one endpoint on each line in **Endpoints**:
+
+    ```text
+    GET /tickets/{id} Read a ticket
+    GET /tickets?status&limit List tickets
+    POST /tickets Create a ticket
+    ```
+
+    | Line part | Effect |
+    | --- | --- |
+    | `{name}` in the path | A required string parameter |
+    | `?a&b` after the path | Optional string query parameters `a` and `b`. Write a space in a name as `%20` |
+    | `POST`, `PUT` or `PATCH` | A JSON body that accepts any object |
+    | The text after the path | The name of the action |
+
+    Onyx makes the action key from the method and the path, and adds an eight-character suffix,
+    for example `get_tickets_id_c8e55555`. If a line is not correct, Onyx shows the error under the endpoints,
+    with the line number. The Onyx API server must be able to reach the base URL.
+  </Step>
+
+  <Step title="Set the sign-in">
+    Select a **Sign-in Mode**. Open **Advanced** to select the **Sign-in Method** and its fields.
+    See [Sign-in](#sign-in).
+  </Step>
+
+  <Step title="Add the plugin">
+    Select the **Owner** under **Advanced** if the dialog shows it, then click **Add**. Onyx opens the integration.
+    To add a description, open the **...** menu of the integration and select **Edit details**.
+    Users see the description in the integration list and on the integration page.
+    The agent reads the operations in the schema, not this description. To turn the integration on for each user,
+    so that default Chat uses it,
+    set its install setting to **Installed** or **Required** on **Admin Panel → Integrations**.
+    Only users with the organization-wide **Manage Actions** permission can change the install setting.
+  </Step>
+</Steps>
+
+## GraphQL APIs
+
+For a GraphQL API, enter the endpoint URL as the **URL**.
+Onyx sends an introspection query with no credentials and loads the schema.
+Onyx shows the number of queries and mutations that it found.
+If the endpoint does not allow introspection without sign-in,
+click **Upload a spec file** and select the schema as a `.graphql` file in GraphQL SDL.
+
+Each query and mutation root field becomes an action, with the key `query.<field>` or `mutation.<field>`.
+A query starts at **Allow** and a mutation starts at **Ask**. Subscriptions are not actions.
+
+The tool of an action takes the arguments of its root field. It also takes an optional `selection`,
+a GraphQL selection set such as `{ id title }`. Without a selection,
+the tool returns the scalar and enum fields of the result, one level deep.
+Onyx writes and sends a document for one root field only. The agent cannot send a document of its own.
+
+To change the schema, edit the **Schema** field on the **Configuration** tab.
+Onyx syncs the actions again when you save.
+
+## Sign-in
+
+| Sign-in Mode | Sign-in Method | Effect |
+| --- | --- | --- |
+| **No sign-in** | None | Onyx sends requests without credentials. |
+| **One account for the organization** | **API key** | Onyx adds the headers that you set, such as `Authorization: Bearer {api_key}`, to every request. An admin enters the values on the **Configuration** tab. All users share these credentials. |
+| **One account for the organization** | **OAuth** | An admin connects one account on the **Configuration** tab. |
+| **Each user signs in** | **API key** or **OAuth** | Each user connects their own account in [Customize → Integrations](/overview/core_features/plugins) before the agent can call the API for them. |
+| **Each user signs in** | **Onyx login** | Onyx sends the user's Onyx sign-in token to the API. Only an admin who manages actions for the whole organization can select it. |
+
+For **API key**, put each credential in braces in the **Header Value**. Each placeholder becomes a credential field.
+Click **Add Header** to send more headers.
+
+For **OAuth**, create an OAuth client in the provider with this redirect URI:
+
+```text
+https://<your-onyx-domain>/integrations/oauth/callback
+```
+
+An integration added before this URI keeps `/oauth-config/callback` until you enter a new client ID.
+
+Then enter the **Authorization URL**, **Token URL**, **Client ID**, and **Client Secret**. Optionally, enter **Scopes**.
+
+## Request placeholders
+
+Use these placeholders anywhere in the schema, for example in the server URL, a path, or a parameter default.
+Onyx replaces them with the values of the current request at call time.
+
+| Placeholder | Value |
+| --- | --- |
+| `CHAT_SESSION_ID` | The ID of the current chat session |
+| `MESSAGE_ID` | The ID of the current message |
+| `USER_ID` | The ID of the current user |
+| `USER_EMAIL` | The email address of the current user |
+
+## Manage the plugin
+
+| Tab | Contents |
+| --- | --- |
+| **Overview** | Name, description, owner, and **Install Setting**. The page header holds the on/off switch and, under **More actions**, **Edit details** and **Delete**. |
+| **Configuration** | **Import a Spec**, the base URL and the endpoints (or the endpoint URL and schema of a GraphQL API), the sign-in, and **Users Can Save Always Allow**. |
+| **Actions** | The operations that Onyx found in the schema, each with **Allow**, **Ask**, or **Blocked**. |
+
+<img className="rounded-image" src="/assets/admins/plugins/integration_openapi_actions_tab.webp" alt="The Actions tab with the operations from an OpenAPI schema"/>
+
+To add, remove, rename, or change an operation, edit the endpoints on the **Configuration** tab.
+Onyx applies the changed lines to the stored schema. An operation whose line did not change keeps its parameter types,
+body and description, and its action keeps its policy. A changed method or path makes a new action.
+For a schema that the lines cannot show, such as shared components,
+upload or import the changed schema in **Import a Spec**. Onyx fills in the base URL and the endpoints from it.
+Onyx syncs the actions again when you save. A schema can be at most 5 MB.
+
+Changing the install setting of the integration does not remove it from custom agents.
+To remove the integration from all agents, delete it from **More actions** in the page header.
+
+<Note>
+  In Terraform, `onyx_custom_tool.enabled` sets default Chat availability. It does not change custom-agent attachments.
+</Note>
+
+## Use the plugin in custom agents
+
+Open the agent editor and select **Add an integration** under **Actions**. See [Agents](/admins/agents/overview).
+
+## Example
+
+Use this schema to add a plugin that creates and gets agents in Onyx. Replace the server URL with your Onyx API URL.
+
+```json OpenAPI expandable
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Agents API",
+    "version": "1.0.0",
+    "description": "Minimal OpenAPI schema for creating and fetching agents in Onyx"
+  },
+  "servers": [
+    {
+      "url": "https://cloud.onyx.app/api"
+    }
+  ],
+  "paths": {
+    "/persona": {
+      "post": {
+        "summary": "Create Agent (Persona)",
+        "operationId": "create_persona",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "document_set_ids": {
+                    "type": "array",
+                    "items": { "type": "integer" }
+                  },
+                  "is_public": { "type": "boolean" },
+                  "tool_ids": {
+                    "type": "array",
+                    "items": { "type": "integer" }
+                  },
+                  "system_prompt": { "type": "string" },
+                  "task_prompt": { "type": "string" },
+                  "datetime_aware": { "type": "boolean" }
+                },
+                "required": [
+                  "name",
+                  "description",
+                  "document_set_ids",
+                  "is_public",
+                  "tool_ids",
+                  "system_prompt",
+                  "task_prompt",
+                  "datetime_aware"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Created" }
+        }
+      }
+    },
+    "/persona/{persona_id}": {
+      "get": {
+        "summary": "Get Agent (Persona) By ID",
+        "operationId": "get_persona",
+        "parameters": [
+          {
+            "name": "persona_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  }
+}
+```
