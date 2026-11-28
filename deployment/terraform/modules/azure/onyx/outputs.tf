@@ -153,3 +153,13 @@ output "client_key" {
   value       = module.aks.client_key
   sensitive   = true
 }
+
+output "craft_sandbox_runtime" {
+  description = "Sandbox runtime of the sandbox pool: \"firecracker\" or \"pod\". Null when enable_sandbox_node_pool is false."
+  value       = module.aks.craft_sandbox_runtime
+}
+
+output "sandbox_helm_values" {
+  description = "Onyx Helm chart values (YAML) that match the sandbox pool. Pass them with -f to helm install or helm upgrade."
+  value       = module.aks.sandbox_helm_values
+}

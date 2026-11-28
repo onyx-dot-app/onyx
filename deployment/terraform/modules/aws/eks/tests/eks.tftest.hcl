@@ -75,12 +75,122 @@ run "defaults_plan" {
   }
 }
 
+run "default_sandbox_group_is_firecracker" {
+  command = plan
+
+  assert {
+    condition = (
+      local.craft_sandbox_runtime == "firecracker" &&
+      local.craft_sandbox_node_groups.sandbox.labels["onyx.app/kvm"] == "true" &&
+      local.craft_sandbox_node_groups.sandbox.cpu_options.nested_virtualization == "enabled" &&
+      local.craft_sandbox_node_groups.sandbox.capacity_type == "ON_DEMAND"
+    )
+    error_message = "By default the module must create a Firecracker sandbox group on the KVM-capable m8i.2xlarge type."
+  }
+
+  assert {
+    condition = (
+      local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.iops == 6000 &&
+      local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.throughput == 500
+    )
+    error_message = "Firecracker sandbox disks default to the tested 6000 IOPS and 500 MiB/s."
+  }
+
+  assert {
+    condition     = output.craft_sandbox_runtime == "firecracker" && yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "auto"
+    error_message = "A Firecracker group must output craft.sandboxRuntime: auto, so the chart picks Firecracker from the registered nodes."
+  }
+
+  assert {
+    condition     = length(local.craft_pod_sandbox_node_groups) == 0
+    error_message = "The pod sandbox group stays off by default."
+  }
+}
+
+run "auto_metal_is_firecracker" {
+  command = plan
+  variables {
+    craft_sandbox_node_instance_types = ["m7i.metal-24xl"]
+  }
+
+  assert {
+    condition     = local.craft_sandbox_firecracker && !contains(keys(local.craft_sandbox_node_groups.sandbox), "cpu_options")
+    error_message = "auto must pick Firecracker on Intel .metal types, with no nested virtualization flag."
+  }
+}
+
+run "auto_falls_back_to_pod" {
+  command = plan
+  variables {
+    craft_sandbox_node_instance_types   = ["m7i.2xlarge"]
+    enable_craft_pod_sandbox_node_group = true
+  }
+
+  assert {
+    condition = (
+      local.craft_sandbox_runtime == "pod" &&
+      !contains(keys(local.craft_sandbox_node_groups.sandbox.labels), "onyx.app/kvm") &&
+      !contains(keys(local.craft_sandbox_node_groups.sandbox), "cpu_options") &&
+      local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.iops == 3000
+    )
+    error_message = "auto must pick the pod runtime on types without /dev/kvm, with pod disk defaults."
+  }
+
+  assert {
+    condition     = length(local.craft_pod_sandbox_node_groups) == 0
+    error_message = "The extra pod sandbox group must not be made when auto picks the pod runtime."
+  }
+
+  assert {
+    condition     = yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "pod"
+    error_message = "A pod-runtime group must output craft.sandboxRuntime: pod."
+  }
+}
+
+run "auto_mixed_metal_and_nested_is_pod" {
+  command = plan
+  variables {
+    craft_sandbox_node_instance_types = ["m8i.2xlarge", "m7i.metal-24xl"]
+  }
+
+  assert {
+    condition     = local.craft_sandbox_runtime == "pod"
+    error_message = "auto must not pick Firecracker for a mix of metal and nested types."
+  }
+}
+
+run "sandbox_group_off" {
+  command = plan
+  variables {
+    enable_craft = false
+  }
+
+  assert {
+    condition = (
+      length(local.craft_sandbox_node_groups) == 0 &&
+      output.craft_sandbox_runtime == null &&
+      yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "auto"
+    )
+    error_message = "enable_craft = false must make no sandbox group and keep the chart default runtime."
+  }
+}
+
+run "rejects_resolved_throughput_above_gp3_ratio" {
+  command = plan
+  variables {
+    craft_sandbox_runtime              = "pod"
+    craft_sandbox_node_disk_throughput = 1000
+  }
+  expect_failures = [terraform_data.craft_sandbox_disk_check]
+}
+
 run "optional_node_groups_and_addons_plan" {
   command = plan
 
   variables {
     enable_gpu_node       = true
     enable_craft          = true
+    craft_sandbox_runtime = "pod"
     enable_network_policy = true
   }
 
@@ -104,7 +214,7 @@ run "optional_node_groups_and_addons_plan" {
       !contains(keys(local.craft_sandbox_node_groups.sandbox), "cpu_options") &&
       !contains(keys(local.craft_sandbox_node_groups.sandbox), "capacity_type")
     )
-    error_message = "The default pod runtime must leave the sandbox node group unchanged: no kvm label, cpu_options or capacity_type."
+    error_message = "The pod runtime must leave the sandbox node group unchanged: no kvm label, cpu_options or capacity_type."
   }
 
   assert {
@@ -124,7 +234,7 @@ run "optional_node_groups_and_addons_plan" {
       local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.iops == 3000 &&
       local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.throughput == 125
     )
-    error_message = "Default sandbox disk IOPS and throughput must stay at 3000 and 125."
+    error_message = "Pod-runtime sandbox disk IOPS and throughput must stay at 3000 and 125."
   }
 }
 
@@ -276,6 +386,7 @@ run "pod_runtime_accepts_any_type" {
   command = plan
   variables {
     enable_craft                      = true
+    craft_sandbox_runtime             = "pod"
     craft_sandbox_node_instance_types = ["m7a.2xlarge"]
   }
 
@@ -363,6 +474,7 @@ run "pod_sandbox_group_needs_firecracker" {
   command = plan
   variables {
     enable_craft                        = true
+    craft_sandbox_runtime               = "pod"
     enable_craft_pod_sandbox_node_group = true
   }
   expect_failures = [var.enable_craft_pod_sandbox_node_group]

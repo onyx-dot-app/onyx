@@ -98,7 +98,8 @@ run "index_pool_can_be_turned_off" {
   command = plan
 
   variables {
-    index_node_pool_enabled = false
+    index_node_pool_enabled  = false
+    enable_sandbox_node_pool = false
   }
 
   assert {
@@ -131,11 +132,72 @@ run "optional_pools_are_tainted_and_labelled" {
   }
 }
 
-run "the_sandbox_pool_runs_pods_by_default" {
+run "the_default_sandbox_pool_is_firecracker" {
+  command = plan
+
+  assert {
+    condition = (
+      azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_labels["onyx.app/kvm"] == "true" &&
+      azurerm_kubernetes_cluster_node_pool.this["sandbox"].os_sku == "Ubuntu2404" &&
+      contains(azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_taints, "onyx.app/kvm=true:NoSchedule")
+    )
+    error_message = "By default the sandbox pool must run Firecracker on the KVM-capable Standard_D8ds_v5 size."
+  }
+
+  assert {
+    condition     = output.craft_sandbox_runtime == "firecracker" && yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "auto"
+    error_message = "A Firecracker pool must output craft.sandboxRuntime: auto, so the chart picks Firecracker from the registered nodes."
+  }
+
+  assert {
+    condition     = !contains(keys(azurerm_kubernetes_cluster_node_pool.this), "sandboxpod")
+    error_message = "The pod sandbox pool stays off by default."
+  }
+}
+
+run "auto_falls_back_to_pod_without_kvm" {
+  command = plan
+
+  variables {
+    sandbox_node_vm_size               = "Standard_D8as_v5"
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  assert {
+    condition = (
+      output.craft_sandbox_runtime == "pod" &&
+      yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "pod" &&
+      !contains(keys(azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_labels), "onyx.app/kvm") &&
+      azurerm_kubernetes_cluster_node_pool.this["sandbox"].os_sku == "Ubuntu" &&
+      !contains(keys(azurerm_kubernetes_cluster_node_pool.this), "sandboxpod")
+    )
+    error_message = "auto must pick the pod runtime on an AMD size and make no extra pod sandbox pool."
+  }
+}
+
+run "the_sandbox_pool_can_be_turned_off" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = false
+  }
+
+  assert {
+    condition = (
+      !contains(keys(azurerm_kubernetes_cluster_node_pool.this), "sandbox") &&
+      output.craft_sandbox_runtime == null &&
+      yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "auto"
+    )
+    error_message = "enable_sandbox_node_pool = false must make no sandbox pool and keep the chart default runtime."
+  }
+}
+
+run "the_pod_runtime_runs_pods" {
   command = plan
 
   variables {
     enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "pod"
   }
 
   assert {
@@ -262,6 +324,7 @@ run "pod_sandbox_pool_needs_firecracker" {
 
   variables {
     enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "pod"
     enable_craft_pod_sandbox_node_pool = true
   }
 
@@ -272,6 +335,7 @@ run "pod_sandbox_pool_needs_the_sandbox_pool" {
   command = plan
 
   variables {
+    enable_sandbox_node_pool           = false
     craft_sandbox_runtime              = "firecracker"
     enable_craft_pod_sandbox_node_pool = true
   }
@@ -614,7 +678,8 @@ run "pools_sharing_a_prefix_still_get_distinct_rotation_names" {
       workera = { vm_size = "Standard_D8ds_v5" }
       workerb = { vm_size = "Standard_D8ds_v5" }
     }
-    index_node_pool_enabled = false
+    index_node_pool_enabled  = false
+    enable_sandbox_node_pool = false
   }
 
   assert {

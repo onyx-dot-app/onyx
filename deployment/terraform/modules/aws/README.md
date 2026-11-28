@@ -265,7 +265,10 @@ Inputs (common):
 - Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
 - `alarm_actions`: SNS topic ARNs for the CloudWatch alarms created by the data-plane modules. Empty (the default) leaves the alarms in place but notifying nothing
 - `manage_core_addons` (default false): set true for a new cluster. See "Core addons on new clusters" under `eks`
-- Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`, `enable_craft`
+- Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`
+- `enable_craft` (default true): the sandbox node group. With the default
+  `craft_sandbox_runtime = "auto"` it is a Firecracker group. See "Craft
+  sandboxes on Firecracker" below
 - `enable_sandbox_archive_bucket` (default false): a bucket for Craft sandbox
   session archives. See "Sandbox archive bucket" below
 
@@ -368,6 +371,18 @@ true. The bucket holds Craft sandbox session archives:
 
 These modules were realigned with the versions Onyx runs in production. If you
 applied an earlier revision, note the following before your next `terraform apply`.
+
+**Onyx v6: the sandbox node group is on by default.** `enable_craft` now
+defaults to true and `craft_sandbox_runtime` to `"auto"`, which picks
+Firecracker on the default `m8i.2xlarge`. The sandbox disk IOPS and throughput
+now default to 6000 and 500 with Firecracker. Before you apply:
+
+- For no sandbox nodes, set `enable_craft = false`.
+- To keep an existing pod sandbox group, set `craft_sandbox_runtime = "pod"`.
+  Otherwise the group gets the `onyx.app/kvm` taint and EKS rolls its nodes,
+  and pod sandboxes no longer schedule there.
+- To keep the old disk values, set `craft_sandbox_node_disk_iops = 3000` and
+  `craft_sandbox_node_disk_throughput = 125`.
 
 **Renamed resources are handled for you.** The modules ship `moved` blocks that
 relabel state in place, so the plan shows moves rather than destroy/create:
@@ -481,7 +496,7 @@ Terraform creates the AWS resources for Craft. Helm creates the Craft Kubernetes
 objects. With `ENABLE_CRAFT=true`, the chart creates the `onyx-sandboxes` namespace, the `sandbox`
 ServiceAccount, the sandbox RBAC, the sandbox proxy, and the sandbox NetworkPolicies.
 
-- **Sandbox nodes.** `enable_craft = true` adds a node group labeled
+- **Sandbox nodes.** `enable_craft` (default true) adds a node group labeled
   `onyx.app/workload=sandbox` and tainted `workload=sandbox:NoSchedule`, with IMDSv2
   and hop limit 1. Sandbox pods select that label and tolerate that taint.
   Other nodes with the same label, taint, and IMDS settings also work.
@@ -517,18 +532,44 @@ that the VPC CNI left, then run destroy again.
 
 ### Craft sandboxes on Firecracker
 
-Craft can run each sandbox as a Firecracker microVM instead of a pod. This
-needs `/dev/kvm` on the sandbox nodes. Set it on the sandbox node group:
+Chat sandbox tools and Craft run each sandbox as a Firecracker microVM. This
+needs `/dev/kvm` on the sandbox nodes. The defaults make a Firecracker group:
 
 ```hcl
-enable_craft                       = true
-craft_sandbox_runtime              = "firecracker"
-craft_sandbox_node_instance_types  = ["m8i.2xlarge"]
-craft_sandbox_node_disk_iops       = 6000
-craft_sandbox_node_disk_throughput = 500
+enable_craft                      = true           # default
+craft_sandbox_runtime             = "auto"         # default
+craft_sandbox_node_instance_types = ["m8i.2xlarge"] # default
 ```
 
-With `"firecracker"`, the `eks` module:
+`"auto"` picks `"firecracker"` when every type in
+`craft_sandbox_node_instance_types` can run it (see the table below), and
+`"pod"` when one cannot. Set `"firecracker"` to make the plan fail on a type
+that cannot run it. Set `"pod"` to keep a pod sandbox group. Set
+`enable_craft = false` for no sandbox nodes.
+
+The `craft_sandbox_runtime` output gives the runtime that the module picked.
+The `sandbox_helm_values` output gives the Onyx chart values that match it, so
+you set the runtime in Terraform only. Expose it in your root module:
+
+```hcl
+output "sandbox_helm_values" {
+  value = module.onyx.sandbox_helm_values
+}
+```
+
+Then pass it to Helm:
+
+```bash
+terraform output -raw sandbox_helm_values > sandbox-values.yaml
+helm upgrade --install onyx onyx/onyx -n onyx -f values.yaml -f sandbox-values.yaml
+```
+
+For a Firecracker group the output is `craft.sandboxRuntime: auto`, the chart
+default. The chart then runs the host agent on the `onyx.app/kvm=true` nodes.
+The chart defaults select and tolerate the labels and taints below, so you set
+no node values.
+
+With the Firecracker runtime, the `eks` module:
 
 - turns on nested virtualization in the launch template (non-metal types only);
 - adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
@@ -562,13 +603,12 @@ the prepuller pod on that node, and check that no such pod is left:
 kubectl get pods -n onyx-sandboxes -o wide --field-selector spec.nodeName=<firecracker node>
 ```
 
-The default, `"pod"`, leaves the group as it is. A change to
-`craft_sandbox_runtime` makes a new launch template version (user data, and
-nested virtualization on non-metal types), so EKS rolls the sandbox nodes.
-`craft_sandbox_node_disk_iops` and `_throughput` set the gp3 root
-volume (defaults 3000 and 125). The tested values for Firecracker are 6000 and
-500 MiB/s. The AL2023 root filesystem is XFS with reflink, so no extra disk is
-needed.
+A change of the picked runtime makes a new launch template version (user data,
+and nested virtualization on non-metal types), so EKS rolls the sandbox nodes.
+`craft_sandbox_node_disk_iops` and `_throughput` set the gp3 root volume. Null
+(the default) gives the tested Firecracker values, 6000 IOPS and 500 MiB/s, and
+3000 and 125 for the pod runtime. The AL2023 root filesystem is XFS with
+reflink, so no extra disk is needed.
 
 Node requirements:
 
@@ -580,9 +620,9 @@ Node requirements:
 | Capacity | On-demand | Spot |
 | `vm.max_map_count` | `1048576` or more (set by the module) | The AL2023 default `524288` |
 
-The module refuses a blocked type, and a group that mixes `.metal` and
-nested virtualization types. Keep `craft_sandbox_runtime = "pod"` on Graviton,
-AMD, or older Intel non-metal sandbox nodes.
+With `"firecracker"`, the module refuses a blocked type, and a group that
+mixes `.metal` and nested virtualization types. With `"auto"`, these groups get
+the pod runtime.
 
 ## Workflow tips
 - First apply can be infra-only; once EKS is active, install the Helm chart.

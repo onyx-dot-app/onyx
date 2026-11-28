@@ -367,8 +367,8 @@ variable "gpu_node_instance_types" {
 
 variable "enable_craft" {
   type        = bool
-  description = "Create a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1). Opt-in per workspace."
-  default     = false
+  description = "Create the sandbox node group (label onyx.app/workload=sandbox, taint workload=sandbox:NoSchedule, IMDSv2 hop limit 1). Chat sandbox tools and Craft run their sandboxes there. Set false for no sandbox nodes."
+  default     = true
 }
 
 variable "craft_sandbox_node_instance_types" {
@@ -403,25 +403,25 @@ variable "craft_sandbox_node_disk_size_gb" {
 
 variable "craft_sandbox_node_disk_iops" {
   type        = number
-  description = "Provisioned IOPS for the gp3 root volume of Craft sandbox nodes. 6000 is the tested value for Firecracker sandboxes."
-  default     = 3000
+  description = "Provisioned IOPS for the gp3 root volume of Craft sandbox nodes. Null uses 6000 (the tested value) with the Firecracker runtime and 3000 with the pod runtime."
+  default     = null
 }
 
 variable "craft_sandbox_node_disk_throughput" {
   type        = number
-  description = "Provisioned throughput (MiB/s) for the gp3 root volume of Craft sandbox nodes. 500 is the tested value for Firecracker sandboxes."
-  default     = 125
+  description = "Provisioned throughput (MiB/s) for the gp3 root volume of Craft sandbox nodes. Null uses 500 (the tested value) with the Firecracker runtime and 125 with the pod runtime."
+  default     = null
 }
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "How Craft sandboxes run: \"pod\" (default) or \"firecracker\". \"firecracker\" needs Intel c8i, m8i or r8i (or -flex) or Intel .metal craft_sandbox_node_instance_types. The eks module checks the types."
-  default     = "pod"
+  description = "How sandboxes run: \"auto\" (default), \"pod\" or \"firecracker\". \"firecracker\" needs Intel c8i, m8i or r8i (or -flex) or Intel .metal craft_sandbox_node_instance_types. \"auto\" picks \"firecracker\" when the types support it, else \"pod\". The eks module checks the types."
+  default     = "auto"
 }
 
 variable "enable_craft_pod_sandbox_node_group" {
   type        = bool
-  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox node group without the onyx.app/kvm taint. Pod sandboxes and the image prepuller run there."
+  description = "With the Firecracker runtime, also create a small pod sandbox node group without the onyx.app/kvm taint. Pod sandboxes and the image prepuller run there."
   default     = false
 }
 

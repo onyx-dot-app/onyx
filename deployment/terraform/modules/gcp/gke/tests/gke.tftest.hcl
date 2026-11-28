@@ -144,8 +144,8 @@ run "default_pools_are_main_and_index" {
   command = plan
 
   assert {
-    condition     = toset(keys(google_container_node_pool.this)) == toset(["main", "index"])
-    error_message = "By default only main and the document-index pool should exist."
+    condition     = toset(keys(google_container_node_pool.this)) == toset(["main", "index", "sandbox"])
+    error_message = "By default main, the document-index pool and the sandbox pool should exist."
   }
 
   assert {
@@ -255,7 +255,8 @@ run "index_pool_can_be_turned_off" {
   command = plan
 
   variables {
-    index_node_pool_enabled = false
+    index_node_pool_enabled  = false
+    enable_sandbox_node_pool = false
   }
 
   assert {
@@ -270,6 +271,7 @@ run "optional_pools_are_tainted_and_labelled" {
   variables {
     enable_gpu_node_pool     = true
     enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "pod"
   }
 
   assert {
@@ -348,21 +350,101 @@ run "gvisor_can_be_turned_on" {
   }
 }
 
-run "the_sandbox_pool_runs_pods_by_default" {
+run "the_default_sandbox_pool_is_firecracker" {
+  command = plan
+
+  assert {
+    condition     = one(google_container_node_pool.this["sandbox"].node_config[0].advanced_machine_features).enable_nested_virtualization == true
+    error_message = "By default the sandbox pool must run Firecracker on the KVM-capable n2-standard-8 type."
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandbox"].node_config[0].labels["onyx.app/kvm"] == "true"
+    error_message = "The default sandbox pool must carry the onyx.app/kvm label the host agent selects."
+  }
+
+  assert {
+    condition     = length(google_service_account.workload) == 1
+    error_message = "The default Firecracker pool needs the GCS signing service account."
+  }
+
+  assert {
+    condition     = output.craft_sandbox_runtime == "firecracker" && yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "auto"
+    error_message = "A Firecracker pool must output craft.sandboxRuntime: auto, so the chart picks Firecracker from the registered nodes."
+  }
+}
+
+run "auto_falls_back_to_pod_without_kvm" {
+  command = plan
+
+  variables {
+    sandbox_node_machine_type          = "n2d-standard-8"
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  assert {
+    condition = (
+      output.craft_sandbox_runtime == "pod" &&
+      length(google_container_node_pool.this["sandbox"].node_config[0].advanced_machine_features) == 0 &&
+      !contains(keys(google_container_node_pool.this["sandbox"].node_config[0].labels), "onyx.app/kvm") &&
+      !contains(keys(google_container_node_pool.this), "sandboxpod")
+    )
+    error_message = "auto must pick the pod runtime on an AMD type and make no extra pod sandbox pool."
+  }
+}
+
+run "auto_falls_back_to_pod_with_gvisor" {
+  command = plan
+
+  variables {
+    sandbox_gvisor_enabled = true
+  }
+
+  assert {
+    condition     = output.craft_sandbox_runtime == "pod"
+    error_message = "A gVisor pool has no /dev/kvm, so auto must pick the pod runtime."
+  }
+}
+
+run "the_sandbox_pool_can_be_turned_off" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = false
+  }
+
+  assert {
+    condition = (
+      !contains(keys(google_container_node_pool.this), "sandbox") &&
+      output.craft_sandbox_runtime == null &&
+      yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "auto" &&
+      length(google_service_account.workload) == 0
+    )
+    error_message = "enable_sandbox_node_pool = false must make no sandbox pool and keep the chart default runtime."
+  }
+}
+
+run "the_pod_runtime_runs_pods" {
   command = plan
 
   variables {
     enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "pod"
   }
 
   assert {
     condition     = length(google_container_node_pool.this["sandbox"].node_config[0].advanced_machine_features) == 0
-    error_message = "Nested virtualization stays off unless craft_sandbox_runtime asks for Firecracker."
+    error_message = "Nested virtualization stays off with the pod runtime."
   }
 
   assert {
     condition     = length(google_container_node_pool.this["sandbox"].node_config[0].linux_node_config) == 0
-    error_message = "The default pool gets no sysctls."
+    error_message = "A pod-runtime pool gets no sysctls."
+  }
+
+  assert {
+    condition     = output.craft_sandbox_runtime == "pod" && yamldecode(output.sandbox_helm_values).craft.sandboxRuntime == "pod"
+    error_message = "A pod-runtime pool must output craft.sandboxRuntime: pod."
   }
 
   assert {
@@ -555,6 +637,7 @@ run "pod_sandbox_pool_needs_firecracker" {
 
   variables {
     enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "pod"
     enable_craft_pod_sandbox_node_pool = true
   }
 
@@ -565,6 +648,7 @@ run "pod_sandbox_pool_needs_the_sandbox_pool" {
   command = plan
 
   variables {
+    enable_sandbox_node_pool           = false
     craft_sandbox_runtime              = "firecracker"
     enable_craft_pod_sandbox_node_pool = true
   }
@@ -739,6 +823,11 @@ run "a_long_cluster_name_still_gives_a_valid_node_account_id" {
 run "the_workload_principal_names_the_service_account" {
   command = plan
 
+  # The pod runtime keeps the direct principal; Firecracker maps a Google account.
+  variables {
+    craft_sandbox_runtime = "pod"
+  }
+
   override_resource {
     target          = google_container_cluster.this
     override_during = plan
@@ -766,6 +855,11 @@ run "the_workload_principal_names_the_service_account" {
 run "the_namespace_is_created_before_the_service_account" {
   command = plan
 
+  # The pod runtime keeps the direct principal; Firecracker maps a Google account.
+  variables {
+    craft_sandbox_runtime = "pod"
+  }
+
   assert {
     condition     = kubernetes_namespace.workload[0].metadata[0].name == "onyx"
     error_message = "On a fresh cluster nothing else has made the namespace, and the service account cannot exist without it."
@@ -784,11 +878,12 @@ run "the_namespace_is_created_before_the_service_account" {
   }
 }
 
-run "the_default_runtime_creates_no_google_service_account" {
+run "the_pod_runtime_creates_no_google_service_account" {
   command = plan
 
   variables {
     enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "pod"
   }
 
   assert {
@@ -877,6 +972,7 @@ run "the_namespace_can_be_left_to_something_else" {
   variables {
     create_workload_namespace = false
     workload_namespace        = "onyx-prod"
+    craft_sandbox_runtime     = "pod"
   }
 
   assert {

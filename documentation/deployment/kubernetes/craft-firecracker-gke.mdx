@@ -82,7 +82,8 @@ The `WARN filesystem` line for the ext4 root disk is also expected.
 
 ## Option 1: Onyx Terraform modules
 
-The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/deployment/cloud/gcp) for the full module.
+The `gcp/onyx` module makes the Firecracker sandbox pool by default. See [Google Cloud](/deployment/cloud/gcp)
+for the full module.
 
 <Steps>
   <Step title="Set the sandbox pool variables">
@@ -93,12 +94,16 @@ The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/de
       source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/gcp/onyx?ref=<tag>"
       # ... your existing settings
 
-      enable_sandbox_node_pool = true
-      craft_sandbox_runtime    = "firecracker"
+      # Defaults: a Firecracker sandbox pool of n2-standard-8.
+      # enable_sandbox_node_pool = true
+      # craft_sandbox_runtime    = "auto"
     }
     ```
 
-    With `craft_sandbox_runtime = "firecracker"`, the `gke` module:
+    `craft_sandbox_runtime = "auto"` picks Firecracker on the default `n2` machine type.
+    Set `"firecracker"` to make the plan fail on a pool that cannot run it.
+
+    With the Firecracker runtime, the `gke` module:
 
     - turns on nested virtualization for the sandbox pool;
     - sets `vm.max_map_count` to `1048576` (COS uses `65530`);
@@ -107,12 +112,13 @@ The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/de
     - makes a Google service account for the Onyx workloads, so that the API server can sign
     Cloud Storage URLs. See [Signed Cloud Storage URLs](#signed-cloud-storage-urls).
 
-    The module refuses a blocked machine type, and gVisor with Firecracker on the same pool.
+    With `"firecracker"`, the module refuses a blocked machine type, and gVisor with Firecracker on the same pool.
   </Step>
 
   <Step title="Add the pod sandbox pool">
+    Do this step only if you use Craft pod sandboxes.
     Add `enable_craft_pod_sandbox_node_pool = true` to the module block.
-    It needs `enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`.
+    It needs `enable_sandbox_node_pool = true` and a runtime other than `"pod"`.
     The module then adds the pool `sandboxpod` (`n2-standard-4`, 1 to 2 nodes, boot disk `sandbox_node_disk_size_gb`).
     The pool has the label `onyx.app/workload=sandbox`, the taint `workload=sandbox:NoSchedule`,
     and no KVM label or taint. The chart default `sandboxPod` values select this pool,
@@ -131,8 +137,9 @@ The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/de
     ```
 
     GCP turns on nested virtualization only when it creates a pool. On an existing cluster,
-    a change to `craft_sandbox_runtime` replaces the sandbox pool, and every sandbox on it stops.
-    On an existing cluster, deploy the chart with Firecracker before you apply,
+    a change of the runtime replaces the sandbox pool, and every sandbox on it stops.
+    An upgrade to these module defaults changes a pod sandbox pool to Firecracker. To keep a pod sandbox pool,
+    set `craft_sandbox_runtime = "pod"`. On an existing cluster, deploy the chart with Firecracker before you apply,
     as [Add Firecracker to an existing
     installation](/deployment/kubernetes/craft-firecracker#add-firecracker-to-an-existing-installation) shows.
     Plan the apply for a quiet time.
@@ -154,6 +161,18 @@ The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/de
   </Step>
 
   <Step title="Configure Helm">
+    Add the module output to your root module, apply, and save the Helm values that match the sandbox pool:
+
+    ```hcl
+    output "sandbox_helm_values" {
+      value = module.onyx.sandbox_helm_values
+    }
+    ```
+
+    ```bash
+    terraform output -raw sandbox_helm_values > sandbox-values.yaml
+    ```
+
     For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
     Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
     and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
@@ -217,7 +236,7 @@ The host agent uploads and downloads session files with signed Cloud Storage URL
 the API server signs URLs through the IAM `signBlob` API. That API needs a Google service account:
 a direct Workload Identity principal has none.
 
-With `craft_sandbox_runtime = "firecracker"`, the `gke` module:
+With the Firecracker runtime, the `gke` module:
 
 - makes a Google service account (`<cluster name>-workload`, shortened with a hash for long cluster names);
 - maps the Kubernetes service account `onyx-workload-access` to it, with the `iam.gke.io/gcp-service-account`

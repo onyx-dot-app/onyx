@@ -26,7 +26,7 @@ output "workload_identity_principal" {
 }
 
 output "workload_google_service_account_email" {
-  description = "Google service account the workload service account maps to, which signs GCS URLs. Null unless craft_sandbox_runtime = \"firecracker\" with the sandbox pool on."
+  description = "Google service account the workload service account maps to, which signs GCS URLs. Null unless the sandbox pool is on with the Firecracker runtime."
   value       = module.gke.workload_google_service_account_email
 }
 
@@ -164,4 +164,14 @@ output "l7_dns_authorization_records" {
 output "l7_certificate_names" {
   description = "Certificate name for each domain, to check its state with gcloud. Null when enable_l7_ingress is false."
   value       = one(module.l7_ingress[*].certificate_names)
+}
+
+output "craft_sandbox_runtime" {
+  description = "Sandbox runtime of the sandbox pool: \"firecracker\" or \"pod\". Null when enable_sandbox_node_pool is false."
+  value       = module.gke.craft_sandbox_runtime
+}
+
+output "sandbox_helm_values" {
+  description = "Onyx Helm chart values (YAML) that match the sandbox pool. Pass them with -f to helm install or helm upgrade."
+  value       = module.gke.sandbox_helm_values
 }

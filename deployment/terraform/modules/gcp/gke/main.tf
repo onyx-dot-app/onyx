@@ -1,7 +1,20 @@
 locals {
   location = coalesce(var.zonal_location, var.region)
 
-  sandbox_firecracker = var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker"
+  # Keep the pattern in sync with the craft_sandbox_runtime validation.
+  sandbox_kvm_capable = can(regex("^(n2|c3)-", var.sandbox_node_machine_type)) && !var.sandbox_gvisor_enabled
+  craft_sandbox_runtime = (
+    var.craft_sandbox_runtime != "auto" ? var.craft_sandbox_runtime :
+    local.sandbox_kvm_capable ? "firecracker" : "pod"
+  )
+  sandbox_firecracker = var.enable_sandbox_node_pool && local.craft_sandbox_runtime == "firecracker"
+  # "auto" picks Firecracker once a node from the KVM pool registers, and
+  # hides chat sandbox tools until then.
+  sandbox_helm_values = yamlencode({
+    craft = {
+      sandboxRuntime = var.enable_sandbox_node_pool && local.craft_sandbox_runtime == "pod" ? "pod" : "auto"
+    }
+  })
   sandbox_node_labels = merge(
     { "onyx.app/workload" = "sandbox" },
     local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},

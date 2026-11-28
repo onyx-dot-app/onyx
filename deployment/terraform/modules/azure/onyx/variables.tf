@@ -405,8 +405,8 @@ variable "enable_gpu_node_pool" {
 
 variable "enable_sandbox_node_pool" {
   type        = bool
-  description = "Create a tainted pool for Craft sandbox workloads"
-  default     = false
+  description = "Create the tainted sandbox pool. Chat sandbox tools and Craft run their sandboxes there. Set false for no sandbox nodes."
+  default     = true
 }
 
 # Defaults match the aks module's, so passing them through changes nothing.
@@ -436,13 +436,13 @@ variable "sandbox_node_disk_size_gb" {
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". Opencode sessions still run as pods; see enable_craft_pod_sandbox_node_pool. See \"Craft sandboxes on Firecracker\" in the azure module README for the node requirements."
-  default     = "pod"
+  description = "How sandboxes run on the sandbox pool: \"auto\" (default), \"pod\" or \"firecracker\". \"auto\" picks \"firecracker\" on Intel D or E v5, v6 or v7 sizes, else \"pod\". Opencode sessions still run as pods; see enable_craft_pod_sandbox_node_pool. See \"Craft sandboxes on Firecracker\" in the azure module README for the node requirements."
+  default     = "auto"
 }
 
 variable "enable_craft_pod_sandbox_node_pool" {
   type        = bool
-  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox pool next to the Firecracker pool, for pod sandboxes and the image prepuller. See \"Craft sandboxes on Firecracker\" in the azure module README."
+  description = "With the Firecracker runtime, also create a small pod sandbox pool next to the Firecracker pool, for pod sandboxes and the image prepuller. See \"Craft sandboxes on Firecracker\" in the azure module README."
   default     = false
 }
 

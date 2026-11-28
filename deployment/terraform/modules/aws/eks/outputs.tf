@@ -38,3 +38,13 @@ output "oidc_provider_arn" {
   description = "OIDC provider ARN for IRSA role trust policies"
   value       = module.eks.oidc_provider_arn
 }
+
+output "craft_sandbox_runtime" {
+  description = "Sandbox runtime of the sandbox node group: \"firecracker\" or \"pod\". Null when enable_craft is false."
+  value       = var.enable_craft ? local.craft_sandbox_runtime : null
+}
+
+output "sandbox_helm_values" {
+  description = "Onyx Helm chart values (YAML) that match the sandbox node group. Pass them with -f. The chart defaults already select and tolerate the node labels and taints this module sets."
+  value       = local.sandbox_helm_values
+}

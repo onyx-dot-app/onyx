@@ -85,6 +85,7 @@
             "group": "Getting Started",
             "pages": [
               "deployment/overview",
+              "deployment/getting_started/choose_your_setup",
               "deployment/getting_started/quickstart",
               "deployment/getting_started/resourcing",
               "deployment/enterprise_edition"

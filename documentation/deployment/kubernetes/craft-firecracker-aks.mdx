@@ -54,13 +54,17 @@ README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modu
       source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/azure/onyx?ref=<tag>"
       # ... your existing settings
 
-      enable_sandbox_node_pool  = true
-      craft_sandbox_runtime     = "firecracker"
-      sandbox_node_vm_size      = "Standard_D8ds_v5"
-      sandbox_node_disk_size_gb = 200
-      network_policy            = "cilium" # without it, AKS enforces no NetworkPolicy
+      network_policy = "cilium" # without it, AKS enforces no NetworkPolicy
+
+      # Defaults: a Firecracker sandbox pool of Standard_D8ds_v5 with a 200 GiB OS disk.
+      # enable_sandbox_node_pool = true
+      # craft_sandbox_runtime    = "auto"
+      # sandbox_node_vm_size     = "Standard_D8ds_v5"
     }
     ```
+
+    `craft_sandbox_runtime = "auto"` picks Firecracker on an Intel D or E v5, v6, or v7 size,
+    and the pod runtime on other sizes. Set `"firecracker"` to make the plan fail on a size that cannot run it.
 
     Set `network_policy`. The module default is no enforcement, and then AKS does not enforce the chart NetworkPolicies.
     The sandbox NetworkPolicies must be enforced:
@@ -68,15 +72,15 @@ README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modu
     `cilium` needs the default overlay network mode. On an existing cluster,
     read `terraform plan` before you change `network_policy`: the change can replace the cluster.
 
-    With `craft_sandbox_runtime = "firecracker"`,
+    With the Firecracker runtime,
     the `aks` module sets the sandbox pool OS to `Ubuntu2404` and adds the label `onyx.app/kvm=true` and the taint
-    `onyx.app/kvm=true:NoSchedule`. The module refuses a blocked VM size.
+    `onyx.app/kvm=true:NoSchedule`. With `"firecracker"`, the module refuses a blocked VM size.
     `Ubuntu2404` needs the `azurerm` provider 4.67 or later.
   </Step>
 
   <Step title="Add the pod sandbox pool">
-    Add the pod sandbox pool variables to the module block.
-    The pool needs `enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`:
+    Do this step only if you use Craft pod sandboxes. Add the pod sandbox pool variables to the module block.
+    The pool needs `enable_sandbox_node_pool = true` and a runtime other than `"pod"`:
 
     ```hcl
     enable_craft_pod_sandbox_node_pool = true
@@ -97,15 +101,29 @@ README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modu
     terraform apply
     ```
 
-    On an existing cluster, a change to `craft_sandbox_runtime` changes the pool OS. AKS replaces the sandbox nodes,
-    and every sandbox on them stops. On an existing cluster, deploy the chart with Firecracker before you apply,
+    On an existing cluster, a change of the runtime changes the pool OS. AKS replaces the sandbox nodes,
+    and every sandbox on them stops. An upgrade to these module defaults changes a pod sandbox pool to Firecracker.
+    To keep a pod sandbox pool, set `craft_sandbox_runtime = "pod"`. On an existing cluster,
+    deploy the chart with Firecracker before you apply,
     as [Add Firecracker to an existing
     installation](/deployment/kubernetes/craft-firecracker#add-firecracker-to-an-existing-installation) shows.
     Plan the apply for a quiet time.
   </Step>
 
   <Step title="Connect Onyx to the module outputs">
-    Make a values file for the module outputs. Use `terraform output` for the names.
+    Add the module output to your root module, apply, and save the Helm values that match the sandbox pool:
+
+    ```hcl
+    output "sandbox_helm_values" {
+      value = module.onyx.sandbox_helm_values
+    }
+    ```
+
+    ```bash
+    terraform output -raw sandbox_helm_values > sandbox-values.yaml
+    ```
+
+    Make a values file for the other module outputs. Use `terraform output` for the names.
     The [Azure module
     README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modules/azure/README.md#installing-the-onyx-helm-chart-after-terraform)
     gives the full list of components that need the pod label.

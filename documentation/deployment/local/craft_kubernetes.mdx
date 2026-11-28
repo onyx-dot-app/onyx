@@ -19,7 +19,9 @@ when the sandbox backend is not `kubernetes`, or when sandbox push authenticatio
 
 <Tip>
   On AWS, the [Terraform modules](/deployment/local/terraform)
-  create a labeled and tainted sandbox node group when you set `enable_craft = true`.
+  create a labeled and tainted sandbox node group by default. With the default instance types it is a Firecracker group.
+  For Craft pod sandboxes beside a Firecracker group, also set `enable_craft_pod_sandbox_node_group = true`.
+  With `craft_sandbox_runtime = "pod"`, leave it unset: the sandbox group then runs the pod sandboxes.
 </Tip>
 
 <Note>

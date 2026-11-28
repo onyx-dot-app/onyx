@@ -4,10 +4,15 @@ description: "Run Craft sandboxes as Firecracker microVMs on Kubernetes nodes wi
 icon: "microchip"
 ---
 
-With the Firecracker runtime, Onyx runs Craft sandboxes as Firecracker microVMs.
+With the Firecracker runtime, Onyx runs chat sandbox tools and Craft sandboxes as Firecracker microVMs.
 Each microVM has its own guest kernel and no network card.
 A host agent DaemonSet on nodes with KVM starts and stops the microVMs. The Onyx Helm chart deploys the host agent,
 its Secrets, and its network rules.
+
+In Onyx v6 and later, Firecracker is on by default. The default `craft.sandboxRuntime` value is `auto`. With it,
+the chart runs the host agent on each node with the label `onyx.app/kvm=true`. You set no runtime, no image version,
+and no registration value. Clusters without KVM nodes get no host agent pods and no chat sandbox tools.
+To find the setup for your platform, see [Choose Your Setup](/deployment/getting_started/choose_your_setup).
 
 This page gives the requirements, Helm values, and checks for all platforms.
 The platform guides add the steps for each cloud and for your own hardware.
@@ -52,22 +57,21 @@ The platform guides add the steps for each cloud and for your own hardware.
 | **Sandbox proxy** | Receives all microVM egress from the host agent over mutual TLS on port 8443. It applies the same policies and credential injection as for pod sandboxes. |
 | **File store** | Keeps session files while a microVM is stopped. The host agent uploads and downloads them with presigned URLs. It has no storage credentials. |
 
-{/* depends: harness release (D8). State here which Craft sessions run on microVMs and which stay on pods. */}
-The Firecracker runtime does not replace pod sandboxes. Craft sessions that use pod sandboxes keep running as pods,
-so a deployment with Firecracker needs two sandbox node pools.
+Chat sandbox tools run only on microVMs. Craft sessions that use pod sandboxes keep running as pods. If you use Craft,
+a deployment with Firecracker needs two sandbox node pools.
 
 For the isolation design, see [Firecracker isolation](/security/architecture/craft#firecracker-isolation).
 
 ## Requirements
 
 <Note>
-  Craft requires a Business or Enterprise license. Firecracker sandboxes need Intel x86_64 nodes with KVM.
-  AMD and Arm nodes are not supported.
+  Firecracker sandboxes need Intel x86_64 nodes with KVM. AMD and Arm nodes are not supported.
+  Craft requires a Business or Enterprise license.
 </Note>
 
 | Item | Requirement |
 | --- | --- |
-| Onyx | A full Onyx Helm deployment with Craft on Kubernetes. See [Craft on Kubernetes](/deployment/local/craft_kubernetes). |
+| Onyx | A full Onyx Helm deployment, Onyx v6 or later. Chat sandbox tools do not need Craft. To also use Craft, see [Craft on Kubernetes](/deployment/local/craft_kubernetes). |
 | Kubernetes | 1.33 or later. Privileged pods with `hostPID` must be allowed in the host agent namespace. |
 | CPU | Intel x86_64 with VT-x. `/dev/kvm` must exist on the node: bare metal, or a VM size with nested virtualization. |
 | Node OS | Linux with cgroup v2 and systemd. Onyx tests host kernel 6.18. The preflight check also accepts 5.10 and 6.1. |
@@ -83,8 +87,8 @@ See the [AKS guide](/deployment/kubernetes/craft-firecracker-aks).
 
 ### Node pools
 
-Create two sandbox node pools. Kubelet does not count microVM memory,
-so the scheduler must keep other pods off the KVM nodes.
+Create a Firecracker node pool. If you use Craft, also create a pod sandbox node pool.
+Kubelet does not count microVM memory, so the scheduler must keep other pods off the KVM nodes.
 
 | Pool | Labels | Taints | Runs |
 | --- | --- | --- | --- |
@@ -108,7 +112,8 @@ so the scheduler must keep other pods off the KVM nodes.
 Only the host agent and the preflight check tolerate the `onyx.app/kvm` taint.
 The chart refuses a `sandboxPod.tolerations` value that tolerates it.
 
-The Onyx Terraform modules make both pools. To prepare nodes yourself, use these commands:
+The Onyx Terraform modules make the Firecracker pool by default, and the pod sandbox pool when you ask for it.
+To prepare nodes yourself, use these commands:
 
 ```bash
 # Firecracker nodes: taint first, so that no pod sandbox lands on the node
@@ -129,7 +134,6 @@ A new Onyx install needs the base chart Secrets before the first start. Without 
 the API server stops with `USER_AUTH_SECRET is empty`. Without the OpenSearch password,
 or the object store keys when the chart runs the bundled object store, Helm refuses to render the chart.
 Put the values in your Onyx values file (`onyx-values.yaml`), and keep that file private.
-Do not put them in `craft-fc-secrets.yaml`: the command in [Configure Helm](#configure-helm) overwrites that file.
 
 ```yaml
 auth:
@@ -178,57 +182,30 @@ instead of making a loop store, add `--loop-store=off` to `craft.hostAgent.extra
 
 ## Configure Helm
 
+In Onyx v6 and later, the default chart values turn on Firecracker. Most installs add no Firecracker values.
+
 <Steps>
-  <Step title="Prepare Craft on Kubernetes">
-    Follow [Craft on Kubernetes](/deployment/local/craft_kubernetes) first,
-    and set the [base chart values](#base-chart-values) for a new install. Firecracker uses the same `ENABLE_CRAFT`,
-    `SANDBOX_BACKEND`, sandbox push Secret, and sandbox proxy.
+  <Step title="Set the base chart values">
+    For a new install, set the [base chart values](#base-chart-values). To also use Craft,
+    follow [Craft on Kubernetes](/deployment/local/craft_kubernetes). Craft uses the same sandbox proxy.
   </Step>
 
-  <Step title="Create the node registration value">
-    Host agents send a shared registration value when they register their node signing key.
-    The API server refuses every registration until the value is set. Make a random value:
+  <Step title="Get the Terraform values">
+    If the Onyx Terraform modules made the sandbox nodes, add the module output to your root module, apply,
+    and save the Helm values:
 
-    ```bash
-    umask 077   # make the files readable only by you
-    openssl rand -base64 48 | tr -d '\n' > sandbox-node-registration.txt
-    ```
-
-    The chart refuses a value in the chart values that is shorter than 32 characters. Keep this file private.
-    You use it in the next step.
-  </Step>
-
-  <Step title="Add the Firecracker values">
-    Merge these values into your Onyx values file. The registration value goes in a separate,
-    private values file that you pass on each upgrade:
-
-    ```yaml craft-fc-values.yaml
-    configMap:
-      ENABLE_CRAFT: "true"
-      SANDBOX_BACKEND: "kubernetes"
-
-    auth:
-      sandboxPushSecret:
-        enabled: true
-        existingSecret: "onyx-sandbox-push-secret"
-      sandboxNodeRegistration:
-        enabled: true
-
-    craft:
-      sandboxRuntime: firecracker
-      firecrackerPreflight:
-        enabled: true
+    ```hcl
+    output "sandbox_helm_values" {
+      value = module.onyx.sandbox_helm_values
+    }
     ```
 
     ```bash
-    printf 'auth:\n  sandboxNodeRegistration:\n    values:\n      sandbox_node_registration_secret: "%s"\n' \
-      "$(cat sandbox-node-registration.txt)" > craft-fc-secrets.yaml
+    terraform output -raw sandbox_helm_values > sandbox-values.yaml
     ```
 
-    The preflight check tests the file system and free disk of `craft.hostAgent.dataDir`.
-
-    The chart copies the registration value into the host agent namespace. To keep the value in your own Secret instead,
-    see [Use your own Secrets](#use-your-own-secrets).
+    The file sets `craft.sandboxRuntime` to the runtime of the Terraform sandbox pool. For a Firecracker pool,
+    the value is `auto`, the chart default. Skip this step if you made the nodes yourself.
   </Step>
 
   <Step title="Install or upgrade Onyx">
@@ -237,36 +214,68 @@ instead of making a loop store, add `--loop-store=off` to `craft.hostAgent.extra
       --namespace onyx \
       --create-namespace \
       --values onyx-values.yaml \
-      --values craft-fc-values.yaml \
-      --values craft-fc-secrets.yaml
+      --values sandbox-values.yaml   # only with the Terraform values
     ```
+
+    An install that set Firecracker up before Onyx v6 has `craft-fc-values.yaml` and `craft-fc-secrets.yaml`.
+    Keep them in this command and in each later upgrade.
+    They hold settings such as `craft.hostAgent.dataDir` and the registration value that the running host agents use.
 
     The first start on each node copies the root drive (about 4 GiB) and builds the node template.
   </Step>
 </Steps>
 
-With `craft.sandboxRuntime: firecracker`, the chart:
+### Runtime values
 
-- sets `SANDBOX_RUNTIME=firecracker` on the backend and the sandbox proxy;
+`craft.sandboxRuntime` sets the sandbox runtime.
+The chart sets `SANDBOX_RUNTIME` on the backend and the sandbox proxy to the same value.
+
+| Value | Firecracker parts | Chat sandbox tools |
+| --- | --- | --- |
+| `auto` (default) | Rendered. The host agent runs only on `onyx.app/kvm=true` nodes. | Shown while at least one registered node reports a ready template. Hidden at other times. |
+| `firecracker` | Rendered. Helm refuses to render the chart when an input is missing. | Always shown. A session fails when no KVM node has capacity. |
+| `pod` | Not rendered. Craft pod sandboxes only. | Hidden. |
+| `off` | No sandbox parts. Helm refuses `off` together with `configMap.ENABLE_CRAFT: "true"`. | Hidden. |
+
+The Firecracker parts do not need `configMap.ENABLE_CRAFT`. With `auto` or `firecracker`, the chart:
+
 - deploys the host agent DaemonSet in `craft.hostAgent.namespace` with Pod Security `privileged`;
+- deploys the sandbox proxy;
 - lets only the API server, the heavy worker, and the Scheduled Task worker reach the agent port (7443);
 - lets the host agent pods reach the mutual TLS relay port of the sandbox proxy (8443). Pod sandboxes keep port
   8080. Port 8080 stays open to the host agent pods, so that host agents that have not restarted keep egress during
   an upgrade;
+- makes the node registration value. See [Registration value](#registration-value);
 - makes the mutual TLS certificates for the host agent, its clients, and the relay to the sandbox proxy.
-  See [Certificates](#certificates).
+  See [Certificates](#certificates);
+- runs the preflight check on the `onyx.app/kvm=true` nodes. See [Verify the deployment](#verify-the-deployment).
+
+With `auto`, the chart renders no Firecracker parts when it cannot find a pinned release tag for the images.
+The install does not fail. The Helm notes after the install give the cause. With an Onyx version before v6,
+`auto` acts as `pod`.
+
+### Registration value
+
+Host agents send a shared registration value when they register their node signing key.
+The API server refuses every registration without the value. The chart makes a random value at the first install,
+keeps it at each upgrade, and copies it into the host agent namespace.
+
+The chart reads the existing value from the cluster. Tools that render the chart without cluster access,
+for example Argo CD or `helm template`, make a new value at each render. With these tools,
+keep the value in your own Secret: see [Use your own Secrets](#use-your-own-secrets).
 
 ### Versions
 
-The chart takes the Firecracker image tags from the Onyx version (`global.version`, without a `-dev` suffix).
-`global.version` must be a pinned Onyx release tag. With `latest`, `edge`, or `beta`, Helm refuses to render the chart.
-For Onyx `v5.2.0`, the chart uses:
+The chart takes the Firecracker image tags from the Onyx version, without a `-dev` suffix.
+It uses `global.version` when it is a pinned release tag, and else the chart `appVersion`.
+You do not need to pin `global.version`. A floating `global.version` (`latest`, `edge`, or `beta`)
+uses the chart `appVersion`. For Onyx `v6.0.0`, the chart uses:
 
 | Item | Value |
 | --- | --- |
-| Host agent image | `onyxdotapp/craft-fc-host-agent:v5.2.0` |
-| Root drive image | `onyxdotapp/craft-fc-artifacts:rootfs-v5.2.0` |
-| `SANDBOX_FC_TEMPLATE` | `v5.2.0` |
+| Host agent image | `onyxdotapp/craft-fc-host-agent:v6.0.0` |
+| Root drive image | `onyxdotapp/craft-fc-artifacts:rootfs-v6.0.0` |
+| `SANDBOX_FC_TEMPLATE` | `v6.0.0` |
 
 Keep these defaults. The API server, the host agent, and the root drive of one release work together.
 To use another root drive, set `craft.hostAgent.rootfs.version`. It sets the root drive tag (`rootfs-<version>`)
@@ -319,7 +328,14 @@ see [Rotate the certificates](/deployment/kubernetes/craft-firecracker-operation
 
 Use this path to keep secret values out of Helm values, for example with External Secrets Operator or cert-manager.
 
-**Registration value.** Create the same Secret in the release namespace and in the host agent namespace.
+**Registration value.** Make a random value of 32 characters or more:
+
+```bash
+umask 077   # make the file readable only by you
+openssl rand -base64 48 | tr -d '\n' > sandbox-node-registration.txt
+```
+
+Create the same Secret in the release namespace and in the host agent namespace.
 Make the host agent namespace before the install, because the Secret must exist before the agent pods start:
 
 ```bash
@@ -403,7 +419,8 @@ When it is empty with `existingSecret`, the sandbox proxy accepts every certific
     Each KVM node must print `RESULT: PASS`. A `WARN filesystem` line on an ext4 node is expected:
     the host agent makes its XFS loop store there.
     A `WARN kernel` line is expected on a host kernel that Onyx does not test,
-    for example 6.12 on GKE COS nodes and 6.8 on AKS Ubuntu 24.04 nodes. Turn the preflight off after the check:
+    for example 6.12 on GKE COS nodes and 6.8 on AKS Ubuntu 24.04 nodes.
+    The preflight check is on by default and does not stop the install when a node fails. To turn it off,
     set `craft.firecrackerPreflight.enabled: false` and upgrade.
   </Step>
 
@@ -450,9 +467,8 @@ When it is empty with `existingSecret`, the sandbox proxy accepts every certific
     This deletes the test users and microVMs that earlier runs left.
   </Step>
 
-  <Step title="Run a Craft session">
-    {/* depends: harness release (D8). Name the session type that runs on a microVM. */} As a Craft user,
-    start a session and send a prompt that creates a file. Then confirm that a host agent started a microVM:
+  <Step title="Run a chat with a sandbox tool">
+    In a new chat, ask the agent to run a command that writes a file. Then confirm that a host agent started a microVM:
 
     ```bash
     kubectl -n onyx-sandbox-runtime logs -l app.kubernetes.io/component=craft-fc-host-agent --prefix --tail=-1 --since=10m \
@@ -466,11 +482,13 @@ When it is empty with `existingSecret`, the sandbox proxy accepts every certific
 ## Add Firecracker to an existing installation
 
 Onyx needs no data migration for Firecracker. Pod sandboxes, their snapshots, and their idle timeout do not change.
-Do the steps in this order, so that no pod sandbox lands on a KVM node:
+An upgrade to Onyx v6 turns on Firecracker with the default `craft.sandboxRuntime: auto`. If you use Craft,
+do the steps in this order, so that no pod sandbox lands on a KVM node:
 
 <Steps>
   <Step title="Deploy the chart with Firecracker">
-    Set the values in [Configure Helm](#configure-helm) and upgrade.
+    Upgrade to Onyx v6 or later with the values in [Configure Helm](#configure-helm).
+    If your values set `craft.sandboxRuntime: pod`, remove it.
     The host agent and the preflight check then tolerate the `onyx.app/kvm` taint before it exists.
     Until a node has the `onyx.app/kvm=true` label, the host agent DaemonSet has no pods.
   </Step>
@@ -519,13 +537,14 @@ Do the steps in this order, so that no pod sandbox lands on a KVM node:
   </Step>
 
   <Step title="Change the runtime">
-    Set `craft.sandboxRuntime: pod` and upgrade. The chart removes the host agent, its network rules,
-    and `SANDBOX_RUNTIME`. Pod sandboxes continue to work.
+    Set `craft.sandboxRuntime: pod` if you use Craft pod sandboxes, or `off` for no sandboxes, and upgrade.
+    The chart removes the host agent, its network rules, and the preflight check. Chat sandbox tools are hidden.
+    With `pod`, Craft pod sandboxes continue to work. If the Onyx Terraform modules made the sandbox nodes,
+    also set `craft_sandbox_runtime = "pod"` or turn off the sandbox pool.
   </Step>
 </Steps>
 
-If `craft.firecrackerPreflight.enabled` is `true`, the preflight DaemonSet and its NetworkPolicy stay.
-Set it to `false`. The chart deletes the host agent namespace that it made, with the chart-made certificates.
+The chart deletes the host agent namespace that it made, with the chart-made certificates and registration value.
 When you turn Firecracker on again, the chart makes new certificates.
 
 Session files that the host agent saved stay in the file store, and they restore when you turn Firecracker on again.
@@ -534,13 +553,27 @@ Sessions that need a microVM cannot start until you turn Firecracker on again.
 ## Troubleshooting
 
 <AccordionGroup>
+  <Accordion title="Chat has no sandbox tools">
+    With `craft.sandboxRuntime: auto`,
+    chat shows sandbox tools only while a registered KVM node reports a ready template. Check these items in order:
+
+    - The Helm notes after `helm upgrade` say that Firecracker is off. Read the cause in the notes.
+    - `kubectl get nodes -l onyx.app/kvm=true` shows no node. Add the label and taint in [Node pools](#node-pools).
+    - The preflight check prints `RESULT: FAIL` on a node. Fix the failed check.
+    - A host agent does not log `template ready` and `node signing key registered`.
+    See [Verify the deployment](#verify-the-deployment).
+
+    Multi-model chats, Deep Research, bots, and incognito chats have no sandbox tools on any runtime.
+  </Accordion>
+
   <Accordion title="Helm rejects the Firecracker values">
     Read the render error. It names the value. Common causes:
 
-    - `auth.sandboxNodeRegistration.enabled` is not `true`, or it has no value and no existing Secret.
     - `sandboxPod.tolerations` tolerates the `onyx.app/kvm` taint.
     - `craft.hostAgent.namespace` is the release namespace or the sandbox namespace.
-    - `global.version` is `latest`, `edge`, or `beta`. Use a pinned Onyx release tag.
+    - `craft.sandboxRuntime: off` is set together with `configMap.ENABLE_CRAFT: "true"`.
+    - With `craft.sandboxRuntime: firecracker`, the chart finds no pinned release tag for the images.
+    Set `global.version` to an Onyx release tag.
     - `craft.hostAgent.rootfs.image.tag` is set without `configMap.SANDBOX_FC_TEMPLATE`.
     - Only one of `craft.hostAgent.tls.existingSecret` and `craft.hostAgent.client.existingSecret` is set.
   </Accordion>
