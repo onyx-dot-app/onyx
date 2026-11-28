@@ -166,3 +166,26 @@ def test_is_article_public(status_code: int, payload: Any, expected: bool) -> No
     ) as get:
         assert _gateway().is_article_public(article_id=7) is expected
     assert get.call_args.kwargs["allow_redirects"] is False
+
+
+def test_is_article_public_sends_no_netrc_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The probe must stay anonymous, but keep the environment's proxy and CA
+    settings, so it disables only the netrc lookup."""
+    import requests
+
+    sent: list[requests.PreparedRequest] = []
+
+    def send(
+        _self: requests.Session, request: requests.PreparedRequest, **_kwargs: Any
+    ) -> MagicMock:
+        sent.append(request)
+        return _response(403, {})
+
+    monkeypatch.setattr(
+        requests.sessions, "get_netrc_auth", lambda *_a, **_k: ("user", "secret")
+    )
+    monkeypatch.setattr(requests.Session, "send", send)
+    assert _gateway().is_article_public(article_id=7) is False
+    assert "Authorization" not in sent[0].headers

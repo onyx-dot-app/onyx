@@ -120,12 +120,17 @@ def _make_request_function(
     return make_request
 
 
+def _no_auth(request: requests.PreparedRequest) -> requests.PreparedRequest:
+    return request
+
+
 @retry_builder(tries=5, retry_if=_is_transient)
 def _anonymous_get(url: str) -> requests.Response:
     # A redirect leads to a sign-in page, which is no proof of public access.
-    # Without the environment, no netrc credentials ride along.
+    # An explicit (empty) auth keeps netrc credentials out, while the session
+    # still honors the environment's proxy and CA settings.
     with requests.Session() as session:
-        session.trust_env = False
+        session.auth = _no_auth
         response = session.get(
             url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=False
         )
