@@ -27,6 +27,7 @@ from typing import Any
 # Importing it also sets up the ``onyx.audit`` stdout handler that this
 # module's logger reaches.
 from ee.onyx.utils.audit import audit_enabled_for_tenant, category_enabled
+from ee.onyx.utils.audit_stats import record_event
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.constants import CacheBackendType
 from onyx.utils.audit import AuditEventCategory
@@ -37,6 +38,8 @@ from onyx.utils.audit import AuditEventCategory
 # would make machine parsing harder). The logger propagates to the root so it
 # still reaches the configured handlers / log files.
 AUDIT_LOGGER_NAME = "onyx.audit.credential_access"
+# The status page counts this stream as its own class.
+CREDENTIAL_ACCESS_STATS_CLASS = "credential_access"
 _audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
 _audit_logger.setLevel(logging.INFO)
 
@@ -160,6 +163,7 @@ def emit_credential_access(
             "client_ip": client_ip,
         }
         _audit_logger.info(json.dumps(payload, default=str))
+        record_event(tenant_id, CREDENTIAL_ACCESS_STATS_CLASS)
     except Exception:
         # Audit must never break the caller. Last-resort swallow.
         return

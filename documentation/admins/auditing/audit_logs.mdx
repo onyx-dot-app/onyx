@@ -228,6 +228,19 @@ source = '. = parse_json!(.message)'
   and `onyx.audit.credential_access` — if you want to route classes to different destinations.
 </Info>
 
+## Check that Onyx writes events
+
+`GET /api/admin/security/audit-status` returns what Onyx wrote for your workspace:
+
+- `enabled`: the license includes the audit stream.
+- `log_format`: the `LOG_FORMAT` of the API server. Use `json`.
+- `categories` and `include_query_text`: the current settings.
+- `classes`: for each `ocsf_class` and for `credential_access`, `events_last_24h` and the time of the last event.
+  Onyx counts in whole clock hours: `events_last_24h` is the current hour and the 23 hours before it.
+  Both values can be up to one minute old, and the counts are a diagnostic, not a complete record.
+
+Onyx cannot see your log shipper or your SIEM. If Onyx writes events but your SIEM shows none, check the shipper.
+
 ## Event reference
 
 Every `action` value, what triggers it, and the fields most useful for building SIEM detection rules. `actor`,

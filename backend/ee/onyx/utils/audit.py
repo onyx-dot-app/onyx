@@ -28,6 +28,7 @@ from typing import Any
 
 from cachetools import TTLCache
 
+from ee.onyx.utils.audit_stats import record_event
 from onyx.utils.audit import (
     DEFAULT_AUDIT_DEDUP_TTL_SECONDS,
     AuditAction,
@@ -399,6 +400,7 @@ def emit_audit_event(
         # JSON as the message body so it parses identically under plain/json
         # LOG_FORMAT; default=str keeps a stray value from raising.
         _logger_for(ocsf_class).info(json.dumps(payload, default=str))
+        record_event(tenant_id, ocsf_class.value if ocsf_class else "unclassified")
     except Exception:
         # Audit must never break the caller.
         return

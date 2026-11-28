@@ -120,6 +120,7 @@
   "GET /admin/query-history/export-status": "read:query_history",
   "GET /admin/query-history/list": "read:query_history",
   "GET /admin/security": "admin",
+  "GET /admin/security/audit-status": "admin",
   "GET /admin/security/pinned-fields": "admin",
   "GET /admin/service-status/opensearch": "admin",
   "GET /admin/service-status/opensearch/searches": "admin",

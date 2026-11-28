@@ -46,12 +46,16 @@ def enterprise_audit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[None, None, None]:
     """Enable EE and resolve every tenant to the Enterprise tier, so the audit
-    stream writes events. Clears the audit tier cache before and after."""
+    stream writes events. Clears the audit tier cache before and after, and
+    keeps status-page counts out of the cache."""
     from ee.onyx.utils import audit as ee_audit
+    from ee.onyx.utils import credential_audit as ee_credential_audit
     from ee.onyx.utils import tier
     from onyx.server.settings.models import Tier
 
     monkeypatch.setattr(tier, "get_tier", lambda tenant_id=None: Tier.ENTERPRISE)  # noqa: ARG005
+    monkeypatch.setattr(ee_audit, "record_event", lambda *_args: None)
+    monkeypatch.setattr(ee_credential_audit, "record_event", lambda *_args: None)
     ee_audit._tier_cache.clear()
     try:
         yield
