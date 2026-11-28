@@ -12576,6 +12576,9 @@
         }
       },
       "rateLimitBanner": {
+        "playground": {
+          "text": "هذا حد خاص بالـ playground. نسخة Onyx الخاصة بك لا تحتوي عليه. <link>تحدث إلى المبيعات</link>."
+        },
         "defaultError": {
           "text": "لقد بلغت حد الاستخدام الخاص بك."
         },

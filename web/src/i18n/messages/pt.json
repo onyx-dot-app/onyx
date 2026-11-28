@@ -12576,6 +12576,9 @@
         }
       },
       "rateLimitBanner": {
+        "playground": {
+          "text": "Este é um limite do playground. O seu próprio Onyx não o tem. <link>Falar com vendas</link>."
+        },
         "defaultError": {
           "text": "Você atingiu seu limite de uso."
         },

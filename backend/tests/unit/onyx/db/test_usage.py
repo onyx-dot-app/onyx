@@ -95,6 +95,20 @@ class TestCheckUsageLimit:
             check_usage_limit(MagicMock(), UsageType.API_CALLS, 10, period=period)
         assert get_usage.call_args.args[2] == period
 
+    def test_the_error_carries_the_period(self) -> None:
+        """The refusal tells the user when the limit resets from it."""
+        period = UsagePeriod(
+            anchor=WindowAnchor.CALENDAR,
+            start=_MONDAY,
+            end=_MONDAY + timedelta(days=7),
+        )
+        with (
+            patch("onyx.db.usage.get_usage", return_value=11.0),
+            pytest.raises(UsageLimitExceededError) as exc_info,
+        ):
+            check_usage_limit(MagicMock(), UsageType.API_CALLS, 10, period=period)
+        assert exc_info.value.period == period
+
     def test_defaults_to_the_current_calendar_period(self) -> None:
         current = UsagePeriod(
             anchor=WindowAnchor.CALENDAR,

@@ -12576,6 +12576,9 @@
         }
       },
       "rateLimitBanner": {
+        "playground": {
+          "text": "これはプレイグラウンドの制限です。ご自身の Onyx にはありません。<link>営業に相談</link>"
+        },
         "defaultError": {
           "text": "使用量の上限に達しました。"
         },

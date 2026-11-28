@@ -62,12 +62,22 @@ class UsagePeriod(BaseModel):
 
 
 class UsageLimitExceededError(Exception):
-    """Raised when a tenant exceeds their usage limit."""
+    """Raised when usage plus the pending amount is over the limit. ``period``
+    is the period the usage was read in; its end is when the limit resets.
+    None for a limit with no period, such as a per-user count for the whole
+    trial."""
 
-    def __init__(self, usage_type: UsageType, current: float, limit: float):
+    def __init__(
+        self,
+        usage_type: UsageType,
+        current: float,
+        limit: float,
+        period: UsagePeriod | None = None,
+    ):
         self.usage_type = usage_type
         self.current = current
         self.limit = limit
+        self.period = period
         super().__init__(
             f"Usage limit exceeded for {usage_type.value}: current usage {current}, limit {limit}"
         )
@@ -171,6 +181,7 @@ def check_usage_limit(
             usage_type=usage_type,
             current=current_value + pending_amount,
             limit=float(limit),
+            period=period,
         )
 
 

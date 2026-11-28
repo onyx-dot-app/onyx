@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
-import { Button } from "@opal/components";
-import { CopyButton } from "@opal/components";
+import { Button, CopyButton, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
-import { RateLimitDetails, RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
+import {
+  PLAYGROUND_LIMIT_POLICY,
+  RateLimitDetails,
+  RATE_LIMITED_ERROR_CODE,
+} from "@/app/app/types";
+import { CONTACT_SALES_URL } from "@/lib/constants";
 import { useTranslations } from "next-intl";
 
 const COUNTDOWN_TICK_MS = 1_000;
@@ -70,9 +75,15 @@ function RateLimitBanner({
 }: RateLimitBannerProps) {
   const t = useTranslations("chat.messages");
   const [nowMs, setNowMs] = useState(Date.now());
+  // A playground limit shows no countdown: its sentence says when it opens
+  // again, and the only countdown on the playground is the trial's days left.
+  const playground = details.policy === PLAYGROUND_LIMIT_POLICY;
   const resetMs = useMemo(
-    () => resolveResetMs(details.reset_at, details.retry_after_seconds),
-    [details.reset_at, details.retry_after_seconds]
+    () =>
+      playground
+        ? null
+        : resolveResetMs(details.reset_at, details.retry_after_seconds),
+    [playground, details.reset_at, details.retry_after_seconds]
   );
 
   useEffect(() => {
@@ -124,6 +135,24 @@ function RateLimitBanner({
           <span>{error || t("rateLimitBanner.defaultError.text")}</span>
           {details.model && (
             <span>{t("rateLimitBanner.otherModels.text")}</span>
+          )}
+          {playground && (
+            <Text as="p" font="secondary-body" color="inherit">
+              {richNodes(
+                t.rich("rateLimitBanner.playground.text", {
+                  link: (chunks) => (
+                    <a
+                      href={CONTACT_SALES_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                    >
+                      {chunks}
+                    </a>
+                  ),
+                })
+              )}
+            </Text>
           )}
           {resetLine && (
             <span className="text-xs text-muted-foreground">{resetLine}</span>

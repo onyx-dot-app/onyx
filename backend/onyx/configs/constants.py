@@ -563,6 +563,10 @@ class MilestoneRecordType(str, Enum):
     CREATED_ASSISTANT = "created_assistant"
     CREATED_ONYX_BOT = "created_onyx_bot"
     REQUESTED_CONNECTOR = "requested_connector"
+    # Playground usage limits (onyx/server/usage_limits.py): one event per
+    # refusal, and one the first time a tenant or user is refused in a period.
+    USAGE_LIMIT_REFUSED = "usage_limit_refused"
+    USAGE_LIMIT_ENTERED = "usage_limit_entered"
 
 
 class OnyxCeleryQueues:

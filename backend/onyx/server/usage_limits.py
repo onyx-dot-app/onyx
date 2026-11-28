@@ -17,16 +17,20 @@ A tenant override replaces the plan's value. It is not added to it.
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from math import ceil
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     ANTHROPIC_DEFAULT_API_KEY,
     COHERE_DEFAULT_API_KEY,
     OPENAI_DEFAULT_API_KEY,
     OPENROUTER_DEFAULT_API_KEY,
 )
+from onyx.configs.constants import MilestoneRecordType
 from onyx.db import usage as tenant_usage_db
 from onyx.db.usage import (
     UsageLimitExceededError,
@@ -51,6 +55,7 @@ from onyx.server.tenant_usage_limits import (
 )
 from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
+from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import (
     IS_PLAYGROUND,
@@ -472,7 +477,7 @@ def check_llm_cost_limit_for_provider(
         llm_provider_api_key: The API key of the LLM provider that will be used
 
     Raises:
-        HTTPException: 429 Too Many Requests if limit exceeded
+        OnyxError: RATE_LIMITED (429) if the limit is exceeded
     """
     if not is_usage_limits_enabled():
         return
@@ -535,14 +540,15 @@ def _derived_usage(
 
 
 def _refusal_detail(
-    usage_type: UsageType, is_trial: bool, e: UsageLimitExceededError
+    usage_type: UsageType, policy: LimitPolicy, e: UsageLimitExceededError
 ) -> str:
-    user_type = "trial" if is_trial else "paid"
-    if usage_type == UsageType.IMAGE_GENERATIONS:
-        return (
-            f"You have used your {int(e.limit)} images for this trial. "
-            "Talk to sales to raise the limit."
-        )
+    """The sentence the user reads. It is the same on every surface: the chat
+    and Craft banners, a connector run stopped by the chunk cap, a Slack
+    thread and API clients. It names no date and shows no number: it says in
+    words when the limit opens again."""
+    if policy.name is LimitPolicyName.PLAYGROUND:
+        return _playground_refusal_detail(usage_type)
+    user_type = "trial" if policy.name is LimitPolicyName.CLOUD_TRIAL else "paid"
     if usage_type == UsageType.LLM_COST:
         return (
             f"LLM usage limit exceeded for {user_type} account. "
@@ -558,7 +564,7 @@ def _refusal_detail(
             "Please upgrade your plan or wait for the next billing period."
         )
     if usage_type == UsageType.API_CALLS:
-        if is_trial and e.limit == 0:
+        if user_type == "trial" and e.limit == 0:
             return "API access is not available on trial accounts. Please upgrade to a paid plan to use the API and chat widget."
         return (
             f"API call limit exceeded for {user_type} account. "
@@ -570,6 +576,134 @@ def _refusal_detail(
         f"Calls: {int(e.current)}, Limit: {int(e.limit)} per week. "
         "Please upgrade your plan or wait for the next billing period."
     )
+
+
+def _playground_refusal_detail(usage_type: UsageType) -> str:
+    """Playground plan, section 13, "The messages when a limit fires". Each
+    carries "talk to sales"; the banner adds that it is a playground limit and
+    that the user's own Onyx has none. No numbers: the plan shows none."""
+    if usage_type == UsageType.LLM_COST:
+        return (
+            "Your team has used this trial week's allowance. Your messages are "
+            "not lost: chat opens again when the next trial week starts, or "
+            "talk to sales to lift it now."
+        )
+    if usage_type == UsageType.CHUNKS_INDEXED:
+        return (
+            "Your team has used the playground's indexing allowance for this "
+            "trial. What is already indexed stays searchable. Talk to sales to "
+            "raise it."
+        )
+    if usage_type == UsageType.IMAGE_GENERATIONS:
+        return (
+            "You have used your image allowance for this trial. "
+            "Talk to sales to raise the limit."
+        )
+    return (
+        f"You have reached the playground's {usage_type.value.replace('_', ' ')} "
+        "limit for this trial. Talk to sales to raise it."
+    )
+
+
+def _refusal_fields(
+    usage_type: UsageType,
+    allowance: Allowance,
+    policy: LimitPolicy,
+    reset_at: datetime | None,
+) -> dict[str, object]:
+    """The machine-readable part of the 429 body, next to ``detail``. The chat
+    banner adds the sales link when ``policy`` is the playground's; ``reset_at``
+    is for API clients, with the Retry-After header. The token budget 429
+    (query_and_chat/token_limit.py) uses the same keys."""
+    fields: dict[str, object] = {
+        "limit_type": usage_type.value,
+        "scope": allowance.scope.value,
+        "policy": policy.name.value,
+    }
+    if reset_at is not None:
+        fields["reset_at"] = reset_at.isoformat()
+        fields["retry_after_seconds"] = _seconds_until(reset_at)
+    return fields
+
+
+def _seconds_until(moment: datetime) -> int:
+    return max(1, ceil((moment - datetime.now(timezone.utc)).total_seconds()))
+
+
+# A first refusal is remembered until its period ends. A whole-trial limit has
+# no end, so its key outlives any trial (14 days, plus the read-only week).
+_LIMIT_ENTERED_KEY_PREFIX = "usage_limit_entered"
+_WHOLE_TRIAL_ENTERED_TTL_SECONDS = 30 * 24 * 3600
+
+
+def _record_refusal(
+    usage_type: UsageType,
+    allowance: Allowance,
+    policy: LimitPolicy,
+    tenant_id: str,
+    user_id: UUID | None,
+    e: UsageLimitExceededError,
+    reset_at: datetime | None,
+) -> None:
+    """Playground only: one analytics event per refusal, and one more the first
+    time this tenant, or this user for a per-user limit, is refused in the
+    period. The second counts who hit a limit without counting retries, which
+    the watch and tune work (ENG-4756) reads. The 429 itself is logged by the
+    error handler, so there is no log line here. The events are sent on the
+    request, like every other product event."""
+    if policy.name is not LimitPolicyName.PLAYGROUND:
+        return
+    properties: dict[str, Any] = {
+        "policy": policy.name.value,
+        "limit_type": usage_type.value,
+        "scope": allowance.scope.value,
+        "used": e.current,
+        "allowed": e.limit,
+        "reset_at": reset_at.isoformat() if reset_at is not None else None,
+    }
+    distinct_id = str(user_id) if user_id is not None else tenant_id
+    mt_cloud_telemetry(
+        tenant_id, distinct_id, MilestoneRecordType.USAGE_LIMIT_REFUSED, properties
+    )
+    if _first_refusal_in_period(tenant_id, usage_type, allowance, user_id, e.period):
+        mt_cloud_telemetry(
+            tenant_id,
+            distinct_id,
+            MilestoneRecordType.USAGE_LIMIT_ENTERED,
+            properties,
+        )
+
+
+def _first_refusal_in_period(
+    tenant_id: str,
+    usage_type: UsageType,
+    allowance: Allowance,
+    user_id: UUID | None,
+    period: UsagePeriod | None,
+) -> bool:
+    """Set-if-missing on a key that lives until the period ends, so only the
+    first refusal in a period returns True. A cache outage is logged and
+    counts as not the first: the refusal itself is never held up."""
+    subject = (
+        str(user_id)
+        if allowance.scope == LimitScope.USER and user_id is not None
+        else "tenant"
+    )
+    start = period.start.isoformat() if period is not None else "trial"
+    key = f"{_LIMIT_ENTERED_KEY_PREFIX}:{usage_type.value}:{subject}:{start}"
+    ttl = _WHOLE_TRIAL_ENTERED_TTL_SECONDS
+    if period is not None and period.end is not None:
+        ttl = _seconds_until(period.end)
+    try:
+        return get_cache_backend(tenant_id=tenant_id).set_if_absent(key, "1", ex=ttl)
+    except Exception:
+        logger.warning(
+            "Could not record the first refusal of %s for tenant %s",
+            usage_type.value,
+            tenant_id,
+            exc_info=True,
+        )
+        return False
 
 
 def check_usage_and_raise(
@@ -592,7 +726,7 @@ def check_usage_and_raise(
         user_id: The user, for a limit that counts each user's own usage
 
     Raises:
-        HTTPException: 429 Too Many Requests if limit exceeded
+        OnyxError: RATE_LIMITED (429) if the limit is exceeded
     """
     # A type no plan in force limits needs no billing lookup or query.
     if not is_usage_type_limited(usage_type):
@@ -600,7 +734,8 @@ def check_usage_and_raise(
 
     # Playground tenants have no billing plan, so do not look it up.
     is_trial = True if IS_PLAYGROUND else is_tenant_on_trial_fn(tenant_id)
-    allowance = policy_for_plan(is_trial).allowances.get(usage_type)
+    policy = policy_for_plan(is_trial)
+    allowance = policy.allowances.get(usage_type)
     if allowance is None:
         return
     if allowance.scope == LimitScope.USER and user_id is None:
@@ -625,6 +760,15 @@ def check_usage_and_raise(
             user_id,
         )
     except UsageLimitExceededError as e:
+        reset_at = e.period.end if e.period is not None else None
+        _record_refusal(usage_type, allowance, policy, tenant_id, user_id, e, reset_at)
         raise OnyxError(
-            OnyxErrorCode.RATE_LIMITED, _refusal_detail(usage_type, is_trial, e)
+            OnyxErrorCode.RATE_LIMITED,
+            _refusal_detail(usage_type, policy, e),
+            extra=_refusal_fields(usage_type, allowance, policy, reset_at),
+            headers=(
+                {"Retry-After": str(_seconds_until(reset_at))}
+                if reset_at is not None
+                else None
+            ),
         )
