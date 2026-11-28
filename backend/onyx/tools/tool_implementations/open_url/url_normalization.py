@@ -14,6 +14,9 @@ from urllib.parse import urlparse, urlunparse
 from onyx.configs.constants import DocumentSource
 from onyx.configs.slack_configs import is_slack_host
 from onyx.connectors.factory import identify_connector_class
+from onyx.connectors.jira_service_management.connector import (
+    DOCUMENT_ID_PREFIX as JSM_DOCUMENT_ID_PREFIX,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -64,6 +67,19 @@ def normalize_url(url: str, source_type: DocumentSource | None = None) -> str | 
     return _default_url_normalizer(url)
 
 
+def _with_service_management_candidate(
+    source_type: DocumentSource | None, candidates: list[str]
+) -> list[str]:
+    """Jira Service Management documents share Jira's URLs but are stored under a
+    namespaced id, so offer that id after the plain one."""
+    if source_type != DocumentSource.JIRA or not candidates:
+        return candidates
+    namespaced = JSM_DOCUMENT_ID_PREFIX + candidates[0]
+    if namespaced in candidates:
+        return candidates
+    return [*candidates, namespaced]
+
+
 def normalize_url_candidates(
     url: str, source_type: DocumentSource | None = None
 ) -> list[str]:
@@ -76,7 +92,14 @@ def normalize_url_candidates(
     """
     if source_type is None:
         source_type = _detect_source_type(url)
+    return _with_service_management_candidate(
+        source_type, _normalize_url_candidates(url, source_type)
+    )
 
+
+def _normalize_url_candidates(
+    url: str, source_type: DocumentSource | None
+) -> list[str]:
     if source_type:
         try:
             connector_class = identify_connector_class(source_type)

@@ -296,7 +296,10 @@ downloaded file with
    should override `normalize_url`**
    (`connectors/interfaces.py:BaseConnector.normalize_url`). The open-URL tool
    (`tools/tool_implementations/open_url/url_normalization.py`) uses it to map
-   a pasted URL to an indexed document ([[web-search]]).
+   a pasted URL to an indexed document ([[web-search]]). A connector that
+   prefixes its ids and shares another source's URLs (Jira Service Management
+   on Jira URLs) cannot be reached that way. The open-URL normalizer adds its
+   prefixed id as an extra candidate.
 10. `gateway-fenced-and-thread-safe` **A gateway is fenced at import time, must
     be thread safe, and returns plain data.** The class shape
     (`connectors/source_operations.py:SourceOperations.__init_subclass__`) fails
