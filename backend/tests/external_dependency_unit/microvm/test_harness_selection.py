@@ -110,7 +110,7 @@ def new_ref(
     yield new
     for sandbox_id in ids:
         clear_container_record(tenant_cache, sandbox_id)
-        tenant_cache.delete(harness_selection._CHOICE_PREFIX + str(sandbox_id))
+        tenant_cache.delete_prefix(harness_selection._CHOICE_PREFIX + str(sandbox_id))
 
 
 def _fake() -> MagicMock:

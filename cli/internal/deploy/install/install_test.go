@@ -1164,10 +1164,14 @@ func TestInstallMissingFileAtRefDoesNotDisableFetching(t *testing.T) {
 
 // A dry rerun shows the overlays that a real rerun keeps, and probes nothing.
 func TestDryRunShowsTheKeptSandboxOverlay(t *testing.T) {
-	runner := &fakeRunner{handler: healthyDockerHandler}
-	root := installFixture(t, runner, "v4.2.0")
-	if err := os.WriteFile(filepath.Join(root, "deployment", "docker-compose.sandbox.yml"), []byte("services: {}\n"), 0644); err != nil {
-		t.Fatal(err)
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	install := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	if err := RunInstall(context.Background(), install, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true, IncludeSandbox: true,
+	}); err != nil {
+		t.Fatalf("install: %v\noutput:\n%s", err, outBuf(install).String())
 	}
 	dry := &fakeRunner{handler: healthyDockerHandler}
 	deps := testDeps(t, dry, notFoundServer(t))
@@ -1179,5 +1183,25 @@ func TestDryRunShowsTheKeptSandboxOverlay(t *testing.T) {
 	}
 	if len(dry.calls) != 0 {
 		t.Errorf("dry-run executed commands: %v", dry.calls)
+	}
+}
+
+// A lite rerun drops a sandbox overlay, so the dry-run plan does not show it.
+func TestDryRunOnLiteDoesNotShowASandboxOverlay(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.2.0")
+	m, err := state.Load(root)
+	if err != nil || m == nil || m.Mode != state.ModeLite {
+		t.Skipf("fixture is not a lite install: %+v %v", m, err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "deployment", "docker-compose.sandbox.yml"), []byte("services: {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	if err := RunInstall(context.Background(), deps, Options{DryRun: true, Tag: "v4.2.0", Dir: root}); err != nil {
+		t.Fatalf("RunInstall: %v", err)
+	}
+	if strings.Contains(outBuf(deps).String(), "Chat sandbox containers: true") {
+		t.Errorf("plan shows a sandbox overlay that a lite rerun removes:\n%s", outBuf(deps).String())
 	}
 }

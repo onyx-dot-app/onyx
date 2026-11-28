@@ -25,16 +25,18 @@ spec:
         (idle stop, orphan sweep). light: chat retention purges.
         scheduled-tasks: scheduled task runs. */}}
         {{- range $workload := list "api" "celery_worker_heavy" "celery_worker_light" "celery_worker_scheduled_tasks" }}
+        {{- /* The same labels that the workload's Deployment selects its pods by. */}}
         {{- $labels := (index $.Values $workload | default dict).deploymentLabels | default dict }}
-        {{- if not $labels.app }}
-        {{- fail (printf "harness sandbox pods need %s.deploymentLabels.app: the daemon NetworkPolicy selects that pod label" $workload) }}
-        {{- end }}
+        {{- $matchLabels := dict }}
+        {{- range $k, $v := $labels }}{{- if not (kindIs "invalid" $v) }}{{- $_ := set $matchLabels $k (toString $v) }}{{- end }}{{- end }}
+        {{- if $matchLabels }}
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ $.Release.Namespace | quote }}
           podSelector:
             matchLabels:
-              app: {{ $labels.app | quote }}
+              {{- toYaml $matchLabels | nindent 14 }}
+        {{- end }}
         {{- end }}
         {{- range $harness.extraDaemonClients | default list }}
         - {{- toYaml . | nindent 10 }}

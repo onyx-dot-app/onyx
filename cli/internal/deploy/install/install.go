@@ -1042,18 +1042,27 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	return effectiveTag, hostPort, nil
 }
 
-// recoverOverlaysForPlan adds the overlays that a real rerun keeps (the
-// manifest, or the files on disk), so the dry-run plan shows them. It only
-// reads files: no Docker probes.
+// recoverOverlaysForPlan resolves the mode and overlays as a real rerun
+// does (flags, the manifest, the files on disk), so the dry-run plan shows
+// them. It only reads files: no Docker probes.
 func (in *installer) recoverOverlaysForPlan() {
 	manifest, err := state.Load(in.root.Dir)
 	if err != nil || manifest == nil {
 		manifest = &state.Manifest{}
 	}
-	in.craft = in.craft || manifest.IncludeCraft ||
+	// The same rules as a rerun (runInstall).
+	in.prod = in.opts.Prod || manifest.Mode == state.ModeProd ||
+		in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel))
+	wasLite := manifest.Mode == state.ModeLite ||
+		in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))
+	in.lite = !in.prod && (in.opts.Lite ||
+		(!in.opts.IncludeCraft && !in.opts.IncludeSandbox && wasLite))
+	in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 		in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
-	in.sandbox = !in.lite && (in.sandbox || manifest.IncludeSandbox ||
+	in.sandbox = !in.lite && (in.opts.IncludeSandbox || manifest.IncludeSandbox ||
 		in.overlayOnDisk(filepath.Base(deployfiles.SandboxOverlay.DestRel)))
+	in.dev = !in.prod && (in.opts.Dev || manifest.Dev ||
+		in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel)))
 }
 
 // guardRunningServices reports whether the deployment's services are up, and

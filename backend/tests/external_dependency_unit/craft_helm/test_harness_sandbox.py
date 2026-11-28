@@ -321,3 +321,20 @@ def test_daemon_policy_follows_custom_workload_labels() -> None:
     apps = {peer["podSelector"]["matchLabels"]["app"] for peer in rule["from"]}
     assert "my-api" in apps
     assert "api-server" not in apps
+
+
+def test_daemon_policy_takes_labels_without_an_app_key() -> None:
+    docs = _render(
+        [
+            *_NO_CRAFT,
+            "--set",
+            "api.deploymentLabels.app=null",
+            "--set-string",
+            "api.deploymentLabels.component=api",
+        ]
+    )
+    policy = _find(docs, "NetworkPolicy", _POLICY)
+    assert policy is not None
+    (rule,) = policy["spec"]["ingress"]
+    selectors = [peer["podSelector"]["matchLabels"] for peer in rule["from"]]
+    assert {"component": "api"} in selectors
