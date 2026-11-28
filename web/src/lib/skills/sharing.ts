@@ -4,8 +4,8 @@ import type {
   SkillSharePermission,
 } from "@/lib/skills/types";
 import type {
-  SkillGroupSettingPayload,
-  SkillShareUpdatePayload,
+  PluginGroupSettingPayload,
+  PluginShareUpdatePayload,
 } from "@/lib/skills/api";
 import {
   INHERIT,
@@ -124,7 +124,7 @@ export function serializeSkillSharing(
   draft: SkillSharingDraft,
   isOrganizationManager: boolean,
   initial?: SkillSharingDraft
-): SkillShareUpdatePayload {
+): PluginShareUpdatePayload {
   const userShares = userShareRequests(draft);
   const groupShares = groupShareRequests(draft);
   const changed = <T>(value: T, unchanged: boolean): T | undefined =>
@@ -176,9 +176,9 @@ export interface GroupAccessRow extends GroupSettingRow {
 export function groupSettingChanges(
   initial: readonly GroupSettingRow[],
   current: readonly GroupSettingRow[]
-): SkillGroupSettingPayload[] {
+): PluginGroupSettingPayload[] {
   const before = new Map(initial.map((row) => [row.group_id, row.choice]));
-  const changes: SkillGroupSettingPayload[] = current
+  const changes: PluginGroupSettingPayload[] = current
     .filter((row) => row.choice !== (before.get(row.group_id) ?? INHERIT))
     .map((row) => ({
       group_id: row.group_id,

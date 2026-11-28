@@ -44,7 +44,7 @@ export default function UploadPluginFlow({
         // The plugin page can be open already, and the navigation below then
         // keeps it, so refresh its detail and versions here.
         void mutate(SWR_KEYS.userSkill(plugin.id));
-        void mutate(SWR_KEYS.skillVersions(plugin.id));
+        void mutate(SWR_KEYS.pluginVersions(plugin.id));
         const values = {
           name: target.plugin_name,
           version: target.version_number,

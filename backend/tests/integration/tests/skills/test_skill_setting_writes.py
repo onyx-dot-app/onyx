@@ -26,7 +26,7 @@ from tests.integration.tests.skills.conftest import (
     visible_skill_ids,
 )
 
-_DEFAULT_ACCESS = f"{API_SERVER_URL}/skills/organization-library/default-access"
+_DEFAULT_ACCESS = f"{API_SERVER_URL}/plugins/organization-library/default-access"
 
 
 def _set_default(admin: DATestUser, policy: str) -> httpx.Response:
@@ -241,7 +241,7 @@ def test_group_required_skill_permissions_through_the_api(
     member_view = SkillManager.get_for_user(skill.id, member)
     assert member_view.enabled and not member_view.can_toggle
     turned_off = client.put(
-        f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+        f"{API_SERVER_URL}/plugins/{skill.id}/enabled",
         json={"enabled": False},
         headers=member.headers,
     )
@@ -250,12 +250,12 @@ def test_group_required_skill_permissions_through_the_api(
 
     assert not SkillManager.get_for_user(skill.id, manager).can_delete
     refused = client.delete(
-        f"{API_SERVER_URL}/skills/custom/{skill.id}", headers=manager.headers
+        f"{API_SERVER_URL}/plugins/{skill.id}", headers=manager.headers
     )
     assert refused.status_code == 403
     assert SkillManager.get_for_user(skill.id, admin_user).can_delete
     client.delete(
-        f"{API_SERVER_URL}/skills/custom/{skill.id}", headers=admin_user.headers
+        f"{API_SERVER_URL}/plugins/{skill.id}", headers=admin_user.headers
     ).raise_for_status()
 
 
@@ -265,7 +265,7 @@ def test_transfer_is_refused_while_sharing_is_off(admin_user: DATestUser) -> Non
     target = UserManager.create(name=unique_name("transfer_off_target"))
     skill = SkillManager.create_custom(owner)
     body = {"new_owner_user_id": target.id}
-    url = f"{API_SERVER_URL}/skills/custom/{skill.id}/transfer-ownership"
+    url = f"{API_SERVER_URL}/plugins/{skill.id}/transfer-ownership"
 
     _set_sharing(admin_user, False)
     refused = client.post(url, json=body, headers=owner.headers)

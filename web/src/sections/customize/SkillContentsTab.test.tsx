@@ -7,8 +7,8 @@ const mockPatchUserSkill = jest.fn();
 const mockRemoveUserSkillFile = jest.fn();
 jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
-  patchUserSkill: (...args: unknown[]) => mockPatchUserSkill(...args),
-  removeUserSkillFile: (...args: unknown[]) => mockRemoveUserSkillFile(...args),
+  patchPlugin: (...args: unknown[]) => mockPatchUserSkill(...args),
+  removePluginFile: (...args: unknown[]) => mockRemoveUserSkillFile(...args),
 }));
 
 const detail = {

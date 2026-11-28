@@ -128,7 +128,7 @@ from onyx.server.features.persona.api import admin_router as admin_persona_route
 from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.projects.api import router as projects_router
 from onyx.server.features.search.api import router as search_api_router
-from onyx.server.features.skill.api import user_router as skill_router
+from onyx.server.features.skill.api import plugin_router as skill_plugin_router
 from onyx.server.features.skill.marketplace_api import (
     router as marketplace_router,
 )
@@ -700,7 +700,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     )
     include_router_with_global_prefix_prepended(application, action_policies_router)
     include_router_with_global_prefix_prepended(application, mobile_plugins_router)
-    include_router_with_global_prefix_prepended(application, skill_router)
+    include_router_with_global_prefix_prepended(application, skill_plugin_router)
     include_router_with_global_prefix_prepended(application, marketplace_router)
 
     include_router_with_global_prefix_prepended(application, pat_router)

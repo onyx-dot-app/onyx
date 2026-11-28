@@ -49,7 +49,7 @@ function plugin(id: string, name: string, over = {}) {
 test("an admin's list leaves out the private plugins of other members", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
-    "/api/skills": {
+    "/api/plugins": {
       builtins: [],
       customs: [
         plugin("mine", "my-kit"),
@@ -69,7 +69,7 @@ test("an admin's list leaves out the private plugins of other members", async ()
 test("a plugin that is only a root SKILL.md is left out", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
-    "/api/skills": {
+    "/api/plugins": {
       builtins: [],
       customs: [
         plugin("kit", "my-kit"),
@@ -86,7 +86,7 @@ test("a plugin that is only a root SKILL.md is left out", async () => {
 test("a plugin that is off because another plugin holds its skill name says so", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
-    "/api/skills": {
+    "/api/plugins": {
       builtins: [],
       customs: [
         plugin("held", "own-kit", {
@@ -108,8 +108,8 @@ test("the second click of a double-click on Turn on does not open the plugin", a
   const off = plugin("kit", "my-kit", { enabled: false });
   let enabled = false;
   mockFetch({
-    "/api/skills": () => ({ builtins: [], customs: [{ ...off, enabled }] }),
-    "PUT /api/skills/kit/enabled": () => {
+    "/api/plugins": () => ({ builtins: [], customs: [{ ...off, enabled }] }),
+    "PUT /api/plugins/kit/enabled": () => {
       enabled = true;
       return { ...off, enabled };
     },
@@ -135,7 +135,7 @@ test("the second click of a double-click on Turn on does not open the plugin", a
 test("with no plugins and no marketplaces, one empty state offers upload and add marketplace", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
-    "/api/skills": { builtins: [], customs: [] },
+    "/api/plugins": { builtins: [], customs: [] },
     "/api/marketplaces": { marketplaces: [] },
   });
   render(<CustomizePluginsPage />);
@@ -156,7 +156,7 @@ test("with no plugins and no marketplaces, one empty state offers upload and add
 test("the empty state offers add marketplace only once the marketplaces load", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
-    "/api/skills": { builtins: [], customs: [] },
+    "/api/plugins": { builtins: [], customs: [] },
     "/api/marketplaces": () => new Promise<never>(() => undefined),
   });
   render(<CustomizePluginsPage />);
@@ -172,7 +172,7 @@ test("the empty state offers add marketplace only once the marketplaces load", a
 test("the Marketplaces section shows a loader while the marketplaces load", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
-    "/api/skills": { builtins: [], customs: [] },
+    "/api/plugins": { builtins: [], customs: [] },
     "/api/marketplaces": () => new Promise<never>(() => undefined),
   });
   render(<CustomizePluginsPage />);
@@ -185,7 +185,7 @@ test("the Marketplaces section shows a loader while the marketplaces load", asyn
 test("the Marketplaces section lists marketplaces and the Add menu opens the add dialog", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
-    "/api/skills": { builtins: [], customs: [] },
+    "/api/plugins": { builtins: [], customs: [] },
     "/api/marketplaces": {
       marketplaces: [summaryFixture({ scope: "company" })],
     },
@@ -219,7 +219,7 @@ test("the Marketplaces section lists marketplaces and the Add menu opens the add
 test("the marketplaces stay usable when the plugins fail to load", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
-    "/api/skills": () => new Response(null, { status: 500 }),
+    "/api/plugins": () => new Response(null, { status: 500 }),
     "/api/marketplaces": { marketplaces: [summaryFixture()] },
   });
   render(<CustomizePluginsPage />);
@@ -235,7 +235,7 @@ test("the marketplaces stay usable when the plugins fail to load", async () => {
 test("the marketplaces show while the plugins still load", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
-    "/api/skills": () => new Promise<never>(() => undefined),
+    "/api/plugins": () => new Promise<never>(() => undefined),
     "/api/marketplaces": { marketplaces: [summaryFixture()] },
   });
   render(<CustomizePluginsPage />);
@@ -250,7 +250,7 @@ test("a link to #marketplaces scrolls to the section once it loads", async () =>
   const scrollIntoView = jest.fn();
   Element.prototype.scrollIntoView = scrollIntoView;
   mockFetch({
-    "/api/skills": { builtins: [], customs: [] },
+    "/api/plugins": { builtins: [], customs: [] },
     "/api/marketplaces": { marketplaces: [summaryFixture()] },
   });
   render(<CustomizePluginsPage />);
@@ -266,7 +266,7 @@ test("a sync that changes a marketplace refreshes the plugins once", async () =>
   window.history.replaceState(null, "", "/app/customize/plugins");
   let synced = false;
   const fetchMock = mockFetch({
-    "/api/skills": { builtins: [], customs: [] },
+    "/api/plugins": { builtins: [], customs: [] },
     "/api/marketplaces": () => ({
       marketplaces: [summaryFixture({ plugin_count: synced ? 3 : 2 })],
     }),
@@ -276,7 +276,7 @@ test("a sync that changes a marketplace refreshes the plugins once", async () =>
     },
   });
   const skillFetches = () =>
-    fetchMock.mock.calls.filter(([url]) => url === "/api/skills").length;
+    fetchMock.mock.calls.filter(([url]) => url === "/api/plugins").length;
   render(<CustomizePluginsPage />);
 
   await screen.findByRole("table", { name: "Marketplaces" });
@@ -301,7 +301,7 @@ test("two copies of a plugin say which marketplace each comes from", async () =>
     repository: "anthropics/skills",
   };
   mockFetch({
-    "/api/skills": {
+    "/api/plugins": {
       builtins: [],
       customs: [
         plugin("company", "academy-guide", {
@@ -328,7 +328,7 @@ describe("admin page", () => {
   test("lists every plugin, leaves skills out and opens plugins in the admin panel", async () => {
     window.history.replaceState(null, "", "/admin/plugins");
     mockFetch({
-      "/api/skills": {
+      "/api/plugins": {
         builtins: [],
         customs: [
           plugin("11111111-1111-4111-8111-111111111111", "my-kit"),
@@ -361,7 +361,7 @@ describe("admin page", () => {
   test("an unpublished upload with no owner says so, not by you", async () => {
     window.history.replaceState(null, "", "/admin/plugins");
     mockFetch({
-      "/api/skills": {
+      "/api/plugins": {
         builtins: [],
         customs: [
           plugin("mine", "my-kit"),
@@ -385,7 +385,7 @@ describe("admin page", () => {
   test("an admin's own published plugin is from the organization", async () => {
     window.history.replaceState(null, "", "/admin/plugins");
     mockFetch({
-      "/api/skills": {
+      "/api/plugins": {
         builtins: [],
         customs: [
           plugin("pub", "pub-kit", { published_version_number: 1 }),
@@ -411,7 +411,7 @@ describe("admin page", () => {
   test("deletes the selected plugins in one bulk request after the confirm", async () => {
     window.history.replaceState(null, "", "/admin/plugins");
     const fetchMock = mockFetch({
-      "/api/skills": {
+      "/api/plugins": {
         builtins: [],
         customs: [
           plugin("a", "alpha-kit", { user_permission: "OWNER" }),
@@ -420,7 +420,7 @@ describe("admin page", () => {
         ],
       },
       "/api/marketplaces": { marketplaces: [] },
-      "POST /api/skills/bulk": { succeeded: ["a", "b"], failed: [] },
+      "POST /api/plugins/bulk": { succeeded: ["a", "b"], failed: [] },
     });
     render(<CustomizePluginsPage />);
     const user = setupUser({
@@ -442,7 +442,7 @@ describe("admin page", () => {
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
-      expect(requestBody(fetchMock, "POST", "/api/skills/bulk")).toEqual({
+      expect(requestBody(fetchMock, "POST", "/api/plugins/bulk")).toEqual({
         action: "delete",
         skill_ids: ["a", "b"],
       })
@@ -456,7 +456,7 @@ describe("admin page", () => {
     window.history.replaceState(null, "", "/admin/plugins");
     let listCalls = 0;
     mockFetch({
-      "/api/skills": () =>
+      "/api/plugins": () =>
         ++listCalls === 1
           ? {
               builtins: [],
@@ -464,7 +464,7 @@ describe("admin page", () => {
             }
           : new Response(null, { status: 500 }),
       "/api/marketplaces": { marketplaces: [] },
-      "POST /api/skills/bulk": {
+      "POST /api/plugins/bulk": {
         succeeded: [],
         failed: [{ skill_id: "a", detail: "in use" }],
       },
@@ -497,7 +497,7 @@ describe("admin page", () => {
   test("a plugin the admin cannot manage cannot be selected", async () => {
     window.history.replaceState(null, "", "/admin/plugins");
     mockFetch({
-      "/api/skills": {
+      "/api/plugins": {
         builtins: [],
         customs: [
           plugin("mine", "my-kit", { user_permission: "OWNER" }),
@@ -531,7 +531,7 @@ describe("admin page", () => {
       repository: "anthropics/skills",
     };
     mockFetch({
-      "/api/skills": {
+      "/api/plugins": {
         builtins: [],
         customs: [
           plugin("personal", "personal-kit", {

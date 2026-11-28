@@ -50,7 +50,7 @@ def share_skill(
     user: DATestUser, skill_id: UUID | str, body: dict[str, Any]
 ) -> httpx.Response:
     return client.patch(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/share",
+        f"{API_SERVER_URL}/plugins/{skill_id}/share",
         json=body,
         headers=user.headers,
     )

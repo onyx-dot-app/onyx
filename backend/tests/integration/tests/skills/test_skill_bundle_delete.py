@@ -101,7 +101,7 @@ def test_bulk_delete_removes_every_version_and_bundle(
     assert len(file_ids) == 6
 
     response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         headers=basic_user.headers,
         json={"skill_ids": [str(skill.id) for skill in skills], "action": "delete"},
     )

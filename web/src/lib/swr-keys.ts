@@ -308,21 +308,21 @@ export const SWR_KEYS = {
   assistantPreferences: "/api/user/assistant/preferences",
 
   // ── Skills ────────────────────────────────────────────────────────────────
-  userSkills: "/api/skills",
-  chatSkills: "/api/skills/chat",
-  userSkill: (skillId: string) => `/api/skills/${skillId}`,
-  userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  userSkills: "/api/plugins",
+  chatSkills: "/api/plugins/chat-skills",
+  userSkill: (skillId: string) => `/api/plugins/${skillId}`,
+  userSkillPreview: (skillId: string) => `/api/plugins/${skillId}/preview`,
   pluginSkill: (pluginId: string, path: string) =>
-    `/api/skills/${pluginId}/plugin-skill?path=${encodeURIComponent(path)}`,
-  skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
-  editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
-  skillReviewRequests: "/api/skills/review-requests",
-  skillLimitUsers: "/api/skills/users-over-limit",
+    `/api/plugins/${pluginId}/skill?path=${encodeURIComponent(path)}`,
+  pluginSharing: (pluginId: string) => `/api/plugins/${pluginId}/share`,
+  editablePlugin: (pluginId: string) => `/api/plugins/${pluginId}/edit`,
+  pluginReviewRequests: "/api/plugins/review-requests",
+  skillLimitUsers: "/api/plugins/users-over-limit",
   organizationLibraryDefaultAccess:
-    "/api/skills/organization-library/default-access",
-  skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
-  skillVersion: (skillId: string, versionId: string) =>
-    `/api/skills/custom/${skillId}/versions/${versionId}`,
+    "/api/plugins/organization-library/default-access",
+  pluginVersions: (pluginId: string) => `/api/plugins/${pluginId}/versions`,
+  pluginVersion: (pluginId: string, versionId: string) =>
+    `/api/plugins/${pluginId}/versions/${versionId}`,
   marketplaces: "/api/marketplaces",
   marketplace: (marketplaceId: string) => `/api/marketplaces/${marketplaceId}`,
 

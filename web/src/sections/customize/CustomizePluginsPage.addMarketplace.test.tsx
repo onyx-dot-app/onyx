@@ -44,7 +44,7 @@ jest.mock("@/sections/marketplaces/AddMarketplaceModal", () => ({
 beforeEach(() => {
   mockRefreshSkillLists.mockClear();
   mockFetch({
-    "/api/skills": { builtins: [], customs: [] },
+    "/api/plugins": { builtins: [], customs: [] },
     "/api/marketplaces": { marketplaces: [] },
   });
 });

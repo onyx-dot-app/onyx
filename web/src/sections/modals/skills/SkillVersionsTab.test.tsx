@@ -15,8 +15,9 @@ jest.mock("@/lib/fetcher", () => ({
 
 jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
-  restoreSkillVersion: (...args: unknown[]) => mockRestoreSkillVersion(...args),
-  publishSkill: (...args: unknown[]) => mockPublishSkill(...args),
+  restorePluginVersion: (...args: unknown[]) =>
+    mockRestoreSkillVersion(...args),
+  publishPlugin: (...args: unknown[]) => mockPublishSkill(...args),
 }));
 
 let mockPublishing = "OPEN";
@@ -91,8 +92,8 @@ describe("SkillVersionsTab", () => {
     mockPublishing = "OPEN";
     mockIsManager = false;
     mockFetch.mockReset().mockImplementation(async (url: string) => {
-      if (url === "/api/skills/custom/skill-1/versions") return VERSIONS;
-      if (url === "/api/skills/custom/skill-1/versions/version-2") {
+      if (url === "/api/plugins/skill-1/versions") return VERSIONS;
+      if (url === "/api/plugins/skill-1/versions/version-2") {
         return {
           description: "Older description",
           instructions_markdown: "Older instructions.",
@@ -156,12 +157,12 @@ describe("SkillVersionsTab", () => {
 
   it("opens a plugin version with its skills, integrations and plugin.json version", async () => {
     mockFetch.mockImplementation(async (url: string) => {
-      if (url === "/api/skills/custom/skill-1/versions")
+      if (url === "/api/plugins/skill-1/versions")
         return [
           version({ id: "v2", version_number: 2, is_current: true }),
           version({ id: "v1", version_number: 1, manifest_version: "1.0.0" }),
         ];
-      if (url === "/api/skills/custom/skill-1/versions/v1")
+      if (url === "/api/plugins/skill-1/versions/v1")
         return {
           description: "First kit",
           instructions_markdown: "",

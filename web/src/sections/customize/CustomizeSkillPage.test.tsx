@@ -71,8 +71,8 @@ function open(
 ) {
   window.history.replaceState(null, "", url);
   const fetchMock = mockFetch({
-    "/api/skills/custom/custom-1/edit": skill,
-    "/api/skills/custom-1/preview": {
+    "/api/plugins/custom-1/edit": skill,
+    "/api/plugins/custom-1/preview": {
       source: "custom",
       id: "custom-1",
       name: skill.name,
@@ -81,8 +81,8 @@ function open(
       instructions_markdown: skill.instructions_markdown,
       files: skill.files,
     },
-    "/api/skills": { builtins: [], customs: [skill] },
-    "/api/skills/custom/custom-1/versions": [
+    "/api/plugins": { builtins: [], customs: [skill] },
+    "/api/plugins/custom-1/versions": [
       {
         id: "version-2",
         version_number: 2,
@@ -100,8 +100,8 @@ function open(
         review_status: "draft",
       },
     ],
-    "PUT /api/skills/custom-1/enabled": { ...skill, enabled: true },
-    "POST /api/skills/custom/custom-1/versions/version-1/restore": {
+    "PUT /api/plugins/custom-1/enabled": { ...skill, enabled: true },
+    "POST /api/plugins/custom-1/versions/version-1/restore": {
       ...skill,
       current_version_id: "version-3",
       current_version_number: 3,
@@ -176,20 +176,20 @@ test("a viewer who opens a Versions link sees Overview", async () => {
 
 test("an owner edits SKILL.md and removes a file, then saves one edit", async () => {
   const fetchMock = mockFetch({
-    "/api/skills/custom/custom-1/edit": {
+    "/api/plugins/custom-1/edit": {
       ...detail({ user_permission: "OWNER", current_version_id: "version-2" }),
     },
-    "/api/skills": {
+    "/api/plugins": {
       builtins: [],
       customs: [detail({ user_permission: "OWNER" })],
     },
-    "/api/skills/chat": [],
-    "/api/skills/users-over-limit": { users: [] },
-    "PATCH /api/skills/custom/custom-1": {
+    "/api/plugins/chat-skills": [],
+    "/api/plugins/users-over-limit": { users: [] },
+    "PATCH /api/plugins/custom-1": {
       ...detail({ user_permission: "OWNER" }),
       current_version_id: "version-3",
     },
-    "DELETE /api/skills/custom/custom-1/files?path=references%2Fguide.md&base_version_id=version-3":
+    "DELETE /api/plugins/custom-1/files?path=references%2Fguide.md&base_version_id=version-3":
       {
         ...detail({ user_permission: "OWNER" }),
         current_version_id: "version-4",
@@ -228,9 +228,7 @@ test("an owner edits SKILL.md and removes a file, then saves one edit", async ()
   );
 
   await waitFor(() => expect(window.location.search).toBe("?tab=contents"));
-  expect(
-    requestBody(fetchMock, "PATCH", "/api/skills/custom/custom-1")
-  ).toEqual({
+  expect(requestBody(fetchMock, "PATCH", "/api/plugins/custom-1")).toEqual({
     description: "Writes the weekly report.",
     instructions_markdown: "Write it.",
     base_version_id: "version-2",
@@ -243,10 +241,10 @@ function ownerRoutes(extra: Record<string, unknown>) {
     current_version_id: "version-2",
   });
   return mockFetch({
-    "/api/skills/custom/custom-1/edit": owner,
-    "/api/skills": { builtins: [], customs: [owner] },
-    "/api/skills/chat": [],
-    "/api/skills/users-over-limit": { users: [] },
+    "/api/plugins/custom-1/edit": owner,
+    "/api/plugins": { builtins: [], customs: [owner] },
+    "/api/plugins/chat-skills": [],
+    "/api/plugins/users-over-limit": { users: [] },
     ...extra,
   });
 }
@@ -266,7 +264,7 @@ async function editDescription(description: string) {
 
 test("a newer save by someone else keeps the draft and offers Reload", async () => {
   ownerRoutes({
-    "PATCH /api/skills/custom/custom-1": () =>
+    "PATCH /api/plugins/custom-1": () =>
       new Response(
         JSON.stringify({ error_code: "PLUGIN_VERSION_STALE", detail: "stale" }),
         { status: 409 }
@@ -298,7 +296,7 @@ test("a newer save by someone else keeps the draft and offers Reload", async () 
 
 test("Reload drops the staged file changes with the text", async () => {
   ownerRoutes({
-    "DELETE /api/skills/custom/custom-1/files?path=references%2Fguide.md&base_version_id=version-2":
+    "DELETE /api/plugins/custom-1/files?path=references%2Fguide.md&base_version_id=version-2":
       () =>
         new Response(
           JSON.stringify({
@@ -339,13 +337,13 @@ test("a failed refresh keeps the page and the editor", async () => {
   const toastError = jest.spyOn(toast, "error");
   let reads = 0;
   ownerRoutes({
-    "/api/skills/custom/custom-1/edit": () => {
+    "/api/plugins/custom-1/edit": () => {
       reads += 1;
       return reads === 1
         ? detail({ user_permission: "OWNER", current_version_id: "version-2" })
         : new Response(JSON.stringify({ detail: "down" }), { status: 503 });
     },
-    "PATCH /api/skills/custom/custom-1": () =>
+    "PATCH /api/plugins/custom-1": () =>
       new Response(
         JSON.stringify({ error_code: "PLUGIN_VERSION_STALE", detail: "stale" }),
         { status: 409 }
@@ -386,11 +384,11 @@ test("a failed refresh keeps the page and the editor", async () => {
 test("a retry after a failed step sends only the steps left", async () => {
   let removals = 0;
   const fetchMock = ownerRoutes({
-    "PATCH /api/skills/custom/custom-1": {
+    "PATCH /api/plugins/custom-1": {
       ...detail({ user_permission: "OWNER" }),
       current_version_id: "version-3",
     },
-    "DELETE /api/skills/custom/custom-1/files?path=references%2Fguide.md&base_version_id=version-3":
+    "DELETE /api/plugins/custom-1/files?path=references%2Fguide.md&base_version_id=version-3":
       () => {
         removals += 1;
         return removals === 1
@@ -428,11 +426,11 @@ test("a retry after a failed step sends only the steps left", async () => {
 test("a retry still removes a file from an upload that already went up", async () => {
   let removals = 0;
   ownerRoutes({
-    "POST /api/skills/custom/custom-1/files": {
+    "POST /api/plugins/custom-1/files": {
       ...detail({ user_permission: "OWNER" }),
       current_version_id: "version-3",
     },
-    "DELETE /api/skills/custom/custom-1/files?path=b.md&base_version_id=version-3":
+    "DELETE /api/plugins/custom-1/files?path=b.md&base_version_id=version-3":
       () => {
         removals += 1;
         return removals === 1
@@ -479,8 +477,8 @@ test("leaving edits by a tab asks first", async () => {
 
 test("a renamed skill in SKILL.md is refused before any save", async () => {
   const fetchMock = mockFetch({
-    "/api/skills/custom/custom-1/edit": detail({ user_permission: "OWNER" }),
-    "/api/skills": {
+    "/api/plugins/custom-1/edit": detail({ user_permission: "OWNER" }),
+    "/api/plugins": {
       builtins: [],
       customs: [detail({ user_permission: "OWNER" })],
     },
@@ -533,8 +531,8 @@ test("a failed preview keeps the Overview and shows the error in Contents", asyn
     owner: { id: "other", email: "other@example.com" },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [viewer] },
-    "/api/skills/custom-1/preview": () =>
+    "/api/plugins": { builtins: [], customs: [viewer] },
+    "/api/plugins/custom-1/preview": () =>
       new Response(JSON.stringify({ detail: "down" }), { status: 503 }),
   });
   window.history.replaceState(null, "", "/app/customize/skills/custom-1");
@@ -558,9 +556,9 @@ test("Add turns on an organization skill the user has not added", async () => {
   );
   expect(await screen.findByText(copy.fromOrganization)).toBeVisible();
   await setupUser().click(screen.getByRole("button", { name: copy.add }));
-  expect(requestBody(fetchMock, "PUT", "/api/skills/custom-1/enabled")).toEqual(
-    { enabled: true, replace_conflict: false }
-  );
+  expect(
+    requestBody(fetchMock, "PUT", "/api/plugins/custom-1/enabled")
+  ).toEqual({ enabled: true, replace_conflict: false });
 });
 
 test("an owner restores a version from the Versions tab", async () => {
@@ -583,7 +581,7 @@ test("an owner restores a version from the Versions tab", async () => {
     requestBody(
       fetchMock,
       "POST",
-      "/api/skills/custom/custom-1/versions/version-1/restore"
+      "/api/plugins/custom-1/versions/version-1/restore"
     )
   ).toEqual({ base_version_id: "version-2" });
 });
@@ -641,7 +639,7 @@ test("an uploaded plugin opens its admin plugin page without skill-only requests
     user_permission: "OWNER",
   });
   const fetchMock = mockFetch({
-    "/api/skills": { builtins: [], customs: [plugin] },
+    "/api/plugins": { builtins: [], customs: [plugin] },
   });
   render(<CustomizeSkillPage skillId="custom-1" from="admin" />);
   await waitFor(() =>
@@ -650,7 +648,7 @@ test("an uploaded plugin opens its admin plugin page without skill-only requests
   expect(
     fetchMock.mock.calls
       .map(([input]) => String(input))
-      .filter((url) => url.startsWith("/api/skills/"))
+      .filter((url) => url.startsWith("/api/plugins/"))
   ).toEqual([]);
 });
 

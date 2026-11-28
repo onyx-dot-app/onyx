@@ -24,7 +24,7 @@ export async function createSkill(
   instructions: string,
   options: { publish?: boolean } = {}
 ): Promise<CreatedSkill> {
-  const res = await request.post("/api/skills/custom/editor", {
+  const res = await request.post("/api/plugins/editor", {
     multipart: {
       name,
       description: skillDescription(name),
@@ -52,7 +52,7 @@ export async function deleteSkill(
   request: APIRequestContext,
   skillId: string
 ): Promise<void> {
-  const res = await request.delete(`/api/skills/custom/${skillId}`);
+  const res = await request.delete(`/api/plugins/${skillId}`);
   expect(res.ok(), await res.text()).toBeTruthy();
 }
 
@@ -61,7 +61,7 @@ export async function editSkillInstructions(
   skillId: string,
   instructions: string
 ): Promise<CreatedSkill> {
-  const res = await request.patch(`/api/skills/custom/${skillId}`, {
+  const res = await request.patch(`/api/plugins/${skillId}`, {
     data: { instructions_markdown: instructions },
   });
   expect(res.ok(), await res.text()).toBeTruthy();
@@ -73,7 +73,7 @@ export async function shareSkillWithEditor(
   skillId: string,
   userId: string
 ): Promise<void> {
-  const res = await request.patch(`/api/skills/custom/${skillId}/share`, {
+  const res = await request.patch(`/api/plugins/${skillId}/share`, {
     data: { user_shares: [{ user_id: userId, permission: "EDITOR" }] },
   });
   expect(res.ok(), await res.text()).toBeTruthy();

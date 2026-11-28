@@ -181,7 +181,7 @@ def test_manager_cannot_grant_skill_to_unmanaged_group(env: _ScopedEnv) -> None:
     _assert_manager(
         env,
         "PATCH",
-        f"/skills/custom/{skill.id}/share",
+        f"/plugins/{skill.id}/share",
         "denied",
         {
             "group_shares": [
@@ -200,7 +200,7 @@ def test_manager_cannot_publish_skill(env: _ScopedEnv) -> None:
     _assert_manager(
         env,
         "PATCH",
-        f"/skills/custom/{skill.id}",
+        f"/plugins/{skill.id}",
         "denied",
         {"public_permission": "VIEWER"},
     )
@@ -219,7 +219,7 @@ def test_manager_cannot_delete_skill_it_does_not_own(env: _ScopedEnv) -> None:
     skill = SkillManager.create_custom(
         env.admin, is_public=False, group_ids=[env.managed_group.id]
     )
-    _assert_manager(env, "DELETE", f"/skills/custom/{skill.id}", "denied")
+    _assert_manager(env, "DELETE", f"/plugins/{skill.id}", "denied")
 
 
 def test_manager_skill_list_is_scoped(env: _ScopedEnv) -> None:
@@ -230,7 +230,7 @@ def test_manager_skill_list_is_scoped(env: _ScopedEnv) -> None:
         env.admin, is_public=False, group_ids=[env.other_group.id]
     )
     resp = call_endpoint(
-        "GET", "/skills", None, env.manager.headers, env.manager.cookies
+        "GET", "/plugins", None, env.manager.headers, env.manager.cookies
     )
     assert resp.status_code == 200, resp.text
     custom_ids = {c["id"] for c in resp.json()["customs"]}

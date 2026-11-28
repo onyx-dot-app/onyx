@@ -24,7 +24,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.skills.conftest import promote_to_manager, unique_name
 
-_DEFAULT_ACCESS = f"{API_SERVER_URL}/skills/organization-library/default-access"
+_DEFAULT_ACCESS = f"{API_SERVER_URL}/plugins/organization-library/default-access"
 
 
 @pytest.fixture(autouse=True)
@@ -41,7 +41,7 @@ def _set_default(admin: DATestUser, policy: str) -> httpx.Response:
 
 def _share(user: DATestUser, skill_id: UUID, body: dict[str, Any]) -> SkillResponse:
     response = client.patch(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/share",
+        f"{API_SERVER_URL}/plugins/{skill_id}/share",
         json=body,
         headers=user.headers,
     )
@@ -167,7 +167,7 @@ def test_group_settings_from_the_share_dialog(
 
     # Group settings are set one skill at a time; the bulk dialog has none.
     response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
+        f"{API_SERVER_URL}/plugins/bulk",
         json={
             "action": "share",
             "skill_ids": [str(first.id), str(second.id)],

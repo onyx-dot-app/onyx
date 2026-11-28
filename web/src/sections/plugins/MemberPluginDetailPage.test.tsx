@@ -36,7 +36,7 @@ afterEach(() => jest.restoreAllMocks());
 test("a plugin that is one skill opens the skill page", async () => {
   window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
   mockFetch({
-    "/api/skills": {
+    "/api/plugins": {
       builtins: [],
       customs: [
         customFixture({
@@ -59,7 +59,7 @@ test("a plugin that is one skill opens the skill page", async () => {
 test("the member page does not open a plugin that members cannot see", async () => {
   window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
   mockFetch({
-    "/api/skills": {
+    "/api/plugins": {
       builtins: [],
       customs: [
         customFixture({
@@ -117,10 +117,10 @@ test("an uploaded plugin lists its needs and turning it on shows the ones not on
     },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/plugins": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
     "/api/integrations": [],
-    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: { ...plugin, enabled: true },
+    [`PUT /api/plugins/${PLUGIN_ID}/enabled`]: { ...plugin, enabled: true },
   });
   const user = setupUser();
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
@@ -153,9 +153,9 @@ test("turning on a plugin whose skill name is taken asks to switch", async () =>
     },
   });
   const fetchMock = mockFetch({
-    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
-    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: (init?: RequestInit) =>
+    "/api/plugins": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
+    [`PUT /api/plugins/${PLUGIN_ID}/enabled`]: (init?: RequestInit) =>
       typeof init?.body === "string" && JSON.parse(init.body).replace_conflict
         ? { ...plugin, enabled: true }
         : new Response(
@@ -250,10 +250,10 @@ test("turning on a plugin refreshes the integration rows it turned on", async ()
     server_url: null,
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/plugins": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
     "/api/integrations": () => [integration()],
-    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: () => {
+    [`PUT /api/plugins/${PLUGIN_ID}/enabled`]: () => {
       enabled = true;
       return {
         ...plugin,
@@ -298,10 +298,10 @@ test("the turn-on dialog lists only the integrations that are not on", async () 
     },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/plugins": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
     "/api/integrations": [],
-    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: { ...plugin, enabled: true },
+    [`PUT /api/plugins/${PLUGIN_ID}/enabled`]: { ...plugin, enabled: true },
   });
   const user = setupUser();
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
@@ -334,9 +334,9 @@ test("the owner shares, uploads a new version and deletes the plugin from its pa
     },
   });
   const fetchMock = mockFetch({
-    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
-    [`DELETE /api/skills/custom/${PLUGIN_ID}`]: new Response(null, {
+    "/api/plugins": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
+    [`DELETE /api/plugins/${PLUGIN_ID}`]: new Response(null, {
       status: 204,
     }),
   });
@@ -360,7 +360,7 @@ test("the owner shares, uploads a new version and deletes the plugin from its pa
   expect(
     fetchMock.mock.calls.some(
       ([url, init]) =>
-        String(url).endsWith(`/api/skills/custom/${PLUGIN_ID}`) &&
+        String(url).endsWith(`/api/plugins/${PLUGIN_ID}`) &&
         init?.method === "DELETE"
     )
   ).toBe(true);
@@ -386,9 +386,9 @@ test("the Skills tab opens the instructions of one skill", async () => {
     },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
-    [`/api/skills/${PLUGIN_ID}/plugin-skill?path=skills%2Fplan`]: {
+    "/api/plugins": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
+    [`/api/plugins/${PLUGIN_ID}/skill?path=skills%2Fplan`]: {
       instructions_markdown: "Write the plan first.",
     },
   });
@@ -427,9 +427,9 @@ test("a synced plugin says it changes in GitHub and hides restore and publish", 
     plugin: { manifest: null, skills: [], needs: [] },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [plugin] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
-    [`/api/skills/custom/${PLUGIN_ID}/versions`]: [
+    "/api/plugins": { builtins: [], customs: [plugin] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
+    [`/api/plugins/${PLUGIN_ID}/versions`]: [
       {
         id: "version-2",
         version_number: 2,
@@ -483,8 +483,8 @@ test("a synced plugin names its marketplace and says that GitHub holds it", asyn
     plugin: { manifest: null, skills: [], needs: [] },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [plugin] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/plugins": { builtins: [], customs: [plugin] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
   });
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
@@ -518,8 +518,8 @@ test("a personal synced plugin offers neither Share nor Upload New Version", asy
     plugin: { manifest: null, skills: [], needs: [] },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/plugins": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
   });
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
@@ -540,8 +540,8 @@ test("in the admin panel the back link returns to the admin plugin list", async 
     plugin: { manifest: null, skills: [], needs: [] },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/plugins": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
   });
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
@@ -563,8 +563,8 @@ test("the overview says why the switch of a required plugin is disabled", async 
     plugin: { manifest: null, skills: [], needs: [] },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [plugin] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/plugins": { builtins: [], customs: [plugin] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
   });
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
@@ -589,8 +589,8 @@ test("the overview says which plugin holds the skill name of an off plugin", asy
     plugin: { manifest: null, skills: [], needs: [] },
   });
   mockFetch({
-    "/api/skills": { builtins: [], customs: [plugin] },
-    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/plugins": { builtins: [], customs: [plugin] },
+    [`/api/plugins/${PLUGIN_ID}`]: plugin,
   });
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
@@ -612,11 +612,11 @@ describe("a plugin deleted in another tab", () => {
   function mockDeletedAfterLoad(route: string) {
     let deleted = false;
     mockFetch({
-      "/api/skills": () => ({
+      "/api/plugins": () => ({
         builtins: [],
         customs: deleted ? [] : [{ ...plugin, plugin: null }],
       }),
-      [`/api/skills/${PLUGIN_ID}`]: plugin,
+      [`/api/plugins/${PLUGIN_ID}`]: plugin,
       [route]: () => {
         deleted = true;
         return new Response(
@@ -632,7 +632,7 @@ describe("a plugin deleted in another tab", () => {
   );
 
   test("a switch that gets a 404 shows the not-found state", async () => {
-    mockDeletedAfterLoad(`PUT /api/skills/${PLUGIN_ID}/enabled`);
+    mockDeletedAfterLoad(`PUT /api/plugins/${PLUGIN_ID}/enabled`);
     const user = setupUser();
     render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
@@ -646,7 +646,7 @@ describe("a plugin deleted in another tab", () => {
   });
 
   test("Share that gets a 404 shows the not-found state", async () => {
-    mockDeletedAfterLoad(`/api/skills/custom/${PLUGIN_ID}/share`);
+    mockDeletedAfterLoad(`/api/plugins/${PLUGIN_ID}/share`);
     const user = setupUser();
     render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 

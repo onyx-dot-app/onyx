@@ -78,7 +78,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> list[SkillVersionResponse]:
         response = client.get(
-            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions",
+            f"{API_SERVER_URL}/plugins/{skill_id}/versions",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -89,7 +89,7 @@ class SkillManager:
         skill_id: UUID, version_id: UUID, user_performing_action: DATestUser
     ) -> SkillVersionPreviewResponse:
         response = client.get(
-            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions/{version_id}",
+            f"{API_SERVER_URL}/plugins/{skill_id}/versions/{version_id}",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -103,7 +103,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> httpx.Response:
         return client.post(
-            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions/{version_id}/restore",
+            f"{API_SERVER_URL}/plugins/{skill_id}/versions/{version_id}/restore",
             json=SkillVersionRestoreRequest(base_version_id=base_version_id).model_dump(
                 mode="json"
             ),
@@ -130,7 +130,7 @@ class SkillManager:
         base_version_id: UUID | None = None,
     ) -> httpx.Response:
         return client.post(
-            f"{API_SERVER_URL}/skills/custom/{skill_id}/publish",
+            f"{API_SERVER_URL}/plugins/{skill_id}/publish",
             json=SkillPublishRequest(base_version_id=base_version_id).model_dump(
                 mode="json"
             ),
@@ -157,7 +157,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> httpx.Response:
         return client.post(
-            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions/{version_id}/{decision}",
+            f"{API_SERVER_URL}/plugins/{skill_id}/versions/{version_id}/{decision}",
             headers=user_performing_action.headers,
         )
 
@@ -179,7 +179,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> list[SkillReviewRequestResponse]:
         response = client.get(
-            f"{API_SERVER_URL}/skills/review-requests",
+            f"{API_SERVER_URL}/plugins/review-requests",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -217,7 +217,7 @@ class SkillManager:
                 "application/octet-stream",
             )
         response = client.post(
-            f"{API_SERVER_URL}/skills/custom/editor",
+            f"{API_SERVER_URL}/plugins/editor",
             files=files,
             headers=headers,
         )
@@ -244,7 +244,7 @@ class SkillManager:
         headers.pop("Content-Type", None)
 
         response = client.post(
-            f"{API_SERVER_URL}/skills/custom",
+            f"{API_SERVER_URL}/plugins/skill-bundle",
             files={
                 "auto_enable": (None, str(auto_enable).lower(), None),
                 "bundle": (
@@ -270,7 +270,7 @@ class SkillManager:
                 ],
             )
             share_response = client.patch(
-                f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
+                f"{API_SERVER_URL}/plugins/{skill.id}/share",
                 json=share_req.model_dump(mode="json", exclude_unset=True),
                 headers=user_performing_action.headers,
             )
@@ -286,7 +286,7 @@ class SkillManager:
         patch_req: SkillPatchRequest,
     ) -> SkillResponse:
         response = client.patch(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}",
+            f"{API_SERVER_URL}/plugins/{skill.id}",
             json=patch_req.model_dump(
                 mode="json",
                 exclude_unset=True,
@@ -306,7 +306,7 @@ class SkillManager:
         headers.pop("Content-Type", None)
 
         response = client.put(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/bundle",
+            f"{API_SERVER_URL}/plugins/{skill.id}/bundle",
             files={
                 "bundle": (
                     f"{skill.name}.zip",
@@ -330,7 +330,7 @@ class SkillManager:
         headers.pop("Content-Type", None)
 
         response = client.post(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/files",
+            f"{API_SERVER_URL}/plugins/{skill.id}/files",
             files={
                 "upload": (
                     filename,
@@ -350,7 +350,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillEditableDetailResponse:
         response = client.delete(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/files",
+            f"{API_SERVER_URL}/plugins/{skill.id}/files",
             params={"path": path},
             headers=user_performing_action.headers,
         )
@@ -373,7 +373,7 @@ class SkillManager:
             ],
         )
         response = client.patch(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
+            f"{API_SERVER_URL}/plugins/{skill.id}/share",
             json=share_req.model_dump(mode="json", exclude_none=True),
             headers=user_performing_action.headers,
         )
@@ -386,7 +386,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> None:
         response = client.delete(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}",
+            f"{API_SERVER_URL}/plugins/{skill.id}",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -396,7 +396,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillsList:
         response = client.get(
-            f"{API_SERVER_URL}/skills",
+            f"{API_SERVER_URL}/plugins",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -407,7 +407,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillsList:
         response = client.get(
-            f"{API_SERVER_URL}/skills",
+            f"{API_SERVER_URL}/plugins",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -421,7 +421,7 @@ class SkillManager:
         replace_conflict: bool = False,
     ) -> SkillResponse:
         response = client.put(
-            f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+            f"{API_SERVER_URL}/plugins/{skill.id}/enabled",
             json={"enabled": enabled, "replace_conflict": replace_conflict},
             headers=user_performing_action.headers,
         )
@@ -434,7 +434,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillResponse:
         response = client.get(
-            f"{API_SERVER_URL}/skills/{skill_id}",
+            f"{API_SERVER_URL}/plugins/{skill_id}",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -446,7 +446,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillPreviewResponse:
         response = client.get(
-            f"{API_SERVER_URL}/skills/{skill_id}/preview",
+            f"{API_SERVER_URL}/plugins/{skill_id}/preview",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -458,7 +458,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> SkillEditableDetailResponse:
         response = client.get(
-            f"{API_SERVER_URL}/skills/custom/{skill_id}/edit",
+            f"{API_SERVER_URL}/plugins/{skill_id}/edit",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -494,7 +494,7 @@ class SkillManager:
         share_req = SkillShareRequest.model_validate(share_fields)
 
         response = client.patch(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
+            f"{API_SERVER_URL}/plugins/{skill.id}/share",
             json=share_req.model_dump(mode="json", exclude_unset=True),
             headers=user_performing_action.headers,
         )
@@ -511,7 +511,7 @@ class SkillManager:
             new_owner_user_id=UUID(str(new_owner_user_id))
         )
         response = client.post(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/transfer-ownership",
+            f"{API_SERVER_URL}/plugins/{skill.id}/transfer-ownership",
             json=transfer_req.model_dump(mode="json"),
             headers=user_performing_action.headers,
         )
@@ -536,7 +536,7 @@ class SkillManager:
         headers.pop("Content-Type", None)
 
         response = client.post(
-            f"{API_SERVER_URL}/skills/custom",
+            f"{API_SERVER_URL}/plugins/skill-bundle",
             files={
                 "auto_enable": (None, str(auto_enable).lower(), None),
                 "bundle": (
@@ -560,7 +560,7 @@ class SkillManager:
         headers.pop("Content-Type", None)
 
         response = client.put(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/bundle",
+            f"{API_SERVER_URL}/plugins/{skill.id}/bundle",
             files={
                 "bundle": (
                     f"{skill.name}.zip",
@@ -580,7 +580,7 @@ class SkillManager:
         patch_req: SkillPatchRequest,
     ) -> SkillResponse:
         response = client.patch(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}",
+            f"{API_SERVER_URL}/plugins/{skill.id}",
             json=patch_req.model_dump(
                 mode="json",
                 exclude_unset=True,
@@ -596,7 +596,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> None:
         response = client.delete(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}",
+            f"{API_SERVER_URL}/plugins/{skill.id}",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()

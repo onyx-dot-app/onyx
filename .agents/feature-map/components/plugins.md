@@ -88,13 +88,13 @@ Group or user restriction needs EE.
   selected; the others show a disabled checkbox. The selection gets the Admin
   Skills bulk actions (`sections/skills/usePluginBulkActions.tsx`: Share,
   Enable for me, Disable for me, Delete with a confirm that lists the
-  plugins, all through `POST /skills/bulk`), with plugin copy
+  plugins, all through `POST /plugins/bulk`), with plugin copy
   (`plugins.bulk`). Share takes the row menu's rule (`canShareSkill`: never
   a personal marketplace's plugin), and **Everyone** needs
   `canChangeOrganizationAccess` for every selected row (never a synced one).
   A row's Delete opens the same confirm for that plugin.
   Search (on both Plugins pages) also matches the owner email and the shared group names, as Admin
-  Skills did. Search and the status filter clear the selection. A failed `GET /skills`
+  Skills did. Search and the status filter clear the selection. A failed `GET /plugins`
   shows an error in place of the list; the Marketplaces section stays.
   `/admin/plugins/[pluginId]` renders `MemberPluginDetailPage`. These pages read their panel from the path
   (`lib/customize/hooks.ts:usePanel`), so the links, back links, the
@@ -191,14 +191,14 @@ client, header template, transport and owner are under Advanced. The Actions tab
 **Member flow.** `web/src/sections/customize/` (the three tabs, in
 `CustomizeLayout`) and `web/src/sections/plugins/MemberPluginDetailPage.tsx`
 read only member endpoints: the user's skills
-(`GET /skills`, as the Skills page) and `GET /integrations`.
+(`GET /plugins`, as the Skills page) and `GET /integrations`.
 `lib/plugins/directory.ts:memberPluginEntries` makes one plugin of each custom
-skill (a custom skill's id is its plugin id). `GET /skills` also lists
+skill (a custom skill's id is its plugin id). `GET /plugins` also lists
 uploaded plugins: each row has `kind` (`skill` or `plugin`) and
-`available_count` of `needed_count` integrations. `GET /skills/{id}` adds
+`available_count` of `needed_count` integrations. `GET /plugins/{id}` adds
 `plugin`: the skills, the plugin.json fields and the needs with their state
 for the user ([[skills#plugin-upload]]). A plugin row shows "N of M
-integrations available"; a `kind: plugin` page reads `GET /skills/{id}`
+integrations available"; a `kind: plugin` page reads `GET /plugins/{id}`
 (`lib/plugins/hooks.ts:usePluginDetail`) for its Skills and Integrations tabs
 and does not redirect to the skill page. The admin skills table leaves out
 `kind: plugin` rows, and the skill page redirects a `kind: plugin` id here
@@ -208,7 +208,7 @@ matched integration from `GET /integrations`, so a row follows a switch or a
 sign-in at once, and `needAction` maps the state to one action (Turn on,
 Connect, Add for your team with `newIntegrationHref` filling the add modal, or
 the "Ask an admin" note; other states have only the badge). `lib/plugins/directory.ts:pluginSwitch` gives its switch
-(`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:usePluginEnablement`,
+(`PUT /plugins/{id}/enabled` through `lib/skills/hooks.ts:usePluginEnablement`,
 so a skill name conflict asks to switch in `SkillSwitchModal`); when the response leaves a supported need not
 on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integration row carries `access`; its
 `installation_policy` is the user's own setting (group settings and shares

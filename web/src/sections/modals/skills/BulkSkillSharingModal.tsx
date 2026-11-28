@@ -23,7 +23,7 @@ import type {
   SkillInstallationPolicy,
   SkillSharePermission,
 } from "@/lib/skills/types";
-import type { SkillShareUpdatePayload } from "@/lib/skills/api";
+import type { PluginShareUpdatePayload } from "@/lib/skills/api";
 import {
   fromPolicyChoice,
   isPolicyChoice,
@@ -49,7 +49,7 @@ interface BulkSkillSharingModalProps {
   open: boolean;
   saving: boolean;
   onClose: () => void;
-  onSave: (sharing: SkillShareUpdatePayload) => Promise<void>;
+  onSave: (sharing: PluginShareUpdatePayload) => Promise<void>;
 }
 
 export default function BulkSkillSharingModal({
@@ -108,7 +108,7 @@ export default function BulkSkillSharingModal({
   }
 
   async function save() {
-    const sharing: SkillShareUpdatePayload = {};
+    const sharing: PluginShareUpdatePayload = {};
     if (scope === "PUBLIC") sharing.public_permission = "VIEWER";
     if (policy !== KEEP) sharing.installation_policy = fromPolicyChoice(policy);
     if (stagedUsers.length)

@@ -14,7 +14,7 @@
   `/craft/v1/skills*` redirect here with their query). The groups are Created by
   you (owner is the user), From your organization (published), Shared with you,
   and Built-in, which shows the built-ins that chat offers (`GET
-  /api/skills/chat`, so only on a deployment with chat VMs; Craft is not a
+  /api/plugins/chat-skills`, so only on a deployment with chat VMs; Craft is not a
   condition) (`lib/customize/skills.ts:groupSkills`). A row has the
   tag Off, Required, Pending review or Unpublished changes, the date, Turn
   on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
@@ -70,9 +70,9 @@
   dialog (`lib/skills/sharing.ts:canChangeOrganizationAccess`); each says
   why. `can_delete` is false for a synced plugin.
 - **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
-  ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
+  ([[#plugin-upload]]). `POST /plugins/upload/inspect` shows the skills, the
   MCP servers the plugin needs with their state for the user, the parts Onyx
-  does not use, and the save target. `POST /skills/plugins` saves it. On the
+  does not use, and the save target. `POST /plugins/upload` saves it. On the
   web, Add > Upload plugin on the Plugins tab of Customize opens
   `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
   plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
@@ -135,7 +135,7 @@
   their names, **Manage skills** and **Dismiss**. Dismiss hides that list
   only. It waits while the session is stale. The admin Skills page shows
   `SkillLimitUsersBanner` (`web/src/sections/skills/`) when
-  `GET /skills/users-over-limit` lists users: the first 10, then a count.
+  `GET /plugins/users-over-limit` lists users: the first 10, then a count.
 - **Skill page.** A custom skill opens at `/app/customize/skills/[id]`
   (`sections/customize/CustomizeSkillPage.tsx`): a header with the owner, the
   current and published versions, Copy link, Share, a menu (Edit, Remove) and
@@ -154,12 +154,12 @@
   card (`web/src/sections/customize/SkillBundleEditor.tsx`). Create merges every
   added upload, without the removed files, into one ZIP
   (`lib/skills/bundleUpload.ts:mergeSkillFilesUploads`) and sends it with the
-  sharing in one `POST /skills/custom/editor`, so the first version holds
+  sharing in one `POST /plugins/editor`, so the first version holds
   every file. A SKILL.md bundle replaces the text and
   the files after a confirmation.
-  The skill comes from `GET /skills`; only owners and editors read
-  `/skills/custom/{id}/edit` (it is 404 for a viewer), and a viewer reads the
-  instructions and the supporting file list from `/skills/{id}/preview`. `ShareSkillModal` holds only the
+  The skill comes from `GET /plugins`; only owners and editors read
+  `/plugins/{id}/edit` (it is 404 for a viewer), and a viewer reads the
+  instructions and the supporting file list from `/plugins/{id}/preview`. `ShareSkillModal` holds only the
   share settings. Admin Panel → Skills (`views/SkillsPage.tsx`,
   `sections/skills/AdminSkillsTable.tsx`; `kind: plugin` rows are on Admin
   Panel → Plugins) is an inventory table (Name, Source,
@@ -209,7 +209,7 @@
   folder. Built-ins have no plugin rows; their `ChatSkill.version_id` is the
   `skill` row id, with `built_in_skill_id` set.
   In the chat input, `@` at the start of a word opens a picker of these
-  skills, with a **Manage skills** row that opens Customize → Skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
+  skills, with a **Manage skills** row that opens Customize → Skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/plugins/chat-skills`),
   filtered by name prefix without case. In an incognito, multi-model or
   Deep Research chat the picker leaves built-ins out (`useChatSkills({ builtIns })`).
   A row shows the skill's short
@@ -229,7 +229,7 @@
   Craft's `/` pickers, in the input bar and in the scheduled task prompt,
   follow the same rules and match a substring
   (`lib/skills/hooks.ts:useEntryPicker`). They offer the built-ins from
-  `GET /skills` and the custom skills from `GET /skills/chat`, one per skill of
+  `GET /plugins` and the custom skills from `GET /plugins/chat-skills`, one per skill of
   a plugin by its own name (`lib/skills/picker.ts:toPickerSections`). The tiles are the mentions: only a pick
   mentions a skill, so typed or pasted `@name` text does not. Removing a tile
   by delete or cut removes its mention, and undo brings it back. A draft,
@@ -695,12 +695,12 @@ the app from the same rule
     skills before their owner is removed.
     Agents apply a looser form of the rule
     ([[agents-personas#group-share-needs-manage-agents]]).
-    `POST /skills/bulk` sharing applies one change to every skill the user
+    `POST /plugins/bulk` sharing applies one change to every skill the user
     can edit, reports refusals and failures per skill, and pushes the combined
     affected audience once after commit. A refusal for the whole set, such as
     a scope or install setting refusal, fails every skill. Bulk delete applies
     each item in a savepoint. Bulk enable and disable change only the caller's preference.
-    `POST /skills/custom/batch` and GitHub import create each bundle through
+    `POST /plugins/skill-bundles` and GitHub import create each bundle through
     `db/skill.py:create_skill_from_bundle__no_commit`, one savepoint per skill,
     so a bad bundle or a name conflict under a DEFAULT or REQUIRED policy lands
     in `not_imported` and the other skills still import.
@@ -862,7 +862,7 @@ the app from the same rule
     (`file_store/staging.py:delete_files_best_effort`).
 22. `version-history-api` **Version history uses the EDIT policy.** The
     owner, editors and global `MANAGE_PLUGINS` list every version
-    (`GET /skills/custom/{id}/versions`), preview one
+    (`GET /plugins/{id}/versions`), preview one
     (`GET .../versions/{version_id}`) and restore one
     (`POST .../versions/{version_id}/restore`); a viewer or a version of
     another skill gets 404. `review_status` is derived from the plugin
@@ -880,13 +880,13 @@ the app from the same rule
     failed settings read stops the publish. Global `MANAGE_PLUGINS` and a
     system write (`actor` None: community downgrade, approve) always
     publish. Every publish path calls it: the access-change
-    write path for a private plugin, `POST /skills/custom/{id}/publish` and
+    write path for a private plugin, `POST /plugins/{id}/publish` and
     approve. A save never moves `published_version_id`. Review state is two
     pointers on `plugin`: a request sets `pending_version_id` (a newer request
     replaces it), and a publish or a deny clears it. There is no denied state.
     A new skill created published and other publishes return CONFLICT on a
     clash. Requests
-    (`GET /skills/review-requests`, approve, deny) need global
+    (`GET /plugins/review-requests`, approve, deny) need global
     `MANAGE_PLUGINS`; the list shows the plugin author and the version's
     `created_at`, and the admin approves or denies from a view of the version
     preview. The web hook `usePublishAction` mirrors the setting for the
@@ -894,7 +894,7 @@ the app from the same rule
     The **Skill Publishing** card on Admin Panel → Skills
     (`web/src/sections/skills/SkillPublishingCard.tsx`) also
     holds **Default Access**, saved with
-    `PUT /skills/organization-library/default-access`, and **Sharing**, saved
+    `PUT /plugins/organization-library/default-access`, and **Sharing**, saved
     as `plugin_sharing`.
 24. `chat-skills-one-definition` **Chat's skills have one definition and
     mentions are records.** Change which skills chat gets only in
@@ -954,8 +954,8 @@ the app from the same rule
     plugins ahead of it on a shared name, also one that loses another name
     (`db/skill.py:skill_user_states`); a 409
     `SKILL_NAME_CONFLICT` on a turn-on has `conflict_names`.
-    `GET /skills/{id}/plugin-skill?path=` returns one skill's SKILL.md
-    instructions in the version the user runs. `GET /skills` marks each custom
+    `GET /plugins/{id}/skill?path=` returns one skill's SKILL.md
+    instructions in the version the user runs. `GET /plugins` marks each custom
     skill `member_visible`: false for one a global `MANAGE_PLUGINS` user sees
     only through that permission; the Customize lists leave those out. The description is the plugin.json description of the version
     the user runs (`db/plugin_access.py:load_plugin_access`), so a draft
@@ -963,7 +963,7 @@ the app from the same rule
     preview and restore take a plugin version too: the preview adds `files`
     and `plugin` (manifest, skills, needs), and a restore adds a version from
     the old bundle (`db/skill.py:restore_plugin_version__no_commit`). Turning a
-    plugin on (`PUT /skills/{id}/enabled`, bulk enable, a new upload, and a
+    plugin on (`PUT /plugins/{id}/enabled`, bulk enable, a new upload, and a
     new version of a plugin the user has on) turns
     on each needed integration in `turn_on` with a connected status, through
     `integrations/plugin_needs.py:turn_on_needed_integrations__no_commit`, and
@@ -1006,7 +1006,7 @@ the app from the same rule
     id, name, bytes, files, reason) go to `sandbox.skill_omissions` together
     with `skills_hash`, so they describe the content on that disk.
     `SessionResponse.skill_omissions` carries them to the session UI.
-    `GET /skills/users-over-limit` (`MANAGE_PLUGINS`,
+    `GET /plugins/users-over-limit` (`MANAGE_PLUGINS`,
     `db/skill_limit.py:users_past_write_limit`) lists active users past the
     write limit with their usage and the omission count of their sandbox. An
     SQL sum of enabled, not invalid plugins

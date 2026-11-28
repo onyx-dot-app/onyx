@@ -91,8 +91,7 @@ jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
   createCustomSkillFromEditor: (...args: unknown[]) =>
     mockCreateCustomSkillFromEditor(...args),
-  uploadUserSkillFiles: (...args: unknown[]) =>
-    mockUploadUserSkillFiles(...args),
+  uploadPluginFiles: (...args: unknown[]) => mockUploadUserSkillFiles(...args),
 }));
 
 const mockPickedUploads: PreparedSkillFilesUpload[] = [];

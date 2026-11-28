@@ -118,7 +118,7 @@ async function choose(file: File) {
 test("a plugin zip shows the preview and Save as a new plugin asks for a free name", async () => {
   const fetchMock = mockFetch({
     "/api/integrations": [],
-    "POST /api/skills/plugins/inspect": (init?: RequestInit) =>
+    "POST /api/plugins/upload/inspect": (init?: RequestInit) =>
       formValue(init, "save_as_new") === "true"
         ? preview({
             target: {
@@ -130,7 +130,7 @@ test("a plugin zip shows the preview and Save as a new plugin asks for a free na
             },
           })
         : preview(),
-    "POST /api/skills/plugins": {
+    "POST /api/plugins/upload": {
       target: {
         kind: "new_plugin",
         plugin_id: null,
@@ -162,7 +162,7 @@ test("a plugin zip shows the preview and Save as a new plugin asks for a free na
     )
   ).toBeInTheDocument();
   const saveAsNew = fetchMock.mock.calls
-    .filter(([url]) => String(url) === "/api/skills/plugins/inspect")
+    .filter(([url]) => String(url) === "/api/plugins/upload/inspect")
     .map(([, init]) => formValue(init, "save_as_new"));
   expect(saveAsNew).toEqual(["false", "true"]);
 
@@ -178,12 +178,12 @@ test("a plugin zip shows the preview and Save as a new plugin asks for a free na
   await waitFor(() =>
     expect(
       fetchMock.mock.calls.some(
-        ([url]) => String(url) === "/api/skills/plugins"
+        ([url]) => String(url) === "/api/plugins/upload"
       )
     ).toBe(true)
   );
   const [, saveInit] = fetchMock.mock.calls.find(
-    ([url]) => String(url) === "/api/skills/plugins"
+    ([url]) => String(url) === "/api/plugins/upload"
   ) ?? [undefined, undefined];
   expect(formValue(saveInit, "name")).toBe("review-kit-copy");
 });
@@ -191,7 +191,7 @@ test("a plugin zip shows the preview and Save as a new plugin asks for a free na
 test("a save refused for a taken name asks for another name", async () => {
   const fetchMock = mockFetch({
     "/api/integrations": [],
-    "POST /api/skills/plugins/inspect": () =>
+    "POST /api/plugins/upload/inspect": () =>
       preview({
         target: {
           kind: "new_plugin",
@@ -201,7 +201,7 @@ test("a save refused for a taken name asks for another name", async () => {
           name_taken: false,
         },
       }),
-    "POST /api/skills/plugins": () =>
+    "POST /api/plugins/upload": () =>
       new Response(
         JSON.stringify({
           error_code: "CONFLICT",
@@ -230,14 +230,14 @@ test("a save refused for a taken name asks for another name", async () => {
   expect(onSaved).not.toHaveBeenCalled();
   expect(
     fetchMock.mock.calls.filter(
-      ([url]) => String(url) === "/api/skills/plugins"
+      ([url]) => String(url) === "/api/plugins/upload"
     )
   ).toHaveLength(1);
 });
 
 test("a bad zip shows the reason from the server", async () => {
   mockFetch({
-    "POST /api/skills/plugins/inspect": new Response(
+    "POST /api/plugins/upload/inspect": new Response(
       JSON.stringify({
         error_code: "INVALID_INPUT",
         detail: "plugin.json needs a 'name'.",
@@ -255,7 +255,7 @@ test("a bad zip shows the reason from the server", async () => {
 
 test("a zip with a skill and no plugin.json continues as a skill", async () => {
   const fetchMock = mockFetch({
-    "POST /api/skills/custom/bundle/inspect": {
+    "POST /api/plugins/skill-bundle/inspect": {
       name: "notes",
       description: "Take notes.",
       instructions_markdown: "Take notes.",
@@ -270,7 +270,7 @@ test("a zip with a skill and no plugin.json continues as a skill", async () => {
   expect(onContinueSkill.mock.calls[0][0].contents.name).toBe("notes");
   expect(
     fetchMock.mock.calls.some(
-      ([url]) => String(url) === "/api/skills/plugins/inspect"
+      ([url]) => String(url) === "/api/plugins/upload/inspect"
     )
   ).toBe(false);
 });
@@ -299,7 +299,7 @@ test("a file that finishes preparing after the modal closes is not read", async 
 test("a skill name clash says the plugin is saved off", async () => {
   mockFetch({
     "/api/integrations": [],
-    "POST /api/skills/plugins/inspect": () =>
+    "POST /api/plugins/upload/inspect": () =>
       preview({
         target: {
           kind: "new_plugin",

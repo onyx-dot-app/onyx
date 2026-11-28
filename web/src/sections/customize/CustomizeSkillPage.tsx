@@ -90,7 +90,7 @@ export default function CustomizeSkillPage({
   const locked = listed?.content_locked === true;
   const canChangeContent = canEdit && !locked;
   const detail = useSWR<SkillEditableDetail>(
-    canEdit ? SWR_KEYS.editableSkill(skillId) : null,
+    canEdit ? SWR_KEYS.editablePlugin(skillId) : null,
     errorHandlingFetcher
   );
   const preview = useSWR<SkillPreview>(
@@ -137,7 +137,7 @@ export default function CustomizeSkillPage({
     }
     try {
       const fresh = await errorHandlingFetcher<SkillEditableDetail>(
-        SWR_KEYS.editableSkill(skillId)
+        SWR_KEYS.editablePlugin(skillId)
       );
       await Promise.all([detail.mutate(fresh, { revalidate: false }), lists]);
       return true;

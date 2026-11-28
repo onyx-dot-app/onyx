@@ -448,7 +448,7 @@ def test_a_renamed_skill_takes_its_plugin_name_everywhere(
     # A replacement bundle may use the new name or the former one.
     for bundle_name in (renamed, name):
         replace_current_user_skill_bundle(
-            skill_id=moved.id,
+            plugin_id=moved.id,
             bundle=_bundle_upload(
                 {"SKILL.md": f"---\nname: {bundle_name}\ndescription: Z\n---\n\nHi.\n"}
             ),

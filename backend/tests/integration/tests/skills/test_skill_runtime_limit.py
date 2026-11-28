@@ -62,7 +62,7 @@ def _set_size(skill_id: UUID | str, size: int) -> None:
 
 def _over_limit(admin: DATestUser) -> dict[str, dict[str, Any]]:
     response = client.get(
-        f"{API_SERVER_URL}/skills/users-over-limit", headers=admin.headers
+        f"{API_SERVER_URL}/plugins/users-over-limit", headers=admin.headers
     )
     response.raise_for_status()
     body = response.json()
@@ -83,7 +83,7 @@ def test_group_join_past_500_mb_keeps_every_skill_under_900_mb(
         _set_size(skill.id, SKILL_RUNTIME_MAX_BYTES * 3 // 10)
         # The group is empty, so the write check passes.
         client.patch(
-            f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
+            f"{API_SERVER_URL}/plugins/{skill.id}/share",
             json={
                 "group_shares": [{"group_id": group.id, "permission": "VIEWER"}],
                 "group_settings": [
@@ -111,6 +111,6 @@ def test_group_join_past_500_mb_keeps_every_skill_under_900_mb(
 
     # Only admins who manage plugins read the list.
     response = client.get(
-        f"{API_SERVER_URL}/skills/users-over-limit", headers=member.headers
+        f"{API_SERVER_URL}/plugins/users-over-limit", headers=member.headers
     )
     assert response.status_code == 403

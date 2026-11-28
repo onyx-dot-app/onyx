@@ -37,11 +37,11 @@ import {
 import { toast } from "@opal/layouts";
 import {
   bulkUpdateSkills,
-  deleteUserSkill,
+  deletePlugin,
   isSkillNameConflict,
   setSkillEnabled,
   skillNameConflictNames,
-  type SkillShareUpdatePayload,
+  type PluginShareUpdatePayload,
 } from "@/lib/skills/api";
 import {
   refreshSkillLists,
@@ -92,7 +92,7 @@ export interface ChatSkillEntries {
   onInputFocus: () => void;
 }
 
-/** The skills that the user's chat agents get (`GET /api/skills/chat`).
+/** The skills that the user's chat agents get (`GET /api/plugins/chat-skills`).
  * Skill changes made in this app fetch them again (`lib/skills/cache.ts`).
  * Changes from elsewhere show after the chat input or the window gains focus,
  * at most once a minute. */
@@ -674,7 +674,7 @@ export function usePluginDelete({
     if (deleting) return false;
     setDeleting(true);
     try {
-      await deleteUserSkill(skill.id);
+      await deletePlugin(skill.id);
       await onDeleted?.(skill);
       refreshLists();
       toast.success(
@@ -736,7 +736,7 @@ export interface PluginBulkSelection {
   confirmDelete: (items: CustomSkill[]) => void;
   run: (
     action: BulkPluginAction,
-    sharing?: SkillShareUpdatePayload
+    sharing?: PluginShareUpdatePayload
   ) => Promise<void>;
   /** Clears the selection and the failure report, as a filter change must. */
   reset: () => void;
@@ -790,7 +790,7 @@ export function usePluginBulkSelection({
 
   async function run(
     action: BulkPluginAction,
-    sharing?: SkillShareUpdatePayload
+    sharing?: PluginShareUpdatePayload
   ) {
     // Delete acts on exactly the skills its confirm listed.
     const targets =

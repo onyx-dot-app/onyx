@@ -165,7 +165,7 @@ from onyx.skills.push import (
     push_skills_and_commit,
 )
 
-user_router = APIRouter(prefix="/skills")
+plugin_router = APIRouter(prefix="/plugins")
 
 _BUNDLE_CLEANUP = "skill bundle cleanup"
 
@@ -379,7 +379,7 @@ def _replace_skill_bundle_from_editor(
     return _editable_skill_response(skill, user, db_session, created_version_id)
 
 
-@user_router.get("")
+@plugin_router.get("")
 def list_skills_for_current_user(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -388,7 +388,7 @@ def list_skills_for_current_user(
     return skills_list_response_for_user(rows, user, db_session)
 
 
-@user_router.get("/chat")
+@plugin_router.get("/chat-skills")
 def list_chat_skills_for_current_user(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -398,7 +398,7 @@ def list_chat_skills_for_current_user(
     return list_chat_skills(db_session, user, with_sandbox=HARNESS_SANDBOX_ENABLED)
 
 
-@user_router.post("/bulk")
+@plugin_router.post("/bulk")
 def bulk_update_skills(
     request: Annotated[
         SkillBulkShareRequest | SkillBulkActionRequest,
@@ -446,15 +446,15 @@ def bulk_update_skills(
     return SkillBulkResponse(succeeded=succeeded, failed=failed)
 
 
-@user_router.put("/{skill_id}/enabled")
+@plugin_router.put("/{plugin_id}/enabled")
 def set_skill_enabled_for_current_user(
-    skill_id: UUID,
+    plugin_id: UUID,
     request: SkillEnableRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     skill = set_skill_enabled_for_user(
-        skill_id=skill_id,
+        skill_id=plugin_id,
         enabled=request.enabled,
         replace_conflict=request.replace_conflict,
         user=user,
@@ -489,7 +489,7 @@ def _turn_on_needs__no_commit(
     )
 
 
-@user_router.get("/review-requests")
+@plugin_router.get("/review-requests")
 def list_skill_review_requests(
     _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
     db_session: Session = Depends(get_session),
@@ -500,7 +500,7 @@ def list_skill_review_requests(
     ]
 
 
-@user_router.get("/organization-library/default-access")
+@plugin_router.get("/organization-library/default-access")
 def get_organization_library_default_access(
     _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
     db_session: Session = Depends(get_session),
@@ -510,7 +510,7 @@ def get_organization_library_default_access(
     )
 
 
-@user_router.put("/organization-library/default-access")
+@plugin_router.put("/organization-library/default-access")
 def set_organization_library_default_access(
     request: OrganizationLibraryDefaultAccess,
     _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
@@ -526,7 +526,7 @@ def set_organization_library_default_access(
     )
 
 
-@user_router.get("/users-over-limit")
+@plugin_router.get("/users-over-limit")
 def list_users_over_skill_limit(
     _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
     db_session: Session = Depends(get_session),
@@ -540,38 +540,38 @@ def list_users_over_skill_limit(
     )
 
 
-@user_router.get("/{skill_id}")
+@plugin_router.get("/{plugin_id}")
 def fetch_skill_for_current_user(
-    skill_id: UUID,
+    plugin_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    skill = _visible_skill(skill_id, user, db_session)
+    skill = _visible_skill(plugin_id, user, db_session)
     return skill_response_for_user(
         skill, user, db_session, include_plugin_detail=isinstance(skill, Plugin)
     )
 
 
-@user_router.get("/{skill_id}/preview")
+@plugin_router.get("/{plugin_id}/preview")
 def preview_skill_for_current_user(
-    skill_id: UUID,
+    plugin_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillPreviewResponse:
-    skill = _visible_skill(skill_id, user, db_session)
+    skill = _visible_skill(plugin_id, user, db_session)
     return skill_preview_response(skill, user, db_session)
 
 
-@user_router.get("/{skill_id}/plugin-skill")
+@plugin_router.get("/{plugin_id}/skill")
 def read_plugin_skill_for_current_user(
-    skill_id: UUID,
+    plugin_id: UUID,
     path: str,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PluginSkillInstructions:
     """The SKILL.md instructions of one skill in the plugin version the user
     runs."""
-    skill = fetch_skill(skill_id, user=user, db_session=db_session)
+    skill = fetch_skill(plugin_id, user=user, db_session=db_session)
     if not isinstance(skill, Plugin):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     version_id = get_version_user_runs(skill.id, user.id, db_session)
@@ -586,7 +586,7 @@ def read_plugin_skill_for_current_user(
     )
 
 
-@user_router.post("/custom")
+@plugin_router.post("/skill-bundle")
 def create_custom_skill(
     bundle: UploadFile = File(...),
     auto_enable: Annotated[bool, Form()] = True,
@@ -615,7 +615,7 @@ def create_custom_skill(
     )
 
 
-@user_router.post("/custom/batch")
+@plugin_router.post("/skill-bundles")
 def create_custom_skills_batch(
     bundles: Annotated[list[UploadFile], File()],
     auto_enable: Annotated[bool, Form()] = True,
@@ -703,7 +703,7 @@ def _upload_target(
     )
 
 
-@user_router.post("/plugins/inspect")
+@plugin_router.post("/upload/inspect")
 def inspect_plugin_upload(
     bundle: UploadFile = File(...),
     save_as_new: Annotated[bool, Form()] = False,
@@ -743,7 +743,7 @@ def inspect_plugin_upload(
     )
 
 
-@user_router.post("/plugins")
+@plugin_router.post("/upload")
 def save_plugin_upload(
     bundle: UploadFile = File(...),
     save_as_new: Annotated[bool, Form()] = False,
@@ -816,7 +816,7 @@ def save_plugin_upload(
     )
 
 
-@user_router.post("/custom/editor")
+@plugin_router.post("/editor")
 def create_custom_skill_from_editor(
     name: Annotated[str, Form(min_length=1)],
     description: Annotated[str, Form(min_length=1)],
@@ -884,18 +884,18 @@ def create_custom_skill_from_editor(
     return _editable_skill_response(skill, user, db_session)
 
 
-@user_router.get("/custom/{skill_id}/edit")
+@plugin_router.get("/{plugin_id}/edit")
 def fetch_custom_skill_for_edit(
-    skill_id: UUID,
+    plugin_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
-    skill = _editable_skill(skill_id, user, db_session)
+    skill = _editable_skill(plugin_id, user, db_session)
 
     return _editable_skill_response(skill, user, db_session)
 
 
-@user_router.post("/custom/bundle/inspect")
+@plugin_router.post("/skill-bundle/inspect")
 def inspect_custom_skill_bundle_upload(
     upload: UploadFile = File(...),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
@@ -962,14 +962,14 @@ def _editable_skill(
     return skill
 
 
-@user_router.get("/custom/{skill_id}/versions")
+@plugin_router.get("/{plugin_id}/versions")
 def list_custom_skill_versions(
-    skill_id: UUID,
+    plugin_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[SkillVersionResponse]:
     """Every version, newest first."""
-    skill = _editable_skill(skill_id, user, db_session, any_plugin=True)
+    skill = _editable_skill(plugin_id, user, db_session, any_plugin=True)
     return [
         SkillVersionResponse(
             id=version.id,
@@ -992,14 +992,14 @@ def list_custom_skill_versions(
     ]
 
 
-@user_router.get("/custom/{skill_id}/versions/{version_id}")
+@plugin_router.get("/{plugin_id}/versions/{version_id}")
 def preview_custom_skill_version(
-    skill_id: UUID,
+    plugin_id: UUID,
     version_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillVersionPreviewResponse:
-    skill = _editable_skill(skill_id, user, db_session, any_plugin=True)
+    skill = _editable_skill(plugin_id, user, db_session, any_plugin=True)
     get_plugin_version(skill.id, version_id, db_session)
     if not version_is_skill(version_id, db_session):
         detail = plugin_version_detail(
@@ -1024,9 +1024,9 @@ def preview_custom_skill_version(
     )
 
 
-@user_router.post("/custom/{skill_id}/versions/{version_id}/restore")
+@plugin_router.post("/{plugin_id}/versions/{version_id}/restore")
 def restore_custom_skill_version(
-    skill_id: UUID,
+    plugin_id: UUID,
     version_id: UUID,
     request: SkillVersionRestoreRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -1034,7 +1034,7 @@ def restore_custom_skill_version(
 ) -> SkillEditableDetailResponse:
     """Copy an old version's files into a new version. Content equal to the
     current version adds no version."""
-    skill = _editable_skill(skill_id, user, db_session, any_plugin=True)
+    skill = _editable_skill(plugin_id, user, db_session, any_plugin=True)
     get_plugin_version(skill.id, version_id, db_session)
     stored = get_stored_version_content(version_id, db_session)
     if not version_is_skill(version_id, db_session):
@@ -1076,9 +1076,9 @@ def _restore_plugin_version(
     return _editable_skill_response(plugin, user, db_session, created_version_id)
 
 
-@user_router.post("/custom/{skill_id}/publish")
+@plugin_router.post("/{plugin_id}/publish")
 def publish_current_user_skill(
-    skill_id: UUID,
+    plugin_id: UUID,
     request: SkillPublishRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -1087,7 +1087,7 @@ def publish_current_user_skill(
     as a publish update for a published one. The Publishing setting can make
     this a review request or refuse it."""
     skill = _editable_skill(
-        skill_id, user, db_session, lock_for_update=True, any_plugin=True
+        plugin_id, user, db_session, lock_for_update=True, any_plugin=True
     )
     affected = publish_skill__no_commit(
         skill, request.base_version_id, user, db_session
@@ -1098,15 +1098,15 @@ def publish_current_user_skill(
     return skill_response_for_user(skill, user, db_session, include_share_details=True)
 
 
-@user_router.post("/custom/{skill_id}/versions/{version_id}/approve")
+@plugin_router.post("/{plugin_id}/versions/{version_id}/approve")
 def approve_skill_review(
-    skill_id: UUID,
+    plugin_id: UUID,
     version_id: UUID,
     user: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     skill = _editable_skill(
-        skill_id, user, db_session, lock_for_update=True, any_plugin=True
+        plugin_id, user, db_session, lock_for_update=True, any_plugin=True
     )
     affected = approve_skill_review__no_commit(skill, version_id, db_session)
     db_session.commit()
@@ -1115,30 +1115,30 @@ def approve_skill_review(
     return skill_response_for_user(skill, user, db_session, include_share_details=True)
 
 
-@user_router.post("/custom/{skill_id}/versions/{version_id}/deny")
+@plugin_router.post("/{plugin_id}/versions/{version_id}/deny")
 def deny_skill_review(
-    skill_id: UUID,
+    plugin_id: UUID,
     version_id: UUID,
     user: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     skill = _editable_skill(
-        skill_id, user, db_session, lock_for_update=True, any_plugin=True
+        plugin_id, user, db_session, lock_for_update=True, any_plugin=True
     )
     deny_skill_review__no_commit(skill, version_id, db_session)
     db_session.commit()
     return skill_response_for_user(skill, user, db_session, include_share_details=True)
 
 
-@user_router.put("/custom/{skill_id}/bundle")
+@plugin_router.put("/{plugin_id}/bundle")
 def replace_current_user_skill_bundle(
-    skill_id: UUID,
+    plugin_id: UUID,
     bundle: UploadFile = File(...),
     base_version_id: Annotated[UUID | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    skill = _editable_skill(skill_id, user, db_session)
+    skill = _editable_skill(plugin_id, user, db_session)
 
     file_store = get_default_file_store()
     with ingested_skill_bundle(
@@ -1169,15 +1169,15 @@ def replace_current_user_skill_bundle(
     )
 
 
-@user_router.post("/custom/{skill_id}/files")
+@plugin_router.post("/{plugin_id}/files")
 def upload_current_user_skill_files(
-    skill_id: UUID,
+    plugin_id: UUID,
     upload: UploadFile = File(...),
     base_version_id: Annotated[UUID | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
-    skill = _editable_skill(skill_id, user, db_session)
+    skill = _editable_skill(plugin_id, user, db_session)
 
     updated_bundle_bytes = update_custom_bundle_files(
         lambda: _bundle_to_edit(skill, user, db_session),
@@ -1189,15 +1189,15 @@ def upload_current_user_skill_files(
     )
 
 
-@user_router.delete("/custom/{skill_id}/files")
+@plugin_router.delete("/{plugin_id}/files")
 def remove_current_user_skill_file(
-    skill_id: UUID,
+    plugin_id: UUID,
     path: str,
     base_version_id: Annotated[UUID | None, Query()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
-    skill = _editable_skill(skill_id, user, db_session)
+    skill = _editable_skill(plugin_id, user, db_session)
     if not path:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Skill file path cannot be empty")
 
@@ -1210,14 +1210,14 @@ def remove_current_user_skill_file(
     )
 
 
-@user_router.patch("/custom/{skill_id}")
+@plugin_router.patch("/{plugin_id}")
 def patch_current_user_skill(
-    skill_id: UUID,
+    plugin_id: UUID,
     patch_req: SkillPatchRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    skill = _editable_skill(skill_id, user, db_session)
+    skill = _editable_skill(plugin_id, user, db_session)
     if "public_permission" in patch_req.model_fields_set:
         ensure_can_edit_org_visibility(skill, user)
     if not (patch_req.has_details_update or patch_req.has_db_field_update):
@@ -1318,25 +1318,25 @@ def patch_current_user_skill(
     )
 
 
-@user_router.get("/custom/{skill_id}/share")
+@plugin_router.get("/{plugin_id}/share")
 def fetch_custom_skill_sharing(
-    skill_id: UUID,
+    plugin_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    skill = _editable_skill(skill_id, user, db_session, any_plugin=True)
+    skill = _editable_skill(plugin_id, user, db_session, any_plugin=True)
     return skill_response_for_user(skill, user, db_session, include_share_details=True)
 
 
-@user_router.patch("/custom/{skill_id}/share")
+@plugin_router.patch("/{plugin_id}/share")
 def share_current_user_skill(
-    skill_id: UUID,
+    plugin_id: UUID,
     share_req: SkillShareRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     skill = _editable_skill(
-        skill_id, user, db_session, lock_for_update=True, any_plugin=True
+        plugin_id, user, db_session, lock_for_update=True, any_plugin=True
     )
     if (
         share_req.user_shares is None
@@ -1364,14 +1364,14 @@ def share_current_user_skill(
     )
 
 
-@user_router.post("/custom/{skill_id}/transfer-ownership")
+@plugin_router.post("/{plugin_id}/transfer-ownership")
 def transfer_current_user_skill_ownership(
-    skill_id: UUID,
+    plugin_id: UUID,
     transfer_req: TransferSkillOwnershipRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    visible = fetch_skill(skill_id, user=user, db_session=db_session)
+    visible = fetch_skill(plugin_id, user=user, db_session=db_session)
     if visible is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     if isinstance(visible, Skill):
@@ -1427,14 +1427,14 @@ def transfer_current_user_skill_ownership(
     )
 
 
-@user_router.delete("/custom/{skill_id}")
+@plugin_router.delete("/{plugin_id}")
 def delete_current_user_skill(
-    skill_id: UUID,
+    plugin_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     skill = _editable_skill(
-        skill_id, user, db_session, lock_for_update=True, any_plugin=True
+        plugin_id, user, db_session, lock_for_update=True, any_plugin=True
     )
 
     affected, file_ids = delete_skill_for_user__no_commit(skill, user, db_session)

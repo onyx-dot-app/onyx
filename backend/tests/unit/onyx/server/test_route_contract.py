@@ -17,6 +17,7 @@ import importlib
 import inspect
 import json
 import os
+import re
 import textwrap
 import types
 from collections.abc import Callable, Iterator
@@ -399,3 +400,13 @@ def test_checks_flag_a_violating_route() -> None:
         "GET /read-that-commits": "basic",
         "GET /read-that-calls-a-writer": "basic",
     }
+
+
+def test_path_templates_differ_by_more_than_parameter_names(app: FastAPI) -> None:
+    """OpenAPI forbids two templates for one URL, such as `/x/{a}` and `/x/{b}`."""
+    templates: dict[str, set[str]] = {}
+    for route in iter_routes(app):
+        templates.setdefault(re.sub(r"\{[^}]*\}", "{}", route.path), set()).add(
+            route.path
+        )
+    assert {shape: paths for shape, paths in templates.items() if len(paths) > 1} == {}
