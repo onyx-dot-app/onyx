@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import JsonValue
+from sqlalchemy.orm import Session
 
 from onyx.browser_extension import relay
 from onyx.browser_extension.models import (
@@ -22,8 +23,17 @@ from onyx.browser_extension.models import (
 from onyx.browser_extension.relay import ChromeBrowser
 from onyx.cache.interface import CacheBackend
 from onyx.cache.postgres_backend import PostgresCacheBackend
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.db.approval_request import (
+    create_approval_request__no_commit,
+    record_approval_decision__no_commit,
+)
+from onyx.db.chat import delete_messages_and_files_from_chat_session
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
+from onyx.db.models import ApprovalRequest, ChatMessage, ChatSession
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
 from onyx.tools.models import ToolCallException
+from tests.external_dependency_unit.conftest import MakeTestUser
 
 _TENANT = "public"
 
@@ -503,3 +513,53 @@ def test_a_call_records_its_site_and_sends_the_allowed_sites() -> None:
     browser_next._record_once("https://other.example")
     grant = relay.load_grant(_TENANT, chat_id, user_id)
     assert grant is not None and grant.once_origins == ["https://other.example"]
+
+
+def test_a_site_approved_for_the_chat_asks_no_more_in_later_turns(
+    db_session: Session, make_test_user: MakeTestUser
+) -> None:
+    user = make_test_user("chrome_site_grant")
+    chat_session = ChatSession(
+        id=uuid4(), user_id=user.id, persona_id=DEFAULT_PERSONA_ID, description="c"
+    )
+    db_session.add(chat_session)
+    db_session.flush()
+    response = ChatMessage(
+        chat_session_id=chat_session.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(response)
+    db_session.flush()
+    presence = _connect(user.id)
+    _share(user.id, chat_session.id, presence)
+    first = _browser(user.id, chat_session.id, response_id=response.id)
+    details = first.site_approval("open", {"url": "https://docs.example/a"})
+    assert details is not None and details.action_id is not None
+    # The card's "Approve for this chat" saves a session grant for its key.
+    approval_id = create_approval_request__no_commit(
+        db_session,
+        chat_session_id=chat_session.id,
+        chat_message_id=response.id,
+        integration_id=None,
+        action_id=details.action_id,
+        tool_call_id="call",
+        tool_name="browser_open",
+        display_name=details.display_name,
+        arguments={},
+    )
+    approval = db_session.get_one(ApprovalRequest, approval_id)
+    record_approval_decision__no_commit(
+        db_session,
+        approval,
+        ApprovalDecision.APPROVED,
+        ApprovalDecidedVia.SESSION_GRANT,
+    )
+    db_session.commit()
+    try:
+        later = _browser(user.id, chat_session.id, response_id=response.id + 1)
+        assert later.site_approval("open", {"url": "https://docs.example/b"}) is None
+        assert later.site_approval("open", {"url": "https://other.example"}) is not None
+    finally:
+        delete_messages_and_files_from_chat_session(chat_session.id, db_session)

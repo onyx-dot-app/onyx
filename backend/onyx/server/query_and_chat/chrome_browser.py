@@ -97,10 +97,9 @@ def get_chrome_browser_state(
         else ChromeGrantView(
             tabs=grant.tabs,
             current=grant.current,
-            origins=sorted(
-                relay.session_origins(tenant_id, chat_session_id)
-                | set(grant.once_origins)
-            ),
+            # "Approve once" sites last only for their turn, so only the
+            # chat's approvals count here.
+            origins=sorted(relay.session_origins(tenant_id, chat_session_id)),
             expires_at=grant.expires_at,
             side_panel=grant.side_panel,
         ),
