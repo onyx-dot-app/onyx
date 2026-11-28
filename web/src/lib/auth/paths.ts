@@ -7,6 +7,8 @@ export const LOGIN_PATH = "/auth/login";
 
 export const SIGNUP_PATH = "/auth/signup";
 
+export const AUTH_ERROR_PATH = "/auth/error";
+
 /** Playground: the person chose to start a new team on /auth/error. */
 export const START_NEW_TEAM_PARAM = "start_new_team";
 
@@ -48,6 +50,16 @@ export function signupPath({
   return startNewTeam
     ? `${SIGNUP_PATH}?${START_NEW_TEAM_PARAM}=true`
     : SIGNUP_PATH;
+}
+
+type AuthErrorPath =
+  | typeof AUTH_ERROR_PATH
+  | `${typeof AUTH_ERROR_PATH}?${string}`;
+
+/** The error page, showing `error` (a known code or a sentence) if given. */
+export function authErrorPath(error?: string | null): AuthErrorPath {
+  if (!error) return AUTH_ERROR_PATH;
+  return `${AUTH_ERROR_PATH}?${new URLSearchParams({ error }).toString()}`;
 }
 
 /**

@@ -69,6 +69,7 @@ from onyx.integrations.policy import always_asks
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
+    APPROVAL_EXPIRED,
     AWAITING_USER,
     OverallStop,
     Packet,
@@ -551,6 +552,8 @@ def overall_stop(status: RunStatus, failure: RunFailure | None) -> OverallStop:
         return OverallStop(stop_reason="finished")
     if failure is not None and failure.kind == RunFailureKind.DEADLINE:
         return OverallStop(stop_reason="timed_out")
+    if failure is not None and failure.kind == RunFailureKind.APPROVAL_EXPIRED:
+        return OverallStop(stop_reason=APPROVAL_EXPIRED)
     return OverallStop(stop_reason="user_cancelled")
 
 

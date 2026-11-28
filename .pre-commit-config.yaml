@@ -301,6 +301,21 @@ repos:
         # Deleted chart files must also trigger the check.
         always_run: true
         stages: [pre-commit]
+      - id: pr-workflow-concurrency
+        name: PR workflows keep their newest run
+        language: python
+        entry: python .github/scripts/check_pr_workflow_concurrency.py
+        additional_dependencies: [PyYAML==6.0.3]
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^\.github/(workflows/.+\.ya?ml|scripts/check_pr_workflow_concurrency\.py)$
+      - id: cancel-superseded-runs-tests
+        name: cancel_superseded_runs tests
+        language: system
+        entry: python3 -m unittest discover -s .github/scripts -p test_cancel_superseded_runs.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^\.github/scripts/(test_)?cancel_superseded_runs\.py$
       - id: microvm-python-stubs
         name: Firecracker Python gRPC stubs match the protos
         language: python
@@ -450,9 +465,9 @@ repos:
           )$
       - id: bun-install
         name: bun install
-        description: "Automatically run 'bun install' after a checkout, pull or rebase"
+        description: "Install locked dependencies after a checkout, pull or rebase"
         language: system
-        entry: bash -c 'cd web && bun install'
+        entry: bash -c 'cd web && bun install --frozen-lockfile --prefer-offline'
         pass_filenames: false
         files: ^web/(package\.json|bun\.lock|lib/opal/package\.json)$
         stages: [post-checkout, post-merge, post-rewrite]
@@ -496,9 +511,9 @@ repos:
 
       - id: root-bun-install
         name: root bun install
-        description: "Automatically run 'bun install' at the repo root after a checkout, pull or rebase"
+        description: "Install locked dependencies at the repo root after a checkout, pull or rebase"
         language: system
-        entry: bun install
+        entry: bun install --frozen-lockfile --prefer-offline
         pass_filenames: false
         files: ^(package\.json|bun\.lock|(widget|examples/widget)/package\.json)$
         stages: [post-checkout, post-merge, post-rewrite]
@@ -582,9 +597,9 @@ repos:
       # absent in CI (the auto-install hook only fires on post-checkout/merge/rewrite).
       - id: mobile-bun-install
         name: mobile bun install
-        description: "Automatically run 'bun install' in mobile/ after a checkout, pull or rebase"
+        description: "Install locked dependencies in mobile/ after a checkout, pull or rebase"
         language: system
-        entry: bash -c 'cd mobile && bun install'
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile --prefer-offline'
         pass_filenames: false
         files: ^mobile/(package\.json|bun\.lock)$
         stages: [post-checkout, post-merge, post-rewrite]

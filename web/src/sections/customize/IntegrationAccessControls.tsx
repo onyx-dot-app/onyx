@@ -15,8 +15,8 @@ import { Section, toast } from "@opal/layouts";
 import { useScreenSize } from "@opal/hooks";
 import { SvgMoreHorizontal, SvgOrganization, SvgShare } from "@opal/icons";
 import {
-  publishIntegration,
   setIntegrationEnabled,
+  setIntegrationInstallationPolicy,
 } from "@/lib/integrations/svc";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -157,7 +157,7 @@ export function IntegrationMenu({ integration }: IntegrationMenuProps) {
   async function publish() {
     setPublishing(false);
     try {
-      await publishIntegration(integration.id);
+      await setIntegrationInstallationPolicy(integration.id, "AVAILABLE");
       toast.success(t("publish.done", { name: integration.name }));
       await Promise.all([
         mutate(SWR_KEYS.integrations),

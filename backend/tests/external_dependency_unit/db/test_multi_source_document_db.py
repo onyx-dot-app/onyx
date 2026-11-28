@@ -16,7 +16,7 @@ from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document as ConnectorDocument
-from onyx.connectors.models import IndexAttemptMetadata, InputType
+from onyx.connectors.models import IndexAttemptMetadata, InputType, TextSection
 from onyx.db.document import (
     get_document_source_types,
     upsert_document_by_connector_credential_pair,
@@ -35,7 +35,10 @@ from onyx.db.permission_sync_attempt import (
     get_open_doc_permission_sync_attempt,
     mark_doc_permission_sync_attempt_in_progress,
 )
-from onyx.indexing.indexing_pipeline import _upsert_documents_in_db
+from onyx.indexing.indexing_pipeline import (
+    _upsert_documents_in_db,
+    index_doc_batch_prepare,
+)
 from onyx.kg.models import KGStage
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
@@ -583,6 +586,65 @@ def test_sharepoint_indexing_writes_acls_without_owned_onedrive_permissions(
             build_ext_group_name_for_onyx("sharepoint", DocumentSource.SHAREPOINT)
         ]
         assert document.is_public is True
+    finally:
+        _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
+
+
+def test_unchanged_sharepoint_document_with_onedrive_permissions_is_skipped(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """SharePoint's access never replaces OneDrive's on a row OneDrive owns, so
+    it must not count as a change, or the document re-indexes every run."""
+    unique = uuid4().hex
+    document_id = f"reindex-loop-{unique}"
+    sharepoint = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
+    onedrive = _add_cc_pair(
+        db_session,
+        DocumentSource.ONEDRIVE,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
+    db_session.commit()
+    sharepoint_document = ConnectorDocument(
+        id=document_id,
+        source=DocumentSource.SHAREPOINT,
+        sections=[TextSection(text="unchanged content")],
+        semantic_identifier=document_id,
+        metadata={},
+        external_access=ExternalAccess(
+            external_user_emails={"sharepoint@example.com"},
+            external_user_group_ids={"sharepoint"},
+            is_public=False,
+        ),
+    )
+
+    try:
+        _add_document_with_onedrive_acl(
+            db_session, onedrive, document_id, has_been_indexed=True
+        )
+        stored = db_session.get(Document, document_id)
+        assert stored is not None
+        stored.content_hash = sharepoint_document.content_hash()
+        db_session.commit()
+
+        context = index_doc_batch_prepare(
+            [sharepoint_document],
+            IndexAttemptMetadata(
+                connector_id=sharepoint.connector_id,
+                credential_id=sharepoint.credential_id,
+            ),
+            db_session,
+        )
+
+        assert context is None
     finally:
         _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
 

@@ -72,6 +72,20 @@ def resolve_chat_file_preview(
     return preview_row[0], preview_row[1], mime_type
 
 
+def read_stored_chat_file_preview(
+    db_session: Session, file_record: FileRecord
+) -> IO[bytes] | None:
+    """The stored PDF preview of the chat file `file_record`, or None when
+    none is made yet. Raises OnyxError PREVIEW_UNAVAILABLE when the file has
+    no PDF preview (resolve_chat_file_preview)."""
+    preview_row, _, _ = resolve_chat_file_preview(db_session, file_record)
+    if preview_row.preview_file_id is None:
+        return None
+    return get_default_file_store().read_file(
+        preview_row.preview_file_id, mode="b", use_tempfile=True
+    )
+
+
 def convert_chat_file_preview_pdf(
     db_session: Session, file_record: FileRecord
 ) -> IO[bytes]:
@@ -91,16 +105,15 @@ def convert_chat_file_preview_pdf(
     so a later request tries again. Raises OnyxError SERVICE_UNAVAILABLE or
     SANDBOX_CAPACITY_UNAVAILABLE when the sandbox cannot start or be reached
     now."""
+    stored = read_stored_chat_file_preview(db_session, file_record)
+    if stored is not None:
+        return stored
     preview_row, owner_id, mime_type = resolve_chat_file_preview(
         db_session, file_record
     )
     file_id = file_record.file_id
     file_name = file_record.display_name or file_id
     file_store = get_default_file_store()
-    if preview_row.preview_file_id is not None:
-        return file_store.read_file(
-            preview_row.preview_file_id, mode="b", use_tempfile=True
-        )
     try:
         sandbox = get_harness_sandbox()
     except HarnessSandboxUnavailableError as e:

@@ -103,3 +103,48 @@ func TestOutcomeLabelNamesACommandGrant(t *testing.T) {
 		t.Fatalf("OutcomeLabel = %q", got)
 	}
 }
+
+func TestDecisionOutcomeNamesACommandGrant(t *testing.T) {
+	result := models.ApprovalDecisionResult{Decision: "APPROVED", DecidedVia: "COMMAND_GRANT"}
+	if got := DecisionOutcome(result); got != models.ApprovalOutcomeApprovedForCommand {
+		t.Fatalf("DecisionOutcome = %q", got)
+	}
+}
+
+func TestWiderApprovalFollowsTheServer(t *testing.T) {
+	no := false
+	tests := []struct {
+		name     string
+		req      models.ToolApprovalRequestEvent
+		decision models.ApprovalDecision
+		label    string
+		ok       bool
+	}{
+		{"chat", models.ToolApprovalRequestEvent{}, models.ApproveSession, "Approve for this chat", true},
+		{"asks each time", models.ToolApprovalRequestEvent{CanApproveForChat: &no}, "", "", false},
+		{"command", models.ToolApprovalRequestEvent{CanApproveForChat: &no, CanApproveForCommand: true}, models.ApproveCommand, "Approve for this command", true},
+	}
+	for _, tt := range tests {
+		decision, label, ok := WiderApproval(tt.req)
+		if decision != tt.decision || label != tt.label || ok != tt.ok {
+			t.Errorf("%s: WiderApproval = %q, %q, %v", tt.name, decision, label, ok)
+		}
+	}
+}
+
+func TestTitleNamesTheAppAndDeadlineReadsServerTimes(t *testing.T) {
+	req := models.ToolApprovalRequestEvent{DisplayName: "GET /mail", AppName: "Gmail\x1b[2J"}
+	if got := Title(req); got != "GET /mail in Gmail" {
+		t.Fatalf("Title = %q", got)
+	}
+	for _, at := range []string{"2026-01-02T15:04:05Z", "2026-01-02T15:04:05.123456+00:00", "2026-01-02T15:04:05.123456"} {
+		req.ExpiresAt = at
+		if got := Deadline(req); !strings.HasPrefix(got, "Approve by ") {
+			t.Errorf("Deadline(%q) = %q", at, got)
+		}
+	}
+	req.ExpiresAt = "soon"
+	if got := Deadline(req); got != "" {
+		t.Errorf("Deadline of a bad time = %q", got)
+	}
+}

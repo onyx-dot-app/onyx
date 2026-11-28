@@ -172,6 +172,7 @@ type ApprovalDecision string
 const (
 	ApproveOnce    ApprovalDecision = "approve_once"
 	ApproveSession ApprovalDecision = "approve_session"
+	ApproveCommand ApprovalDecision = "approve_command"
 	RejectApproval ApprovalDecision = "reject"
 )
 
@@ -180,8 +181,8 @@ type ApprovalDecisionResult struct {
 	ApprovalID string `json:"approval_id"`
 	// APPROVED or REJECTED.
 	Decision string `json:"decision"`
-	// USER, SESSION_GRANT, or POLICY: the action policy disabled the tool, so
-	// the approval rejected the call.
+	// USER, SESSION_GRANT, COMMAND_GRANT, or POLICY: the action policy
+	// disabled the tool, so the approval rejected the call.
 	DecidedVia string `json:"decided_via"`
 	// Continuation is the stream that continues the response after the
 	// decision, or nil while other requests still wait or nothing resumed.

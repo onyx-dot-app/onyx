@@ -117,10 +117,7 @@ test("the user answers the agent's questions on the card and in the chat", async
     await chatPage.expectAnswerParagraph(
       "I will update the docs and the README."
     );
-    await questions.expectRecord(
-      "Answered",
-      "Scope: Docs and the README · Audience: End users"
-    );
+    await questions.expectRecord("Answered 2 questions");
 
     // A message typed in the chat answers the second question. Text sent
     // before the reply settles would join that turn.
@@ -155,10 +152,7 @@ test("the user answers the agent's questions on the card and in the chat", async
     expect(results.get(secondCall)).toBe("Use a short table");
 
     await chatPage.reload();
-    await questions.expectRecord(
-      "Answered",
-      "Scope: Docs and the README · Audience: End users"
-    );
+    await questions.expectRecord("Answered 2 questions");
     await questions.expectRecord("Answered in the chat");
     await chatPage.expectHumanMessageBubble("Use a short table");
     await chatPage.expectAnswerParagraph("The release notes are drafted.");
@@ -216,10 +210,7 @@ test("the user chooses several options of a multi-select question", async ({
     await questions.submit();
 
     await chatPage.expectAnswerParagraph("The update is posted.");
-    await questions.expectRecord(
-      "Answered",
-      "Channels: Email and Wiki (Teams too)"
-    );
+    await questions.expectRecord("Answered 1 question");
     const requests = await getMockLlmConversationRequests(nonce);
     const result = requests
       .flatMap((request) => request.messages)
@@ -233,10 +224,7 @@ test("the user chooses several options of a multi-select question", async ({
     });
 
     await chatPage.reload();
-    await questions.expectRecord(
-      "Answered",
-      "Channels: Email and Wiki (Teams too)"
-    );
+    await questions.expectRecord("Answered 1 question");
   } finally {
     await api.deleteChatSession(sessionId);
   }

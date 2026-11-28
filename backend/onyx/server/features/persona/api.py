@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from fastapi import (
@@ -52,6 +53,7 @@ from onyx.db.persona import (
     get_persona_count_for_user,
     get_persona_snapshots_for_user,
     get_persona_snapshots_paginated,
+    get_personas_by_ids,
     is_persona_editable_by_user,
     mark_persona_as_deleted,
     mark_persona_as_not_deleted,
@@ -96,6 +98,12 @@ from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_per
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.file import sniff_mime_type
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -103,6 +111,50 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _persona_sharing_state(db_session: Session, persona_id: int) -> dict[str, Any]:
+    """Who can reach the agent after a change, as saved. Events use it instead
+    of the request, because helpers drop the changes a caller may not make."""
+    try:
+        personas = get_personas_by_ids([persona_id], db_session)
+        if not personas:
+            return {}
+        persona = personas[0]
+        return {
+            "is_public": persona.is_public,
+            "public_permission": persona.public_permission.value,
+            "owner_user_id": str(persona.user_id) if persona.user_id else None,
+            "owner_group_id": persona.owner_group_id,
+            "user_shares": [
+                {"user_id": str(share.user_id), "permission": share.permission.value}
+                for share in persona.user_shares
+            ],
+            "group_shares": [
+                {"group_id": share.user_group_id, "permission": share.permission.value}
+                for share in persona.group_shares
+            ],
+        }
+    except Exception:
+        # The change is already saved; the audit detail must not fail it.
+        logger.warning("Failed to read agent sharing state for audit", exc_info=True)
+        return {}
+
+
+def _emit_persona_event(
+    action: AuditAction,
+    user: User,
+    persona_id: int,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    emit_audit_event(
+        action,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="persona",
+        resource_id=persona_id,
+        extra=extra,
+    )
 
 
 def _validate_user_knowledge_enabled(
@@ -206,6 +258,15 @@ def patch_user_persona_public_status(
     except ValueError as e:
         logger.exception("Failed to update persona public status")
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_id,
+        {
+            "change": "public_status",
+            **_persona_sharing_state(db_session, persona_id),
+        },
+    )
 
 
 @admin_router.patch("/{persona_id}/featured")
@@ -327,6 +388,12 @@ def undelete_persona(
         user=user,
         db_session=db_session,
     )
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_id,
+        {"change": "undelete", **_persona_sharing_state(db_session, persona_id)},
+    )
 
 
 # Every allowlisted image type is identified by its first few bytes.
@@ -378,6 +445,15 @@ def create_persona(
         user=user,
         db_session=db_session,
     )
+    _emit_persona_event(
+        AuditAction.PERSONA_CREATE,
+        user,
+        persona_snapshot.id,
+        {
+            "name": persona_upsert_request.name,
+            **_persona_sharing_state(db_session, persona_snapshot.id),
+        },
+    )
     mt_cloud_telemetry(
         tenant_id=tenant_id,
         distinct_id=str(user.id),
@@ -411,6 +487,16 @@ def update_persona(
     # The persona's default model is baked into the cached LLM provider listing
     # (see onyx/server/manage/llm/provider_cache.py), so edits must drop it.
     invalidate_provider_listing_cache()
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_snapshot.id,
+        {
+            "change": "config",
+            "name": persona_upsert_request.name,
+            **_persona_sharing_state(db_session, persona_snapshot.id),
+        },
+    )
     return get_persona(persona_snapshot.id, user, db_session)
 
 
@@ -546,6 +632,15 @@ def share_persona(
     except ValueError as e:
         logger.exception("Failed to share persona")
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_id,
+        {
+            "change": "share",
+            **_persona_sharing_state(db_session, persona_id),
+        },
+    )
 
 
 class TransferPersonaOwnershipRequest(BaseModel):
@@ -577,6 +672,15 @@ def transfer_persona_ownership_endpoint(
     except (ValueError, NotImplementedError) as e:
         logger.exception("Failed to transfer persona ownership")
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+    _emit_persona_event(
+        AuditAction.PERSONA_UPDATE,
+        user,
+        persona_id,
+        {
+            "change": "transfer_ownership",
+            **_persona_sharing_state(db_session, persona_id),
+        },
+    )
 
 
 @basic_router.delete("/{persona_id}/share/me")
@@ -647,6 +751,7 @@ def delete_persona(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can only delete agents you created.",
         ) from e
+    _emit_persona_event(AuditAction.PERSONA_DELETE, user, persona_id)
 
 
 # scope_exempt: the auth dependency below carries no require_permission marker,
@@ -749,7 +854,8 @@ def get_persona(
     snapshot.integrations = list_persona_integration_snapshots(persona.id, db_session)
     # Old custom and MCP tool ids come from the integration links, so they
     # round-trip through tool_ids. A tool of an integration that the viewer
-    # has no access to keeps its id and gives nothing else of the tool.
+    # has no access to keeps its id and gives nothing else of the tool. Each
+    # reader of the agent gets no header values: they can hold shared secrets.
     visible_integrations = (
         None
         if has_global_permission(user, Permission.MANAGE_ACTIONS)
@@ -765,7 +871,7 @@ def get_persona(
 
     def viewer_snapshot(integration_id: int, tool: ToolSnapshot) -> ToolSnapshot:
         if visible_integrations is None or integration_id in visible_integrations:
-            return tool
+            return tool.model_copy(update={"custom_headers": None})
         return tool.model_copy(
             update={
                 "description": "",

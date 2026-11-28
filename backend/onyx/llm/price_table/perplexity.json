@@ -23,6 +23,14 @@
       "mode": "evaluation",
       "name": "pplx-decider-flash-v1.2"
     },
+    "pplx-decider-flash-v1.3": {
+      "cost": {
+        "input": 0.01,
+        "output": 0.0
+      },
+      "mode": "evaluation",
+      "name": "pplx-decider-flash-v1.3"
+    },
     "pplx-decider-latest": {
       "cost": {
         "input": 0.02,
@@ -66,6 +74,14 @@
       },
       "mode": "evaluation",
       "name": "pplx-decider-v1.2"
+    },
+    "pplx-decider-v1.3": {
+      "cost": {
+        "input": 0.02,
+        "output": 0.0
+      },
+      "mode": "evaluation",
+      "name": "pplx-decider-v1.3"
     },
     "pplx-embed-context-v1-0.6b": {
       "cost": {
@@ -111,6 +127,20 @@
       "mode": "embedding",
       "name": "pplx-embed-v1-4b"
     },
+    "pplx-embed-v2-context-0.6b": {
+      "cost": {
+        "input": 0.02
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-v2-context-0.6b"
+    },
+    "pplx-embed-v2-context-9b": {
+      "cost": {
+        "input": 0.12
+      },
+      "mode": "embedding",
+      "name": "pplx-embed-v2-context-9b"
+    },
     "search": {
       "mode": "search",
       "name": "search"
@@ -150,7 +180,7 @@
         "output": 8,
         "reasoning": 3
       },
-      "family": "sonar",
+      "family": "sonar-deep-research",
       "limit": {
         "context": 128000,
         "output": 32768
@@ -207,7 +237,7 @@
         "input": 2,
         "output": 8
       },
-      "family": "sonar-reasoning",
+      "family": "sonar-reasoning-pro",
       "limit": {
         "context": 128000,
         "output": 4096

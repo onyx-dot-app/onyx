@@ -104,6 +104,7 @@ export const SWR_KEYS = {
   authType: "/api/auth/type",
   adminSecuritySettings: "/api/admin/security",
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
+  adminAuditStatus: "/api/admin/security/audit-status",
   incognitoAvailability: "/api/chat/incognito-availability",
   // A chat file's preview data, not a URL: see `useChatFilePreview`
   chatFilePreview: (fileId: string) => `chat-file-preview:${fileId}`,
@@ -273,6 +274,8 @@ export const SWR_KEYS = {
   adminUserGroupsWithDefault:
     "/api/manage/admin/user-group?include_default=true",
   shareableGroups: "/api/manage/user-groups/minimal",
+  shareableGroupsManageableFor: (permission: string) =>
+    `/api/manage/user-groups/minimal?manageable_for=${encodeURIComponent(permission)}`,
   shareableUsers: (includeApiKeys: boolean) =>
     `/api/users?include_api_keys=${includeApiKeys}`,
   userGroupPermissions: (groupId: number) =>

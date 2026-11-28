@@ -105,7 +105,7 @@
       "name": "codestral-mamba-latest"
     },
     "deepseek-v4-1-flash-1017": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.007,
         "input": 0.3,
@@ -118,7 +118,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "text"
@@ -129,6 +130,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-10-17",
+      "status": "beta",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -161,16 +163,14 @@
       "tool_call": true
     },
     "devstral-latest": {
-      "attachment": false,
       "cost": {
         "cache_read": 0.04,
-        "input": 0.4,
-        "output": 2
+        "input": 0.39999999999999997,
+        "output": 2.0
       },
-      "family": "devstral",
       "limit": {
-        "context": 262144,
-        "output": 262144
+        "context": 256000,
+        "output": 256000
       },
       "modalities": {
         "input": [
@@ -181,25 +181,20 @@
         ]
       },
       "mode": "chat",
-      "name": "Devstral 2",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-12-09",
-      "status": "deprecated",
-      "temperature": true,
+      "name": "devstral-latest",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "devstral-medium-latest": {
-      "attachment": false,
       "cost": {
         "cache_read": 0.04,
-        "input": 0.4,
-        "output": 2
+        "input": 0.39999999999999997,
+        "output": 2.0
       },
-      "family": "devstral",
       "limit": {
-        "context": 262144,
-        "output": 262144
+        "context": 256000,
+        "output": 256000
       },
       "modalities": {
         "input": [
@@ -210,12 +205,9 @@
         ]
       },
       "mode": "chat",
-      "name": "Devstral 2 (latest)",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-12-02",
-      "status": "deprecated",
-      "temperature": true,
+      "name": "devstral-medium-latest",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "devstral-small-latest": {
@@ -301,15 +293,13 @@
       "tool_call": true
     },
     "labs-leanstral-1-5-1": {
-      "attachment": true,
       "cost": {
-        "input": 0,
-        "output": 0
+        "input": 0.0,
+        "output": 0.0
       },
-      "family": "leanstral",
       "limit": {
         "context": 262144,
-        "output": 128000
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -321,31 +311,28 @@
         ]
       },
       "mode": "chat",
-      "name": "Leanstral 1.5",
-      "open_weights": true,
+      "name": "labs-leanstral-1-5-1",
       "reasoning": true,
-      "release_date": "2026-06-30",
-      "status": "deprecated",
       "structured_output": true,
-      "temperature": true,
       "tool_call": true
     },
     "magistral-medium-latest": {
       "attachment": true,
       "cost": {
         "cache_read": 0.15,
-        "input": 2,
-        "output": 5
+        "input": 1.5,
+        "output": 7.5
       },
       "family": "magistral-medium",
       "limit": {
         "context": 262144,
-        "output": 16384
+        "output": 262144
       },
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -357,6 +344,7 @@
       "reasoning": true,
       "release_date": "2025-03-17",
       "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -417,11 +405,13 @@
       "tool_call": true
     },
     "ministral-14b-latest": {
+      "attachment": true,
       "cost": {
         "cache_read": 0.02,
-        "input": 0.19999999999999998,
-        "output": 0.19999999999999998
+        "input": 0.2,
+        "output": 0.2
       },
+      "family": "ministral",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -429,15 +419,20 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
         ]
       },
       "mode": "chat",
-      "name": "ministral-14b-latest",
+      "name": "Ministral 3 14B (latest)",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-12-02",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "ministral-3-14b-2512": {
@@ -522,7 +517,7 @@
       "family": "ministral",
       "limit": {
         "context": 131072,
-        "output": 262144
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -553,7 +548,7 @@
       "family": "ministral",
       "limit": {
         "context": 131072,
-        "output": 128000
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -566,10 +561,10 @@
         ]
       },
       "mode": "chat",
-      "name": "Ministral 3B (latest)",
+      "name": "Ministral 3 3B (latest)",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2024-10-01",
+      "release_date": "2025-12-02",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -615,7 +610,7 @@
       "family": "ministral",
       "limit": {
         "context": 262144,
-        "output": 128000
+        "output": 262144
       },
       "modalities": {
         "input": [
@@ -628,10 +623,10 @@
         ]
       },
       "mode": "chat",
-      "name": "Ministral 8B (latest)",
+      "name": "Ministral 3 8B (latest)",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2024-10-01",
+      "release_date": "2025-12-02",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -709,6 +704,7 @@
     "mistral-embed": {
       "attachment": false,
       "cost": {
+        "cache_read": 0.01,
         "input": 0.1,
         "output": 0
       },
@@ -735,6 +731,7 @@
     },
     "mistral-embed-2312": {
       "cost": {
+        "cache_read": 0.01,
         "input": 0.09999999999999999
       },
       "limit": {
@@ -769,7 +766,8 @@
       "name": "Mistral Large 3",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2024-11-01",
+      "release_date": "2025-12-02",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -822,10 +820,9 @@
       },
       "mode": "chat",
       "name": "Mistral Large 4",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-10-06",
-      "status": "beta",
+      "release_date": "2026-10-05",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -881,7 +878,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-06",
-      "status": "beta",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -889,13 +886,13 @@
     "mistral-large-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.05,
-        "input": 0.5,
-        "output": 1.5
+        "cache_read": 0.07,
+        "input": 0.7,
+        "output": 2.1
       },
       "family": "mistral-large",
       "limit": {
-        "context": 262144,
+        "context": 1048576,
         "output": 262144
       },
       "modalities": {
@@ -911,8 +908,8 @@
       "mode": "chat",
       "name": "Mistral Large (latest)",
       "open_weights": true,
-      "reasoning": false,
-      "release_date": "2024-11-01",
+      "reasoning": true,
+      "release_date": "2026-10-05",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1024,7 +1021,8 @@
       "name": "Mistral Medium 3.5",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-29",
+      "release_date": "2026-04-28",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1130,7 +1128,8 @@
       "name": "Mistral Medium (latest)",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-29",
+      "release_date": "2026-04-28",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1387,13 +1386,11 @@
       "tool_call": true
     },
     "open-mistral-nemo": {
-      "attachment": false,
       "cost": {
         "cache_read": 0.03,
-        "input": 0.15,
-        "output": 0.15
+        "input": 0.3,
+        "output": 0.3
       },
-      "family": "mistral-nemo",
       "limit": {
         "context": 128000,
         "output": 128000
@@ -1407,13 +1404,8 @@
         ]
       },
       "mode": "chat",
-      "name": "Open Mistral Nemo",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2024-07-01",
-      "status": "deprecated",
-      "temperature": true,
-      "tool_call": true
+      "name": "open-mistral-nemo",
+      "structured_output": true
     },
     "pixtral-12b": {
       "attachment": true,
@@ -1479,7 +1471,7 @@
       "cost": {
         "second_input": 5e-05
       },
-      "family": "voxtral",
+      "family": "voxtral-transcribe",
       "limit": {
         "context": 0,
         "output": 0
@@ -1497,6 +1489,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2026-02-04",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -1528,6 +1521,13 @@
       "mode": "audio_transcription",
       "name": "voxtral-mini-transcribe-3-0"
     },
+    "voxtral-mini-transcribe-latest": {
+      "cost": {
+        "second_input": 5.83333e-05
+      },
+      "mode": "audio_transcription",
+      "name": "voxtral-mini-transcribe-latest"
+    },
     "voxtral-mini-transcribe-realtime-2602": {
       "cost": {
         "second_input": 0.0001
@@ -1551,7 +1551,7 @@
     },
     "voxtral-mini-transcribe-realtime-latest": {
       "cost": {
-        "second_input": 0.0001
+        "second_input": 0.000133333
       },
       "mode": "audio_transcription",
       "name": "voxtral-mini-transcribe-realtime-latest"
@@ -1570,7 +1570,7 @@
     },
     "voxtral-mini-tts-latest": {
       "attachment": false,
-      "family": "voxtral",
+      "family": "voxtral-tts",
       "limit": {
         "context": 0,
         "output": 0
@@ -1588,6 +1588,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2026-03-23",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -1598,7 +1599,7 @@
         "input": 0.1,
         "output": 0.4
       },
-      "family": "voxtral",
+      "family": "voxtral-small",
       "limit": {
         "context": 32768,
         "output": 32000
@@ -1629,7 +1630,7 @@
         "input": 0.1,
         "output": 0.4
       },
-      "family": "voxtral",
+      "family": "voxtral-small",
       "limit": {
         "context": 32768,
         "output": 32000
@@ -1666,6 +1667,13 @@
       },
       "mode": "audio_transcription",
       "name": "voxtral-small-transcribe-3-0"
+    },
+    "voxtral-small-transcribe-latest": {
+      "cost": {
+        "second_input": 6.66667e-05
+      },
+      "mode": "audio_transcription",
+      "name": "voxtral-small-transcribe-latest"
     },
     "zai-glm-5": {
       "cost": {
@@ -1766,7 +1774,6 @@
         "input": [
           "text",
           "image",
-          "video",
           "pdf"
         ],
         "output": [

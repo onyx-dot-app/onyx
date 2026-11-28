@@ -1063,8 +1063,8 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		m.agentID = *detail.AgentID
 	}
 
-	// Replay messages. The questions that a response asked and that ended
-	// show as records before its text.
+	// Replay messages. The approval requests and questions that a response
+	// asked and that ended show as records before its text.
 	saved := readSavedRequests(detail)
 	recorded := maps.Clone(m.resolvedRequests)
 	if recorded == nil {
@@ -1086,6 +1086,15 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 			// A replay of a running response replaces its saved copy.
 			m.viewport.startAgent()
 			m.viewport.showResponse(chatMsg.MessageID)
+			// The records belong to the response, so a replay of it replaces them.
+			for _, card := range saved.approvals {
+				outcome, ok := saved.outcomes[card.request.ApprovalID]
+				if card.responseID != chatMsg.MessageID || !ok {
+					continue
+				}
+				m.viewport.setCard(card.request.ApprovalID, approvalRecord(card.request, approval.OutcomeLabel(outcome)))
+				recorded[card.request.ApprovalID] = true
+			}
 			m.viewport.appendToken(chatMsg.Message)
 			m.viewport.finishAgent()
 			m.viewport.endResponse()

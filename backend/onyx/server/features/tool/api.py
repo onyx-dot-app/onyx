@@ -1,6 +1,8 @@
 """The public tool routes. Built-in tools come from the ``tool`` table. A
 custom tool is an ``api`` integration with a REST ``api_app``: the routes read
-and write the integration and return the id of its OpenAPI ``tool`` row."""
+and write the integration and return the id of its OpenAPI ``tool`` row. The
+admin custom-tool routes are deprecated: use ``/admin/integrations``. A later
+release removes them."""
 
 import json
 from collections.abc import Sequence
@@ -302,7 +304,7 @@ def openapi_tool_snapshots(
     ]
 
 
-@admin_router.post("/custom", tags=PUBLIC_API_TAGS)
+@admin_router.post("/custom", tags=PUBLIC_API_TAGS, deprecated=True)
 def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
@@ -338,7 +340,7 @@ def create_custom_tool(
     return openapi_tool_snapshot(tool, integration, db_session)
 
 
-@admin_router.put("/custom/{tool_id}", tags=PUBLIC_API_TAGS)
+@admin_router.put("/custom/{tool_id}", tags=PUBLIC_API_TAGS, deprecated=True)
 def update_custom_tool(
     tool_id: int,
     tool_data: CustomToolUpdate,
@@ -407,7 +409,7 @@ def update_custom_tool(
     return openapi_tool_snapshot(tool, integration, db_session)
 
 
-@admin_router.delete("/custom/{tool_id}", tags=PUBLIC_API_TAGS)
+@admin_router.delete("/custom/{tool_id}", tags=PUBLIC_API_TAGS, deprecated=True)
 def delete_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
@@ -428,7 +430,7 @@ class ValidateToolResponse(BaseModel):
     methods: list[MethodSpec]
 
 
-@admin_router.post("/custom/validate", tags=PUBLIC_API_TAGS)
+@admin_router.post("/custom/validate", tags=PUBLIC_API_TAGS, deprecated=True)
 def validate_tool(
     tool_data: ValidateToolRequest,
     _: User = Depends(require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)),
@@ -470,6 +472,8 @@ def _openapi_snapshots(
         )
         if include_managed:
             snapshot.permissions = tool_permissions(can_manage=can_manage)
+        if not can_manage:
+            snapshot.custom_headers = None
         snapshots.append(snapshot)
     return snapshots
 

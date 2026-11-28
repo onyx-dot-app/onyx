@@ -219,14 +219,11 @@ async def fetch_sign_up_domain_state(email: str) -> SignUpDomainState:
     return SignUpDomainState(response.json()["state"])
 
 
-async def check_playground_sign_up(email: str, start_new_team: bool) -> None:
-    """Refuses a playground sign-up that is not from a work address, or that
-    the control plane rules out.
-
-    A free-mail address is refused first: it is not one company, so the
-    domain rules do not apply and the control plane is not asked.
-    `active_tenant` passes when the person chose to start a new team. A
-    control plane that cannot answer refuses too: no tenant without the rules.
+def check_playground_address(email: str) -> None:
+    """Refuses an address the playground never gives a tenant: a free-mail
+    domain is not one company, so the domain rules do not apply and the
+    control plane is not asked. Decided by the address alone, so the magic
+    link runs it before it sends anything.
     """
     if is_free_mail_email(email):
         logger.info(
@@ -234,6 +231,22 @@ async def check_playground_sign_up(email: str, start_new_team: bool) -> None:
             email.rsplit("@", 1)[-1].lower(),
         )
         raise OnyxError(OnyxErrorCode.REGISTRATION_DISABLED, PLAYGROUND_FREE_MAIL_CODE)
+
+
+def is_team_choice_refusal(error: OnyxError) -> bool:
+    """The one refusal the person can answer: a team from the domain has a
+    running trial, and they may start a new one instead of joining it."""
+    return error.detail == PLAYGROUND_REFUSAL_CODES[SignUpDomainState.ACTIVE_TENANT]
+
+
+async def check_playground_sign_up(email: str, start_new_team: bool) -> None:
+    """Refuses a playground sign-up that is not from a work address, or that
+    the control plane rules out.
+
+    `active_tenant` passes when the person chose to start a new team. A
+    control plane that cannot answer refuses too: no tenant without the rules.
+    """
+    check_playground_address(email)
     try:
         state = await fetch_sign_up_domain_state(email)
     except Exception:

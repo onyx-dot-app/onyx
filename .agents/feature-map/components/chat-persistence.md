@@ -560,8 +560,9 @@ Community downgrade clears it ([[billing]]).
    `chat/renderer.py:question_resolved`
    ([[mcp-and-custom-tools#chat-approval-records-replay]]).
    Runtime replay uses `chat/presentation.py:overall_stop`: a `CANCELLED`
-   response with a `DEADLINE` failure gets `timed_out`; other cancellations get
-   `user_cancelled`. Lost admission, lost ownership lease and control failures
+   response with a `DEADLINE` failure gets `timed_out`, and one with an
+   `APPROVAL_EXPIRED` failure (a scheduled run that nobody approved in time)
+   gets `approval_expired`; other cancellations get `user_cancelled`. Lost admission, lost ownership lease and control failures
    still cancel without a classified failure and replay like Stop. History keeps
    deadline cancellations out of error fields, so clients retain the partial answer.
    Preparation timeouts also save a minimal runtime record. Legacy replay

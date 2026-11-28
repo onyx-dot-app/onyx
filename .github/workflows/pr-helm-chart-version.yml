@@ -1,6 +1,6 @@
 name: Helm Chart Version Check
 concurrency:
-  group: Helm-Chart-Version-Check-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  group: Helm-Chart-Version-Check-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
   cancel-in-progress: true
 
 # Requires deployment/helm/charts/onyx/Chart.yaml `version` to be bumped above the
@@ -32,6 +32,14 @@ permissions:
   contents: read
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   helm-chart-version-check:
     runs-on: ubuntu-latest
     timeout-minutes: 10

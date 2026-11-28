@@ -5,14 +5,14 @@ import { FileDescriptor } from "@/app/app/types";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/lib/timeline/chat/message/MessageSwitcher";
 import { cn, richNodes } from "@opal/utils";
-import useScreenSize from "@/hooks/useScreenSize";
 import { Badge, Button, CopyButton, Text } from "@opal/components";
 import { SvgChevronDown, SvgChevronUp, SvgEdit, SvgSparkle } from "@opal/icons";
-import { Hoverable } from "@opal/core";
 import { Section } from "@opal/layouts";
 import { useOverflow } from "@opal/hooks";
 import FileDisplay from "./FileDisplay";
-import MessageTime from "@/lib/timeline/chat/message/MessageTime";
+import MessageTime, {
+  MESSAGE_FOOTER_REVEAL,
+} from "@/lib/timeline/chat/message/MessageTime";
 import { placeMentions, MENTION_TRIGGER } from "@/lib/chat/mentions";
 import type { ComposedMention, MessageEdit, Mention } from "@/lib/chat/types";
 import type { IconFunctionComponent } from "@opal/types";
@@ -186,8 +186,6 @@ const HumanMessage = React.memo(function HumanMessage({
 }: HumanMessageProps) {
   const t = useTranslations("chat.messages");
 
-  const { isMobile } = useScreenSize();
-
   // Use nodeId for switching (finding position in siblings)
   const indexInSiblings = otherMessagesCanSwitchTo?.indexOf(nodeId);
   // indexOf returns -1 if not found, treat that as undefined
@@ -218,25 +216,71 @@ const HumanMessage = React.memo(function HumanMessage({
     return undefined;
   };
 
-  const copyEditButtonContent = useMemo(
-    () => (
+  return (
+    <Section
+      id="onyx-human-message"
+      justifyContent="end"
+      alignItems="stretch"
+      height="fit"
+      gap={0}
+      className="group/message relative"
+    >
+      <FileDisplay files={files || []} />
+      <Section flexDirection="row" justifyContent="end" height="fit" gap={0}>
+        <HumanMessageBubble
+          content={content}
+          mentions={mentions}
+          findKey={chatFindTextKey("user", nodeId)}
+        />
+      </Section>
       <Section
         flexDirection="row"
+        justifyContent="end"
         alignItems="center"
-        width="fit"
         height="fit"
-        gap={0}
-        className="shrink mx-1"
+        gap={0.5}
+        className={cn("mt-1", MESSAGE_FOOTER_REVEAL)}
       >
+        {timeSent && (
+          <div className="px-1">
+            <MessageTime timeSent={timeSent} />
+          </div>
+        )}
+        {currentMessageInd !== undefined &&
+          onMessageSelection &&
+          otherMessagesCanSwitchTo &&
+          otherMessagesCanSwitchTo.length > 1 && (
+            <MessageSwitcher
+              disableForStreaming={disableSwitchingForStreaming}
+              currentPage={currentMessageInd + 1}
+              totalPages={otherMessagesCanSwitchTo.length}
+              handlePrevious={() => {
+                stopGenerating();
+                const prevMessage = getPreviousMessage();
+                if (prevMessage !== undefined) {
+                  onMessageSelection(prevMessage);
+                }
+              }}
+              handleNext={() => {
+                stopGenerating();
+                const nextMessage = getNextMessage();
+                if (nextMessage !== undefined) {
+                  onMessageSelection(nextMessage);
+                }
+              }}
+            />
+          )}
         <CopyButton
           getCopyText={() => content}
           prominence="tertiary"
+          size="xs"
           data-testid="HumanMessage/copy-button"
         />
         {onEdit && messageId != null && (
           <Button
             icon={SvgEdit}
             prominence="tertiary"
+            size="xs"
             tooltip={t("humanMessage.editButton.tooltip")}
             onClick={() =>
               onEdit({
@@ -250,73 +294,7 @@ const HumanMessage = React.memo(function HumanMessage({
           />
         )}
       </Section>
-    ),
-    [content, files, mentions, messageId, onEdit, t]
-  );
-
-  const copyEditButton = (
-    <Hoverable.Item group="humanMessage" variant="appear-on-hover">
-      {copyEditButtonContent}
-    </Hoverable.Item>
-  );
-
-  return (
-    <Hoverable.Root group="humanMessage" width="full">
-      <div
-        id="onyx-human-message"
-        className="group/human-message flex flex-col justify-end w-full relative"
-      >
-        <FileDisplay files={files || []} />
-        <div className="flex justify-end">
-          {!isMobile && copyEditButton}
-          <HumanMessageBubble
-            content={content}
-            mentions={mentions}
-            findKey={chatFindTextKey("user", nodeId)}
-          />
-        </div>
-        <Section
-          flexDirection="row"
-          justifyContent="end"
-          alignItems="center"
-          height="fit"
-          gap={0}
-          className="mt-1"
-        >
-          {isMobile && copyEditButton}
-          {/* The send time sits under the bubble, at its end. */}
-          {timeSent && (
-            <div className="px-1 opacity-0 transition-opacity duration-0 group-hover/human-message:duration-150 group-hover/human-message:opacity-100 group-hover/human-message:delay-300 group-focus-within/human-message:opacity-100 no-hover:opacity-100">
-              <MessageTime timeSent={timeSent} />
-            </div>
-          )}
-          {currentMessageInd !== undefined &&
-            onMessageSelection &&
-            otherMessagesCanSwitchTo &&
-            otherMessagesCanSwitchTo.length > 1 && (
-              <MessageSwitcher
-                disableForStreaming={disableSwitchingForStreaming}
-                currentPage={currentMessageInd + 1}
-                totalPages={otherMessagesCanSwitchTo.length}
-                handlePrevious={() => {
-                  stopGenerating();
-                  const prevMessage = getPreviousMessage();
-                  if (prevMessage !== undefined) {
-                    onMessageSelection(prevMessage);
-                  }
-                }}
-                handleNext={() => {
-                  stopGenerating();
-                  const nextMessage = getNextMessage();
-                  if (nextMessage !== undefined) {
-                    onMessageSelection(nextMessage);
-                  }
-                }}
-              />
-            )}
-        </Section>
-      </div>
-    </Hoverable.Root>
+    </Section>
   );
 }, arePropsEqual);
 

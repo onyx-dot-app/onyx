@@ -10,12 +10,14 @@ import {
   asksUser,
   decidedStatus,
   readToolApprovals,
-  readToolQuestions,
   readWaitingToolRequests,
   toolApprovalStatus,
-  toolQuestionStatus,
   useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
+import {
+  readToolQuestions,
+  toolQuestionStatus,
+} from "@/lib/chat/toolQuestions";
 import type { ApprovalStatus } from "@/lib/approvals/types";
 
 function request(approvalId: string, agentName: string | null = null): Packet {

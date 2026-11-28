@@ -393,7 +393,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     holds, which also approves the command's other waiting rows that the
     command's grants together cover), or reject. An approval of a request that
     the current policies block, or whose integration is gone or turned off,
-    saves a rejection by the policy (`decided_via` POLICY) and grants nothing.
+    saves a rejection by the policy (`decided_via` POLICY) and grants nothing;
+    the held request then gets 403 `policy_denied`, not `user_rejected`.
     The scan does the same check for each covered row (one policy read for
     all of them), so a covered row with a now-blocked action is a rejection
     by the policy, not an approval. A covered row with an action that asks

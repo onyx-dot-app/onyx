@@ -50,6 +50,12 @@ from onyx.server.oauth_provider.models import (
 )
 from onyx.server.oauth_provider.provider import OnyxOAuthProvider
 from onyx.server.settings.store import load_settings
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import UsageCredentialIdentity, get_current_tenant_id
 from shared_configs.enums import UsageCredentialType
@@ -275,5 +281,13 @@ def disconnect_client(
         session.commit()
     if not revoked:
         raise OnyxError(OnyxErrorCode.NOT_FOUND)
+    emit_audit_event(
+        AuditAction.OAUTH_GRANT_REVOKE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="oauth_grant",
+        resource_id=str(grant_id),
+        extra={"source": "user_disconnect"},
+    )
     response.headers.update(NO_STORE_HEADERS)
     return {"revoked": True}

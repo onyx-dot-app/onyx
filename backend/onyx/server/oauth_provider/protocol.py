@@ -47,6 +47,7 @@ from onyx.server.oauth_provider.provider import (
     OAuthClientMetadataUnavailable,
     OnyxOAuthProvider,
 )
+from onyx.utils.audit import AuditAction, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -208,6 +209,17 @@ async def register(request: Request) -> Response:
         return _oauth_error("invalid_client_metadata", "Invalid client metadata")
     except _UNAVAILABLE_ERRORS:
         return _service_unavailable()
+    # Registration is anonymous, so the event has no actor.
+    emit_audit_event(
+        AuditAction.OAUTH_CLIENT_REGISTER,
+        AuditOutcome.SUCCESS,
+        resource_type="oauth_client",
+        resource_id=client.client_id,
+        extra={
+            "client_name": client.client_name,
+            "redirect_uris": [str(uri) for uri in client.redirect_uris or []],
+        },
+    )
     return JSONResponse(
         client.model_dump(mode="json", exclude_none=True),
         status_code=HTTPStatus.CREATED,

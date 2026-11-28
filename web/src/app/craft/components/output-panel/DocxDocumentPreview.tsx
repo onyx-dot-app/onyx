@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useEffectEvent, useRef, useState } from "react";
-import { FilePreviewLoading } from "@/app/craft/components/output-panel/FilePreviewLoading";
+import { FilePreviewLoading } from "@/sections/file-preview/FilePreviewLoading";
 import { renderDocx } from "@/lib/docx/renderDocx";
 import {
   FilePreviewScrollArea,
