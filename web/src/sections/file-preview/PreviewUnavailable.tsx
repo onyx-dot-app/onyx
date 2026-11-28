@@ -7,18 +7,23 @@ import { SvgDownloadCloud } from "@opal/icons";
 import type { RichStr } from "@opal/types";
 import { getFileIcon } from "@/lib/utils";
 
-interface PreviewUnavailableProps {
+// The download is a link to the file, or an action that downloads it
+type PreviewUnavailableDownload =
+  | { fileUrl: string; onDownload?: never }
+  | { fileUrl?: never; onDownload: () => void };
+
+type PreviewUnavailableProps = PreviewUnavailableDownload & {
   fileName: string;
-  fileUrl: string;
   title: string | RichStr;
   description: string | RichStr;
   onRetry?: () => void;
-}
+};
 
 /** Stands in for a preview that cannot show: the file's icon, why, and a download. */
 export function PreviewUnavailable({
   fileName,
   fileUrl,
+  onDownload,
   title,
   description,
   onRetry,
@@ -58,8 +63,9 @@ export function PreviewUnavailable({
             </Button>
           )}
           <Button
-            href={fileUrl}
-            download={fileName}
+            {...(fileUrl === undefined
+              ? { onClick: onDownload }
+              : { href: fileUrl, download: fileName })}
             icon={SvgDownloadCloud}
             prominence="primary"
             size="lg"

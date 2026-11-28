@@ -18,8 +18,9 @@ function formatterFor(locale: "en" | "de"): (bytes: number) => string {
 describe("useFormatBytes", () => {
   it("formats sizes in English", () => {
     const formatBytes = formatterFor("en");
-    expect(formatBytes(500)).toBe("500 byte");
-    expect(formatBytes(1023)).toBe("1,023 byte");
+    expect(formatBytes(500)).toBe("500 bytes");
+    expect(formatBytes(1023)).toBe("1,023 bytes");
+    expect(formatBytes(1)).toBe("1 byte");
     expect(formatBytes(1024)).toBe("1 kB");
     expect(formatBytes(1234.5 * 1024)).toBe("1.2 MB");
     expect(formatBytes(1023.5 * 1024)).toBe("1,023.5 kB");

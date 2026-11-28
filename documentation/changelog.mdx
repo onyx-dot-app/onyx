@@ -37,6 +37,14 @@ rss: true
 
   The Terraform provider adds the `onyx_integration` resource, and deprecates `onyx_mcp_server` and `onyx_custom_tool`.
 
+  ## [Update] Audit Logs Need an Enterprise License
+
+  Onyx writes the audit-event stream only when the license tier is Enterprise. After the upgrade,
+  deployments with a Business license or no license stop writing audit events.
+  Deployments with an Enterprise license write the same events as before.
+
+  See [Audit Logs & SIEM Integration](https://docs.onyx.app/admins/auditing/audit_logs).
+
 </Update>
 
 <Update label="v5.0.0" description="October 23rd, 2026" tags={["New Features", "Deployment Changes", "Bug Fixes"]}>

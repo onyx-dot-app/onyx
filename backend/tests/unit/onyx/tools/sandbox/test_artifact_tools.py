@@ -272,12 +272,8 @@ def test_bad_list_arguments_are_tool_errors_without_the_database(
     chat_id = "not-a-chat"
     bad_chat, _ = _run(monkeypatch, {"chat_id": chat_id})
     assert bad_chat.is_error
-    assert bad_chat.content == f"No chat {chat_id} of yours"
-    # A list result never spills, so its error cannot echo a long ID.
-    long_chat, _ = _run(monkeypatch, {"chat_id": "x" * (ARTIFACTS_PATH_MAX_CHARS + 1)})
-    assert long_chat.content == (
-        "Invalid tool arguments: chat_id: String should have at most "
-        f"{ARTIFACTS_PATH_MAX_CHARS} characters"
+    assert bad_chat.content.startswith(
+        "Invalid tool arguments: chat_id: Input should be a valid UUID"
     )
 
     for cursor in ("%%%", "bm90IGpzb24=", str(uuid4())):
@@ -408,11 +404,6 @@ _LONG_ID = "x" * (ARTIFACTS_PATH_MAX_CHARS + 1)
                     "operations.0.update.file_uri.file_id",
                 ),
             )
-        ),
-        (
-            LibrarySearchArguments,
-            {"search_query": [{"q": "q3"}], "chat_id": _LONG_ID},
-            "chat_id",
         ),
     ],
 )

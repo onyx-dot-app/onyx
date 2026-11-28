@@ -71,6 +71,12 @@ from onyx.server.features.build.sandbox.harness_factory import get_harness_sandb
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.server.query_and_chat.models import BrowserUploadResponse
 from onyx.server.settings.store import load_browser_enabled
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -408,6 +414,14 @@ def download_chat_browser_file(
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Download not found.") from e
         except SandboxFileTooLargeError as e:
             raise OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, str(e)) from e
+    emit_audit_event(
+        AuditAction.FILE_DOWNLOAD,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="chat_browser_download",
+        resource_id=name,
+        extra={"chat_session_id": str(chat_session_id)},
+    )
     return StreamingResponse(
         chunks,
         media_type="application/octet-stream",

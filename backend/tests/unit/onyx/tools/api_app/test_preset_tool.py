@@ -367,7 +367,7 @@ def test_only_a_rejected_sign_in_asks_the_user_to_connect(
     )
     with (
         patch(_SEND, return_value=_response(status=status)),
-        patch("onyx.tools.tool_implementations.http_request.mark_api_key_rejected"),
+        patch("onyx.tools.tool_implementations.http_request.mark_credential_rejected"),
     ):
         result = _run(tool, method="GET", url="https://api.github.com/repos/o/r/issues")
 

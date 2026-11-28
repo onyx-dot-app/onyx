@@ -831,7 +831,7 @@ class Corpus:
         if principal.kind == "site_group":
             return f"{site.web_url}::{principal.key}"
         if principal.kind == "entra_group":
-            return f"{self.principal_title(principal)}_{principal.key}"
+            return principal.key
         return f"{self.principal_title(principal)}_{self.tenant_id}"
 
     def effective_access(
@@ -877,7 +877,7 @@ class Corpus:
                         queue.append(
                             (
                                 Principal(kind="entra_group", key=nested_id),
-                                f"{nested.display_name}_{nested_id}",
+                                nested_id,
                             )
                         )
         return EffectiveAccess(
@@ -928,12 +928,11 @@ class Corpus:
                 entra = self.entra_groups[principal.key]
                 emails.update(self.users[u].email for u in entra.member_user_ids)
                 for nested_id in entra.member_group_ids:
-                    nested = self.entra_groups[nested_id]
                     queue.append(
                         (
                             Principal(kind="entra_group", key=nested_id),
                             nested_id,
-                            f"{nested.display_name}_{nested_id}",
+                            nested_id,
                         )
                     )
         return {name: sorted(emails) for name, emails in sorted(result.items())}

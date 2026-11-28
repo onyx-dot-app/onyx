@@ -7,7 +7,7 @@ import {
   useCallback,
   useEffectEvent,
 } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import { useInView } from "motion/react";
 import { useTranslations, useFormatter } from "next-intl";
@@ -23,20 +23,11 @@ import {
   PreviewSidebar,
 } from "@/sections/file-preview/PreviewControls";
 import { useThumbnailColumn } from "@/lib/filePreview/hooks";
+import { PDF_DOCUMENT_OPTIONS } from "@/lib/filePreview/pdfjs";
 import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 
-const assetRoot = `/pdfjs/${pdfjs.version}/`;
-pdfjs.GlobalWorkerOptions.workerSrc = `${assetRoot}pdf.worker.min.mjs`;
-const DOCUMENT_OPTIONS = {
-  cMapUrl: `${assetRoot}cmaps/`,
-  cMapPacked: true,
-  standardFontDataUrl: `${assetRoot}standard_fonts/`,
-  wasmUrl: `${assetRoot}wasm/`,
-  iccUrl: `${assetRoot}iccs/`,
-  isEvalSupported: false,
-};
 const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 interface PdfDocumentViewerProps {
   blob: Blob;
@@ -205,7 +196,7 @@ export default function PdfDocumentViewer({
   return (
     <Document
       file={blob}
-      options={DOCUMENT_OPTIONS}
+      options={PDF_DOCUMENT_OPTIONS}
       suspense={false}
       onLoadSuccess={loadDocument}
       onLoadError={failDocument}

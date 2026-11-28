@@ -6,11 +6,11 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import ToolQuestionCard from "@/lib/timeline/chat/message/messageComponents/ToolQuestionCard";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import {
   PENDING_QUESTION,
   type ToolQuestionStatus,
-  useToolRequestUi,
-} from "@/lib/chat/toolApprovals";
+} from "@/lib/chat/toolQuestions";
 import {
   PacketType,
   type ToolQuestionRequest,

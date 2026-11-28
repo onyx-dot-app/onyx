@@ -510,7 +510,8 @@ def test_owner_shares_and_publishes_a_private_integration(
     )
     created.append(detail.id)
     access_url = f"{API_SERVER_URL}/integrations/{detail.id}/access"
-    publish_url = f"{API_SERVER_URL}/integrations/{detail.id}/publish"
+    policy_url = f"{API_SERVER_URL}/admin/integrations/{detail.id}/installation-policy"
+    available = {"installation_policy": "AVAILABLE"}
     # The share routes need Manage actions.
     assert client.get(access_url, headers=basic_user.headers).status_code == 403
     assert (
@@ -540,9 +541,12 @@ def test_owner_shares_and_publishes_a_private_integration(
         ).status_code
         == 403
     )
-    assert client.post(publish_url, headers=basic_user.headers).status_code == 403
+    assert (
+        client.put(policy_url, json=available, headers=basic_user.headers).status_code
+        == 403
+    )
 
-    published = client.post(publish_url, headers=admin_user.headers)
+    published = client.put(policy_url, json=available, headers=admin_user.headers)
     assert published.status_code == 200, published.text
     assert published.json() == {"installation_policy": "AVAILABLE"}
     assert (

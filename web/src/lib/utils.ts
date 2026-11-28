@@ -26,6 +26,22 @@ export const truncateString = (str: string, maxLength: number) => {
  * Converts bare email addresses to mailto: links.
  * Preserves existing protocols, relative paths, and anchors.
  */
+// A host before any path: a name with a dot, or localhost, with an optional port.
+const BARE_HOST_REGEX =
+  /^(localhost|[^/?#\s:@]+\.[^/?#\s:@]+)(:\d+)?([/?#]|$)/i;
+
+/** A relative path such as `outputs/report.pdf`: no scheme, host or leading `/`. */
+export function isBareRelativeHref(href: string): boolean {
+  return (
+    !URI_SCHEME_REGEX.test(href) &&
+    !href.startsWith("/") &&
+    !href.startsWith("#") &&
+    !href.startsWith("?") &&
+    !BARE_EMAIL_REGEX.test(href) &&
+    !BARE_HOST_REGEX.test(href)
+  );
+}
+
 export function ensureHrefProtocol(
   href: string | undefined
 ): string | undefined {

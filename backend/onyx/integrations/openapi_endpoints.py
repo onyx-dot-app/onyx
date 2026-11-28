@@ -17,6 +17,7 @@ from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     PATH_PARAM,
     TOOL_HTTP_METHODS,
     InlineBudget,
+    check_nesting_depth,
     check_unique_name,
     malformed_label,
     malformed_operations,
@@ -277,6 +278,7 @@ def apply_endpoint_lines(
             "paths": {},
         }
     )
+    check_nesting_depth(original)
     spec = copy.deepcopy(original)
     existing = _operations(spec)
     shown = _shown_lines(spec, existing)

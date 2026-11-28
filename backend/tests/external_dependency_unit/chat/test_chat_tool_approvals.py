@@ -2162,7 +2162,6 @@ def _ask_for_request_tool(
         scope=ToolApprovalScope(
             integration_id=chat.integration_id, action_id=action_id
         ),
-        signed_out=False,
     )
 
 

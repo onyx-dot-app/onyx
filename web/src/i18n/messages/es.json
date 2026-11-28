@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "Registros de auditoría y SIEM",
+          "description": "Onyx escribe eventos de auditoría como líneas JSON en sus registros. Su recopilador de registros los envía a su SIEM. [Configurar el reenvío al SIEM]({url})."
+        },
+        "status": {
+          "title": "Estado del flujo de auditoría",
+          "description": "Los eventos que escribió Onyx. Onyx no puede ver su recopilador de registros ni su SIEM, así que confirme que los eventos llegan allí.",
+          "loadFailed": {
+            "title": "No se pudo cargar el estado del flujo de auditoría",
+            "description": "Vuelva a cargar la página para intentarlo de nuevo."
+          },
+          "notEnabled": {
+            "title": "Onyx no escribe eventos de auditoría",
+            "description": "El flujo de auditoría requiere una licencia Enterprise."
+          },
+          "logFormat": {
+            "title": "Use registros JSON",
+            "description": "El formato de registro es {logFormat}. Establezca LOG_FORMAT=json para que su recopilador de registros pueda analizar cada registro."
+          },
+          "noEvents": "Aún no hay eventos",
+          "eventSummary": "{count, plural, one {# evento} other {# eventos}} en las últimas 24 horas. Último evento {lastEvent}.",
+          "eventCount": "{count, plural, one {# evento} other {# eventos}} en las últimas 24 horas.",
+          "classes": {
+            "authentication": "Autenticación",
+            "account_change": "Cambios de cuenta",
+            "user_access_management": "Gestión del acceso de usuarios",
+            "group_management": "Gestión de grupos",
+            "api_activity": "Actividad de la API",
+            "credential_access": "Acceso a credenciales"
+          }
+        },
+        "auditEvents": {
+          "title": "Eventos de auditoría",
+          "description": "Cambios de seguridad y administración. Están activados de forma predeterminada."
+        },
+        "userActivity": {
+          "title": "Actividad de los usuarios",
+          "description": "Lo que hizo cada usuario, para investigar incidentes. Están desactivados de forma predeterminada y pueden generar muchos eventos."
+        },
+        "categories": {
+          "authentication": {
+            "title": "Autenticación",
+            "description": "Inicios de sesión, inicios de sesión fallidos, cierres de sesión y restablecimientos de contraseña."
+          },
+          "user_and_group_management": {
+            "title": "Gestión de usuarios y grupos",
+            "description": "Cambios de usuarios, roles y grupos, y aprobaciones de clientes MCP."
+          },
+          "configuration": {
+            "title": "Cambios de configuración",
+            "description": "Cambios en la configuración, los conectores, las credenciales, los agentes, los conjuntos de documentos, las claves de API y los tokens de acceso."
+          },
+          "credential_access": {
+            "title": "Acceso a credenciales",
+            "description": "Descifrados de credenciales almacenadas. Onyx puede omitir una repetición para la misma credencial y el mismo usuario en un plazo de 10 minutos."
+          },
+          "data_export": {
+            "title": "Exportaciones de datos",
+            "description": "Descargas del historial de consultas, informes de uso y exportaciones de registros."
+          },
+          "chat": {
+            "title": "Mensajes de chat",
+            "description": "Cada respuesta del chat, con el agente, el modelo, las herramientas y los documentos que vio el usuario."
+          },
+          "search": {
+            "title": "Búsquedas",
+            "description": "Cada búsqueda desde la página de búsqueda, la API o un cliente MCP, con los documentos que encontró."
+          },
+          "llm_gateway": {
+            "title": "Solicitudes a la pasarela de LLM",
+            "description": "Cada llamada a través de la pasarela de LLM, con el modelo y el número de tokens."
+          },
+          "file_download": {
+            "title": "Descargas de archivos",
+            "description": "Cada archivo del chat que descarga un usuario."
+          }
+        },
+        "queryText": {
+          "title": "Incluir el texto de la consulta",
+          "description": "Agrega lo que escribió el usuario a los eventos de chat y búsqueda. Onyx lo agrega solo cuando el historial de consultas es normal."
+        }
       }
     },
     "serviceAccounts": {
@@ -12264,6 +12347,9 @@
         },
         "timedOut": {
           "text": "La respuesta se detuvo porque alcanzó su límite de tiempo."
+        },
+        "approvalExpired": {
+          "text": "La ejecución programada se detuvo porque nadie respondió a tiempo a su solicitud de aprobación."
         }
       },
       "callout": {
@@ -12601,6 +12687,12 @@
           },
           "waitingForAnswer": {
             "label": "Esperando tu respuesta..."
+          },
+          "waitingForOwnerApproval": {
+            "label": "Esperando la aprobación del propietario..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "Esperando la respuesta del propietario..."
           },
           "runningCommand": {
             "label": "Ejecutando comando..."
@@ -13645,6 +13737,10 @@
       },
       "viewAllButton": {
         "label": "Ver los {count} archivos"
+      },
+      "unavailable": {
+        "title": "Este archivo no está disponible",
+        "description": "Se eliminó o no tienes acceso a él."
       }
     },
     "rightPanel": {
@@ -14707,9 +14803,6 @@
       },
       "unsupported": {
         "description": "Descarga el archivo para ver su contenido."
-      },
-      "retry": {
-        "label": "Reintentar"
       },
       "download": {
         "label": "Descargar archivo"
@@ -17349,7 +17442,9 @@
           "publishOff": {
             "description": "Un administrador desactivó la publicación en la organización. Pide a un administrador que publique este plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx no pudo cargar tus grupos, así que no se pueden cambiar los accesos de grupo. Cierra y abre este diálogo para intentarlo de nuevo.",
+        "groupSharesLocked": "Esta habilidad está compartida con un grupo que no administras, así que no puedes cambiar sus accesos de grupo. Pide ayuda a un administrador de habilidades de toda la organización."
       },
       "tabs": {
         "details": "Detalles",
@@ -17458,7 +17553,8 @@
         "disableFailed": "No se pudo desactivar {name}",
         "enableFailed": "No se pudo activar {name}",
         "refreshFailed": "{name} se actualizó, pero no se pudo actualizar la lista de habilidades.",
-        "listRefreshFailed": "No se pudo actualizar la lista de habilidades. Vuelve a cargar la página para ver el cambio."
+        "listRefreshFailed": "No se pudo actualizar la lista de habilidades. Vuelve a cargar la página para ver el cambio.",
+        "requiredHolder": "No se puede activar {name}. Una habilidad obligatoria ya tiene este nombre."
       }
     },
     "sections": {
@@ -17501,7 +17597,8 @@
       "upload": {
         "error": {
           "readFailed": "No se pudo leer el archivo subido.",
-          "folderRoot": "{upload, select, plugin {La carpeta seleccionada debe contener SKILL.md o un manifiesto plugin.json en su nivel superior.} other {La carpeta seleccionada debe contener SKILL.md en su nivel superior.}}"
+          "folderRoot": "{upload, select, plugin {La carpeta seleccionada debe contener SKILL.md o un manifiesto plugin.json en su nivel superior.} other {La carpeta seleccionada debe contener SKILL.md en su nivel superior.}}",
+          "unsupportedFile": "{name} no es un archivo ZIP ni SKILL.md. Sube un ZIP, un archivo SKILL.md o una carpeta de skill."
         }
       }
     },
@@ -17520,6 +17617,8 @@
       "updated": "{count, plural, one {# habilidad actualizada} other {# habilidades actualizadas}}",
       "failed": "No se pudieron actualizar las habilidades. Inténtalo de nuevo.",
       "partialFailure": "{count, plural, one {No se pudo actualizar # habilidad} other {No se pudieron actualizar # habilidades}}",
+      "deleted": "{count, plural, one {# habilidad eliminada} other {# habilidades eliminadas}}",
+      "deleteFailure": "{count, plural, one {No se pudo eliminar # habilidad} other {No se pudieron eliminar # habilidades}}",
       "deleteTitle": "{count, plural, one {¿Eliminar # habilidad?} other {¿Eliminar # habilidades?}}",
       "deleteDescription": "{count, plural, one {Esto elimina la habilidad seleccionada para todas las personas con acceso. Esta acción no se puede deshacer.} other {Esto elimina las # habilidades seleccionadas para todas las personas con acceso. Esta acción no se puede deshacer.}}",
       "shareTitle": "{count, plural, one {Actualizar acceso para # habilidad} other {Actualizar acceso para # habilidades}}",
@@ -17532,7 +17631,8 @@
       "publishWarning": {
         "title": "La publicación no se puede deshacer",
         "description": "Después de aplicar, todos en la organización pueden usar las habilidades seleccionadas. Las habilidades publicadas no se pueden volver a hacer privadas. Solo un administrador puede eliminarlas."
-      }
+      },
+      "skipped": "{count, plural, one {# habilidad no se puede activar ni desactivar y se omitió} other {# habilidades no se pueden activar ni desactivar y se omitieron}}"
     },
     "reviewRequests": {
       "title": "Solicitudes de publicación",
@@ -17834,6 +17934,7 @@
         "newPlugin": "Nuevo plugin: {name}"
       },
       "willBeOff": "El plugin se guarda desactivado. {names} ya tiene una habilidad con el mismo nombre.",
+      "willClash": "{names} ya tiene una habilidad con el mismo nombre. Solo una de ellas puede estar activada.",
       "saveAsNew": {
         "label": "Guardar como Plugin Nuevo",
         "description": "Mantén sin cambios el plugin que tiene este nombre."
@@ -17865,7 +17966,8 @@
         "newPlugin": "Se añadió {name}.",
         "newVersion": "{name} actualizado a la versión {version} de Onyx.",
         "unchanged": "Sin cambios. {name} ya está en la versión {version} de Onyx.",
-        "off": "Se añadió {name}. Está desactivado porque {names} ya tiene una habilidad con el mismo nombre."
+        "off": "Se añadió {name}. Está desactivado porque {names} ya tiene una habilidad con el mismo nombre.",
+        "clash": "Se actualizó {name} a la versión {version} de Onyx. {names} ya tiene una habilidad con el mismo nombre, así que solo una de ellas está activada."
       }
     },
     "turnOn": {
@@ -18036,6 +18138,8 @@
       "updated": "{count, plural, one {# plugin actualizado} other {# plugins actualizados}}",
       "failed": "No se pudieron actualizar los plugins. Inténtalo de nuevo.",
       "partialFailure": "{count, plural, one {No se pudo actualizar # plugin} other {No se pudieron actualizar # plugins}}",
+      "deleted": "{count, plural, one {# plugin eliminado} other {# plugins eliminados}}",
+      "deleteFailure": "{count, plural, one {No se pudo eliminar # plugin} other {No se pudieron eliminar # plugins}}",
       "deleteTitle": "{count, plural, one {¿Eliminar # plugin?} other {¿Eliminar # plugins?}}",
       "deleteDescription": "{count, plural, one {Esto elimina el plugin seleccionado para todas las personas con acceso. Esta acción no se puede deshacer.} other {Esto elimina los # plugins seleccionados para todas las personas con acceso. Esta acción no se puede deshacer.}}",
       "shareTitle": "{count, plural, one {Actualizar acceso para # plugin} other {Actualizar acceso para # plugins}}",
@@ -18044,7 +18148,8 @@
       "apply": "{count, plural, one {Aplicar a # plugin} other {Aplicar a # plugins}}",
       "publishWarning": {
         "description": "Después de aplicar, todos en la organización pueden usar los plugins seleccionados. Los plugins publicados no se pueden volver a hacer privados. Solo un administrador puede eliminarlos."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin no se puede activar ni desactivar y se omitió} other {# plugins no se pueden activar ni desactivar y se omitieron}}"
     }
   },
   "integrations": {
@@ -18370,7 +18475,7 @@
       },
       "confirmDelete": {
         "title": "¿Eliminar «{name}»?",
-        "description": "La tarea deja de ejecutarse y se elimina su historial de ejecuciones.",
+        "description": "La tarea deja de ejecutarse. Se conservan los chats de sus ejecuciones anteriores.",
         "submit": "Eliminar"
       }
     },
@@ -18383,7 +18488,8 @@
       "markAllViewed": "Marcar todo como visto",
       "markAllViewedFailed": "No se pudieron marcar las ejecuciones como vistas. Inténtalo de nuevo.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Ejecutar una vez} other {Programación}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: la siguiente ejecución empezó antes de que alguien respondiera la aprobación.} approval_timeout {Cancelada: nadie respondió la aprobación en 24 horas.} user_cancelled {Detenida por ti.} agent_permission_required {Una acción necesitaba aprobación.} agent_exception {Error: la ejecución encontró un error.} stuck {Error: la ejecución no empezó a tiempo.} timeout {Error: la ejecución alcanzó el límite de una hora.} other {Fallida: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: la siguiente ejecución empezó antes de que alguien respondiera la aprobación.} approval_timeout {Cancelada: nadie respondió la aprobación en 24 horas.} user_cancelled {Detenida por ti.} agent_permission_required {Una acción necesitaba aprobación.} agent_exception {Error: la ejecución encontró un error.} stuck {Error: la ejecución no empezó a tiempo.} timeout {Error: la ejecución alcanzó el límite de una hora.} chat_deleted {Cancelada: se eliminó el chat de esta ejecución.} owner_cannot_chat {Fallida: ya no puedes chatear, así que la tarea está en pausa.} rate_limited {Fallida: se alcanzó el límite de uso.} other {Fallida: {errorClass}}}",
+      "errorDetail": "Fallida: {detail}",
       "columns": {
         "started": "Inicio",
         "status": "Estado",
@@ -18421,7 +18527,8 @@
         "title": "Ejecutar según la programación",
         "label": "Ejecutar {name} según la programación"
       },
-      "menu": "Más acciones"
+      "menu": "Más acciones",
+      "notFound": "Esta tarea programada se eliminó o pertenece a otro usuario."
     },
     "editor": {
       "newTitle": "Nueva tarea programada",
@@ -18433,7 +18540,8 @@
       "saveAndRun": "Guardar y ejecutar ahora",
       "errors": {
         "nameRequired": "Introduce un nombre.",
-        "promptRequired": "Introduce un prompt."
+        "promptRequired": "Introduce un prompt.",
+        "tooLong": "Usa {max, number} caracteres o menos."
       },
       "toasts": {
         "created": "Tarea programada creada.",

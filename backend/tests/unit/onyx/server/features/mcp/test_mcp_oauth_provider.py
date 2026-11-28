@@ -15,6 +15,7 @@ from mcp.shared.auth import (
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.connection_models import access_token_fingerprint
 from onyx.server.features.mcp import oauth
 from onyx.utils.url import SSRFException
 
@@ -455,5 +456,47 @@ def test_noninteractive_provider_requires_reconnection() -> None:
     with pytest.raises(
         oauth.MCPReauthenticationRequired,
         match="Please reconnect to the server through Onyx",
-    ):
+    ) as error:
         asyncio.run(run())
+    assert error.value.rejected_token_fingerprint is None
+
+
+@pytest.mark.parametrize(
+    ("status", "www_authenticate", "token_rejected"),
+    [
+        (401, 'Bearer error="invalid_token"', True),
+        (403, 'Bearer error="insufficient_scope", scope="files:write"', False),
+    ],
+)
+def test_reauthentication_says_whether_the_server_rejected_the_stored_token(
+    status: int, www_authenticate: str, token_rejected: bool
+) -> None:
+    storage = _MemoryTokenStorage()
+    storage.tokens = OAuthToken(access_token="stored-token", token_type="Bearer")
+    provider = _provider(storage)
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/mcp":
+            return _authorization_required_response(request)
+        assert request.headers["Authorization"] == "Bearer stored-token"
+        return httpx.Response(
+            status,
+            headers={
+                "WWW-Authenticate": f"{www_authenticate}, "
+                'resource_metadata="https://mcp.example.com/'
+                '.well-known/oauth-protected-resource/mcp"'
+            },
+            request=request,
+        )
+
+    async def run() -> None:
+        async with httpx.AsyncClient(
+            auth=provider, transport=httpx.MockTransport(respond)
+        ) as client:
+            await client.get("https://mcp.example.com/mcp")
+
+    with pytest.raises(oauth.MCPReauthenticationRequired) as error:
+        asyncio.run(run())
+    assert error.value.rejected_token_fingerprint == (
+        access_token_fingerprint("stored-token") if token_rejected else None
+    )

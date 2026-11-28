@@ -624,6 +624,11 @@ file_text_template = "This is file {}"
 # So each test type should have its own valid prefix
 _VALID_PREFIX = "file_"
 
+# The Drive permission sync integration test creates and deletes shared drives
+# and docs with this name prefix in the same Workspace. A run, or a drive left
+# by a killed run, must not change what these tests expect.
+E2E_NAME_PREFIX = "onyx_e2e_"
+
 
 def filter_invalid_prefixes(names: set[str]) -> set[str]:
     return {name for name in names if name.startswith(_VALID_PREFIX)}
@@ -732,6 +737,25 @@ def load_connector_outputs(
     )
 
 
+def _without_e2e_nodes(nodes: list[HierarchyNode]) -> list[HierarchyNode]:
+    skipped = {
+        node.raw_node_id
+        for node in nodes
+        if node.display_name.startswith(E2E_NAME_PREFIX)
+    }
+    # Parents can come after their children, so repeat until no node is added.
+    while True:
+        children = {
+            node.raw_node_id
+            for node in nodes
+            if node.raw_parent_id in skipped and node.raw_node_id not in skipped
+        }
+        if not children:
+            break
+        skipped |= children
+    return [node for node in nodes if node.raw_node_id not in skipped]
+
+
 def assert_hierarchy_nodes_match_expected(
     retrieved_nodes: list[HierarchyNode],
     expected_nodes: dict[str, ExpectedHierarchyNode],
@@ -749,7 +773,10 @@ def assert_hierarchy_nodes_match_expected(
             expected display_name, node_type, and raw_parent_id
         ignorable_node_ids: Optional set of node IDs that can be missing or extra
             without failing. Useful for non-deterministically returned nodes.
+
+    Nodes named with E2E_NAME_PREFIX, and the nodes under them, are skipped.
     """
+    retrieved_nodes = _without_e2e_nodes(retrieved_nodes)
     expected_node_ids = set(expected_nodes.keys())
     retrieved_node_ids = {node.raw_node_id for node in retrieved_nodes}
     ignorable = ignorable_node_ids or set()

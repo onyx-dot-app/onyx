@@ -134,6 +134,19 @@ describe("toPickerSections", () => {
     ]);
   });
 
+  it("leaves out the custom skills of plugins the sandbox did not get", () => {
+    const data = skillsList({
+      customs: [
+        { ...pickerSkill("loaded"), pluginId: "plugin-a" },
+        { ...pickerSkill("omitted"), pluginId: "plugin-b" },
+      ],
+      omittedPluginIds: new Set(["plugin-b"]),
+    });
+    expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
+      "loaded",
+    ]);
+  });
+
   it("lists each custom skill the sandbox gets after built-ins of the same name", () => {
     const data = skillsList({
       builtins: [builtinFixture({ name: "pptx" })],
