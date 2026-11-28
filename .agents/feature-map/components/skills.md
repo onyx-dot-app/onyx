@@ -1062,7 +1062,12 @@ the app from the same rule
     error (`reset_at`), and a 422 for a ref that names no commit counts as
     not found. The preview says when the caller or the company already has
     the source (`db/marketplace.py:source_added_for`). `GitHubMarketplaceConfig` lowercases owner and repo, so the
-    unique indexes catch a duplicate that differs only in case. Every JSON
+    unique indexes catch a duplicate that differs only in case. Preview and
+    create read the default branch first
+    (`server/features/skill/marketplace_api.py:_source_config`) and fail when
+    GitHub does not give it. A ref that names the default branch is stored as
+    no ref, and `db/marketplace.py:_same_source` also matches a row saved with
+    the default branch as its ref. Every JSON
     read in `skills/marketplace/reader.py` turns a `RecursionError` into a
     blocked entry or a failed read. Replace login needs no GitHub
     connection: the new login reads a public repository without one. The Celery task
