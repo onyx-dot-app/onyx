@@ -13927,6 +13927,10 @@
           "title": "没有打开的页面",
           "description": "智能体打开的页面会显示在这里。你也可以打开新标签页。"
         },
+        "waiting": {
+          "title": "正在等待智能体",
+          "description": "智能体在你的 Chrome 中使用的页面会显示在这里。"
+        },
         "disconnected": {
           "title": "浏览器已断开连接",
           "description": "正在尝试重新连接。"

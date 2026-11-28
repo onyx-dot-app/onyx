@@ -45,6 +45,8 @@ interface BrowserPanelProps {
   // The chat's browser stream; the right panel owns it, so that its tab
   // strip lists the browser's pages
   stream: BrowserStream;
+  // A view only: no control, navigation, prompt answers or input
+  readOnly?: boolean;
 }
 
 /**
@@ -53,7 +55,11 @@ interface BrowserPanelProps {
  * page's dialogs and file choosers. The right panel's tab strip lists and
  * switches the pages, as T3 Code's right panel lists its browser tabs.
  */
-export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
+export function BrowserPanel({
+  sessionId,
+  stream,
+  readOnly = false,
+}: BrowserPanelProps) {
   const t = useTranslations("chat.browser");
   const { state, send } = stream;
   const { connection, tabs, selectedTabId, control } = state;
@@ -63,7 +69,7 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
     selectedTab !== null && state.agentPointer?.tab === selectedTab.id
       ? state.agentPointer.pointer
       : null;
-  const controlling = control === "you";
+  const controlling = !readOnly && control === "you";
   // Only the controller answers the page's file chooser
   const fileChooser = controlling ? state.fileChooser : null;
 
@@ -126,36 +132,42 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
     >
       <PanelUrlBar
         leading={
-          <>
-            <Button
-              icon={SvgArrowLeft}
-              prominence="tertiary"
-              size="md"
-              disabled={!controlling || !selectedTab}
-              onClick={() => send({ type: "history", delta: -1 })}
-              tooltip={t("urlBar.back")}
-              aria-label={t("urlBar.back")}
-            />
-            <Button
-              icon={SvgArrowRight}
-              prominence="tertiary"
-              size="md"
-              disabled={!controlling || !selectedTab}
-              onClick={() => send({ type: "history", delta: 1 })}
-              tooltip={t("urlBar.forward")}
-              aria-label={t("urlBar.forward")}
-            />
-          </>
+          readOnly ? undefined : (
+            <>
+              <Button
+                icon={SvgArrowLeft}
+                prominence="tertiary"
+                size="md"
+                disabled={!controlling || !selectedTab}
+                onClick={() => send({ type: "history", delta: -1 })}
+                tooltip={t("urlBar.back")}
+                aria-label={t("urlBar.back")}
+              />
+              <Button
+                icon={SvgArrowRight}
+                prominence="tertiary"
+                size="md"
+                disabled={!controlling || !selectedTab}
+                onClick={() => send({ type: "history", delta: 1 })}
+                tooltip={t("urlBar.forward")}
+                aria-label={t("urlBar.forward")}
+              />
+            </>
+          )
         }
-        refresh={{
-          label: t("urlBar.reload"),
-          onRefresh:
-            controlling && selectedTab
-              ? () => send({ type: "reload" })
-              : undefined,
-          isRefreshing: selectedTab?.loading ?? false,
-          isUserRefreshing: false,
-        }}
+        refresh={
+          readOnly
+            ? undefined
+            : {
+                label: t("urlBar.reload"),
+                onRefresh:
+                  controlling && selectedTab
+                    ? () => send({ type: "reload" })
+                    : undefined,
+                isRefreshing: selectedTab?.loading ?? false,
+                isUserRefreshing: false,
+              }
+        }
         // Only the controller navigates; others see the tab's URL
         displayUrl={selectedTab?.url}
         searchValue={editedUrl ?? selectedTab?.url ?? ""}
@@ -168,33 +180,35 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
         inputLabel={t("urlBar.label")}
         placeholder={t("urlBar.placeholder")}
       >
-        <Dropdown width={50} align="end">
-          <Dropdown.Trigger asChild>
-            <Button
-              icon={SvgMoreHorizontal}
-              prominence="tertiary"
-              size="md"
-              tooltip={t("moreMenu.label")}
-              aria-label={t("moreMenu.label")}
+        {!readOnly && (
+          <Dropdown width={50} align="end">
+            <Dropdown.Trigger asChild>
+              <Button
+                icon={SvgMoreHorizontal}
+                prominence="tertiary"
+                size="md"
+                tooltip={t("moreMenu.label")}
+                aria-label={t("moreMenu.label")}
+              />
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              sizePreset="secondary"
+              label={t("moreMenu.label")}
+              items={[
+                {
+                  kind: "action",
+                  id: "clear",
+                  title: t("clearData.action"),
+                  icon: SvgTrash,
+                  danger: true,
+                  onSelect: () => setConfirmingClear(true),
+                },
+              ]}
             />
-          </Dropdown.Trigger>
-          <Dropdown.Data
-            sizePreset="secondary"
-            label={t("moreMenu.label")}
-            items={[
-              {
-                kind: "action",
-                id: "clear",
-                title: t("clearData.action"),
-                icon: SvgTrash,
-                danger: true,
-                onSelect: () => setConfirmingClear(true),
-              },
-            ]}
-          />
-        </Dropdown>
+          </Dropdown>
+        )}
       </PanelUrlBar>
-      {live && selectedTab !== null && (
+      {live && selectedTab !== null && !readOnly && (
         <ControlBar
           control={control}
           onTake={() => send({ type: "takeControl" })}
@@ -219,11 +233,13 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
           !fileChooser) ? (
           <BrowserStatus
             status={live && selectedTab !== null ? "blank" : connection}
+            readOnly={readOnly}
             onRetry={stream.retry}
             onNewTab={() => send({ type: "newTab" })}
           />
         ) : (
           // Shown only with a prompt, so it blocks no clicks on the page
+          !readOnly &&
           (selectedTab.dialog || fileChooser) && (
             <Section
               height="auto"
@@ -338,15 +354,30 @@ function ControlBar({ control, onTake, onRelease }: ControlBarProps) {
 interface BrowserStatusProps {
   // The connection's state, or "blank" for a page with no URL yet
   status: BrowserConnectionState | "blank";
+  // A view only: it waits for the agent and opens no page
+  readOnly: boolean;
   onRetry: () => void;
   onNewTab: () => void;
 }
 
 /** The view's state while it has no page to show. */
-function BrowserStatus({ status, onRetry, onNewTab }: BrowserStatusProps) {
+function BrowserStatus({
+  status,
+  readOnly,
+  onRetry,
+  onNewTab,
+}: BrowserStatusProps) {
   const t = useTranslations("chat.browser");
   const content = (() => {
-    switch (status) {
+    switch (
+      readOnly && (status === "blank" || status === "live") ? "waiting" : status
+    ) {
+      case "waiting":
+        return {
+          icon: SvgGlobe,
+          title: t("status.waiting.title"),
+          description: t("status.waiting.description"),
+        };
       case "blank":
         // As T3 Code's empty preview: the URL bar opens a page
         return {

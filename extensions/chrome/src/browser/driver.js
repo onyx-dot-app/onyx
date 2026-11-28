@@ -100,6 +100,34 @@ export function onControlChange(listener) {
   controlListener = listener;
 }
 
+// Called with (tabId, frame) for each screencast frame, and with
+// (tabId, phase, x, y) when the driver moves or clicks the mouse.
+let frameListener = () => {};
+let pointerListener = () => {};
+
+export function onFrame(listener) {
+  frameListener = listener;
+}
+
+export function onPointer(listener) {
+  pointerListener = listener;
+}
+
+/** Start JPEG frames of a tab; Chrome sends the next one after an ack. */
+export async function startScreencast(tabId) {
+  await attach(tabId);
+  await send(tabId, "Page.startScreencast", {
+    format: "jpeg",
+    quality: 60,
+    maxWidth: 1280,
+    maxHeight: 1280,
+  });
+}
+
+export async function stopScreencast(tabId) {
+  await send(tabId, "Page.stopScreencast").catch(() => {});
+}
+
 export function isHumanControlled(tabId) {
   return (tabStates.get(tabId)?.humanUntil ?? 0) > Date.now();
 }
@@ -162,6 +190,10 @@ export function handleEvent(source, method, params) {
       };
       state.refs.clear();
       for (const resolve of state.dialogWaiters.splice(0)) resolve();
+      break;
+    case "Page.screencastFrame":
+      send(tabId, "Page.screencastFrameAck", { sessionId: params.sessionId }).catch(() => {});
+      frameListener(tabId, params);
       break;
     case "Page.javascriptDialogClosed":
       state.dialog = null;
@@ -682,6 +714,7 @@ function dialogOpened(state) {
 
 async function mouseClick(ctx, { x, y }, button = "left", clickCount = 1) {
   await input(ctx, "Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  pointerListener(ctx.tabId, "click", x, y);
   for (let count = 1; count <= clickCount; count += 1) {
     await input(ctx, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, clickCount: count });
     await input(ctx, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button, clickCount: count });
@@ -980,6 +1013,7 @@ async function act(grant, tabId, params, deadline) {
       await checkPoint(grant, tabId, point);
       if (action === "hover") {
         await input(ctx, "Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
+        pointerListener(tabId, "move", point.x, point.y);
         return undefined;
       }
       const button = optString(params, "button") ?? "left";
@@ -1086,6 +1120,7 @@ async function act(grant, tabId, params, deadline) {
       await checkPoint(grant, tabId, from);
       await checkPoint(grant, tabId, to);
       await input(ctx, "Input.dispatchMouseEvent", { type: "mouseMoved", ...from });
+      pointerListener(tabId, "click", from.x, from.y);
       await input(ctx, "Input.dispatchMouseEvent", { type: "mousePressed", ...from, button: "left", clickCount: 1 });
       for (let step = 1; step <= 5; step += 1) {
         await input(ctx, "Input.dispatchMouseEvent", {

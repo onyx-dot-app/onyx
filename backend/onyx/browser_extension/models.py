@@ -64,6 +64,38 @@ class GrantReport(BaseModel):
     current: str | None = None
 
 
+class FrameReport(BaseModel):
+    """One JPEG frame of the grant's current tab, from the extension."""
+
+    chat_session_id: UUID
+    tab_id: str = Field(max_length=50)
+    # Page CSS size
+    width: int = Field(ge=1, le=20000)
+    height: int = Field(ge=1, le=20000)
+    # Base64 JPEG
+    data: str = Field(max_length=3 << 20)
+
+
+class PointerReport(BaseModel):
+    """The agent's mouse move or click, in CSS px of the tab."""
+
+    chat_session_id: UUID
+    tab_id: str = Field(max_length=50)
+    phase: Literal["move", "click"]
+    x: float
+    y: float
+
+
+class PreviewFrame(FrameReport):
+    """A stored frame; `seq` changes with each one."""
+
+    seq: int
+
+
+class PreviewPointer(PointerReport):
+    seq: int
+
+
 class CommandError(BaseModel):
     message: str = Field(max_length=4000)
 

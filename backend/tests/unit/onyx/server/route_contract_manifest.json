@@ -821,6 +821,7 @@
   "PUT /skills/{skill_id}/enabled": "basic",
   "WS /build/sessions/{session_id}/webapp/_next/{hmr_endpoint}": "current_user_from_websocket_cookie",
   "WS /chat/browser/extension/ws": "current_user_from_extension_token",
+  "WS /chat/sessions/{chat_session_id}/browser/chrome/ws": "current_user_from_websocket_cookie",
   "WS /chat/sessions/{chat_session_id}/browser/ws": "current_user_from_websocket_cookie",
   "WS /voice/synthesize/stream": "current_user_from_websocket",
   "WS /voice/transcribe/stream": "current_user_from_websocket"

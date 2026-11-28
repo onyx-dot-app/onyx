@@ -103,6 +103,17 @@ export function browserStreamUrl(
   )}/browser/ws`;
 }
 
+/** The websocket URL of a chat's read-only view of the user's Chrome. */
+export function chromeBrowserStreamUrl(
+  sessionId: string,
+  location: Pick<Location, "protocol" | "host">
+): string {
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${location.host}/api/chat/sessions/${encodeURIComponent(
+    sessionId
+  )}/browser/chrome/ws`;
+}
+
 // The service's limit on one `text` message, in UTF-16 units
 const BROWSER_TEXT_MAX = 10_000;
 

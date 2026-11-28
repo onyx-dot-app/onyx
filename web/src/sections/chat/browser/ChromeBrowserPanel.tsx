@@ -7,7 +7,10 @@ import { IllustrationContent, Section, toast } from "@opal/layouts";
 import { SvgGlobe, SvgMonitor } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { stopChromeShare } from "@/lib/chat/browser/api";
+import { useBrowserStream } from "@/lib/chat/browser/hooks";
+import { chromeBrowserStreamUrl } from "@/lib/chat/browser/stream";
 import type { ChromeBrowserState } from "@/lib/chat/browser/types";
+import { BrowserPanel } from "@/sections/chat/browser/BrowserPanel";
 import { useCurrentMessageTree } from "@/app/app/stores/useChatSessionStore";
 import {
   readWaitingToolRequests,
@@ -134,18 +137,40 @@ export function ChromeBrowserPanel({
         </div>
       )}
       <div className="relative min-h-0 flex-1">
-        <Section gap={2} padding={4}>
-          <IllustrationContent
-            illustration={SvgGlobe}
-            title={t("idle.title")}
-            description={t("idle.description")}
-            size="sm"
-          />
-        </Section>
+        {grant ? (
+          <ChromePreview sessionId={sessionId} />
+        ) : (
+          <Section gap={2} padding={4}>
+            <IllustrationContent
+              illustration={SvgGlobe}
+              title={t("idle.title")}
+              description={t("idle.description")}
+              size="sm"
+            />
+          </Section>
+        )}
         <SiteApprovals />
       </div>
     </Section>
   );
+}
+
+/** The read-only live view of the agent's tab in the user's Chrome. */
+function ChromePreview({ sessionId }: { sessionId: string }) {
+  const t = useTranslations("chat.browser");
+  // The page's own origin, known once the page is in the browser
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    setUrl(chromeBrowserStreamUrl(sessionId, window.location));
+  }, [sessionId]);
+  const stream = useBrowserStream({
+    sessionId,
+    active: url !== null,
+    url: url ?? undefined,
+    onDownload: () => {},
+    onError: (message) => toast.error(t("error"), { description: message }),
+  });
+  return <BrowserPanel sessionId={sessionId} stream={stream} readOnly />;
 }
 
 /**

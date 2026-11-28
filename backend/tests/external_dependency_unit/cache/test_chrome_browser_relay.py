@@ -16,8 +16,10 @@ from onyx.browser_extension import relay
 from onyx.browser_extension.models import (
     CommandError,
     CommandResult,
+    FrameReport,
     GrantReport,
     GrantTab,
+    PointerReport,
     Presence,
 )
 from onyx.browser_extension.relay import ChromeBrowser
@@ -563,3 +565,51 @@ def test_a_site_approved_for_the_chat_asks_no_more_in_later_turns(
         assert later.site_approval("open", {"url": "https://other.example"}) is not None
     finally:
         delete_messages_and_files_from_chat_session(chat_session.id, db_session)
+
+
+def _frame(chat_id: UUID) -> FrameReport:
+    return FrameReport(
+        chat_session_id=chat_id, tab_id="1", width=800, height=600, data="AAAA"
+    )
+
+
+def test_a_frame_needs_a_viewer_and_the_holder() -> None:
+    user_id, chat_id, presence = _shared_chat()
+    other = _connect(user_id)
+    # No viewer yet.
+    relay.save_frame(_TENANT, user_id, presence.installation_id, _frame(chat_id))
+    assert relay.load_frame(_TENANT, chat_id) is None
+    relay.mark_viewer(_TENANT, chat_id)
+    # Not the installation that holds the grant.
+    relay.save_frame(_TENANT, user_id, other.installation_id, _frame(chat_id))
+    assert relay.load_frame(_TENANT, chat_id) is None
+    relay.save_frame(_TENANT, user_id, presence.installation_id, _frame(chat_id))
+    frame = relay.load_frame(_TENANT, chat_id)
+    assert frame is not None and frame.data == "AAAA" and frame.seq > 0
+    # Stop clears the preview, so a new viewer sees no old page.
+    relay.end_grant(_TENANT, user_id, chat_id, notify=False)
+    assert relay.load_frame(_TENANT, chat_id) is None
+
+
+def test_a_pointer_needs_a_viewer_and_the_holder() -> None:
+    user_id, chat_id, presence = _shared_chat()
+    pointer = PointerReport(
+        chat_session_id=chat_id, tab_id="1", phase="click", x=10, y=20
+    )
+    relay.save_pointer(_TENANT, user_id, presence.installation_id, pointer)
+    assert relay.load_pointer(_TENANT, chat_id) is None
+    relay.mark_viewer(_TENANT, chat_id)
+    relay.save_pointer(_TENANT, user_id, presence.installation_id, pointer)
+    saved = relay.load_pointer(_TENANT, chat_id)
+    assert saved is not None and (saved.x, saved.y, saved.phase) == (10, 20, "click")
+
+
+def test_a_screencast_request_reaches_the_holder() -> None:
+    user_id, chat_id, presence = _shared_chat()
+    relay.request_screencast(_TENANT, user_id, chat_id)
+    message = relay.pop_message(_TENANT, user_id, presence)
+    assert message is not None and message["type"] == "screencast"
+    assert message["chat_session_id"] == str(chat_id)
+    # A chat without a grant sends nothing.
+    relay.request_screencast(_TENANT, user_id, uuid4())
+    assert relay.pop_message(_TENANT, user_id, presence) is None

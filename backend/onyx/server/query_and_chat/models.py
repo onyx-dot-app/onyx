@@ -8,9 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.browser_extension.models import (
     CommandResult,
+    FrameReport,
     GrantReport,
     GrantTab,
     Installation,
+    PointerReport,
 )
 from onyx.chat.mention_models import Mentions, RecordedMention
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
@@ -679,6 +681,14 @@ class CommandResultMessage(CommandResult):
 class GrantReportMessage(BaseModel):
     type: Literal["grant"]
     grant: GrantReport
+
+
+class FrameMessage(FrameReport):
+    type: Literal["frame"]
+
+
+class PointerMessage(PointerReport):
+    type: Literal["pointer"]
 
 
 class GrantEnded(BaseModel):

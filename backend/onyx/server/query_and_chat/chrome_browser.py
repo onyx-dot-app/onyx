@@ -8,10 +8,15 @@ extension). The relay logic is in `onyx/browser_extension/relay.py`.
 - GET/DELETE /chat/sessions/{id}/browser/chrome: the chat's state and a stop.
   The turn binds the chat (`process_message.py`); the user approves sites in
   the chat.
+- WS /chat/sessions/{id}/browser/chrome/ws: the read-only live preview of the
+  chat's current tab, in the sandbox viewer's protocol. Close codes: 4403
+  feature off, 4404 chat not found.
 """
 
 import asyncio
+import base64
 import json
+import time
 from typing import Final
 from uuid import UUID, uuid4
 
@@ -20,7 +25,10 @@ from pydantic import ValidationError
 from starlette.websockets import WebSocketState
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_user_from_extension_token
+from onyx.auth.users import (
+    current_user_from_extension_token,
+    current_user_from_websocket_cookie,
+)
 from onyx.browser_extension import relay
 from onyx.browser_extension.models import Presence
 from onyx.browser_extension.tokens import issue_extension_token
@@ -37,8 +45,10 @@ from onyx.server.query_and_chat.models import (
     CommandResultMessage,
     ExtensionHello,
     ExtensionTokenResponse,
+    FrameMessage,
     GrantEnded,
     GrantReportMessage,
+    PointerMessage,
 )
 from onyx.server.settings.store import load_browser_enabled
 from onyx.utils.logger import setup_logger
@@ -49,10 +59,15 @@ logger = setup_logger()
 router = APIRouter(prefix="/chat")
 
 CLOSE_FORBIDDEN: Final = 4403
+CLOSE_NOT_FOUND: Final = 4404
 # A newer socket of the same installation took over.
 CLOSE_REPLACED: Final = 4409
 _HELLO_SECONDS = 10.0
 _MAX_MESSAGE_BYTES = 4 << 20
+# The preview checks the viewer's state this often, and asks the extension for
+# frames this often.
+_PREVIEW_POLL_SECONDS = 0.25
+_SCREENCAST_ASK_SECONDS = 5.0
 _DISABLED = "Chats cannot use your Chrome in this workspace."
 
 
@@ -115,6 +130,124 @@ def stop_chrome_browser(
     always stop."""
     _owned_chat_title(chat_session_id, user)
     relay.end_grant(get_current_tenant_id(), user.id, chat_session_id, notify=True)
+
+
+@router.websocket("/sessions/{chat_session_id}/browser/chrome/ws")
+async def chrome_preview_socket(
+    websocket: WebSocket,
+    chat_session_id: UUID,
+    user: User = Depends(current_user_from_websocket_cookie),
+) -> None:
+    """The read-only live preview of the chat's current tab."""
+    # Accepted first, so that a refusal reaches the viewer with its code.
+    await websocket.accept()
+    try:
+        await asyncio.to_thread(_check_preview_access, chat_session_id, user)
+    except OnyxError as e:
+        code = (
+            CLOSE_NOT_FOUND
+            if e.error_code is OnyxErrorCode.NOT_FOUND
+            else CLOSE_FORBIDDEN
+        )
+        await _close(websocket, code, e.detail)
+        return
+    reader = asyncio.create_task(_drain(websocket))
+    try:
+        await _preview(websocket, user, chat_session_id, reader)
+    except (WebSocketDisconnect, RuntimeError):
+        # The viewer left.
+        pass
+    finally:
+        reader.cancel()
+        await asyncio.gather(reader, return_exceptions=True)
+
+
+def _check_preview_access(chat_session_id: UUID, user: User) -> None:
+    _check_enabled(user)
+    _owned_chat_title(chat_session_id, user)
+
+
+async def _drain(websocket: WebSocket) -> None:
+    """Read and ignore the viewer's messages until it leaves."""
+    while True:
+        message = await websocket.receive()
+        if message["type"] == "websocket.disconnect":
+            return
+
+
+async def _preview(
+    websocket: WebSocket,
+    user: User,
+    chat_session_id: UUID,
+    reader: "asyncio.Task[None]",
+) -> None:
+    tenant_id = get_current_tenant_id()
+    await websocket.send_json({"type": "control", "controller": "agent"})
+    tabs: object = None
+    frame_seq = 0
+    pointer_seq = 0
+    size: tuple[int, int] | None = None
+    next_ask = 0.0
+    while not reader.done():
+        await asyncio.to_thread(relay.mark_viewer, tenant_id, chat_session_id)
+        if time.monotonic() >= next_ask:
+            await asyncio.to_thread(
+                relay.request_screencast, tenant_id, user.id, chat_session_id
+            )
+            next_ask = time.monotonic() + _SCREENCAST_ASK_SECONDS
+        grant = await asyncio.to_thread(
+            relay.load_grant, tenant_id, chat_session_id, user.id
+        )
+        shown = (
+            {"type": "tabs", "tabs": [], "selected": None}
+            if grant is None
+            else {
+                "type": "tabs",
+                "tabs": [
+                    {
+                        "id": tab.id,
+                        "url": tab.url,
+                        "title": tab.title,
+                        "loading": False,
+                        "dialog": None,
+                    }
+                    for tab in grant.tabs
+                ],
+                "selected": grant.current,
+            }
+        )
+        if shown != tabs:
+            tabs = shown
+            await websocket.send_json(shown)
+        frame = await asyncio.to_thread(relay.load_frame, tenant_id, chat_session_id)
+        if (
+            frame is not None
+            and frame.seq != frame_seq
+            and grant is not None
+            and frame.tab_id == grant.current
+        ):
+            frame_seq = frame.seq
+            if size != (frame.width, frame.height):
+                size = (frame.width, frame.height)
+                await websocket.send_json(
+                    {"type": "viewport", "width": frame.width, "height": frame.height}
+                )
+            await websocket.send_bytes(base64.b64decode(frame.data))
+        pointer = await asyncio.to_thread(
+            relay.load_pointer, tenant_id, chat_session_id
+        )
+        if pointer is not None and pointer.seq != pointer_seq:
+            pointer_seq = pointer.seq
+            await websocket.send_json(
+                {
+                    "type": "pointer",
+                    "phase": pointer.phase,
+                    "x": pointer.x,
+                    "y": pointer.y,
+                    "sequence": pointer.seq,
+                }
+            )
+        await asyncio.sleep(_PREVIEW_POLL_SECONDS)
 
 
 @router.websocket("/browser/extension/ws")
@@ -239,6 +372,24 @@ async def _read(
                             "type": "grant_saved" if grant else "end_grant",
                             "chat_session_id": str(report.chat_session_id),
                         }
+                    )
+                case "frame":
+                    frame = FrameMessage.model_validate(message)
+                    await asyncio.to_thread(
+                        relay.save_frame,
+                        tenant_id,
+                        user.id,
+                        presence.installation_id,
+                        frame,
+                    )
+                case "pointer":
+                    pointer = PointerMessage.model_validate(message)
+                    await asyncio.to_thread(
+                        relay.save_pointer,
+                        tenant_id,
+                        user.id,
+                        presence.installation_id,
+                        pointer,
                     )
                 case "grant_ended":
                     ended = GrantEnded.model_validate(message)

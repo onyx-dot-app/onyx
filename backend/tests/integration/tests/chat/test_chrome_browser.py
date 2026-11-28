@@ -3,6 +3,7 @@ real websocket (server/query_and_chat/chrome_browser.py), through the
 integration test client.
 """
 
+import base64
 import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -14,6 +15,7 @@ from starlette.testclient import TestClient, WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
 from onyx.browser_extension import relay
+from onyx.configs.app_configs import WEB_DOMAIN
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -87,6 +89,11 @@ def _bind(user: DATestUser, chat_id: str, tab_id: int = 7) -> None:
         tab_id=tab_id,
         side_panel=True,
     )
+
+
+def _cookie(user: DATestUser) -> str:
+    """The session cookie header of the browser's websocket."""
+    return "; ".join(f"{name}={value}" for name, value in user.cookies.items())
 
 
 def _tab_report(chat_id: str, tab_id: str = "7") -> str:
@@ -224,6 +231,49 @@ def test_another_user_cannot_read_the_chat(
         headers=basic_user.headers,
     )
     assert response.status_code == 404
+
+
+def test_the_preview_socket_streams_the_current_tab(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    user = user_factory()
+    chat_id = str(ChatSessionManager.create(user_performing_action=user).id)
+    with _extension(user) as socket:
+        _bind(user, chat_id)
+        _next(socket, "bind")
+        socket.send_text(_tab_report(chat_id))
+        _next(socket, "grant_saved")
+        with cast(TestClient, client).websocket_connect(
+            f"/chat/sessions/{chat_id}/browser/chrome/ws",
+            # A browser sends its page's origin; the server checks it.
+            headers={"cookie": _cookie(user), "origin": WEB_DOMAIN},
+        ) as viewer:
+            assert json.loads(viewer.receive_text()) == {
+                "type": "control",
+                "controller": "agent",
+            }
+            tabs = json.loads(viewer.receive_text())
+            assert tabs["type"] == "tabs" and tabs["selected"] == "7"
+            assert tabs["tabs"][0]["url"] == "https://wiki.example/"
+            # The viewer's presence makes the server ask for frames; the
+            # extension's frame then reaches the viewer as bytes.
+            _next(socket, "screencast")
+            jpeg = b"\xff\xd8\xff\xe0 jpeg"
+            frame = json.dumps(
+                {
+                    "type": "frame",
+                    "chat_session_id": chat_id,
+                    "tab_id": "7",
+                    "width": 800,
+                    "height": 600,
+                    "data": base64.b64encode(jpeg).decode(),
+                }
+            )
+            socket.send_text(frame)
+            received: bytes | None = None
+            while received is None:
+                received = viewer.receive().get("bytes")
+            assert received == jpeg
 
 
 def test_the_admin_switch_closes_the_socket(

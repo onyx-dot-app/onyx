@@ -13927,6 +13927,10 @@
           "title": "열린 페이지가 없습니다",
           "description": "에이전트가 연 페이지가 여기에 표시됩니다. 새 탭을 열 수도 있습니다."
         },
+        "waiting": {
+          "title": "에이전트를 기다리는 중",
+          "description": "에이전트가 내 Chrome에서 사용하는 페이지가 여기에 표시됩니다."
+        },
         "disconnected": {
           "title": "브라우저 연결이 끊어졌습니다",
           "description": "다시 연결하는 중입니다."
