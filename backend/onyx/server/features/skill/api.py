@@ -445,15 +445,15 @@ def bulk_update_skills(
     return SkillBulkResponse(succeeded=succeeded, failed=failed)
 
 
-@plugin_router.put("/{skill_id}/enabled")
+@plugin_router.put("/{plugin_id}/enabled")
 def set_skill_enabled_for_current_user(
-    skill_id: UUID,
+    plugin_id: UUID,
     request: SkillEnableRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     skill = set_skill_enabled_for_user(
-        skill_id=skill_id,
+        skill_id=plugin_id,
         enabled=request.enabled,
         replace_conflict=request.replace_conflict,
         user=user,
@@ -539,25 +539,25 @@ def list_users_over_skill_limit(
     )
 
 
-@plugin_router.get("/{skill_id}")
+@plugin_router.get("/{plugin_id}")
 def fetch_skill_for_current_user(
-    skill_id: UUID,
+    plugin_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    skill = _visible_skill(skill_id, user, db_session)
+    skill = _visible_skill(plugin_id, user, db_session)
     return skill_response_for_user(
         skill, user, db_session, include_plugin_detail=isinstance(skill, Plugin)
     )
 
 
-@plugin_router.get("/{skill_id}/preview")
+@plugin_router.get("/{plugin_id}/preview")
 def preview_skill_for_current_user(
-    skill_id: UUID,
+    plugin_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillPreviewResponse:
-    skill = _visible_skill(skill_id, user, db_session)
+    skill = _visible_skill(plugin_id, user, db_session)
     return skill_preview_response(skill, user, db_session)
 
 
