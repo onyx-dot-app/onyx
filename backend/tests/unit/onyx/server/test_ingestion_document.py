@@ -68,6 +68,8 @@ def test_a_tenant_exactly_at_the_chunk_limit_is_refused(
         patch.object(usage_limits, "tenant_limit_override_fn", return_value=None),
         patch.object(usage_limits, "tenant_trial_start_fn", return_value=None),
         patch("onyx.db.usage.get_usage", return_value=float(used)),
+        # No trial start records a warning; restore the record afterwards.
+        patch.dict(usage_limits._trial_start_warned_at, {}, clear=True),
     ):
         if refused:
             with pytest.raises(OnyxError):
