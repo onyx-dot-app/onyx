@@ -63,11 +63,14 @@ export function SignInModeField({
   draft,
   onChange,
   methods: allMethods,
+  shape,
   disabled,
 }: IntegrationSignInFieldsProps) {
   const methods = useAllowedMethods(allMethods, draft.authMethod);
-  const authModes = AUTH_MODES.filter(
-    (mode) => mode === "none" || methodsForMode(methods, mode).length > 0
+  // A preset with a sign-in method cannot call its API with no sign-in.
+  const allowsNone = shape !== "preset" || allMethods.length === 0;
+  const authModes = AUTH_MODES.filter((mode) =>
+    mode === "none" ? allowsNone : methodsForMode(methods, mode).length > 0
   );
   const t = useTranslations("admin.integrations.signIn");
   return (
@@ -76,7 +79,7 @@ export function SignInModeField({
         placeholder={t("mode.title")}
         value={draft.authMode}
         // A default makes a re-pick close the list instead of unselecting.
-        defaultOption="none"
+        defaultOption={authModes[0]}
         disabled={disabled}
         options={authModes.map((mode) => ({
           value: mode,
