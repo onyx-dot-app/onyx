@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -8,6 +9,7 @@ import {
 } from "@tests/setup/test-utils";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
+import { FetchError } from "@/lib/fetcher";
 
 let mockIsAdmin = true;
 let mockPublishing = "OPEN";
@@ -17,6 +19,7 @@ let mockIsManager = false;
 const mockUpdateSkillShares = jest.fn();
 const mockLoadSkill = jest.fn();
 jest.mock("@/lib/fetcher", () => ({
+  ...jest.requireActual("@/lib/fetcher"),
   errorHandlingFetcher: (...args: unknown[]) => mockLoadSkill(...args),
 }));
 
@@ -43,18 +46,23 @@ jest.mock("@/lib/permissions/hooks", () => ({
     isScopedManager: false,
   }),
 }));
+let mockUsers: { id: string; email: string }[] = [];
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
-  default: () => ({ data: [] }),
+  default: () => ({ data: mockUsers }),
 }));
 let mockGroups: { id: number; name: string }[] = [];
+let mockGroupsError: Error | undefined;
 jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
-  default: () => ({ data: mockGroups }),
+  default: () => ({ data: mockGroups, error: mockGroupsError }),
 }));
+const mockTransferSkillOwnership = jest.fn();
 jest.mock("@/lib/skills/api", () => ({
   updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
-  transferSkillOwnership: jest.fn(),
+  transferSkillOwnership: (...args: unknown[]) =>
+    mockTransferSkillOwnership(...args),
+  takenPluginName: jest.requireActual("@/lib/skills/api").takenPluginName,
 }));
 
 async function pickCompanySetting(name: RegExp) {
@@ -67,6 +75,9 @@ async function pickCompanySetting(name: RegExp) {
 describe("ShareSkillModal", () => {
   beforeEach(() => {
     mockGroups = [];
+    mockUsers = [];
+    mockTransferSkillOwnership.mockReset();
+    mockGroupsError = undefined;
     mockIsAdmin = true;
     mockPublishing = "OPEN";
     mockSharing = undefined;
@@ -76,6 +87,111 @@ describe("ShareSkillModal", () => {
       .mockReset()
       .mockResolvedValue(customFixture({ user_permission: "OWNER" }));
     mockUpdateSkillShares.mockReset().mockResolvedValue({});
+  });
+
+  it("drops a refused name after the user picks another recipient", async () => {
+    mockUsers = [
+      { id: "new-owner", email: "new@example.com" },
+      { id: "other-owner", email: "other@example.com" },
+    ];
+    let refuse: (error: Error) => void = () => {};
+    mockTransferSkillOwnership.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        refuse = reject;
+      })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Transfer Ownership" })
+    );
+    await user.type(screen.getByRole("combobox"), "new@");
+    fireEvent.click(
+      await screen.findByRole("option", { name: /new@example.com/ })
+    );
+    await user.click(screen.getByRole("button", { name: "Transfer" }));
+    await user.clear(screen.getByRole("combobox"));
+    await user.type(screen.getByRole("combobox"), "other@");
+    fireEvent.click(
+      await screen.findByRole("option", { name: /other@example.com/ })
+    );
+    await act(async () => {
+      refuse(
+        new FetchError("Taken", 409, {
+          error_code: "CONFLICT",
+          taken_name: "demo-skill",
+        })
+      );
+    });
+
+    expect(
+      screen.queryByText("demo-skill is already in use. Pick a different name.")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Transfer" })).toBeEnabled();
+  });
+
+  it("asks for another name when the new owner already holds the name", async () => {
+    mockUsers = [{ id: "new-owner", email: "new@example.com" }];
+    mockTransferSkillOwnership
+      .mockRejectedValueOnce(
+        new FetchError(
+          "The new owner already has a skill named 'demo-skill'. Pick a different name.",
+          409,
+          { error_code: "CONFLICT", taken_name: "demo-skill" }
+        )
+      )
+      .mockResolvedValueOnce({});
+    const onSaved = jest.fn();
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={onSaved}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Transfer Ownership" })
+    );
+    await user.type(screen.getByRole("combobox"), "new@");
+    fireEvent.click(
+      await screen.findByRole("option", { name: /new@example.com/ })
+    );
+    await user.click(screen.getByRole("button", { name: "Transfer" }));
+
+    expect(
+      await screen.findByText(
+        "demo-skill is already in use. Pick a different name."
+      )
+    ).toBeInTheDocument();
+    expect(mockToast.error).not.toHaveBeenCalled();
+    const transfer = screen.getByRole("button", { name: "Transfer" });
+    expect(transfer).toBeDisabled();
+
+    const name = screen.getByRole("textbox", { name: "Name" });
+    await user.clear(name);
+    await user.type(name, "demo-skill-new");
+    expect(transfer).toBeEnabled();
+    await user.click(transfer);
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(mockTransferSkillOwnership).toHaveBeenNthCalledWith(1, "custom-1", {
+      new_owner_user_id: "new-owner",
+    });
+    expect(mockTransferSkillOwnership).toHaveBeenNthCalledWith(2, "custom-1", {
+      new_owner_user_id: "new-owner",
+      name: "demo-skill-new",
+    });
   });
 
   it("saves shares of a synced skill without publish or transfer", async () => {
@@ -122,10 +238,7 @@ describe("ShareSkillModal", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
-        installation_policy: undefined,
-        public_permission: undefined,
         user_shares: [],
-        group_shares: [],
       })
     );
   });
@@ -152,14 +265,11 @@ describe("ShareSkillModal", () => {
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
         installation_policy: "DEFAULT",
-        public_permission: "VIEWER",
-        user_shares: [],
-        group_shares: [],
       })
     );
   });
 
-  it("loads full sharing details from the overview before saving", async () => {
+  it("loads full sharing details and leaves unchanged shares out of the save", async () => {
     const user = setupUser();
     mockLoadSkill.mockResolvedValue(
       customFixture({
@@ -187,12 +297,9 @@ describe("ShareSkillModal", () => {
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
-      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
-        "custom-1",
-        expect.objectContaining({
-          user_shares: [{ user_id: "invited-user", permission: "VIEWER" }],
-        })
-      )
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
+        installation_policy: "REQUIRED",
+      })
     );
   });
 
@@ -232,16 +339,14 @@ describe("ShareSkillModal", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
-        installation_policy: undefined,
-        public_permission: undefined,
         user_shares: [],
-        group_shares: [],
       })
     );
   });
 
   it("lets owners revoke public user and group editors", async () => {
     const user = setupUser();
+    mockGroups = [{ id: 42, name: "Editors" }];
     mockLoadSkill.mockResolvedValue(
       customFixture({
         user_permission: "OWNER",
@@ -283,11 +388,102 @@ describe("ShareSkillModal", () => {
       expect(mockUpdateSkillShares).toHaveBeenCalledWith(
         "custom-1",
         expect.objectContaining({
-          public_permission: "VIEWER",
           user_shares: [],
           group_shares: [],
         })
       )
+    );
+  });
+
+  it("shows a group share the user cannot manage but does not let them change it", async () => {
+    const user = setupUser();
+    mockGroups = [];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: "VIEWER",
+        group_shares: [
+          { group_id: 42, group_name: "Editors", permission: "EDITOR" },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Manage individual access" })
+    );
+    expect(
+      screen.getByRole("button", { name: "Update access for Editors" })
+    ).toBeDisabled();
+  });
+
+  it("locks every group share while one is outside the user's scope", async () => {
+    const user = setupUser();
+    mockIsAdmin = false;
+    mockGroups = [{ id: 7, name: "Design" }];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: "VIEWER",
+        group_shares: [
+          { group_id: 42, group_name: "Editors", permission: "EDITOR" },
+          { group_id: 7, group_name: "Design", permission: "VIEWER" },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Manage individual access" })
+    );
+    expect(
+      screen.getByRole("button", { name: "Update access for Design" })
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/shared with a group you do not manage/)
+    ).toBeInTheDocument();
+  });
+
+  it("says when the groups did not load", async () => {
+    const user = setupUser();
+    mockGroupsError = new Error("failed");
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: "VIEWER",
+        group_shares: [
+          { group_id: 42, group_name: "Editors", permission: "EDITOR" },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Manage individual access" })
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Onyx could not load your groups"
     );
   });
 
@@ -542,9 +738,6 @@ describe("ShareSkillModal", () => {
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
         installation_policy: "REQUIRED",
-        public_permission: null,
-        user_shares: [],
-        group_shares: [],
       })
     );
   });
@@ -601,7 +794,7 @@ describe("ShareSkillModal", () => {
     );
   });
 
-  it("saves changed group settings and sends the unchanged company setting", async () => {
+  it("saves changed group settings and leaves the unchanged company setting out", async () => {
     const user = setupUser();
     mockGroups = [
       { id: 3, name: "Design" },
@@ -670,7 +863,7 @@ describe("ShareSkillModal", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mockUpdateSkillShares).toHaveBeenCalled());
     const payload = mockUpdateSkillShares.mock.calls[0][1];
-    expect(payload.installation_policy).toBeNull();
+    expect(payload.installation_policy).toBeUndefined();
     expect(payload.group_settings).toEqual([
       { group_id: 3, installation_policy: "AVAILABLE" },
       { group_id: 5, installation_policy: "DEFAULT" },

@@ -85,6 +85,7 @@ test("shows the built-in skills that chat offers", async () => {
       short_description: null,
       version_id: "pptx",
       built_in_skill_id: "pptx",
+      plugin_id: null,
     },
   ]);
   const builtins = await screen.findByRole("region", {

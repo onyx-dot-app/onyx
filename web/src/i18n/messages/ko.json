@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "감사 로그 및 SIEM",
+          "description": "Onyx는 감사 이벤트를 JSON 줄로 로그에 기록합니다. 로그 수집기가 이를 SIEM으로 보냅니다. [SIEM 전달 설정하기]({url})."
+        },
+        "status": {
+          "title": "감사 스트림 상태",
+          "description": "Onyx가 기록한 이벤트입니다. Onyx는 로그 수집기나 SIEM을 볼 수 없으므로 이벤트가 그곳에 도착하는지 확인하세요.",
+          "loadFailed": {
+            "title": "감사 스트림 상태를 불러오지 못했습니다",
+            "description": "페이지를 새로 고쳐 다시 시도하세요."
+          },
+          "notEnabled": {
+            "title": "Onyx가 감사 이벤트를 기록하지 않습니다",
+            "description": "감사 스트림에는 Enterprise 라이선스가 필요합니다."
+          },
+          "logFormat": {
+            "title": "JSON 로그 사용",
+            "description": "로그 형식이 {logFormat}입니다. 로그 수집기가 모든 로그 레코드를 분석할 수 있도록 LOG_FORMAT=json으로 설정하세요."
+          },
+          "noEvents": "아직 이벤트가 없습니다",
+          "eventSummary": "지난 24시간 동안 {count, plural, one {이벤트 #개} other {이벤트 #개}}. 마지막 이벤트 {lastEvent}.",
+          "eventCount": "지난 24시간 동안 {count, plural, one {이벤트 #개} other {이벤트 #개}}.",
+          "classes": {
+            "authentication": "인증",
+            "account_change": "계정 변경",
+            "user_access_management": "사용자 액세스 관리",
+            "group_management": "그룹 관리",
+            "api_activity": "API 활동",
+            "credential_access": "자격 증명 액세스"
+          }
+        },
+        "auditEvents": {
+          "title": "감사 이벤트",
+          "description": "보안 및 관리 변경 사항입니다. 기본적으로 켜져 있습니다."
+        },
+        "userActivity": {
+          "title": "사용자 활동",
+          "description": "사고 조사를 위한 각 사용자의 활동입니다. 기본적으로 꺼져 있으며 많은 이벤트가 발생할 수 있습니다."
+        },
+        "categories": {
+          "authentication": {
+            "title": "인증",
+            "description": "로그인, 실패한 로그인, 로그아웃 및 비밀번호 재설정."
+          },
+          "user_and_group_management": {
+            "title": "사용자 및 그룹 관리",
+            "description": "사용자, 역할 및 그룹 변경과 MCP 클라이언트 승인."
+          },
+          "configuration": {
+            "title": "구성 변경",
+            "description": "설정, 커넥터, 자격 증명, 에이전트, 문서 세트, API 키 및 액세스 토큰 변경."
+          },
+          "credential_access": {
+            "title": "자격 증명 액세스",
+            "description": "저장된 자격 증명의 복호화입니다. 같은 자격 증명과 사용자에 대해 10분 이내에 반복되면 기록하지 않을 수 있습니다."
+          },
+          "data_export": {
+            "title": "데이터 내보내기",
+            "description": "쿼리 기록, 사용량 보고서 및 로그 내보내기 다운로드."
+          },
+          "chat": {
+            "title": "채팅 메시지",
+            "description": "각 채팅 답변과 에이전트, 모델, 도구, 사용자가 본 문서."
+          },
+          "search": {
+            "title": "검색",
+            "description": "검색 페이지, API 또는 MCP 클라이언트에서 실행한 각 검색과 찾은 문서."
+          },
+          "llm_gateway": {
+            "title": "LLM 게이트웨이 요청",
+            "description": "LLM 게이트웨이를 통한 각 호출과 모델 및 토큰 수."
+          },
+          "file_download": {
+            "title": "파일 다운로드",
+            "description": "사용자가 다운로드한 각 채팅 파일."
+          }
+        },
+        "queryText": {
+          "title": "쿼리 텍스트 포함",
+          "description": "사용자가 입력한 내용을 채팅 및 검색 이벤트에 추가합니다. 쿼리 기록이 일반일 때만 추가됩니다."
+        }
       }
     },
     "serviceAccounts": {
@@ -12264,6 +12347,9 @@
         },
         "timedOut": {
           "text": "응답이 시간 제한에 도달하여 중지되었습니다."
+        },
+        "approvalExpired": {
+          "text": "승인 요청에 제때 응답하지 않아 예약된 실행이 중지되었습니다."
         }
       },
       "callout": {
@@ -12601,6 +12687,12 @@
           },
           "waitingForAnswer": {
             "label": "답변을 기다리는 중..."
+          },
+          "waitingForOwnerApproval": {
+            "label": "소유자의 승인을 기다리는 중..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "소유자의 답변을 기다리는 중..."
           },
           "runningCommand": {
             "label": "명령 실행 중..."
@@ -13645,6 +13737,10 @@
       },
       "viewAllButton": {
         "label": "파일 {count}개 모두 보기"
+      },
+      "unavailable": {
+        "title": "이 파일을 사용할 수 없습니다",
+        "description": "삭제되었거나 액세스 권한이 없습니다."
       }
     },
     "rightPanel": {
@@ -14707,9 +14803,6 @@
       },
       "unsupported": {
         "description": "파일을 다운로드하여 내용을 확인하세요."
-      },
-      "retry": {
-        "label": "다시 시도"
       },
       "download": {
         "label": "파일 다운로드"
@@ -17349,7 +17442,9 @@
           "publishOff": {
             "description": "관리자가 조직 게시를 껐습니다. 관리자에게 이 플러그인 게시를 요청하세요."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx가 그룹을 불러오지 못해 그룹 공유를 변경할 수 없습니다. 이 대화 상자를 닫았다가 다시 열어 주세요.",
+        "groupSharesLocked": "이 스킬은 관리하지 않는 그룹과 공유되어 있어 그룹 공유를 변경할 수 없습니다. 조직 전체 스킬 관리자에게 요청하세요."
       },
       "tabs": {
         "details": "세부 정보",
@@ -17458,7 +17553,8 @@
         "disableFailed": "{name}을(를) 비활성화하지 못했습니다",
         "enableFailed": "{name}을(를) 활성화하지 못했습니다",
         "refreshFailed": "{name}이(가) 업데이트되었지만 스킬 목록을 새로고침할 수 없습니다.",
-        "listRefreshFailed": "스킬 목록을 새로고침할 수 없습니다. 페이지를 다시 불러와 변경 사항을 확인하세요."
+        "listRefreshFailed": "스킬 목록을 새로고침할 수 없습니다. 페이지를 다시 불러와 변경 사항을 확인하세요.",
+        "requiredHolder": "{name}을(를) 켤 수 없습니다. 필수 스킬이 이미 이 이름을 사용하고 있습니다."
       }
     },
     "sections": {
@@ -17501,7 +17597,8 @@
       "upload": {
         "error": {
           "readFailed": "업로드한 파일을 읽지 못했습니다.",
-          "folderRoot": "{upload, select, plugin {선택한 폴더의 최상위에 SKILL.md 또는 plugin.json 매니페스트가 있어야 합니다.} other {선택한 폴더의 최상위에 SKILL.md가 있어야 합니다.}}"
+          "folderRoot": "{upload, select, plugin {선택한 폴더의 최상위에 SKILL.md 또는 plugin.json 매니페스트가 있어야 합니다.} other {선택한 폴더의 최상위에 SKILL.md가 있어야 합니다.}}",
+          "unsupportedFile": "{name}은(는) ZIP 또는 SKILL.md 파일이 아닙니다. ZIP, SKILL.md 파일 또는 스킬 폴더를 업로드하세요."
         }
       }
     },
@@ -17534,7 +17631,8 @@
       "publishWarning": {
         "title": "게시는 취소할 수 없습니다",
         "description": "적용하면 조직의 모든 사용자가 선택한 스킬을 사용할 수 있습니다. 게시된 스킬은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
-      }
+      },
+      "skipped": "{count, plural, other {켜거나 끌 수 없는 스킬 #개를 건너뛰었습니다}}"
     },
     "reviewRequests": {
       "title": "게시 요청",
@@ -17626,6 +17724,12 @@
       "share": "공유",
       "delete": "삭제",
       "select": "{name} 선택"
+    },
+    "takenName": {
+      "title": "이름",
+      "description": "아직 사용되지 않은 이름을 입력하세요.",
+      "taken": "{name}은(는) 이미 사용 중입니다. 다른 이름을 선택하세요.",
+      "invalid": "소문자, 숫자, 단일 하이픈만 사용하고 최대 {max}자까지 입력하세요."
     }
   },
   "plugins": {
@@ -17836,6 +17940,7 @@
         "newPlugin": "새 플러그인: {name}"
       },
       "willBeOff": "플러그인이 꺼진 상태로 저장됩니다. {names}에 같은 이름의 스킬이 이미 있습니다.",
+      "willClash": "{names}에 같은 이름의 스킬이 이미 있습니다. 둘 중 하나만 켤 수 있습니다.",
       "saveAsNew": {
         "label": "새 플러그인으로 저장",
         "description": "이 이름의 플러그인은 그대로 둡니다."
@@ -17867,7 +17972,8 @@
         "newPlugin": "{name}을(를) 추가했습니다.",
         "newVersion": "{name}을(를) Onyx 버전 {version}(으)로 업데이트했습니다.",
         "unchanged": "변경 사항이 없습니다. {name}은(는) 이미 Onyx 버전 {version}입니다.",
-        "off": "{name}을(를) 추가했습니다. {names}에 같은 이름의 스킬이 있어 꺼져 있습니다."
+        "off": "{name}을(를) 추가했습니다. {names}에 같은 이름의 스킬이 있어 꺼져 있습니다.",
+        "clash": "{name}을(를) Onyx 버전 {version}(으)로 업데이트했습니다. {names}에 같은 이름의 스킬이 이미 있어 둘 중 하나만 켜집니다."
       }
     },
     "turnOn": {
@@ -18048,7 +18154,8 @@
       "apply": "{count, plural, one {플러그인 #개에 적용} other {플러그인 #개에 적용}}",
       "publishWarning": {
         "description": "적용하면 조직의 모든 사용자가 선택한 플러그인을 사용할 수 있습니다. 게시된 플러그인은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
-      }
+      },
+      "skipped": "{count, plural, other {켜거나 끌 수 없는 플러그인 #개를 건너뛰었습니다}}"
     }
   },
   "integrations": {
@@ -18374,7 +18481,7 @@
       },
       "confirmDelete": {
         "title": "\"{name}\"을(를) 삭제할까요?",
-        "description": "작업 실행이 중지되고 실행 기록이 삭제됩니다.",
+        "description": "작업 실행이 중지됩니다. 이전 실행의 채팅은 유지됩니다.",
         "submit": "삭제"
       }
     },
@@ -18387,7 +18494,8 @@
       "markAllViewed": "모두 확인함으로 표시",
       "markAllViewedFailed": "실행을 확인함으로 표시하지 못했습니다. 다시 시도하세요.",
       "trigger": "{source, select, MANUAL_RUN_NOW {한 번 실행} other {일정}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {취소됨: 누군가 승인에 응답하기 전에 다음 실행이 시작되었습니다.} approval_timeout {취소됨: 24시간 이내에 아무도 승인에 응답하지 않았습니다.} user_cancelled {사용자가 중지했습니다.} agent_permission_required {작업에 승인이 필요했습니다.} agent_exception {실패: 실행 중 오류가 발생했습니다.} stuck {실패: 실행이 제때 시작되지 않았습니다.} timeout {실패: 실행이 1시간 제한에 도달했습니다.} other {실패: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {취소됨: 누군가 승인에 응답하기 전에 다음 실행이 시작되었습니다.} approval_timeout {취소됨: 24시간 이내에 아무도 승인에 응답하지 않았습니다.} user_cancelled {사용자가 중지했습니다.} agent_permission_required {작업에 승인이 필요했습니다.} agent_exception {실패: 실행 중 오류가 발생했습니다.} stuck {실패: 실행이 제때 시작되지 않았습니다.} timeout {실패: 실행이 1시간 제한에 도달했습니다.} chat_deleted {취소됨: 이 실행의 채팅이 삭제되었습니다.} owner_cannot_chat {실패: 더 이상 채팅할 수 없어 작업이 일시 중지되었습니다.} rate_limited {실패: 사용 한도에 도달했습니다.} other {실패: {errorClass}}}",
+      "errorDetail": "실패: {detail}",
       "columns": {
         "started": "시작",
         "status": "상태",
@@ -18425,7 +18533,8 @@
         "title": "일정에 따라 실행",
         "label": "일정에 따라 {name} 실행"
       },
-      "menu": "추가 작업"
+      "menu": "추가 작업",
+      "notFound": "이 예약 작업은 삭제되었거나 다른 사용자의 작업입니다."
     },
     "editor": {
       "newTitle": "새 예약된 작업",
@@ -18437,7 +18546,8 @@
       "saveAndRun": "저장하고 지금 실행",
       "errors": {
         "nameRequired": "이름을 입력하세요.",
-        "promptRequired": "프롬프트를 입력하세요."
+        "promptRequired": "프롬프트를 입력하세요.",
+        "tooLong": "{max, number}자 이하로 입력하세요."
       },
       "toasts": {
         "created": "예약된 작업을 만들었습니다.",

@@ -239,6 +239,40 @@ describe("SkillEditorPage", () => {
     );
   });
 
+  it("sends an uploaded SKILL.md with no other files, so its frontmatter is kept", async () => {
+    const user = setupUser();
+    const upload = new File(["---\nlicense: MIT\n---"], "SKILL.md");
+    mockGetSkillCreationDraft.mockReturnValue({
+      contents: {
+        name: "report-writer",
+        description: "Writes reports",
+        instructions_markdown: "Write the requested report.",
+        files: [],
+      },
+      upload: {
+        file: upload,
+        displayName: upload.name,
+        entries: [],
+        containsSkillMd: true,
+      },
+    });
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      id: "created-id",
+      name: "report-writer",
+      enabled: true,
+    } as SkillEditableDetail);
+
+    render(<SkillEditorPage draftId="draft-id" />);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "report-writer" }),
+        upload
+      )
+    );
+  });
+
   it("creates the skill with every added file and its sharing in one request", async () => {
     const user = setupUser();
     mockPickedUploads.push(
@@ -431,6 +465,61 @@ describe("SkillEditorPage", () => {
     expect(
       screen.queryByText("Create another “report-writer” skill?")
     ).not.toBeInTheDocument();
+  });
+
+  it("blocks Create for a name that a create refused as taken", async () => {
+    const user = setupUser();
+    const mockToastError = jest.spyOn(toast, "error");
+    const taken = new FetchError(
+      "You already have a skill or plugin named 'report-writer'. Pick a different name.",
+      409,
+      { error_code: "CONFLICT", taken_name: "report-writer" }
+    );
+    mockCreateCustomSkillFromEditor.mockRejectedValueOnce(taken);
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith(
+        "report-writer is already in use. Pick a different name."
+      )
+    );
+    expect(
+      screen.queryByText("Create another “report-writer” skill?")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    mockToastError.mockRestore();
+  });
+
+  it("checks a refused name again after the sharing changes", async () => {
+    const user = setupUser();
+    const mockToastError = jest.spyOn(toast, "error");
+    mockCreateCustomSkillFromEditor.mockRejectedValueOnce(
+      new FetchError("Taken", 409, {
+        error_code: "CONFLICT",
+        taken_name: "report-writer",
+      })
+    );
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Create" })).toBeDisabled()
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    await user.click(
+      screen.getByRole("button", { name: "Choose organization access" })
+    );
+
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    mockToastError.mockRestore();
   });
 
   it("keeps the confirmation open when disabled creation fails", async () => {

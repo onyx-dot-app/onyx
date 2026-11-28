@@ -7,7 +7,7 @@ from concurrent.futures import Future
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
@@ -114,6 +114,13 @@ from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsReadTool,
 )
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    document_id_fields,
+    emit_audit_event,
+)
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import (
@@ -306,6 +313,8 @@ class ChatTurnExecution:
     ) -> None:
         self.setup = setup
         self.user = user
+        # Built here, in the request, so it carries the request's credential.
+        self._audit_actor = actor_from_user(user)
         self.delivery = ChatDelivery(stream_buffer, query_observation=query_observation)
         self._query_observation = query_observation
         self._dispatch_pending_messages = dispatch_pending_messages
@@ -527,12 +536,78 @@ class ChatTurnExecution:
                 if not worker_done:
                     continue
             if persistence.outcome.done() and persistence.outcome.exception() is None:
-                snapshot = persistence.outcome.result().response.response
+                outcome = persistence.outcome.result()
+                snapshot = outcome.response.response
                 if snapshot is not None:
                     self._response_stops[persistence.model_index] = overall_stop(
                         snapshot.status, snapshot.failure
                     )
+                # A parked run writes its event when it resumes and ends.
+                if snapshot is None or snapshot.status != RunStatus.SUSPENDED:
+                    self._emit_message_audit(persistence, outcome)
+            elif persistence.outcome.done() and not (
+                self._resume_deferred
+                and self.setup.resumed_response_id is not None
+                and isinstance(persistence.outcome.exception(), RETRYABLE_START_ERRORS)
+            ):
+                # A failed worker has no response, but the message was sent. A
+                # deferred resume stays parked and writes its event on retry.
+                self._emit_message_audit(persistence, None)
             del self._response_workers[worker]
+
+    def _emit_message_audit(
+        self,
+        persistence: ChatResponsePersistence,
+        outcome: ChatResponseOutcome | None,
+    ) -> None:
+        """One ``chat.message_send`` event per finished response. ``None`` is a
+        response whose worker failed: the event has no response details. A
+        response that failed to save counts as an error too."""
+        response = outcome.response if outcome is not None else None
+        extra: dict[str, Any] = {
+            "chat_session_id": str(self.setup.chat_session_id),
+            "user_message_id": self.setup.user_message_id,
+            "assistant_message_id": persistence.message_id,
+            "model_index": persistence.model_index,
+            "persona_id": self.setup.persona_id,
+            "model_provider": persistence.llm.config.model_provider,
+            "model_name": persistence.llm.config.model_name,
+            "origin": self.setup.new_msg_req.origin,
+            "resumed": self.setup.resumed_response_id is not None,
+            "error": outcome is None or outcome.error is not None,
+        }
+        if response is not None:
+            extra["tool_names"] = sorted(
+                {call.tool_name for call in response.tool_calls}
+            )
+            extra["cancelled"] = response.cancelled
+        query_text: str | None = None
+        # An incognito chat that keeps no content shows no content here either.
+        if not record_mode_persists_content(self.setup.incognito_record_mode):
+            extra["incognito"] = True
+        elif response is not None:
+            extra.update(
+                document_id_fields(
+                    "retrieved_document_ids", response.all_search_docs.keys()
+                )
+            )
+            extra.update(
+                document_id_fields(
+                    "cited_document_ids",
+                    (citation.document_id for citation in response.citation_info),
+                )
+            )
+            # A resumed run carries an empty request; its prompt was sent earlier.
+            query_text = self.setup.new_msg_req.message or None
+        emit_audit_event(
+            AuditAction.CHAT_MESSAGE_SEND,
+            AuditOutcome.FAILURE if extra["error"] else AuditOutcome.SUCCESS,
+            actor=self._audit_actor,
+            resource_type="chat_session",
+            resource_id=str(self.setup.chat_session_id),
+            extra=extra,
+            query_text=query_text,
+        )
 
     def _root_parked(self, persistence: ChatResponsePersistence, run: Run) -> None:
         """End a response whose run handed off to wait for people: the turn

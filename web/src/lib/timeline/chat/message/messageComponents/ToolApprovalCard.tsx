@@ -6,20 +6,8 @@ import { cn } from "@opal/utils";
 import { Content, Section } from "@opal/layouts";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import type { MultiModelResponse } from "@/lib/timeline/chat/message/types";
-import { postChatApprovalDecision } from "@/lib/chat/svc";
-import {
-  isClosedRequestError,
-  useFollowUserInput,
-  useNudgedCard,
-} from "@/lib/chat/hooks";
-import type { ChatStream } from "@/app/app/types";
-import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
-import {
-  decidedStatus,
-  type ToolApproval,
-  useToolRequestUi,
-} from "@/lib/chat/toolApprovals";
+import { useNudgedCard, useToolApprovalDecision } from "@/lib/chat/hooks";
+import type { ToolApproval } from "@/lib/chat/toolApprovals";
 import ApprovalCard from "@/sections/approvals/ApprovalCard";
 
 interface ToolApprovalCardProps {
@@ -33,28 +21,7 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   const { request } = approval;
   const t = useTranslations("chat.messages.toolApproval");
   const card = useNudgedCard(request.approval_id);
-  const follow = useFollowUserInput();
-
-  // The decided status shows until the resolution packet confirms it.
-  async function submit(decision: ApprovalSubmitDecision) {
-    const { recordStatus } = useToolRequestUi.getState();
-    const sessionId = useChatSessionStore.getState().currentSessionId;
-    let continuation: ChatStream | null;
-    try {
-      const response = await postChatApprovalDecision(
-        request.approval_id,
-        decision
-      );
-      recordStatus(request.approval_id, decidedStatus(response));
-      continuation = response.continuation;
-    } catch (cause) {
-      if (!isClosedRequestError(cause)) throw cause;
-      recordStatus(request.approval_id, "closed");
-      if (sessionId !== null) await follow.refused(sessionId);
-      return;
-    }
-    if (sessionId !== null) await follow.continued(sessionId, continuation);
-  }
+  const decide = useToolApprovalDecision(request.approval_id);
 
   const agentRequest =
     request.agent_name === null
@@ -95,7 +62,7 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
             request.can_approve_for_chat !== false
           }
           status={approval.status}
-          onDecide={submit}
+          onDecide={decide}
         />
       </Section>
     </div>

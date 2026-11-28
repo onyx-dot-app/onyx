@@ -214,7 +214,27 @@ def list_minimal_user_groups(
     include_default: bool = False,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    manageable_for: Permission | None = None,
 ) -> list[MinimalUserGroupSnapshot]:
+    """``manageable_for``: only the groups whose shares the user can change
+    with that permission. A scoped manager gets the groups they manage, and a
+    user without the permission gets none."""
+    if manageable_for is not None and not (
+        Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user)
+        or has_global_permission(user, manageable_for)
+    ):
+        managed = (
+            get_scoped_groups(user, db_session, manageable_for)
+            if has_permission(user, manageable_for) is PermissionAuthority.SCOPED
+            else set()
+        )
+        return [
+            MinimalUserGroupSnapshot.from_model(user_group)
+            for user_group in fetch_user_groups(
+                db_session, only_up_to_date=False, include_default=include_default
+            )
+            if user_group.id in managed
+        ]
     # An organization-wide skill or action manager sets the access of any
     # group, so it picks from every group.
     if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user) or any(

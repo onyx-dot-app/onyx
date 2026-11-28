@@ -5,6 +5,7 @@ import threading
 import zipfile
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from unittest.mock import patch
 from uuid import UUID
 
@@ -28,9 +29,11 @@ from onyx.db.plugin import (
     PluginAccessChange,
     PluginUserGrant,
     apply_plugin_access_change__no_commit,
+    set_plugin_preferences__no_commit,
 )
 from onyx.db.skill import list_chat_skills, list_runtime_skills_for_user
 from onyx.db.users import delete_user_from_db__no_commit
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.integrations.models import PluginNeedState
@@ -150,12 +153,18 @@ def no_craft_reload() -> Iterator[None]:
 
 
 def _save(
-    user: User, upload: UploadFile, db_session: Session, *, save_as_new: bool = False
+    user: User,
+    upload: UploadFile,
+    db_session: Session,
+    *,
+    save_as_new: bool = False,
+    name: str | None = None,
 ) -> api.PluginUploadResponse:
     return api.save_plugin_upload(
         bundle=upload,
         save_as_new=save_as_new,
         auto_enable=True,
+        name=name,
         user=user,
         db_session=db_session,
     )
@@ -276,6 +285,7 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
         "plugin_id": plugin_id,
         "plugin_name": "same-kit",
         "version_number": 2,
+        "name_taken": False,
     }
     second = _save(author, _plugin_zip("same-kit", ["one", "two"]), db_session)
 
@@ -289,8 +299,40 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
     }
     assert second.plugin.enabled is True
 
-    copy = _save(author, _plugin_zip("same-kit", ["one"]), db_session, save_as_new=True)
-    assert (copy.target.kind, copy.plugin.name) == ("new_plugin", "same-kit-2")
+    copy_preview = api.inspect_plugin_upload(
+        bundle=_plugin_zip("same-kit", ["one"]),
+        save_as_new=True,
+        user=author,
+        db_session=db_session,
+    )
+    assert (copy_preview.target.plugin_name, copy_preview.target.name_taken) == (
+        "same-kit",
+        True,
+    )
+    with pytest.raises(OnyxError) as taken:
+        _save(author, _plugin_zip("same-kit", ["one"]), db_session, save_as_new=True)
+    assert taken.value.error_code is OnyxErrorCode.CONFLICT
+    assert taken.value.extra == {"taken_name": "same-kit"}
+    assert "same-kit" in taken.value.detail
+    db_session.rollback()
+    with pytest.raises(OnyxError) as reserved:
+        _save(
+            author,
+            _plugin_zip("same-kit", ["one"]),
+            db_session,
+            save_as_new=True,
+            name="pptx",
+        )
+    assert reserved.value.error_code is OnyxErrorCode.INVALID_INPUT
+    db_session.rollback()
+    copy = _save(
+        author,
+        _plugin_zip("same-kit", ["one"]),
+        db_session,
+        save_as_new=True,
+        name="same-kit-copy",
+    )
+    assert (copy.target.kind, copy.plugin.name) == ("new_plugin", "same-kit-copy")
 
     apply_plugin_access_change__no_commit(
         [plugin_id], PluginAccessChange(publish=True), None, db_session
@@ -914,6 +956,28 @@ def test_a_skill_name_clash_is_shown_before_and_after_the_save(
     assert (saved.enabled, saved.name_conflicts) == (False, ["first-kit"])
 
 
+def test_a_new_version_that_adds_a_clashing_name_reports_the_clash(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, _ = users
+    _save(author, _plugin_zip("first-kit", ["clash"]), db_session)
+    _save(author, _plugin_zip("second-kit", ["other"]), db_session)
+
+    preview = api.inspect_plugin_upload(
+        bundle=_plugin_zip("second-kit", ["clash", "other"]),
+        save_as_new=False,
+        user=author,
+        db_session=db_session,
+    )
+    saved = _save(author, _plugin_zip("second-kit", ["clash", "other"]), db_session)
+
+    assert preview.target.kind == "new_version"
+    assert preview.name_conflicts == ["first-kit"]
+    assert saved.name_conflicts == ["first-kit"]
+
+
 def test_a_plugin_that_loses_its_skill_name_says_which_plugin_holds_it(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -941,6 +1005,44 @@ def test_a_plugin_that_loses_its_skill_name_says_which_plugin_holds_it(
     assert own.enabled is True
     assert listed[own.plugin.id] == (False, ["company-kit"])
     assert listed[company.plugin.id] == (True, [])
+
+
+def test_a_holder_that_loses_another_name_still_holds_its_name(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    """first-kit takes "x" from second-kit, which still takes "y" from
+    third-kit, so third-kit names second-kit as its holder."""
+    member, _, _ = users
+    saved = [
+        _save(member, _plugin_zip(name, skills), db_session).plugin.id
+        for name, skills in (
+            ("first-kit", ["x"]),
+            ("second-kit", ["x", "y"]),
+            ("third-kit", ["y"]),
+        )
+    ]
+    plugins = {
+        plugin.id: plugin
+        for plugin in db_session.scalars(select(Plugin).where(Plugin.id.in_(saved)))
+    }
+    for offset, plugin_id in enumerate(saved):
+        plugins[plugin_id].created_at = plugins[saved[0]].created_at + timedelta(
+            seconds=offset
+        )
+    set_plugin_preferences__no_commit(member.id, saved, True, db_session)
+    db_session.commit()
+
+    listed = {
+        skill.id: (skill.enabled, skill.name_held_by)
+        for skill in api.list_skills_for_current_user(member, db_session).customs
+    }
+
+    first, second, third = saved
+    assert listed[first] == (True, [])
+    assert listed[second] == (False, ["first-kit"])
+    assert listed[third] == (False, ["second-kit"])
 
 
 def test_a_new_version_of_an_enabled_plugin_turns_on_its_new_integrations(

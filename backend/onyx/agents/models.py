@@ -79,6 +79,8 @@ class RunFailureKind(str, Enum):
     EXECUTION = "execution"
     DEADLINE = "deadline"
     STOPPED_BY_USER = "stopped_by_user"
+    # The system ended a run whose approval requests nobody answered in time.
+    APPROVAL_EXPIRED = "approval_expired"
 
 
 class RunFailure(BaseModel):

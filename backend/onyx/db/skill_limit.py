@@ -62,39 +62,30 @@ def skill_limit_error(usage: SkillUsage) -> OnyxError:
     )
 
 
-def _usage(
-    users: Iterable[UUID],
-    db_session: Session,
-    plugin_ids: Iterable[UUID] | None = None,
-) -> dict[UUID, SkillUsage]:
+def _usage(users: Iterable[UUID], db_session: Session) -> dict[UUID, SkillUsage]:
     return skill_usage_by_user(
-        load_user_plugin_states(users, db_session, plugin_ids, runnable_only=True)
+        load_user_plugin_states(users, db_session, runnable_only=True)
     )
 
 
 @contextmanager
-def check_skill_limit(
-    db_session: Session, plugin_ids: Iterable[UUID], user_id: UUID
-) -> Iterator[None]:
+def check_skill_limit(db_session: Session, user_id: UUID) -> Iterator[None]:
     """Refuse with 413 when the user's own write in the block moves them past
-    the write limit. ``plugin_ids`` are the plugins it changes or creates.
-    Holds the user's lock, so two writes of one user check one at a time."""
-    ids = set(plugin_ids)
+    the write limit. Holds the user's lock, so two writes of one user check
+    one at a time. Compares whole totals: a write can change which same-name
+    plugin wins, and so the usage of plugins it does not touch."""
     lock_user_skill_preferences(user_id, db_session)
     db_session.flush()
-    before = _usage([user_id], db_session, ids).get(user_id, SkillUsage())
+    before = _usage([user_id], db_session).get(user_id, SkillUsage())
     yield
     db_session.flush()
-    after = _usage([user_id], db_session, ids).get(user_id, SkillUsage())
+    after = _usage([user_id], db_session).get(user_id, SkillUsage())
     if not after.grew_from(before):
         return
-    total_after = (
-        _usage([user_id], db_session).get(user_id, SkillUsage())
-        + built_in_skills_usage()
-    )
-    total_before = total_after - after + before
+    built_ins = built_in_skills_usage()
+    total_after = after + built_ins
     if limits.is_over_write_limit(total_after) and not limits.is_over_write_limit(
-        total_before
+        before + built_ins
     ):
         raise skill_limit_error(total_after)
 

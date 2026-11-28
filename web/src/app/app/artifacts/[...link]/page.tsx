@@ -1,6 +1,7 @@
-import { notFound } from "@opal/navigation";
 import { parseArtifactLink } from "@/lib/chat/publishedFiles";
-import ArtifactLinkPage from "@/sections/chat/ArtifactLinkPage";
+import ArtifactLinkPage, {
+  ArtifactUnavailable,
+} from "@/sections/chat/ArtifactLinkPage";
 
 interface PageProps {
   params: Promise<{ link: string[] }>;
@@ -10,7 +11,7 @@ interface PageProps {
 export default async function Page({ params }: PageProps) {
   const { link } = await params;
   const artifact = parseArtifactLink(`/app/artifacts/${link.join("/")}`);
-  if (!artifact) notFound();
+  if (!artifact) return <ArtifactUnavailable />;
   return (
     <ArtifactLinkPage
       key={link.join("/")}

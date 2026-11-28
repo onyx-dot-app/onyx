@@ -33,7 +33,6 @@ import {
   FilePreviewScope,
 } from "@/sections/file-preview/FilePreview";
 
-const IMAGE_FILE = /\.(png|jpe?g|gif|webp|avif)$/i;
 // A text tile shows the start of its file, as Craft's: files up to this size
 // load for it
 const TILE_TEXT_MAX_BYTES = 256 * 1024;
@@ -192,7 +191,7 @@ export const PublishedFilesGrid = memo(function PublishedFilesGrid({
                   downloadFile(file.name, { url: buildImgUrl(file.file_id) })
                 }
                 preview={
-                  IMAGE_FILE.test(file.name) ? (
+                  format.kind === "image" ? (
                     <OutputImageThumbnail
                       src={buildImgUrl(file.file_id)}
                       fallback={icon}

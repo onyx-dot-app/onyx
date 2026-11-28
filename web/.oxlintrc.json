@@ -409,7 +409,6 @@
         "src/lib/timeline/chat/renderers/search/WebSearchToolRenderer.tsx",
         "src/app/app/settings/layout.tsx",
         "src/app/app/settings/usage/UsageSettings.tsx",
-        "src/app/app/shared/[[]chatId]/SharedChatDisplay.tsx",
         "src/app/auth/create-account/page.tsx",
         "src/app/auth/error/AuthErrorContent.tsx",
         "src/app/auth/forgot-password/page.tsx",

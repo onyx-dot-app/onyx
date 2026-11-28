@@ -7,6 +7,7 @@
         "input": 0,
         "output": 0
       },
+      "family": "apodex-mini",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -59,7 +60,7 @@
         "input": 0.01,
         "output": 0
       },
-      "family": "bge",
+      "family": "bge-reranker",
       "limit": {
         "context": 8000,
         "output": 0
@@ -85,7 +86,7 @@
         "input": 0.07,
         "output": 0.07
       },
-      "family": "baichuan",
+      "family": "baichuan-m",
       "limit": {
         "context": 131072,
         "output": 131072
@@ -112,6 +113,7 @@
         "input": 0.28,
         "output": 1.13
       },
+      "family": "cobuddy",
       "limit": {
         "context": 131072,
         "output": 65536
@@ -163,6 +165,7 @@
         "input": 0.03,
         "output": 0.03
       },
+      "family": "deepseek-ocr",
       "limit": {
         "context": 8192,
         "output": 8192
@@ -190,7 +193,7 @@
         "input": 0.7,
         "output": 2.5
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-r",
       "limit": {
         "context": 163840,
         "output": 32768
@@ -217,7 +220,7 @@
         "input": 0.06,
         "output": 0.09
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-r",
       "limit": {
         "context": 128000,
         "output": 32000
@@ -243,7 +246,7 @@
         "input": 0.7,
         "output": 2.5
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-r",
       "limit": {
         "context": 64000,
         "output": 16000
@@ -299,7 +302,7 @@
         "input": 1.6,
         "output": 3.2
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-pro",
       "limit": {
         "context": 1048576,
         "output": 393216
@@ -327,7 +330,7 @@
         "input": 1.32,
         "output": 3.96
       },
-      "family": "deepseek-thinking",
+      "family": "deepseek-pro",
       "limit": {
         "context": 1048576,
         "output": 393216
@@ -548,6 +551,7 @@
         "input": 0.09,
         "output": 0.09
       },
+      "family": "mythomax",
       "limit": {
         "context": 4096,
         "output": 3200
@@ -574,7 +578,7 @@
         "input": 0.06,
         "output": 0.18
       },
-      "family": "ling",
+      "family": "ling-flash",
       "limit": {
         "context": 262144,
         "output": 32768
@@ -601,7 +605,7 @@
         "input": 0.075,
         "output": 0.22
       },
-      "family": "ling",
+      "family": "ling-flash",
       "limit": {
         "context": 262144,
         "output": 32768
@@ -628,7 +632,7 @@
         "input": 0.075,
         "output": 0.22
       },
-      "family": "ling",
+      "family": "ling-flash",
       "limit": {
         "context": 262144,
         "output": 32768
@@ -655,7 +659,7 @@
         "input": 0.075,
         "output": 0.22
       },
-      "family": "ling",
+      "family": "ling-flash",
       "limit": {
         "context": 262144,
         "output": 32768
@@ -684,7 +688,7 @@
         "input": 0.3,
         "output": 0.9
       },
-      "family": "ling",
+      "family": "ling-flash",
       "limit": {
         "context": 1000000,
         "output": 262144
@@ -846,6 +850,7 @@
         "input": 0.62,
         "output": 0.62
       },
+      "family": "wizardlm",
       "limit": {
         "context": 65535,
         "output": 8000
@@ -873,6 +878,7 @@
         "input": 0.2475,
         "output": 1.43
       },
+      "family": "macaron-tall",
       "limit": {
         "context": 262144,
         "output": 32768
@@ -899,6 +905,7 @@
         "input": 0.825,
         "output": 2.475
       },
+      "family": "macaron-venti",
       "limit": {
         "context": 1048576,
         "output": 131072
@@ -925,7 +932,7 @@
         "input": 0.3,
         "output": 1.2
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 204800,
         "output": 131100
@@ -953,7 +960,7 @@
         "input": 0.3,
         "output": 1.2
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 204800,
         "output": 131072
@@ -982,7 +989,7 @@
         "input": 0.6,
         "output": 2.4
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 204800,
         "output": 131072
@@ -1026,7 +1033,7 @@
           }
         ]
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 1000000,
         "output": 131072
@@ -1056,7 +1063,7 @@
         "input": 0.15,
         "output": 0.6
       },
-      "family": "minimax",
+      "family": "minimax-m-flash",
       "limit": {
         "context": 1000000,
         "output": 524288
@@ -1085,7 +1092,7 @@
         "input": 0.55,
         "output": 2.2
       },
-      "family": "minimax",
+      "family": "minimax-m",
       "limit": {
         "context": 1000000,
         "output": 40000
@@ -1112,7 +1119,7 @@
         "input": 0.6,
         "output": 2.5
       },
-      "family": "kimi-k2",
+      "family": "kimi",
       "limit": {
         "context": 262144,
         "output": 98304
@@ -1139,7 +1146,7 @@
         "input": 0.57,
         "output": 2.3
       },
-      "family": "kimi-k2",
+      "family": "kimi",
       "limit": {
         "context": 131072,
         "output": 98304
@@ -1166,7 +1173,7 @@
         "input": 0.6,
         "output": 2.5
       },
-      "family": "kimi-thinking",
+      "family": "kimi",
       "limit": {
         "context": 262144,
         "output": 98304
@@ -1194,7 +1201,7 @@
         "input": 0.6,
         "output": 3
       },
-      "family": "kimi-k2",
+      "family": "kimi",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -1224,7 +1231,7 @@
         "input": 0.8,
         "output": 3.4
       },
-      "family": "kimi-k2",
+      "family": "kimi",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -1254,7 +1261,7 @@
         "input": 0.95,
         "output": 4
       },
-      "family": "kimi-k2",
+      "family": "kimi-code",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -1285,7 +1292,7 @@
         "input": 3,
         "output": 15
       },
-      "family": "kimi-k3",
+      "family": "kimi",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -1316,7 +1323,7 @@
         "input": 2,
         "output": 10
       },
-      "family": "kimi-k3",
+      "family": "kimi-pro",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -1347,7 +1354,7 @@
         "input": 4,
         "output": 20
       },
-      "family": "kimi-k3",
+      "family": "kimi-pro",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -1403,7 +1410,7 @@
         "input": 0.05,
         "output": 0.2
       },
-      "family": "nemotron",
+      "family": "nemotron-nano",
       "limit": {
         "context": 262144,
         "output": 32768
@@ -1422,6 +1429,147 @@
       "release_date": "2025-12-15",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "openai/gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.05,
+        "context_over_200k": {
+          "cache_read": 0.1,
+          "input": 2,
+          "output": 10
+        },
+        "input": 1,
+        "output": 5,
+        "tiers": [
+          {
+            "cache_read": 0.1,
+            "input": 2,
+            "output": 10,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "openai/gpt-6.2-astra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "context_over_200k": {
+          "cache_read": 0.8,
+          "input": 16,
+          "output": 60
+        },
+        "input": 8,
+        "output": 40,
+        "tiers": [
+          {
+            "cache_read": 0.8,
+            "input": 16,
+            "output": 60,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-astra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.2 Astra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai/gpt-6.2-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.2 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-17",
+      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
     "openai/gpt-oss-120b": {
@@ -1457,6 +1605,7 @@
         "input": 0.02,
         "output": 0.02
       },
+      "family": "paddleocr",
       "limit": {
         "context": 16384,
         "output": 16384
@@ -1480,10 +1629,10 @@
     "qwen/qwen-mt-plus": {
       "attachment": false,
       "cost": {
-        "input": 0.25,
-        "output": 0.75
+        "input": 0.259,
+        "output": 0.775
       },
-      "family": "qwen",
+      "family": "qwen-mt-plus",
       "limit": {
         "context": 16384,
         "output": 8192
@@ -1509,7 +1658,7 @@
         "input": 0.07,
         "output": 0
       },
-      "family": "qwen",
+      "family": "qwen-embedding",
       "limit": {
         "context": 32768,
         "output": 0
@@ -1536,7 +1685,7 @@
         "input_audio": 2.2,
         "output": 0.97
       },
-      "family": "qwen",
+      "family": "qwen-omni",
       "limit": {
         "context": 65536,
         "output": 16384
@@ -1566,7 +1715,7 @@
         "input": 0.05,
         "output": 0
       },
-      "family": "qwen",
+      "family": "qwen-reranker",
       "limit": {
         "context": 32768,
         "output": 0
@@ -1592,7 +1741,7 @@
         "input": 0.2,
         "output": 0.7
       },
-      "family": "qwen",
+      "family": "qwen-vl",
       "limit": {
         "context": 131072,
         "output": 32768
@@ -1611,6 +1760,59 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-10-04",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen/qwen3-vl-plus": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.014,
+        "cache_write": 0.18,
+        "input": 0.144,
+        "output": 1.434,
+        "tiers": [
+          {
+            "cache_read": 0.022,
+            "cache_write": 0.27,
+            "input": 0.216,
+            "output": 2.151,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          },
+          {
+            "cache_read": 0.043,
+            "cache_write": 0.539,
+            "input": 0.431,
+            "output": 4.301,
+            "tier": {
+              "size": 128000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "qwen-vl-plus",
+      "limit": {
+        "context": 262000,
+        "output": 32000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3-VL Plus",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-09-23",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1792,11 +1994,12 @@
     "qwen/qwen3.7-max": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.25,
-        "input": 1.25,
-        "output": 3.75
+        "cache_read": 0.33,
+        "cache_write": 2.063,
+        "input": 1.65,
+        "output": 4.951
       },
-      "family": "qwen",
+      "family": "qwen-max",
       "limit": {
         "context": 1000000,
         "output": 65536
@@ -1883,7 +2086,7 @@
         "input": 0.15,
         "output": 0.47
       },
-      "family": "qwen",
+      "family": "qwen-flash",
       "limit": {
         "context": 1000000,
         "output": 131072
@@ -1914,7 +2117,7 @@
         "input": 2,
         "output": 6
       },
-      "family": "qwen",
+      "family": "qwen-max",
       "limit": {
         "context": 1000000,
         "output": 131072
@@ -1937,6 +2140,37 @@
       "temperature": true,
       "tool_call": true
     },
+    "qwen/qwen4-max": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.071,
+        "cache_write": 1.767,
+        "input": 1.413,
+        "output": 4.24
+      },
+      "family": "qwen-max",
+      "limit": {
+        "context": 1000000,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen4 Max",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-16",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "stepfun/step-3.7-flash": {
       "attachment": true,
       "cost": {
@@ -1944,6 +2178,7 @@
         "input": 0.2,
         "output": 1.15
       },
+      "family": "step-flash",
       "limit": {
         "context": 262144,
         "input": 256000,
@@ -1974,6 +2209,7 @@
         "input": 1,
         "output": 2.7
       },
+      "family": "step",
       "limit": {
         "context": 1000000,
         "input": 1000000,
@@ -2004,7 +2240,7 @@
         "input": 0.14,
         "output": 0.58
       },
-      "family": "Hy",
+      "family": "hy",
       "limit": {
         "context": 262144,
         "input": 192000,
@@ -2033,10 +2269,10 @@
         "input": 0.417,
         "output": 1.2505
       },
-      "family": "Hy",
+      "family": "hy",
       "limit": {
         "context": 1000000,
-        "input": 983010,
+        "input": 983040,
         "output": 64000
       },
       "modalities": {
@@ -2049,9 +2285,39 @@
         ]
       },
       "name": "Hy4",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-11-04",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "tencent/hy4-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0015,
+        "input": 0.035,
+        "output": 0.1405
+      },
+      "family": "hy-flash",
+      "limit": {
+        "context": 1000000,
+        "input": 983040,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Hy4 flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-11-16",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2063,9 +2329,10 @@
         "input": 0.834,
         "output": 2.501
       },
-      "family": "Hy",
+      "family": "hy",
       "limit": {
         "context": 1000000,
+        "input": 983040,
         "output": 64000
       },
       "modalities": {
@@ -2121,7 +2388,7 @@
         "input": 0.522,
         "output": 1.044
       },
-      "family": "mimo",
+      "family": "mimo-pro",
       "limit": {
         "context": 1048576,
         "output": 131072
@@ -2149,7 +2416,7 @@
         "input": 0.14,
         "output": 0.28
       },
-      "family": "mimo",
+      "family": "mimo-flash",
       "limit": {
         "context": 1048576,
         "output": 131072
@@ -2180,7 +2447,7 @@
         "input": 0.435,
         "output": 0.87
       },
-      "family": "mimo",
+      "family": "mimo-pro",
       "limit": {
         "context": 1048576,
         "output": 131072
@@ -2210,7 +2477,7 @@
         "input": 0.035,
         "output": 0.138
       },
-      "family": "glm",
+      "family": "autoglm",
       "limit": {
         "context": 65536,
         "output": 65536
@@ -2265,7 +2532,7 @@
         "input": 0.6,
         "output": 1.8
       },
-      "family": "glm",
+      "family": "glmv",
       "limit": {
         "context": 65536,
         "output": 16384
@@ -2323,7 +2590,7 @@
         "input": 0.3,
         "output": 0.9
       },
-      "family": "glm",
+      "family": "glmv",
       "limit": {
         "context": 131072,
         "output": 32768

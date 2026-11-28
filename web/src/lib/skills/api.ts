@@ -33,6 +33,7 @@ interface SkillEnabledRequest {
 
 interface SkillOwnershipTransfer {
   new_owner_user_id: string;
+  name?: string;
 }
 
 interface SkillBaseVersionRequest {
@@ -128,21 +129,28 @@ export async function bulkUpdateSkills(
   return result;
 }
 
-function pluginUploadForm(bundle: File, saveAsNew: boolean): FormData {
+function pluginUploadForm(
+  bundle: File,
+  saveAsNew: boolean,
+  name?: string
+): FormData {
   const form = new FormData();
   form.append("bundle", bundle);
   form.append("save_as_new", String(saveAsNew));
+  if (name) form.append("name", name);
   return form;
 }
 
+/** `name` names a new plugin. The manifest name is the default. */
 export async function inspectPluginUpload(
   bundle: File,
-  saveAsNew: boolean
+  saveAsNew: boolean,
+  name?: string
 ): Promise<PluginUploadPreview> {
   return send(
     `${SWR_KEYS.userSkills}/plugins/inspect`,
     "POST",
-    pluginUploadForm(bundle, saveAsNew)
+    pluginUploadForm(bundle, saveAsNew, name)
   );
 }
 
@@ -156,12 +164,13 @@ export interface PluginUploadResult {
 
 export async function savePluginUpload(
   bundle: File,
-  saveAsNew: boolean
+  saveAsNew: boolean,
+  name?: string
 ): Promise<PluginUploadResult> {
   return send(
     `${SWR_KEYS.userSkills}/plugins`,
     "POST",
-    pluginUploadForm(bundle, saveAsNew)
+    pluginUploadForm(bundle, saveAsNew, name)
   );
 }
 
@@ -202,6 +211,12 @@ export function skillNameConflictNames(error: unknown): string[] {
   return Array.isArray(names)
     ? names.filter((name): name is string => typeof name === "string")
     : [];
+}
+
+/** The plugin name that a 409 refused because its marketplace holds it. */
+export function takenPluginName(error: unknown): string | null {
+  if (!(error instanceof FetchError) || error.status !== 409) return null;
+  return error.info?.taken_name ?? null;
 }
 
 export function isSkillVersionStale(error: unknown): boolean {

@@ -1,6 +1,6 @@
 name: Connector Filter Eval
 concurrency:
-  group: Connector-Filter-Eval-${{ github.head_ref || github.run_id }}
+  group: Connector-Filter-Eval-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 # Regression gate for the source-scope filter extraction prompt. Runs the
@@ -28,6 +28,14 @@ env:
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   connector-filter-eval:
     # Informative, not a merge gate: a single failing eval case fails the run,
     # and the backoff advance-vs-re-search cases can flake with cheap models.
