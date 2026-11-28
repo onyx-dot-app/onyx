@@ -32,8 +32,6 @@ def _migrate(direction: str, revision: str) -> None:
 
 @pytest.fixture
 def engine() -> Generator[Engine, None, None]:
-    _migrate("upgrade", "head")
-    _migrate("downgrade", PREVIOUS_REVISION)
     engine = create_engine(
         build_connection_string(
             db=POSTGRES_DB,
@@ -44,10 +42,32 @@ def engine() -> Generator[Engine, None, None]:
             db_api=SYNC_DB_API,
         )
     )
+    _migrate("upgrade", "head")
+    # The downgrade drops the stored paths of the clients already in the
+    # database, and the upgrade would give them a legacy path.
+    with engine.connect() as conn:
+        existing = list(
+            conn.execute(
+                text(
+                    "SELECT integration_id, legacy_redirect_path "
+                    "FROM integration_oauth_client"
+                )
+            )
+        )
+    _migrate("downgrade", PREVIOUS_REVISION)
     try:
         yield engine
     finally:
         _migrate("upgrade", "head")
+        with engine.begin() as conn:
+            for row in existing:
+                conn.execute(
+                    text(
+                        "UPDATE integration_oauth_client "
+                        "SET legacy_redirect_path = :path WHERE integration_id = :id"
+                    ),
+                    {"path": row.legacy_redirect_path, "id": row.integration_id},
+                )
         engine.dispose()
 
 
