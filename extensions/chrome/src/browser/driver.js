@@ -277,13 +277,15 @@ function resolveTab(grant, params) {
   return tabId;
 }
 
-async function sharedTab(grant, tabId) {
+/** The tab, attached. `leaving` is for a move to an allowed URL: it reads
+ * nothing of the page that the tab is on, so that page's site may be any. */
+async function sharedTab(grant, tabId, { leaving = false } = {}) {
   if (endedGrants.has(grant.id)) throw grantEndedError();
   const tab = await chrome.tabs.get(tabId).catch(() => null);
   if (!tab)
     throw new OperationError("tab_not_found", "The tab closed.");
   // The tab's own site may be private: the refusal does not name it.
-  if (!isShared(grant, tab.url ?? ""))
+  if (!leaving && !isShared(grant, tab.url ?? ""))
     throw new OperationError("failed", UNSHARED_TAB_MESSAGE);
   await attach(tabId);
   return tab;
@@ -643,7 +645,8 @@ async function checkLive(ctx) {
     throw humanControlError(ctx.tabId);
   const tab = await chrome.tabs.get(ctx.tabId).catch(() => null);
   if (!tab) throw new OperationError("tab_not_found", "The tab closed.");
-  if (!isShared(ctx.grant, tab.url ?? "")) throw new OperationError("failed", UNSHARED_TAB_MESSAGE);
+  if (!ctx.leaving && !isShared(ctx.grant, tab.url ?? ""))
+    throw new OperationError("failed", UNSHARED_TAB_MESSAGE);
 }
 
 async function input(ctx, method, params) {
@@ -761,7 +764,8 @@ async function waitForReady(tabId, readiness, deadline) {
 }
 
 async function navigateTab(grant, tabId, target, readiness, deadline) {
-  await checkLive({ grant, tabId, deadline });
+  // A move to an allowed URL may leave any site; a history move may not.
+  await checkLive({ grant, tabId, deadline, leaving: target.url !== undefined });
   if (target.url !== undefined) {
     if (!isShared(grant, target.url))
       throw new OperationError("failed", outsideMessage(target.url));
@@ -820,7 +824,7 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
       const newTab = params.newTab === true || grant.current == null;
       if (!newTab) {
         const tabId = grant.current;
-        await sharedTab(grant, tabId);
+        await sharedTab(grant, tabId, { leaving: url !== undefined });
         checkWritable(tabId);
         if (url !== undefined) await navigateTab(grant, tabId, { url }, "domcontentloaded", deadline);
         return { tab: await tabJson(grant, tabId) };
@@ -845,9 +849,9 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
     }
     case "navigate": {
       const tabId = resolveTab(grant, params);
-      await sharedTab(grant, tabId);
-      checkWritable(tabId);
       const url = optString(params, "url");
+      await sharedTab(grant, tabId, { leaving: url !== undefined });
+      checkWritable(tabId);
       const history = optString(params, "history");
       if ((url === undefined) === (history === undefined))
         throw invalid("Pass exactly one of url or history.");
