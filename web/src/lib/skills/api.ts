@@ -104,20 +104,27 @@ export async function bulkUpdateSkills(
   return result;
 }
 
-function pluginUploadForm(bundle: File, saveAsNew: boolean): FormData {
+/** `pluginId` binds the upload to that plugin: it adds a version to it. */
+function pluginUploadForm(
+  bundle: File,
+  saveAsNew: boolean,
+  pluginId?: string
+): FormData {
   const form = new FormData();
   form.append("bundle", bundle);
   form.append("save_as_new", String(saveAsNew));
+  if (pluginId) form.append("plugin_id", pluginId);
   return form;
 }
 
 export async function inspectPluginUpload(
   bundle: File,
-  saveAsNew: boolean
+  saveAsNew: boolean,
+  pluginId?: string
 ): Promise<PluginUploadPreview> {
   return skillsFetch<PluginUploadPreview>("/api/skills/plugins/inspect", {
     method: "POST",
-    body: pluginUploadForm(bundle, saveAsNew),
+    body: pluginUploadForm(bundle, saveAsNew, pluginId),
   });
 }
 
@@ -131,11 +138,12 @@ export interface PluginUploadResult {
 
 export async function savePluginUpload(
   bundle: File,
-  saveAsNew: boolean
+  saveAsNew: boolean,
+  pluginId?: string
 ): Promise<PluginUploadResult> {
   return skillsFetch<PluginUploadResult>("/api/skills/plugins", {
     method: "POST",
-    body: pluginUploadForm(bundle, saveAsNew),
+    body: pluginUploadForm(bundle, saveAsNew, pluginId),
   });
 }
 

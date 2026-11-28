@@ -574,7 +574,11 @@ export default function MemberPluginDetailPage({
           onSaved={() => void refresh()}
         />
       )}
-      <UploadPluginFlow open={uploading} onClose={() => setUploading(false)} />
+      <UploadPluginFlow
+        open={uploading}
+        pluginId={pluginId}
+        onClose={() => setUploading(false)}
+      />
       <removeModal.Provider>
         {skill && (
           <ConfirmEntityModal

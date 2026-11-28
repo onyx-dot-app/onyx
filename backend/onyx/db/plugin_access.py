@@ -53,9 +53,12 @@ from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 from sqlalchemy.sql.elements import KeyedColumnElement
 from sqlalchemy.sql.selectable import Select, Subquery
 
+from onyx.auth.permissions import has_permission
 from onyx.db.enums import (
     AccountType,
     MarketplaceKind,
+    Permission,
+    PermissionAuthority,
     PluginInstallationPolicy,
     SandboxStatus,
     SkillSharePermission,
@@ -201,13 +204,43 @@ def _version_for(
     )
 
 
-def plugin_editable_by_user(
-    plugin: type[Plugin], user_id: UserIdExpr
-) -> ColumnElement[bool]:
-    return or_(
-        plugin.author_user_id == user_id,
-        plugin_shared_with_user(plugin, user_id, SkillSharePermission.EDITOR),
+def not_others_personal_marketplace(user: User) -> ColumnElement[bool]:
+    """A manager reaches every plugin except those of another user's personal
+    GitHub marketplace: only its owner gets them."""
+    return Plugin.marketplace_id.not_in(
+        select(Marketplace.id).where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.owner_user_id.is_not(None),
+            Marketplace.owner_user_id != user.id,
+        )
     )
+
+
+def plugin_editable_by_user(user: User) -> ColumnElement[bool]:
+    """The edit rule for every plugin change, new versions included. An
+    organization-wide MANAGE_PLUGINS holder edits every plugin but those of
+    another user's personal GitHub marketplace. Others edit as the author,
+    through an EDITOR share, or as a group manager in their managed scope."""
+    authority = has_permission(user, Permission.MANAGE_PLUGINS)
+    if authority is PermissionAuthority.GLOBAL:
+        return not_others_personal_marketplace(user)
+    editable = or_(
+        Plugin.author_user_id == user.id,
+        plugin_shared_with_user(Plugin, user.id, SkillSharePermission.EDITOR),
+    )
+    if authority is PermissionAuthority.SCOPED:
+        marketplace: type[Marketplace] = aliased(Marketplace)
+        editable = or_(
+            editable,
+            select(marketplace.id)
+            .where(
+                marketplace.id == Plugin.marketplace_id,
+                plugin_in_managed_scope(Plugin, marketplace, user),
+            )
+            .correlate_except(marketplace)
+            .exists(),
+        )
+    return editable
 
 
 def plugin_in_managed_scope(

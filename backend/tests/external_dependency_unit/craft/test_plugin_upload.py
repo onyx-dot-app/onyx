@@ -14,24 +14,38 @@ from fastapi import UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
+from onyx.db.enums import (
+    GrantSource,
+    Permission,
+    PluginInstallationPolicy,
+    SkillSharePermission,
+)
 from onyx.db.models import (
     Integration__User,
     Integration__UserGroup,
+    PermissionGrant,
     Plugin,
+    Plugin__UserGroup,
     PluginVersion,
     User,
+    User__UserGroup,
     UserGroup,
     UserIntegrationPreference,
 )
+from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.plugin import (
     PluginAccessChange,
     PluginUserGrant,
     apply_plugin_access_change__no_commit,
     set_plugin_preferences__no_commit,
 )
-from onyx.db.skill import list_chat_skills, list_runtime_skills_for_user
+from onyx.db.skill import (
+    list_chat_skills,
+    list_runtime_skills_for_user,
+    publish_skill__no_commit,
+)
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -56,7 +70,11 @@ from onyx.tools.tool_implementations.skills.skill_tools import (
     skills_catalog_message,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.external_dependency_unit.craft.db_helpers import make_group, make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_group,
+    make_user,
+)
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
@@ -131,14 +149,16 @@ def integration_ids(db_session: Session) -> Iterator[list[int]]:
 
 @pytest.fixture(autouse=True)
 def bundle_cleanup(
-    db_session: Session, users: tuple[User, User, User]
+    db_session: Session,
+    users: tuple[User, User, User],  # noqa: ARG001
+    created_user_ids: list[UUID],
 ) -> Iterator[None]:
     yield
     db_session.rollback()
     file_store = get_default_file_store()
     for file_id in db_session.scalars(
         select(PluginVersion.bundle_file_id).where(
-            PluginVersion.created_by_user_id.in_([user.id for user in users])
+            PluginVersion.created_by_user_id.in_(created_user_ids)
         )
     ):
         if file_id is not None:
@@ -152,12 +172,18 @@ def no_craft_reload() -> Iterator[None]:
 
 
 def _save(
-    user: User, upload: UploadFile, db_session: Session, *, save_as_new: bool = False
+    user: User,
+    upload: UploadFile,
+    db_session: Session,
+    *,
+    save_as_new: bool = False,
+    plugin_id: UUID | None = None,
 ) -> api.PluginUploadResponse:
     return api.save_plugin_upload(
         bundle=upload,
         save_as_new=save_as_new,
         auto_enable=True,
+        plugin_id=plugin_id,
         user=user,
         db_session=db_session,
     )
@@ -299,7 +325,12 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
     ).raise_first_failure()
     db_session.commit()
     published_version_id = db_session.get_one(Plugin, plugin_id).published_version_id
-    editor_save = _save(editor, _plugin_zip("same-kit", ["one", "three"]), db_session)
+    editor_save = _save(
+        editor,
+        _plugin_zip("same-kit", ["one", "three"]),
+        db_session,
+        plugin_id=plugin_id,
+    )
     assert (editor_save.target.kind, editor_save.target.version_number) == (
         "new_version",
         3,
@@ -771,12 +802,209 @@ def test_an_editor_share_uploads_a_new_version_of_the_shared_plugin(
     ).raise_first_failure()
     db_session.commit()
 
-    saved = _save(editor, _plugin_zip("shared-kit", ["one", "two"]), db_session)
+    saved = _save(
+        editor,
+        _plugin_zip("shared-kit", ["one", "two"]),
+        db_session,
+        plugin_id=plugin_id,
+    )
 
     assert (saved.plugin.id, saved.target.kind, saved.target.version_number) == (
         plugin_id,
         "new_version",
         2,
+    )
+
+
+def test_a_plugin_manager_uploads_a_new_version_of_another_users_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    """An organization-wide MANAGE_PLUGINS holder who is not an admin edits
+    every plugin, so Upload New Version adds a version to it."""
+    author, manager, _ = users
+    group = make_group(db_session)
+    group_id = group.id
+    add_user_to_group(db_session, manager, group)
+    db_session.add(
+        PermissionGrant(
+            group_id=group_id,
+            permission=Permission.MANAGE_PLUGINS,
+            grant_source=GrantSource.USER,
+        )
+    )
+    recompute_user_permissions__no_commit(manager.id, db_session)
+    db_session.commit()
+    db_session.refresh(manager)
+    try:
+        assert has_global_permission(manager, Permission.MANAGE_PLUGINS)
+        assert not has_global_permission(manager, Permission.FULL_ADMIN_PANEL_ACCESS)
+        plugin_id = _save(
+            author, _plugin_zip("managed-kit", ["one"]), db_session
+        ).plugin.id
+
+        saved = _save(
+            manager,
+            _plugin_zip("managed-kit", ["one", "two"]),
+            db_session,
+            plugin_id=plugin_id,
+        )
+
+        assert (saved.plugin.id, saved.target.kind, saved.target.version_number) == (
+            plugin_id,
+            "new_version",
+            2,
+        )
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(PermissionGrant).where(PermissionGrant.group_id == group_id)
+        )
+        db_session.execute(
+            delete(User__UserGroup).where(User__UserGroup.user_group_id == group_id)
+        )
+        db_session.execute(delete(UserGroup).where(UserGroup.id == group_id))
+        db_session.commit()
+
+
+def test_a_group_manager_uploads_a_new_version_of_a_plugin_in_scope(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    """The scope is checked on the plugin the upload names, so a share of
+    another plugin with another group does not take the plugin out of scope."""
+    author, manager, _ = users
+    managed = make_group(db_session)
+    other = make_group(db_session)
+    group_ids = [managed.id, other.id]
+    db_session.add(
+        User__UserGroup(user_id=manager.id, user_group_id=managed.id, is_manager=True)
+    )
+    recompute_user_permissions__no_commit(manager.id, db_session)
+    db_session.commit()
+    db_session.refresh(manager)
+    try:
+        in_scope_id = _save(
+            author, _plugin_zip("scoped-kit", ["one"]), db_session
+        ).plugin.id
+        outside_id = _save(
+            author, _plugin_zip("outside-kit", ["one"]), db_session
+        ).plugin.id
+        _save(author, _plugin_zip("private-kit", ["one"]), db_session)
+        for plugin_id, group_id in ((in_scope_id, managed.id), (outside_id, other.id)):
+            db_session.add(
+                Plugin__UserGroup(
+                    plugin_id=plugin_id,
+                    user_group_id=group_id,
+                    permission=SkillSharePermission.VIEWER,
+                )
+            )
+        db_session.commit()
+
+        in_scope = _save(
+            manager,
+            _plugin_zip("scoped-kit", ["one", "two"]),
+            db_session,
+            plugin_id=in_scope_id,
+        )
+        private = _save(manager, _plugin_zip("private-kit", ["one", "two"]), db_session)
+
+        assert (in_scope.plugin.id, in_scope.target.kind) == (
+            in_scope_id,
+            "new_version",
+        )
+        assert (private.target.kind, private.plugin.author_user_id) == (
+            "new_plugin",
+            manager.id,
+        )
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(Plugin__UserGroup).where(
+                Plugin__UserGroup.user_group_id.in_(group_ids)
+            )
+        )
+        db_session.execute(
+            delete(User__UserGroup).where(User__UserGroup.user_group_id.in_(group_ids))
+        )
+        db_session.execute(delete(UserGroup).where(UserGroup.id.in_(group_ids)))
+        db_session.commit()
+
+
+def test_an_upload_for_a_plugin_adds_a_version_to_that_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    created_user_ids: list[UUID],
+) -> None:
+    """An admin who opens another user's published plugin and uploads a new
+    version adds it to that plugin, not to a new plugin of their own."""
+    author, _, _ = users
+    admin = make_user(db_session, is_admin=True)
+    db_session.commit()
+    created_user_ids.append(admin.id)
+    plugin_id = _save(author, _plugin_zip("org-kit", ["one"]), db_session).plugin.id
+    plugin = db_session.get(Plugin, plugin_id)
+    assert plugin is not None
+    publish_skill__no_commit(plugin, None, admin, db_session)
+    db_session.commit()
+
+    saved = _save(
+        admin, _plugin_zip("org-kit", ["one", "two"]), db_session, plugin_id=plugin_id
+    )
+
+    assert (saved.plugin.id, saved.target.kind, saved.target.version_number) == (
+        plugin_id,
+        "new_version",
+        2,
+    )
+    with pytest.raises(OnyxError, match="holds the plugin other-kit"):
+        _save(admin, _plugin_zip("other-kit", ["one"]), db_session, plugin_id=plugin_id)
+
+    _save(author, _plugin_zip("copy-kit", ["one"]), db_session)
+    copy = _save(author, _plugin_zip("copy-kit", ["one"]), db_session, save_as_new=True)
+    assert copy.plugin.name != "copy-kit"
+    saved_copy = _save(
+        author,
+        _plugin_zip("copy-kit", ["one", "two"]),
+        db_session,
+        plugin_id=copy.plugin.id,
+    )
+    assert (saved_copy.plugin.id, saved_copy.target.version_number) == (
+        copy.plugin.id,
+        2,
+    )
+
+
+def test_a_general_upload_adds_no_version_to_another_users_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    created_user_ids: list[UUID],
+) -> None:
+    """An admin's general upload of a name another user's plugin has makes the
+    admin's own plugin. Upload New Version is the way to change the other."""
+    author, _, _ = users
+    admin = make_user(db_session, is_admin=True)
+    db_session.commit()
+    created_user_ids.append(admin.id)
+    theirs = _save(author, _plugin_zip("same-name-kit", ["one"]), db_session).plugin
+    plugin = db_session.get(Plugin, theirs.id)
+    assert plugin is not None
+    publish_skill__no_commit(plugin, None, admin, db_session)
+    db_session.commit()
+
+    mine = _save(admin, _plugin_zip("same-name-kit", ["one", "two"]), db_session)
+
+    assert mine.plugin.id != theirs.id
+    assert mine.target.kind == "new_plugin"
+    assert (
+        db_session.scalar(
+            select(func.count()).where(PluginVersion.plugin_id == theirs.id)
+        )
+        == 1
     )
 
 

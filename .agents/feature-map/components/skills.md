@@ -74,7 +74,10 @@
   web, Add > Upload plugin on the Plugins tab of Customize opens
   `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
   plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
-  flow. A dropped folder is zipped in the browser when it has SKILL.md or a
+  flow. Upload New Version on a plugin page
+  (`sections/plugins/MemberPluginDetailPage.tsx`) opens the same modal with
+  `pluginId`: it takes only a plugin zip, so a SKILL.md or a zip with no
+  plugin.json gets the plugin upload error, not the skill flow. A dropped folder is zipped in the browser when it has SKILL.md or a
   plugin.json at its top level (`lib/skills/bundleUpload.ts:prepareSkillBundleUpload`
   with `allowPlugin`).
 - **Admins** set the installation policy of a custom skill: available (the user
@@ -510,7 +513,7 @@ the app from the same rule
 3. `shared-read-predicates` **Every new read path must use the shared
    predicates.** Reads use `db/skill.py:fetch_skill` and `list_skills`
    (`_visible_custom_skill_select`). Edits use `db/skill.py:fetch_editable_skill`
-   (`_editable_by_user`). A query on `Plugin` without them skips sharing. The
+   (`db/plugin_access.py:plugin_editable_by_user`). A query on `Plugin` without them skips sharing. The
    reads list every plugin; `SkillResponse.kind` is `plugin` when the version
    the user runs is not a skill (`db/plugin_access.py:holds_one_root_skill`).
    An edit of the files finds only a skill; the access routes (share,
@@ -518,7 +521,9 @@ the app from the same rule
    the plugin tables through `db/plugin_access.py`: visibility and the install
    setting come only from `db/plugin_access.py:_user_plugin_pairs` (through
    `visible_plugin_ids`, `load_user_plugin_states` and
-   `affected_user_ids_for_plugins`); edits use `plugin_editable_by_user`. There is no organization-wide edit. A `plugin__user_group`
+   `affected_user_ids_for_plugins`); edits and Upload New Version use
+   `plugin_editable_by_user`: the author, an EDITOR share, a group manager in
+   scope, or an organization-wide MANAGE_PLUGINS holder. A `plugin__user_group`
    row with no permission holds only a group install setting and grants
    nothing. Only such a row can be `NOT_AVAILABLE`: a row with a share and
    `NOT_AVAILABLE` is refused (400, "Remove the group's share first"). The
@@ -924,10 +929,17 @@ the app from the same rule
     URL. One match gives that integration's member state; two give
     `more_than_one`. The save
     (`server/features/skill/api.py:save_plugin_upload`) adds a version to a
-    plugin with the same name that the user edits and that is not a skill:
-    the user's uploads first, then another user's uploads shared as EDITOR,
-    then the Organization library (`db/plugin.py:find_upload_target`);
-    `save_as_new` makes a new plugin with the next free name. The save stores
+    plugin with the same name that the user authored and that is not a skill:
+    the user's uploads first, then the Organization library
+    (`db/plugin.py:find_upload_target`);
+    `save_as_new` makes a new plugin with the next free name. A `plugin_id`
+    form field (Upload New Version) binds the upload to that plugin
+    (`_bound_upload_target`): the user must edit it
+    (`fetch_editable_skill(..., any_plugin=True)`), so a new version of another
+    user's plugin needs it. A synced plugin is refused
+    (`refuse_if_synced`), and the manifest name must be the plugin name or the
+    plugin.json name of its current version (Save as New and ownership
+    transfer rename only the plugin); another name is `INVALID_INPUT`. The save stores
     the bundle, then takes the user row lock and finds the target under it, so
     two uploads of one new name make one plugin with two versions. A new version
     keeps shares, publishing and user choices. An upload with the files of
@@ -1065,7 +1077,7 @@ the app from the same rule
     plugin takes no user or group share and no install setting
     (`db/skill.py:_check_skill_access_change`), and a global plugin manager
     does not see or edit another user's personal plugins
-    (`db/skill.py:_not_others_personal_marketplace`). `db/skill.py:may_delete_skill` takes
+    (`db/plugin_access.py:not_others_personal_marketplace`). `db/skill.py:may_delete_skill` takes
     `synced`, so `SkillResponse.can_delete` is false for a synced plugin. A user delete removes the user's personal
     marketplaces and their plugins (`db/users.py:delete_user_from_db__no_commit`
     returns a `UserDeleteCleanup`; after the commit, `finish_user_delete`
